@@ -1,0 +1,2 @@
+# Local Bedrock testing only. Never commit a real key.
+AWS_BEARER_TOKEN_BEDROCK=replace-with-a-bedrock-api-key
