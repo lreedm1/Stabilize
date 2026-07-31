@@ -141,17 +141,17 @@ test("chat endpoint calls OpenAI without storing response state", async () => {
       context: "current_turn",
     });
     assert.equal(providerBody.store, false);
-    assert.equal(providerBody.max_output_tokens, 650);
+    assert.equal(providerBody.max_output_tokens, 500);
     assert.equal(providerBody.input[0].role, "user");
     assert.equal(providerBody.input[0].content, "Help me plan one next step.");
     assert.match(providerBody.instructions, /route ORDINARY/i);
-    assert.match(providerBody.instructions, /600 characters or fewer/i);
+    assert.match(providerBody.instructions, /simple Markdown/i);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test("chat endpoint enforces a 600-character reply ceiling", async () => {
+test("chat endpoint relies on the token budget instead of character truncation", async () => {
   const originalFetch = globalThis.fetch;
 
   globalThis.fetch = async () =>
@@ -185,22 +185,9 @@ test("chat endpoint enforces a 600-character reply ceiling", async () => {
 
     const body = await response.json();
     assert.equal(response.status, 200);
-    assert.equal(Array.from(body.reply).length, 600);
+    assert.equal(Array.from(body.reply).length, 700);
   } finally {
     globalThis.fetch = originalFetch;
-  }
-});
-
-test("all fixed and fallback replies stay within the same ceiling", () => {
-  const fixedReplies = [
-    COPY.client.dangerReply,
-    ...Object.values(COPY.demo),
-    ...Object.values(COPY.routes).map((route) => route.reply),
-    COPY.api.unreliableReply,
-  ];
-
-  for (const reply of fixedReplies) {
-    assert.ok(Array.from(reply).length <= 600);
   }
 });
 
@@ -258,6 +245,17 @@ test("quick-start buttons are removed after the first message is sent", async ()
 
   assert.match(clientScript, /async function sendMessage[\s\S]*quickActions\.remove\(\)/);
   assert.doesNotMatch(clientScript, /reset-button|resetChat/);
+});
+
+test("assistant replies use the local Markdown renderer", async () => {
+  const clientScript = await readFile(
+    new URL("../public/app.js", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(clientScript, /import \{ renderMarkdown \} from "\.\/markdown\.js"/);
+  assert.match(clientScript, /role === "assistant"[\s\S]*renderMarkdown\(content\)/);
+  assert.doesNotMatch(clientScript, /innerHTML\s*=/);
 });
 
 test("layout fills the dynamic viewport without a fixed-width shell", async () => {

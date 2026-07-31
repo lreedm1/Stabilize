@@ -10,12 +10,13 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - Worker-rendered HTML with static CSS and browser JavaScript
 - deterministic routes for immediate danger, possible overdose, unsafe shelter, and medication-change requests
 - OpenAI's Responses API for ordinary AI replies
+- safe, local Markdown rendering for assistant replies
 - demo mode that works without an API key
 - no account, cookies, database, or persistent chat history in this code
 - safety and route tests
 - public-safe protocol background documents
 
-The language model is not the only safety layer. Urgent phrases are routed to fixed responses before model generation, and every returned reply is capped server-side at 600 characters after a small final validation check. This defense is intentionally conservative, but it is not comprehensive and requires independent review before a high-stakes public launch.
+The language model is not the only safety layer. Urgent phrases are routed to fixed responses before model generation, and ordinary model calls use a 500-token generation budget plus a small final validation check. OpenAI counts hidden reasoning and formatting tokens inside that budget. Assistant Markdown is rendered locally with DOM nodes; raw HTML remains text and executable link schemes are rejected. These defenses are intentionally conservative, but they are not comprehensive and require independent review before a high-stakes public launch.
 
 ## Project map
 
@@ -25,7 +26,7 @@ The language model is not the only safety layer. Urgent phrases are routed to fi
 | `src/page.js` | HTML layout rendered from `src/copy.js` |
 | `src/safety.js` | Deterministic input routing |
 | `src/index.js` | Cloudflare Worker API and OpenAI call |
-| `public/` | Static CSS, browser JavaScript, and asset security headers |
+| `public/` | Static CSS, browser JavaScript, safe Markdown renderer, and asset security headers |
 | `test/` | Deterministic router and Worker endpoint tests |
 | `docs/` | Public-safe background material for the protocol |
 | `wrangler.jsonc` | Cloudflare configuration and non-secret model settings |

@@ -1,3 +1,5 @@
+import { renderMarkdown } from "./markdown.js";
+
 const form = document.querySelector("#chat-form");
 const input = document.querySelector("#message-input");
 const sendButton = document.querySelector("#send-button");
@@ -22,9 +24,13 @@ let introDismissed = false;
 function addMessage(role, content, extraClass = "") {
   const article = document.createElement("article");
   article.className = `message ${role === "user" ? "user-message" : "assistant-message"} ${extraClass}`.trim();
-  const paragraph = document.createElement("p");
-  paragraph.textContent = content;
-  article.appendChild(paragraph);
+  if (role === "assistant") {
+    article.appendChild(renderMarkdown(content));
+  } else {
+    const paragraph = document.createElement("p");
+    paragraph.textContent = content;
+    article.appendChild(paragraph);
+  }
   chatLog.appendChild(article);
   chatLog.hidden = false;
   chatLog.scrollTop = chatLog.scrollHeight;
