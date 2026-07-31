@@ -145,7 +145,9 @@ test("chat endpoint calls OpenAI without storing response state", async () => {
     assert.equal(providerBody.input[0].role, "user");
     assert.equal(providerBody.input[0].content, "Help me plan one next step.");
     assert.match(providerBody.instructions, /route ORDINARY/i);
-    assert.match(providerBody.instructions, /simple Markdown/i);
+    assert.match(providerBody.instructions, /Floor supports; answer leads/i);
+    assert.match(providerBody.instructions, /Use history as context, not destiny/i);
+    assert.match(providerBody.instructions, /systems over willpower/i);
   } finally {
     globalThis.fetch = originalFetch;
   }
