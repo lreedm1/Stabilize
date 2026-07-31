@@ -224,6 +224,7 @@ test("root page renders from the centralized copy", async () => {
   assert.ok(html.includes("id=\"client-copy\""));
   assert.doesNotMatch(html, /id=\"reset-button\"|Start over/);
   assert.doesNotMatch(html, /id="status-line"/);
+  assert.doesNotMatch(html, /quick-actions|data-prompt/);
 
   const encodedClientCopy = html.match(
     /<template id="client-copy">([\s\S]*?)<\/template>/,
@@ -242,17 +243,23 @@ test("root page renders from the centralized copy", async () => {
   assert.equal(clientCopy.dangerReply, COPY.client.dangerReply);
 });
 
-test("quick-start buttons are removed after the first message is sent", async () => {
-  const clientScript = await readFile(
-    new URL("../public/app.js", import.meta.url),
-    "utf8",
-  );
+test("the text composer remains visible and prompt buttons are absent", async () => {
+  const [clientScript, styles] = await Promise.all([
+    readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
+  ]);
 
-  assert.match(clientScript, /async function sendMessage[\s\S]*quickActions\.remove\(\)/);
+  assert.doesNotMatch(clientScript, /quickActions|data-prompt|showComposer/);
+  assert.doesNotMatch(
+    styles,
+    /data-view="(?:thinking|response)"[^{}]*\.chat-form[^{]*\{[^}]*display:\s*none/,
+  );
+  assert.match(styles, /textarea\s*{[\s\S]*border:\s*1px solid/);
+  assert.match(styles, /data-view="compose"\]\s+textarea\s*{[\s\S]*min-height:\s*210px/);
   assert.doesNotMatch(clientScript, /reset-button|resetChat/);
 });
 
-test("one flat surface replaces thinking with the latest Markdown reply", async () => {
+test("thinking is replaced with the latest Markdown reply", async () => {
   const clientScript = await readFile(
     new URL("../public/app.js", import.meta.url),
     "utf8",
@@ -262,7 +269,6 @@ test("one flat surface replaces thinking with the latest Markdown reply", async 
   assert.match(clientScript, /function showOutput[\s\S]*chatLog\.replaceChildren\(\)/);
   assert.match(clientScript, /showOutput\(copy\.thinking, "thinking-output", "thinking"\)/);
   assert.match(clientScript, /article\.appendChild\(renderMarkdown\(content\)\)/);
-  assert.match(clientScript, /chatLog\.addEventListener\("click"[\s\S]*showComposer\(\)/);
   assert.doesNotMatch(clientScript, /addMessage|user-message/);
   assert.doesNotMatch(clientScript, /innerHTML\s*=/);
 });

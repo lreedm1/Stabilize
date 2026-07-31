@@ -5,7 +5,6 @@ const input = document.querySelector("#message-input");
 const sendButton = document.querySelector("#send-button");
 const conversationSurface = document.querySelector("#conversation-surface");
 const chatLog = document.querySelector("#chat-log");
-const quickActions = document.querySelector("#quick-actions");
 const dangerButton = document.querySelector("#danger-button");
 const emergencyPanel = document.querySelector("#emergency-panel");
 const copyTemplate = document.querySelector("#client-copy");
@@ -34,21 +33,10 @@ function showOutput(content, extraClass = "", view = "response") {
   return article;
 }
 
-function showComposer({ focus = true } = {}) {
-  if (pending) return;
-  conversationSurface.dataset.view = "compose";
-  chatLog.hidden = true;
-  chatLog.tabIndex = -1;
-  if (focus) input.focus();
-}
-
 function setPending(value) {
   pending = value;
   input.disabled = value;
   sendButton.disabled = value;
-  quickActions.querySelectorAll("button").forEach((button) => {
-    button.disabled = value;
-  });
 }
 
 function showEmergency() {
@@ -62,7 +50,6 @@ async function sendMessage(text) {
 
   introDismissed = true;
   input.placeholder = copy.followupPlaceholder;
-  quickActions.remove();
   messages.push({ role: "user", content: clean });
   input.value = "";
   setPending(true);
@@ -92,7 +79,7 @@ async function sendMessage(text) {
     showOutput(message);
   } finally {
     setPending(false);
-    chatLog.focus({ preventScroll: true });
+    input.focus({ preventScroll: true });
   }
 }
 
@@ -109,30 +96,10 @@ input.addEventListener("keydown", (event) => {
 });
 
 input.addEventListener("input", () => {
-  showComposer({ focus: false });
   if (!introDismissed && input.value.length > 0) {
     introDismissed = true;
     input.placeholder = copy.followupPlaceholder;
   }
-});
-
-quickActions.addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-prompt]");
-  if (!button) return;
-  sendMessage(button.dataset.prompt);
-});
-
-chatLog.addEventListener("click", (event) => {
-  if (event.target instanceof Element && event.target.closest("a")) return;
-  const selection = window.getSelection();
-  if (selection && !selection.isCollapsed) return;
-  showComposer();
-});
-
-chatLog.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" && event.key !== " ") return;
-  event.preventDefault();
-  showComposer();
 });
 
 dangerButton.addEventListener("click", () => {

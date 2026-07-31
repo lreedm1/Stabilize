@@ -18,15 +18,6 @@ function renderEmergencyActions(actions) {
     .join("\n            ");
 }
 
-function renderQuickActions(actions) {
-  return actions
-    .map(
-      (action) =>
-        `<button type="button" data-prompt="${escapeHtml(action.prompt)}">${escapeHtml(action.label)}</button>`,
-    )
-    .join("\n          ");
-}
-
 export function renderPage() {
   const { page, client } = COPY;
   const copyData = escapeHtml(
@@ -95,10 +86,6 @@ export function renderPage() {
             <button id="send-button" type="submit">${escapeHtml(page.chat.sendButton)}</button>
           </form>
         </section>
-
-        <div id="quick-actions" class="quick-actions" aria-label="${escapeHtml(page.chat.quickActionsLabel)}">
-          ${renderQuickActions(page.chat.quickActions)}
-        </div>
 
       </main>
     </div>

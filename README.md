@@ -11,7 +11,7 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - deterministic routes for immediate danger, possible overdose, unsafe shelter, and medication-change requests
 - OpenAI's Responses API for ordinary AI replies
 - safe, local Markdown rendering for assistant replies
-- a single-surface interface that swaps the composer for thinking and the latest reply
+- a persistent text composer beneath thinking and the latest reply
 - a self-hosted Lexend variable font
 - demo mode that works without an API key
 - no account, cookies, database, or persistent chat history in this code

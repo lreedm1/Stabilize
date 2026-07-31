@@ -23,27 +23,8 @@ export const COPY = {
       },
       introPlaceholder:
         "Stabilize is a free AI check-in for overloaded moments. Tell me what feels most fragile, and we’ll choose one small next step. No account or app chat database. AI support—not therapy, diagnosis, or emergency care. OpenAI processes messages to reply. Adults 18+.",
-      quickActionsLabel: "Quick starting prompts",
-      quickActions: [
-        {
-          label: "I have not eaten",
-          prompt: "I have not eaten and I feel overwhelmed.",
-        },
-        {
-          label: "I have not slept",
-          prompt: "I have not slept and everything feels urgent.",
-        },
-        {
-          label: "I need one next step",
-          prompt: "I need one small next step.",
-        },
-        {
-          label: "Help me contact someone",
-          prompt: "Help me ask a safe person for support.",
-        },
-      ],
       inputLabel: "Your message",
-      responseLabel: "AI response. Select it to write another message.",
+      responseLabel: "Latest AI response",
       inputPlaceholder: "What is happening right now?",
       sendButton: "Send",
     },

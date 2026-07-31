@@ -219,15 +219,9 @@ h2 {
   display: flex;
   min-height: 0;
   flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
   margin-top: 14px;
-  overflow: hidden;
-  border-radius: 14px;
-  background: var(--surface-strong);
-}
-
-.conversation-surface[data-view="thinking"] .chat-form,
-.conversation-surface[data-view="response"] .chat-form {
-  display: none;
 }
 
 .conversation-surface[data-view="compose"] .chat-log {
@@ -236,13 +230,14 @@ h2 {
 
 .chat-log {
   width: 100%;
-  min-height: 210px;
+  min-height: 0;
   max-height: 100%;
   flex: 1 1 auto;
   overflow-y: auto;
   margin: 0;
+  border-radius: 14px;
+  background: var(--surface-strong);
   padding: clamp(18px, 3vw, 32px);
-  cursor: text;
   line-height: 1.6;
   scroll-behavior: smooth;
 }
@@ -352,55 +347,40 @@ h2 {
   font-style: italic;
 }
 
-.quick-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.quick-actions button {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface-strong);
-  color: var(--text);
-  cursor: pointer;
-  padding: 8px 11px;
-  font-size: 0.86rem;
-  font-weight: 700;
-}
-
-.quick-actions button:hover {
-  border-color: #b8c7bd;
-  background: var(--accent-soft);
-}
-
 .chat-form {
   display: grid;
   width: 100%;
-  min-height: 210px;
+  min-height: 0;
+  flex: 0 0 auto;
   grid-template-columns: 1fr auto;
   align-items: end;
   gap: 10px;
   margin: 0;
 }
 
+.conversation-surface[data-view="compose"] .chat-form {
+  min-height: 210px;
+  flex: 1 1 auto;
+}
+
 textarea {
   width: 100%;
+  min-height: 76px;
+  max-height: 180px;
+  resize: vertical;
+  border: 1px solid #bcc6bf;
+  border-radius: 14px;
+  background: var(--surface-strong);
+  color: var(--text);
+  padding: 13px 14px;
+  line-height: 1.5;
+}
+
+.conversation-surface[data-view="compose"] textarea {
   min-height: 210px;
   height: 100%;
   max-height: none;
   resize: none;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--text);
-  padding: clamp(18px, 3vw, 32px);
-  line-height: 1.6;
-}
-
-textarea:focus-visible {
-  outline: 0;
 }
 
 textarea::placeholder {
@@ -425,7 +405,6 @@ textarea::placeholder {
 }
 
 .chat-form button:disabled,
-.quick-actions button:disabled,
 textarea:disabled {
   cursor: not-allowed;
   opacity: 0.58;
