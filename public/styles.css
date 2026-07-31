@@ -1,3 +1,14 @@
+@font-face {
+  font-family: "Lexend";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("/fonts/lexend-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   color-scheme: light;
   --background: #f4f2ec;
@@ -13,7 +24,7 @@
   --danger-soft: #fff0ef;
   --shadow: 0 18px 55px rgba(35, 51, 42, 0.11);
   --radius: 22px;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Lexend", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 * {
@@ -91,10 +102,10 @@ p {
 
 h1 {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: inherit;
   font-size: clamp(2.75rem, 8vw, 4.8rem);
-  font-weight: 600;
-  letter-spacing: -0.055em;
+  font-weight: 650;
+  letter-spacing: -0.045em;
   line-height: 0.98;
 }
 
@@ -203,15 +214,36 @@ h2 {
   font-size: 0.83rem;
 }
 
-.chat-log {
+.conversation-surface {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1 1 auto;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--surface-strong);
+}
+
+.conversation-surface[data-view="thinking"] .chat-form,
+.conversation-surface[data-view="response"] .chat-form {
+  display: none;
+}
+
+.conversation-surface[data-view="compose"] .chat-log {
+  display: none;
+}
+
+.chat-log {
+  width: 100%;
+  min-height: 210px;
+  max-height: 100%;
+  flex: 1 1 auto;
   overflow-y: auto;
-  flex-direction: column;
-  gap: 12px;
-  margin: 22px -4px 0;
-  padding: 4px;
+  margin: 0;
+  padding: clamp(18px, 3vw, 32px);
+  cursor: text;
+  line-height: 1.6;
   scroll-behavior: smooth;
 }
 
@@ -219,82 +251,66 @@ h2 {
   display: none;
 }
 
-.chat-log[hidden] + .chat-form {
-  min-height: 210px;
-  flex: 1 1 auto;
+.chat-log:focus-visible {
+  outline: 3px solid rgba(46, 101, 80, 0.35);
+  outline-offset: -3px;
 }
 
-.chat-log[hidden] + .chat-form textarea {
-  height: 100%;
-  max-height: none;
-}
-
-.chat-log:not([hidden]) + .chat-form textarea {
-  min-height: 88px;
-  max-height: 180px;
-}
-
-.message {
-  width: fit-content;
-  max-width: min(88%, 610px);
-  border-radius: 17px;
-  padding: 12px 15px;
-  line-height: 1.55;
+.assistant-output {
+  width: 100%;
+  max-width: none;
+  padding: 0;
   overflow-wrap: anywhere;
 }
 
-.user-message {
-  white-space: pre-wrap;
-}
-
-.message > :first-child {
+.assistant-output > :first-child {
   margin-top: 0;
 }
 
-.message > :last-child {
+.assistant-output > :last-child {
   margin-bottom: 0;
 }
 
-.message p {
+.assistant-output p {
   margin: 0;
 }
 
-.assistant-message p + p,
-.assistant-message p + ul,
-.assistant-message p + ol,
-.assistant-message ul + p,
-.assistant-message ol + p {
+.assistant-output p + p,
+.assistant-output p + ul,
+.assistant-output p + ol,
+.assistant-output ul + p,
+.assistant-output ol + p {
   margin-top: 0.7em;
 }
 
-.assistant-message h3,
-.assistant-message h4,
-.assistant-message h5,
-.assistant-message h6 {
+.assistant-output h3,
+.assistant-output h4,
+.assistant-output h5,
+.assistant-output h6 {
   margin: 0.8em 0 0.3em;
   font-family: inherit;
   font-size: 1em;
   line-height: 1.3;
 }
 
-.assistant-message ul,
-.assistant-message ol {
+.assistant-output ul,
+.assistant-output ol {
   margin: 0.45em 0;
   padding-left: 1.35em;
 }
 
-.assistant-message li + li {
+.assistant-output li + li {
   margin-top: 0.25em;
 }
 
-.assistant-message blockquote {
+.assistant-output blockquote {
   margin: 0.65em 0;
   border-left: 3px solid var(--line);
   padding-left: 0.8em;
   color: var(--muted);
 }
 
-.assistant-message pre {
+.assistant-output pre {
   max-width: 100%;
   margin: 0.65em 0;
   overflow-x: auto;
@@ -305,7 +321,7 @@ h2 {
   word-break: break-word;
 }
 
-.assistant-message code {
+.assistant-output code {
   border-radius: 5px;
   background: var(--background);
   padding: 0.08em 0.3em;
@@ -313,39 +329,25 @@ h2 {
   font-size: 0.9em;
 }
 
-.assistant-message pre code {
+.assistant-output pre code {
   background: transparent;
   padding: 0;
 }
 
-.assistant-message a {
+.assistant-output a {
   color: var(--accent-dark);
   font-weight: 700;
   text-decoration-thickness: 0.08em;
   text-underline-offset: 0.15em;
 }
 
-.assistant-message hr {
+.assistant-output hr {
   margin: 0.75em 0;
   border: 0;
   border-top: 1px solid var(--line);
 }
 
-.assistant-message {
-  align-self: flex-start;
-  border: 1px solid var(--line);
-  border-bottom-left-radius: 5px;
-  background: var(--surface-strong);
-}
-
-.user-message {
-  align-self: flex-end;
-  border-bottom-right-radius: 5px;
-  background: var(--accent);
-  color: white;
-}
-
-.typing-message {
+.thinking-output {
   color: var(--muted);
   font-style: italic;
 }
@@ -375,23 +377,30 @@ h2 {
 
 .chat-form {
   display: grid;
+  width: 100%;
+  min-height: 210px;
   grid-template-columns: 1fr auto;
   align-items: end;
   gap: 10px;
-  margin-top: 14px;
+  margin: 0;
 }
 
 textarea {
   width: 100%;
   min-height: 210px;
-  max-height: 360px;
-  resize: vertical;
-  border: 1px solid #bcc6bf;
-  border-radius: 14px;
-  background: var(--surface-strong);
+  height: 100%;
+  max-height: none;
+  resize: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--text);
-  padding: 13px 14px;
-  line-height: 1.4;
+  padding: clamp(18px, 3vw, 32px);
+  line-height: 1.6;
+}
+
+textarea:focus-visible {
+  outline: 0;
 }
 
 textarea::placeholder {
@@ -420,13 +429,6 @@ textarea::placeholder {
 textarea:disabled {
   cursor: not-allowed;
   opacity: 0.58;
-}
-
-.status-line {
-  min-height: 1.2em;
-  margin: 9px 2px 0;
-  color: var(--muted);
-  font-size: 0.82rem;
 }
 
 .site-footer {
@@ -472,20 +474,8 @@ textarea:disabled {
     grid-template-columns: 1fr;
   }
 
-  .chat-log[hidden] + .chat-form {
-    grid-template-rows: minmax(160px, 1fr) auto;
-  }
-
-  .chat-log[hidden] + .chat-form textarea {
-    min-height: 0;
-  }
-
   .chat-form button {
     width: 100%;
-  }
-
-  .message {
-    max-width: 94%;
   }
 }
 

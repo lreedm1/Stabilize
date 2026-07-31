@@ -11,6 +11,8 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - deterministic routes for immediate danger, possible overdose, unsafe shelter, and medication-change requests
 - OpenAI's Responses API for ordinary AI replies
 - safe, local Markdown rendering for assistant replies
+- a single-surface interface that swaps the composer for thinking and the latest reply
+- a self-hosted Lexend variable font
 - demo mode that works without an API key
 - no account, cookies, database, or persistent chat history in this code
 - safety and route tests
@@ -26,7 +28,7 @@ The language model is not the only safety layer. Urgent phrases are routed to fi
 | `src/page.js` | HTML layout rendered from `src/copy.js` |
 | `src/safety.js` | Deterministic input routing |
 | `src/index.js` | Cloudflare Worker API and OpenAI call |
-| `public/` | Static CSS, browser JavaScript, safe Markdown renderer, and asset security headers |
+| `public/` | Static CSS, browser JavaScript, safe Markdown renderer, Lexend font, and asset security headers |
 | `test/` | Deterministic router and Worker endpoint tests |
 | `docs/` | Public-safe background material for the protocol |
 | `wrangler.jsonc` | Cloudflare configuration and non-secret model settings |
@@ -100,3 +102,5 @@ This repository contains no database and does not write chat messages to storage
 Source code is available under the **AI Pubs OpenRAIL-S v0.1 License**, which permits broad use, modification, hosting, and redistribution subject to use restrictions. Because those restrictions limit fields of use, this is source-available rather than OSI-approved open source.
 
 Background documents are included as project materials under the same responsible-use expectations. Obtain legal review before relying on the license for a production organization.
+
+The bundled Lexend font remains under the SIL Open Font License 1.1; its copyright notice and license are in `public/fonts/OFL.txt`.

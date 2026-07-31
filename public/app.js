@@ -3,9 +3,9 @@ import { renderMarkdown } from "./markdown.js";
 const form = document.querySelector("#chat-form");
 const input = document.querySelector("#message-input");
 const sendButton = document.querySelector("#send-button");
+const conversationSurface = document.querySelector("#conversation-surface");
 const chatLog = document.querySelector("#chat-log");
 const quickActions = document.querySelector("#quick-actions");
-const statusLine = document.querySelector("#status-line");
 const dangerButton = document.querySelector("#danger-button");
 const emergencyPanel = document.querySelector("#emergency-panel");
 const copyTemplate = document.querySelector("#client-copy");
@@ -21,20 +21,25 @@ let awaitingSafetyAnswer = false;
 let pending = false;
 let introDismissed = false;
 
-function addMessage(role, content, extraClass = "") {
+function showOutput(content, extraClass = "", view = "response") {
+  chatLog.replaceChildren();
   const article = document.createElement("article");
-  article.className = `message ${role === "user" ? "user-message" : "assistant-message"} ${extraClass}`.trim();
-  if (role === "assistant") {
-    article.appendChild(renderMarkdown(content));
-  } else {
-    const paragraph = document.createElement("p");
-    paragraph.textContent = content;
-    article.appendChild(paragraph);
-  }
+  article.className = `assistant-output ${extraClass}`.trim();
+  article.appendChild(renderMarkdown(content));
   chatLog.appendChild(article);
   chatLog.hidden = false;
-  chatLog.scrollTop = chatLog.scrollHeight;
+  chatLog.tabIndex = view === "response" ? 0 : -1;
+  conversationSurface.dataset.view = view;
+  chatLog.scrollTop = 0;
   return article;
+}
+
+function showComposer({ focus = true } = {}) {
+  if (pending) return;
+  conversationSurface.dataset.view = "compose";
+  chatLog.hidden = true;
+  chatLog.tabIndex = -1;
+  if (focus) input.focus();
 }
 
 function setPending(value) {
@@ -44,7 +49,6 @@ function setPending(value) {
   quickActions.querySelectorAll("button").forEach((button) => {
     button.disabled = value;
   });
-  statusLine.textContent = value ? copy.pending : "";
 }
 
 function showEmergency() {
@@ -59,11 +63,10 @@ async function sendMessage(text) {
   introDismissed = true;
   input.placeholder = copy.followupPlaceholder;
   quickActions.remove();
-  addMessage("user", clean);
   messages.push({ role: "user", content: clean });
   input.value = "";
   setPending(true);
-  const typing = addMessage("assistant", copy.thinking, "typing-message");
+  showOutput(copy.thinking, "thinking-output", "thinking");
 
   try {
     const response = await fetch("/api/chat", {
@@ -73,25 +76,23 @@ async function sendMessage(text) {
     });
 
     const result = await response.json().catch(() => ({}));
-    typing.remove();
 
     if (!response.ok) {
       throw new Error(result.error || copy.requestFailed);
     }
 
     const reply = String(result.reply || copy.missingReply);
-    addMessage("assistant", reply);
+    showOutput(reply);
     messages.push({ role: "assistant", content: reply });
     awaitingSafetyAnswer = result.awaitingSafetyAnswer === true;
 
     if (result.showEmergency === true) showEmergency();
   } catch (error) {
-    typing.remove();
     const message = error instanceof Error ? error.message : copy.unexpectedError;
-    addMessage("assistant", message);
+    showOutput(message);
   } finally {
     setPending(false);
-    input.focus();
+    chatLog.focus({ preventScroll: true });
   }
 }
 
@@ -108,6 +109,7 @@ input.addEventListener("keydown", (event) => {
 });
 
 input.addEventListener("input", () => {
+  showComposer({ focus: false });
   if (!introDismissed && input.value.length > 0) {
     introDismissed = true;
     input.placeholder = copy.followupPlaceholder;
@@ -120,11 +122,24 @@ quickActions.addEventListener("click", (event) => {
   sendMessage(button.dataset.prompt);
 });
 
+chatLog.addEventListener("click", (event) => {
+  if (event.target instanceof Element && event.target.closest("a")) return;
+  const selection = window.getSelection();
+  if (selection && !selection.isCollapsed) return;
+  showComposer();
+});
+
+chatLog.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  showComposer();
+});
+
 dangerButton.addEventListener("click", () => {
   introDismissed = true;
   input.placeholder = copy.followupPlaceholder;
   showEmergency();
-  addMessage("assistant", copy.dangerReply);
+  showOutput(copy.dangerReply);
   messages.push({
     role: "assistant",
     content: copy.dangerReply,

@@ -43,13 +43,13 @@ export const COPY = {
         },
       ],
       inputLabel: "Your message",
+      responseLabel: "AI response. Select it to write another message.",
       inputPlaceholder: "What is happening right now?",
       sendButton: "Send",
     },
   },
 
   client: {
-    pending: "Finding the smallest useful next step…",
     thinking: "Thinking…",
     requestFailed: "The request failed.",
     missingReply: "I could not generate a reply.",

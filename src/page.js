@@ -44,6 +44,13 @@ export function renderPage() {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="${escapeHtml(page.description)}" />
     <title>${escapeHtml(page.title)}</title>
+    <link
+      rel="preload"
+      href="/fonts/lexend-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -64,26 +71,35 @@ export function renderPage() {
           <p class="outside-us">${escapeHtml(page.chat.emergency.outsideUs)}</p>
         </section>
 
-        <div id="chat-log" class="chat-log" role="log" aria-live="polite" aria-relevant="additions" hidden></div>
+        <section id="conversation-surface" class="conversation-surface" data-view="compose">
+          <div
+            id="chat-log"
+            class="chat-log"
+            role="log"
+            aria-label="${escapeHtml(page.chat.responseLabel)}"
+            aria-live="polite"
+            aria-atomic="true"
+            hidden
+          ></div>
 
-        <form id="chat-form" class="chat-form">
-          <label class="sr-only" for="message-input">${escapeHtml(page.chat.inputLabel)}</label>
-          <textarea
-            id="message-input"
-            name="message"
-            rows="2"
-            maxlength="4000"
-            placeholder="${escapeHtml(page.chat.introPlaceholder)}"
-            required
-          ></textarea>
-          <button id="send-button" type="submit">${escapeHtml(page.chat.sendButton)}</button>
-        </form>
+          <form id="chat-form" class="chat-form">
+            <label class="sr-only" for="message-input">${escapeHtml(page.chat.inputLabel)}</label>
+            <textarea
+              id="message-input"
+              name="message"
+              rows="2"
+              maxlength="4000"
+              placeholder="${escapeHtml(page.chat.introPlaceholder)}"
+              required
+            ></textarea>
+            <button id="send-button" type="submit">${escapeHtml(page.chat.sendButton)}</button>
+          </form>
+        </section>
 
         <div id="quick-actions" class="quick-actions" aria-label="${escapeHtml(page.chat.quickActionsLabel)}">
           ${renderQuickActions(page.chat.quickActions)}
         </div>
 
-        <p id="status-line" class="status-line" aria-live="polite"></p>
       </main>
     </div>
 

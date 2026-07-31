@@ -214,11 +214,16 @@ test("root page renders from the centralized copy", async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /text\/html/);
   assert.match(response.headers.get("content-security-policy"), /script-src 'self'/);
+  assert.match(response.headers.get("content-security-policy"), /font-src 'self'/);
   assert.ok(html.includes(COPY.page.chat.introPlaceholder));
   assert.ok(COPY.page.chat.introPlaceholder.length < 300);
   assert.match(html, /<textarea[\s\S]*placeholder=/);
+  assert.match(html, /id="conversation-surface"[\s\S]*data-view="compose"/);
+  assert.ok(html.includes(COPY.page.chat.responseLabel));
+  assert.match(html, /rel="preload"[\s\S]*lexend-latin-wght-normal\.woff2/);
   assert.ok(html.includes("id=\"client-copy\""));
   assert.doesNotMatch(html, /id=\"reset-button\"|Start over/);
+  assert.doesNotMatch(html, /id="status-line"/);
 
   const encodedClientCopy = html.match(
     /<template id="client-copy">([\s\S]*?)<\/template>/,
@@ -247,15 +252,41 @@ test("quick-start buttons are removed after the first message is sent", async ()
   assert.doesNotMatch(clientScript, /reset-button|resetChat/);
 });
 
-test("assistant replies use the local Markdown renderer", async () => {
+test("one flat surface replaces thinking with the latest Markdown reply", async () => {
   const clientScript = await readFile(
     new URL("../public/app.js", import.meta.url),
     "utf8",
   );
 
   assert.match(clientScript, /import \{ renderMarkdown \} from "\.\/markdown\.js"/);
-  assert.match(clientScript, /role === "assistant"[\s\S]*renderMarkdown\(content\)/);
+  assert.match(clientScript, /function showOutput[\s\S]*chatLog\.replaceChildren\(\)/);
+  assert.match(clientScript, /showOutput\(copy\.thinking, "thinking-output", "thinking"\)/);
+  assert.match(clientScript, /article\.appendChild\(renderMarkdown\(content\)\)/);
+  assert.match(clientScript, /chatLog\.addEventListener\("click"[\s\S]*showComposer\(\)/);
+  assert.doesNotMatch(clientScript, /addMessage|user-message/);
   assert.doesNotMatch(clientScript, /innerHTML\s*=/);
+});
+
+test("Lexend is self-hosted and message bubbles are removed", async () => {
+  const [styles, font, license] = await Promise.all([
+    readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
+    readFile(
+      new URL(
+        "../public/fonts/lexend-latin-wght-normal.woff2",
+        import.meta.url,
+      ),
+    ),
+    readFile(new URL("../public/fonts/OFL.txt", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(styles, /@font-face[\s\S]*font-family:\s*"Lexend"/);
+  assert.match(styles, /font-family:\s*"Lexend", ui-sans-serif/);
+  assert.match(styles, /\.assistant-output\s*{[\s\S]*max-width:\s*none;/);
+  assert.doesNotMatch(styles, /\.assistant-message|\.user-message/);
+  assert.equal(font.subarray(0, 4).toString("ascii"), "wOF2");
+  assert.ok(font.byteLength > 30_000);
+  assert.match(license, /SIL OPEN FONT LICENSE Version 1\.1/);
+  assert.match(license, /Lexend Project Authors/);
 });
 
 test("layout fills the dynamic viewport without a fixed-width shell", async () => {
