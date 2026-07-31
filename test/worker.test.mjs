@@ -319,8 +319,11 @@ test("layout fills the dynamic viewport without a fixed-width shell", async () =
   );
 
   assert.match(styles, /\.page-shell\s*{[\s\S]*?width:\s*100%;/);
+  assert.match(styles, /\.page-shell\s*{[\s\S]*?height:\s*100dvh;/);
   assert.match(styles, /\.page-shell\s*{[\s\S]*?min-height:\s*100dvh;/);
+  assert.match(styles, /\.page-shell\s*{[\s\S]*?overflow:\s*hidden;/);
   assert.match(styles, /\.chat-card\s*{[\s\S]*?flex:\s*1 1 auto;/);
+  assert.match(styles, /\.chat-card\s*{[\s\S]*?overflow:\s*hidden;/);
   assert.doesNotMatch(styles, /width:\s*min\(760px/);
 });
 
