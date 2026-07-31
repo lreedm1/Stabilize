@@ -216,23 +216,18 @@ h2 {
 
 .conversation-surface {
   position: relative;
-  display: flex;
+  display: grid;
   min-height: 0;
   flex: 1 1 auto;
-  flex-direction: column;
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 12px;
   margin-top: 14px;
-}
-
-.conversation-surface[data-view="compose"] .chat-log {
-  display: none;
 }
 
 .chat-log {
   width: 100%;
   min-height: 0;
-  max-height: 100%;
-  flex: 1 1 auto;
+  height: 100%;
   overflow-y: auto;
   margin: 0;
   border-radius: 14px;
@@ -347,40 +342,32 @@ h2 {
   font-style: italic;
 }
 
+.intro-output {
+  color: var(--muted);
+}
+
 .chat-form {
   display: grid;
   width: 100%;
   min-height: 0;
-  flex: 0 0 auto;
   grid-template-columns: 1fr auto;
   align-items: end;
   gap: 10px;
   margin: 0;
 }
 
-.conversation-surface[data-view="compose"] .chat-form {
-  min-height: 210px;
-  flex: 1 1 auto;
-}
-
 textarea {
   width: 100%;
   min-height: 76px;
-  max-height: 180px;
-  resize: vertical;
+  height: 76px;
+  max-height: 76px;
+  resize: none;
   border: 1px solid #bcc6bf;
   border-radius: 14px;
   background: var(--surface-strong);
   color: var(--text);
   padding: 13px 14px;
   line-height: 1.5;
-}
-
-.conversation-surface[data-view="compose"] textarea {
-  min-height: 210px;
-  height: 100%;
-  max-height: none;
-  resize: none;
 }
 
 textarea::placeholder {
@@ -449,13 +436,6 @@ textarea:disabled {
     padding: 17px;
   }
 
-  .chat-form {
-    grid-template-columns: 1fr;
-  }
-
-  .chat-form button {
-    width: 100%;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

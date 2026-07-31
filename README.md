@@ -11,7 +11,7 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - deterministic routes for immediate danger, possible overdose, unsafe shelter, and medication-change requests
 - OpenAI's Responses API for ordinary AI replies
 - safe, local Markdown rendering for assistant replies
-- a persistent text composer beneath thinking and the latest reply
+- a fixed bottom text composer beneath one panel for the intro, thinking, and latest reply
 - a self-hosted Lexend variable font
 - demo mode that works without an API key
 - no account, cookies, database, or persistent chat history in this code
@@ -35,7 +35,7 @@ The language model is not the only safety layer. Urgent phrases are routed to fi
 
 ## Edit site text
 
-All editable product language is in `src/copy.js`: page blurbs, buttons, quick prompts, emergency and medication replies, demo responses, public errors, and the backend model prompt. The other runtime files reference that module, so text changes do not need to be repeated across HTML, browser JavaScript, or routing logic.
+All editable product language is in `src/copy.js`: the intro blurb, labels, buttons, emergency and medication replies, demo responses, public errors, and the backend model prompt. The other runtime files reference that module, so text changes do not need to be repeated across HTML, browser JavaScript, or routing logic.
 
 ## Run locally
 

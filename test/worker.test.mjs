@@ -215,9 +215,9 @@ test("root page renders from the centralized copy", async () => {
   assert.match(response.headers.get("content-type"), /text\/html/);
   assert.match(response.headers.get("content-security-policy"), /script-src 'self'/);
   assert.match(response.headers.get("content-security-policy"), /font-src 'self'/);
-  assert.ok(html.includes(COPY.page.chat.introPlaceholder));
-  assert.ok(COPY.page.chat.introPlaceholder.length < 300);
-  assert.match(html, /<textarea[\s\S]*placeholder=/);
+  assert.ok(html.includes(COPY.page.chat.introBlurb));
+  assert.ok(COPY.page.chat.introBlurb.length < 300);
+  assert.ok(html.includes(`placeholder="${COPY.page.chat.inputPlaceholder}"`));
   assert.match(html, /id="conversation-surface"[\s\S]*data-view="compose"/);
   assert.ok(html.includes(COPY.page.chat.responseLabel));
   assert.match(html, /rel="preload"[\s\S]*lexend-latin-wght-normal\.woff2/);
@@ -225,6 +225,16 @@ test("root page renders from the centralized copy", async () => {
   assert.doesNotMatch(html, /id=\"reset-button\"|Start over/);
   assert.doesNotMatch(html, /id="status-line"/);
   assert.doesNotMatch(html, /quick-actions|data-prompt/);
+
+  const outputIndex = html.indexOf('id="chat-log"');
+  const blurbIndex = html.indexOf(COPY.page.chat.introBlurb);
+  const composerIndex = html.indexOf('id="chat-form"');
+  assert.ok(outputIndex >= 0 && outputIndex < blurbIndex);
+  assert.ok(blurbIndex < composerIndex);
+  assert.doesNotMatch(
+    html.slice(outputIndex, composerIndex),
+    /\shidden(?:\s|>)/,
+  );
 
   const encodedClientCopy = html.match(
     /<template id="client-copy">([\s\S]*?)<\/template>/,
@@ -238,12 +248,13 @@ test("root page renders from the centralized copy", async () => {
     .replaceAll("&gt;", ">")
     .replaceAll("&amp;", "&");
   const clientCopy = JSON.parse(decodedClientCopy);
-  assert.equal(clientCopy.introPlaceholder, COPY.page.chat.introPlaceholder);
-  assert.equal(clientCopy.followupPlaceholder, COPY.page.chat.inputPlaceholder);
+  assert.equal(clientCopy.thinking, COPY.client.thinking);
+  assert.equal("introPlaceholder" in clientCopy, false);
+  assert.equal("followupPlaceholder" in clientCopy, false);
   assert.equal(clientCopy.dangerReply, COPY.client.dangerReply);
 });
 
-test("the text composer remains visible and prompt buttons are absent", async () => {
+test("the output panel stays above a fixed bottom composer", async () => {
   const [clientScript, styles] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
     readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
@@ -254,8 +265,14 @@ test("the text composer remains visible and prompt buttons are absent", async ()
     styles,
     /data-view="(?:thinking|response)"[^{}]*\.chat-form[^{]*\{[^}]*display:\s*none/,
   );
+  assert.match(
+    styles,
+    /\.conversation-surface\s*{[\s\S]*display:\s*grid;[\s\S]*grid-template-rows:\s*minmax\(0,\s*1fr\) auto;/,
+  );
   assert.match(styles, /textarea\s*{[\s\S]*border:\s*1px solid/);
-  assert.match(styles, /data-view="compose"\]\s+textarea\s*{[\s\S]*min-height:\s*210px/);
+  assert.match(styles, /textarea\s*{[\s\S]*height:\s*76px;[\s\S]*resize:\s*none;/);
+  assert.doesNotMatch(styles, /data-view="compose"[^}]*chat-log[^{]*\{[^}]*display:\s*none/);
+  assert.doesNotMatch(clientScript, /introDismissed|followupPlaceholder/);
   assert.doesNotMatch(clientScript, /reset-button|resetChat/);
 });
 

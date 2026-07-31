@@ -20,13 +20,7 @@ function renderEmergencyActions(actions) {
 
 export function renderPage() {
   const { page, client } = COPY;
-  const copyData = escapeHtml(
-    JSON.stringify({
-      ...client,
-      introPlaceholder: page.chat.introPlaceholder,
-      followupPlaceholder: page.chat.inputPlaceholder,
-    }),
-  );
+  const copyData = escapeHtml(JSON.stringify(client));
 
   return `<!doctype html>
 <html lang="${escapeHtml(page.language)}">
@@ -70,8 +64,11 @@ export function renderPage() {
             aria-label="${escapeHtml(page.chat.responseLabel)}"
             aria-live="polite"
             aria-atomic="true"
-            hidden
-          ></div>
+          >
+            <article class="assistant-output intro-output">
+              <p>${escapeHtml(page.chat.introBlurb)}</p>
+            </article>
+          </div>
 
           <form id="chat-form" class="chat-form">
             <label class="sr-only" for="message-input">${escapeHtml(page.chat.inputLabel)}</label>
@@ -80,7 +77,7 @@ export function renderPage() {
               name="message"
               rows="2"
               maxlength="4000"
-              placeholder="${escapeHtml(page.chat.introPlaceholder)}"
+              placeholder="${escapeHtml(page.chat.inputPlaceholder)}"
               required
             ></textarea>
             <button id="send-button" type="submit">${escapeHtml(page.chat.sendButton)}</button>

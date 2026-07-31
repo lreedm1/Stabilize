@@ -21,7 +21,7 @@ export const COPY = {
         ],
         outsideUs: "Outside the U.S., use your local emergency or crisis service.",
       },
-      introPlaceholder:
+      introBlurb:
         "Stabilize is a free AI check-in for overloaded moments. Tell me what feels most fragile, and we’ll choose one small next step. No account or app chat database. AI support—not therapy, diagnosis, or emergency care. OpenAI processes messages to reply. Adults 18+.",
       inputLabel: "Your message",
       responseLabel: "Latest AI response",

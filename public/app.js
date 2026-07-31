@@ -18,7 +18,6 @@ const copy = JSON.parse(copyTemplate.content.textContent);
 let messages = [];
 let awaitingSafetyAnswer = false;
 let pending = false;
-let introDismissed = false;
 
 function showOutput(content, extraClass = "", view = "response") {
   chatLog.replaceChildren();
@@ -48,8 +47,6 @@ async function sendMessage(text) {
   const clean = String(text || "").trim();
   if (!clean || pending) return;
 
-  introDismissed = true;
-  input.placeholder = copy.followupPlaceholder;
   messages.push({ role: "user", content: clean });
   input.value = "";
   setPending(true);
@@ -95,16 +92,7 @@ input.addEventListener("keydown", (event) => {
   }
 });
 
-input.addEventListener("input", () => {
-  if (!introDismissed && input.value.length > 0) {
-    introDismissed = true;
-    input.placeholder = copy.followupPlaceholder;
-  }
-});
-
 dangerButton.addEventListener("click", () => {
-  introDismissed = true;
-  input.placeholder = copy.followupPlaceholder;
   showEmergency();
   showOutput(copy.dangerReply);
   messages.push({
