@@ -42,18 +42,40 @@ test("thinking is replaced with the latest Markdown reply", async () => {
   assert.doesNotMatch(clientScript, /innerHTML\s*=/);
 });
 
-test("the memory control clears the server session", async () => {
-  const [clientScript, styles] = await Promise.all([
+test("the site does not expose a remembered-context deletion control", async () => {
+  const [clientScript, styles, pageSource] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
     readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
   ]);
 
+  assert.doesNotMatch(clientScript, /forgetMemory|\/api\/session/);
+  assert.doesNotMatch(styles, /forget-memory/);
+  assert.doesNotMatch(pageSource, /forget-memory|forgetMemory/);
+});
+
+test("the terrain background is token-modulated and motion-aware", async () => {
+  const [clientScript, terrainScript, styles, pageSource] = await Promise.all([
+    readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/terrain.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(clientScript, /import \{ modulateTerrain \} from "\.\/terrain\.js"/);
+  assert.match(clientScript, /modulateTerrain\(clean\)/);
+  assert.match(clientScript, /modulateTerrain\(reply\)/);
+  assert.match(terrainScript, /continentalness/);
+  assert.match(terrainScript, /erosion/);
+  assert.match(terrainScript, /ridgedNoise/);
+  assert.match(terrainScript, /prefers-reduced-motion: reduce/);
+  assert.match(terrainScript, /document\.hidden/);
+  assert.doesNotMatch(terrainScript, /Math\.random/);
   assert.match(
-    clientScript,
-    /fetch\("\/api\/session", \{ method: "DELETE" \}\)/,
+    styles,
+    /\.terrain-background\s*{[\s\S]*position:\s*fixed;[\s\S]*pointer-events:\s*none;/,
   );
-  assert.match(clientScript, /awaitingSafetyAnswer = false/);
-  assert.match(styles, /\.forget-memory-button\s*{[\s\S]*grid-column:\s*1 \/ -1/);
+  assert.match(pageSource, /id="terrain-background"[\s\S]*aria-hidden="true"/);
 });
 
 test("Lexend is self-hosted and message bubbles are removed", async () => {

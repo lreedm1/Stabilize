@@ -84,9 +84,6 @@ function createSessionNamespace() {
           states.set(name, state);
           return true;
         },
-        async forget() {
-          states.set(name, freshState());
-        },
       };
     },
   };
@@ -421,7 +418,7 @@ test("chat endpoint rejects oversized declared bodies", async () => {
   assert.equal(response.status, 413);
 });
 
-test("deleting the session forgets memory and rotates the cookie", async () => {
+test("the public API does not expose session deletion", async () => {
   const token = "33333333-3333-4333-8333-333333333333";
   const memory = createSessionNamespace();
   await memory.getByName(token).recordExchange({
@@ -439,19 +436,12 @@ test("deleting the session forgets memory and rotates the cookie", async () => {
     createEnv({ SESSIONS: memory }),
   );
 
-  assert.equal(response.status, 200);
-  assert.equal((await response.json()).ok, true);
-  assert.deepEqual(await memory.getByName(token).readContext(), {
-    summary: "",
-    recent: [],
-    awaitingSafetyAnswer: false,
-    turnCount: 0,
-    updatedAt: null,
-  });
-  assert.doesNotMatch(response.headers.get("set-cookie"), new RegExp(token));
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).error, COPY.api.notFound);
+  assert.equal((await memory.getByName(token).readContext()).turnCount, 1);
 });
 
-test("root page renders centralized memory disclosure and controls", async () => {
+test("root page renders memory disclosure without an erase control", async () => {
   const response = await worker.fetch(
     new Request("https://stabilize.test/"),
     createEnv(),
@@ -465,7 +455,8 @@ test("root page renders centralized memory disclosure and controls", async () =>
   assert.match(response.headers.get("set-cookie"), /SameSite=Strict/);
   assert.ok(html.includes(COPY.page.chat.introBlurb));
   assert.ok(COPY.page.chat.introBlurb.length < 300);
-  assert.ok(html.includes('id="forget-memory-button"'));
+  assert.doesNotMatch(html, /forget-memory|Forget remembered context/);
+  assert.ok(html.includes('id="terrain-background"'));
   assert.ok(html.includes('placeholder="' + COPY.page.chat.inputPlaceholder + '"'));
   assert.match(html, /id="conversation-surface"[\s\S]*data-view="compose"/);
   assert.ok(html.includes(COPY.page.chat.responseLabel));
@@ -495,7 +486,7 @@ test("root page renders centralized memory disclosure and controls", async () =>
     .replaceAll("&amp;", "&");
   const clientCopy = JSON.parse(decodedClientCopy);
   assert.equal(clientCopy.thinking, COPY.client.thinking);
-  assert.equal(clientCopy.memoryCleared, COPY.client.memoryCleared);
+  assert.equal(clientCopy.memoryCleared, undefined);
   assert.equal(clientCopy.dangerReply, COPY.client.dangerReply);
 });
 

@@ -217,14 +217,6 @@ export class SessionMemory extends DurableObject {
     });
   }
 
-  async forget() {
-    this.ctx.storage.transactionSync(() => {
-      this.ctx.storage.sql.exec("DELETE FROM recent_messages");
-      this.ctx.storage.sql.exec("DELETE FROM memory_state");
-    });
-    await this.ctx.storage.deleteAlarm();
-  }
-
   async alarm() {
     this.ctx.storage.transactionSync(() => {
       this.ctx.storage.sql.exec("DELETE FROM recent_messages");

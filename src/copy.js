@@ -27,7 +27,6 @@ export const COPY = {
       responseLabel: "Latest AI response",
       inputPlaceholder: "What is happening right now?",
       sendButton: "Send",
-      forgetMemoryButton: "Forget remembered context",
     },
   },
 
@@ -36,8 +35,6 @@ export const COPY = {
     requestFailed: "The request failed.",
     missingReply: "I could not generate a reply.",
     unexpectedError: "Something went wrong.",
-    memoryCleared: "Remembered context was deleted. This is a fresh session.",
-    memoryClearFailed: "I could not delete remembered context. Try again shortly.",
     dangerReply:
       "Move toward a safe person or staffed place now. In the U.S., call or text 988. If an attempt, overdose, medical emergency, or immediate danger may be happening, call 911 or go to an emergency department.",
   },
@@ -103,7 +100,6 @@ export const COPY = {
       "I couldn't produce a reliable reply. Take one small stabilizing step now—water, food, rest, or contact with a safe person—and try again in a moment.",
     methodNotAllowed: "Method not allowed.",
     notFound: "Not found.",
-    memoryCleared: "Remembered context deleted.",
     temporarilyUnavailable:
       "The AI is temporarily unavailable. Try again shortly, or contact a safe person if the situation cannot wait.",
   },

@@ -1,8 +1,8 @@
-import { env } from "cloudflare:workers";
+import { env, runDurableObjectAlarm } from "cloudflare:test";
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-test("Durable Object stores, compacts, and forgets one session", async () => {
+test("Durable Object stores and compacts one session", async () => {
   const stub = env.SESSIONS.getByName("session-memory-lifecycle");
 
   assert.deepEqual(await stub.readContext(), {
@@ -48,14 +48,6 @@ test("Durable Object stores, compacts, and forgets one session", async () => {
     false,
   );
 
-  await stub.forget();
-  assert.deepEqual(await stub.readContext(), {
-    summary: "",
-    recent: [],
-    awaitingSafetyAnswer: false,
-    turnCount: 0,
-    updatedAt: null,
-  });
 });
 
 test("Durable Object bounds uncondensed recent messages", async () => {
@@ -75,4 +67,25 @@ test("Durable Object bounds uncondensed recent messages", async () => {
   assert.equal(context.recent.length, 8);
   assert.equal(context.recent[0].content, "User turn 2");
   assert.equal(context.recent.at(-1).content, "Assistant turn 5");
+});
+
+test("the retention alarm still erases an expired session", async () => {
+  const stub = env.SESSIONS.getByName("session-memory-retention-alarm");
+
+  await stub.recordExchange({
+    user: "Keep this only for the retention window.",
+    assistant: "Stored for bounded continuity.",
+    awaitingSafetyAnswer: false,
+    ipAlias: null,
+  });
+  assert.equal((await stub.readContext()).turnCount, 1);
+
+  assert.equal(await runDurableObjectAlarm(stub), true);
+  assert.deepEqual(await stub.readContext(), {
+    summary: "",
+    recent: [],
+    awaitingSafetyAnswer: false,
+    turnCount: 0,
+    updatedAt: null,
+  });
 });

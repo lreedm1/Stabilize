@@ -620,18 +620,6 @@ async function handleChat(request, env, ctx, token) {
   );
 }
 
-async function forgetSession(request, env, token) {
-  const stub = sessionStub(env, token);
-  if (stub && typeof stub.forget === "function") await stub.forget();
-
-  const newToken = crypto.randomUUID();
-  return jsonResponse(
-    { ok: true, message: COPY.api.memoryCleared },
-    200,
-    sessionHeaders(request, newToken),
-  );
-}
-
 const worker = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -676,13 +664,6 @@ const worker = {
           return jsonResponse({ error: COPY.api.methodNotAllowed }, 405);
         }
         return await handleChat(request, env, ctx, token);
-      }
-
-      if (url.pathname === "/api/session") {
-        if (request.method !== "DELETE") {
-          return jsonResponse({ error: COPY.api.methodNotAllowed }, 405);
-        }
-        return await forgetSession(request, env, token);
       }
 
       if (url.pathname.startsWith("/api/")) {

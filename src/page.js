@@ -39,6 +39,7 @@ export function renderPage() {
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
+    <canvas id="terrain-background" class="terrain-background" aria-hidden="true"></canvas>
     <div class="page-shell">
       <header class="site-header">
         <h1>${escapeHtml(page.header.name)}</h1>
@@ -81,7 +82,6 @@ export function renderPage() {
               required
             ></textarea>
             <button id="send-button" type="submit">${escapeHtml(page.chat.sendButton)}</button>
-            <button id="forget-memory-button" class="forget-memory-button" type="button">${escapeHtml(page.chat.forgetMemoryButton)}</button>
           </form>
         </section>
 

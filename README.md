@@ -12,6 +12,7 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - OpenAI's Responses API for ordinary AI replies
 - safe, local Markdown rendering for assistant replies
 - a fixed bottom text composer beneath one panel for the intro, thinking, and latest reply
+- a continuous, token-modulated landscape generated locally from layered terrain noise
 - a self-hosted Lexend variable font
 - demo mode that works without an API key
 - no account and no full transcript database; browser-scoped memory uses a rolling summary with a bounded recent-message buffer
@@ -29,7 +30,7 @@ The language model is not the only safety layer. Urgent phrases are routed to fi
 | `src/safety.js` | Deterministic input routing |
 | `src/index.js` | Cloudflare Worker API and OpenAI call |
 | `src/session-memory.js` | Per-browser Durable Object memory, expiry, and compaction state |
-| `public/` | Static CSS, browser JavaScript, safe Markdown renderer, Lexend font, and asset security headers |
+| `public/` | Static CSS, browser JavaScript, terrain renderer, safe Markdown renderer, Lexend font, and asset security headers |
 | `test/` | Deterministic router and Worker endpoint tests |
 | `docs/` | Public-safe background material for the protocol |
 | `wrangler.jsonc` | Cloudflare configuration and non-secret model settings |
@@ -98,7 +99,9 @@ See `SECURITY.md`, `PRIVACY.md`, and `RESPONSIBLE_USE.md`.
 
 ## Privacy behavior
 
-The Worker uses a random, `HttpOnly` browser cookie to address one Durable Object. The object retains a rolling summary plus at most eight newest messages awaiting compaction and deletes the record 30 days after the last stored exchange. A visible forget control deletes it sooner. Retrieval is cookie-based rather than IP-based so users on a shared network do not receive each other's context.
+The Worker uses a random, `HttpOnly` browser cookie to address one Durable Object. The object retains a rolling summary plus at most eight newest messages awaiting compaction and deletes the record 30 days after the last stored exchange. The public app does not expose an early-erasure control. Retrieval is cookie-based rather than IP-based so users on a shared network do not receive each other's context.
+
+The landscape animation tokenizes submitted prompts and displayed replies locally, immediately reduces them to numeric climate and motion signals, and does not add message text to animation storage, requests, or logs. Reduced-motion preferences receive a static landscape.
 
 Each chat event logs a keyed alias of the connecting network address and a separate keyed session alias, but not raw addresses, messages, replies, route labels, or cookie values. Both reply and summary requests use OpenAI with `store: false`. Cloudflare, OpenAI, and network infrastructure may still process request data and metadata. See `PRIVACY.md` for the complete implementation-level description and limitations.
 

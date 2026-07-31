@@ -1,9 +1,9 @@
 import { renderMarkdown } from "./markdown.js";
+import { modulateTerrain } from "./terrain.js";
 
 const form = document.querySelector("#chat-form");
 const input = document.querySelector("#message-input");
 const sendButton = document.querySelector("#send-button");
-const forgetMemoryButton = document.querySelector("#forget-memory-button");
 const conversationSurface = document.querySelector("#conversation-surface");
 const chatLog = document.querySelector("#chat-log");
 const dangerButton = document.querySelector("#danger-button");
@@ -36,7 +36,6 @@ function setPending(value) {
   pending = value;
   input.disabled = value;
   sendButton.disabled = value;
-  forgetMemoryButton.disabled = value;
 }
 
 function showEmergency() {
@@ -48,6 +47,7 @@ async function sendMessage(text) {
   const clean = String(text || "").trim();
   if (!clean || pending) return;
 
+  modulateTerrain(clean);
   input.value = "";
   setPending(true);
   showOutput(copy.thinking, "thinking-output", "thinking");
@@ -67,6 +67,7 @@ async function sendMessage(text) {
 
     const reply = String(result.reply || copy.missingReply);
     showOutput(reply);
+    modulateTerrain(reply);
     awaitingSafetyAnswer = result.awaitingSafetyAnswer === true;
 
     if (result.showEmergency === true) showEmergency();
@@ -94,21 +95,5 @@ input.addEventListener("keydown", (event) => {
 dangerButton.addEventListener("click", () => {
   showEmergency();
   showOutput(copy.dangerReply);
-});
-
-forgetMemoryButton.addEventListener("click", async () => {
-  if (pending) return;
-  setPending(true);
-
-  try {
-    const response = await fetch("/api/session", { method: "DELETE" });
-    if (!response.ok) throw new Error(copy.memoryClearFailed);
-    awaitingSafetyAnswer = false;
-    showOutput(copy.memoryCleared);
-  } catch {
-    showOutput(copy.memoryClearFailed);
-  } finally {
-    setPending(false);
-    input.focus({ preventScroll: true });
-  }
+  modulateTerrain(copy.dangerReply);
 });
