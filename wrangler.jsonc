@@ -11,6 +11,14 @@
     "binding": "ASSETS",
     "run_worker_first": ["/api/*", "/", "/index.html"]
   },
+  "durable_objects": {
+    "bindings": [
+      { "name": "SESSIONS", "class_name": "SessionMemory" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["SessionMemory"] }
+  ],
   "vars": {
     "DEMO_MODE": "false",
     "OPENAI_MODEL": "gpt-5.6-sol",
@@ -23,7 +31,7 @@
     "enabled": true,
     "logs": {
       "enabled": true,
-      "head_sampling_rate": 0.05,
+      "head_sampling_rate": 1,
       "invocation_logs": true
     },
     "traces": {

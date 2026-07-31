@@ -381,7 +381,7 @@ textarea::placeholder {
   opacity: 1;
 }
 
-.chat-form button {
+#send-button {
   min-height: 52px;
   border: 0;
   border-radius: 13px;
@@ -392,8 +392,27 @@ textarea::placeholder {
   font-weight: 800;
 }
 
-.chat-form button:hover {
+#send-button:hover {
   background: var(--accent-dark);
+}
+
+.forget-memory-button {
+  grid-column: 1 / -1;
+  justify-self: end;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 0;
+  font-size: 0.76rem;
+  font-weight: 650;
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.15em;
+}
+
+.forget-memory-button:hover {
+  color: var(--text);
 }
 
 .chat-form button:disabled,

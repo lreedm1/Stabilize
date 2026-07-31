@@ -2,7 +2,7 @@
   "name": "stabilize",
   "version": "0.1.0",
   "private": true,
-  "description": "A minimal, stateless, floor-first AI support website for Cloudflare Workers.",
+  "description": "A floor-first AI support website with privacy-bounded session memory on Cloudflare Workers.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -11,11 +11,15 @@
     "check": "wrangler types --check --include-runtime false && wrangler deploy --dry-run",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
-    "test": "node --test",
+    "test": "npm run test:node && npm run test:worker",
+    "test:node": "node --test test/safety.test.mjs test/markdown.test.mjs test/ui.test.mjs",
+    "test:worker": "vitest run --config vitest.config.js test/worker.test.mjs test/session-memory.test.mjs",
     "types": "wrangler types --include-runtime false"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.20.1",
     "@types/node": "^26.1.2",
+    "vitest": "^4.1.10",
     "wrangler": "4.118.0"
   }
 }

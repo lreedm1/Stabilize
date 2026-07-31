@@ -3,6 +3,7 @@ import { renderMarkdown } from "./markdown.js";
 const form = document.querySelector("#chat-form");
 const input = document.querySelector("#message-input");
 const sendButton = document.querySelector("#send-button");
+const forgetMemoryButton = document.querySelector("#forget-memory-button");
 const conversationSurface = document.querySelector("#conversation-surface");
 const chatLog = document.querySelector("#chat-log");
 const dangerButton = document.querySelector("#danger-button");
@@ -15,7 +16,6 @@ if (!(copyTemplate instanceof HTMLTemplateElement)) {
 
 const copy = JSON.parse(copyTemplate.content.textContent);
 
-let messages = [];
 let awaitingSafetyAnswer = false;
 let pending = false;
 
@@ -36,6 +36,7 @@ function setPending(value) {
   pending = value;
   input.disabled = value;
   sendButton.disabled = value;
+  forgetMemoryButton.disabled = value;
 }
 
 function showEmergency() {
@@ -47,7 +48,6 @@ async function sendMessage(text) {
   const clean = String(text || "").trim();
   if (!clean || pending) return;
 
-  messages.push({ role: "user", content: clean });
   input.value = "";
   setPending(true);
   showOutput(copy.thinking, "thinking-output", "thinking");
@@ -56,7 +56,7 @@ async function sendMessage(text) {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, awaitingSafetyAnswer }),
+      body: JSON.stringify({ message: clean, awaitingSafetyAnswer }),
     });
 
     const result = await response.json().catch(() => ({}));
@@ -67,7 +67,6 @@ async function sendMessage(text) {
 
     const reply = String(result.reply || copy.missingReply);
     showOutput(reply);
-    messages.push({ role: "assistant", content: reply });
     awaitingSafetyAnswer = result.awaitingSafetyAnswer === true;
 
     if (result.showEmergency === true) showEmergency();
@@ -95,8 +94,21 @@ input.addEventListener("keydown", (event) => {
 dangerButton.addEventListener("click", () => {
   showEmergency();
   showOutput(copy.dangerReply);
-  messages.push({
-    role: "assistant",
-    content: copy.dangerReply,
-  });
+});
+
+forgetMemoryButton.addEventListener("click", async () => {
+  if (pending) return;
+  setPending(true);
+
+  try {
+    const response = await fetch("/api/session", { method: "DELETE" });
+    if (!response.ok) throw new Error(copy.memoryClearFailed);
+    awaitingSafetyAnswer = false;
+    showOutput(copy.memoryCleared);
+  } catch {
+    showOutput(copy.memoryClearFailed);
+  } finally {
+    setPending(false);
+    input.focus({ preventScroll: true });
+  }
 });
