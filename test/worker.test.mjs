@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
+import { COPY } from "../src/copy.js";
 
 const env = {
   ASSETS: {
@@ -78,7 +79,38 @@ test("chat endpoint rejects oversized declared bodies", async () => {
   assert.equal(response.status, 413);
 });
 
-test("non-API requests pass through to static assets", async () => {
+test("root page renders from the centralized copy", async () => {
   const response = await worker.fetch(new Request("https://stabilize.test/"), env);
+  const html = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /text\/html/);
+  assert.match(response.headers.get("content-security-policy"), /script-src 'self'/);
+  assert.ok(html.includes(COPY.page.chat.introPlaceholder));
+  assert.match(html, /<textarea[\s\S]*placeholder=/);
+  assert.ok(html.includes("id=\"client-copy\""));
+
+  const encodedClientCopy = html.match(
+    /<template id="client-copy">([\s\S]*?)<\/template>/,
+  )?.[1];
+  assert.ok(encodedClientCopy);
+
+  const decodedClientCopy = encodedClientCopy
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&");
+  const clientCopy = JSON.parse(decodedClientCopy);
+  assert.equal(clientCopy.introPlaceholder, COPY.page.chat.introPlaceholder);
+  assert.equal(clientCopy.followupPlaceholder, COPY.page.chat.inputPlaceholder);
+  assert.equal(clientCopy.dangerReply, COPY.client.dangerReply);
+});
+
+test("static asset requests pass through to the asset binding", async () => {
+  const response = await worker.fetch(
+    new Request("https://stabilize.test/styles.css"),
+    env,
+  );
   assert.equal(await response.text(), "asset");
 });

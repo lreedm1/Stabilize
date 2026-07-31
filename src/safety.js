@@ -1,3 +1,5 @@
+import { COPY } from "./copy.js";
+
 const normalize = (value) => String(value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
 
 const matchesAny = (text, patterns) => patterns.some((pattern) => pattern.test(text));
@@ -127,50 +129,6 @@ export function classifyInput(rawText, { awaitingSafetyAnswer = false } = {}) {
 }
 
 export function fixedReplyForRoute(route) {
-  switch (route) {
-    case "MEDICAL_EMERGENCY":
-      return {
-        reply:
-          "Call 911 or go to the nearest emergency department now. Do not wait for this chat. If someone is nearby, tell them what happened and stay with them.",
-        showEmergency: true,
-        awaitingSafetyAnswer: false,
-      };
-    case "IMMEDIATE_DANGER":
-      return {
-        reply:
-          "Move toward a safe person or staffed place now. In the U.S., call or text 988. If an attempt, overdose, serious injury, or immediate danger may be happening, call 911 or go to an emergency department. Tell someone: “I may not be safe alone right now. Please stay with me.”",
-        showEmergency: true,
-        awaitingSafetyAnswer: false,
-      };
-    case "SAFETY_UNCLEAR":
-      return {
-        reply:
-          "I want to check one thing before we do anything else: might you hurt yourself in the next few hours? Reply yes, no, or unsure.",
-        showEmergency: false,
-        awaitingSafetyAnswer: true,
-      };
-    case "UNSAFE_SHELTER":
-      return {
-        reply:
-          "Move toward a safe, staffed place now—a trusted person, shelter, emergency department, fire station, or other public place with staff. If someone is threatening or hurting you right now, call 911.",
-        showEmergency: true,
-        awaitingSafetyAnswer: false,
-      };
-    case "MEDICATION_CHANGE":
-      return {
-        reply:
-          "I can't make a personalized medication-change plan. Follow the label or your clinician's instructions; if they are unclear, contact a pharmacist or prescriber before changing the dose. If there may be an overdose, severe reaction, severe withdrawal, or rapid worsening, seek urgent medical help.",
-        showEmergency: false,
-        awaitingSafetyAnswer: false,
-      };
-    case "MEDICATION_ACCESS":
-      return {
-        reply:
-          "This is a medication-access problem, not a willpower problem. Contact your pharmacy, prescriber, clinic, or support staff now and say what medication you need, when the last dose was, and whether symptoms are worsening. Don't double or improvise a dose unless a clinician or the label tells you to.",
-        showEmergency: false,
-        awaitingSafetyAnswer: false,
-      };
-    default:
-      return null;
-  }
+  const response = COPY.routes[route];
+  return response ? { ...response } : null;
 }

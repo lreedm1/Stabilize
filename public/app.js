@@ -7,13 +7,18 @@ const statusLine = document.querySelector("#status-line");
 const resetButton = document.querySelector("#reset-button");
 const dangerButton = document.querySelector("#danger-button");
 const emergencyPanel = document.querySelector("#emergency-panel");
+const copyTemplate = document.querySelector("#client-copy");
 
-const openingMessage =
-  "You do not need to solve your whole life here. Tell me what feels most fragile, and we will find one small next step.";
+if (!(copyTemplate instanceof HTMLTemplateElement)) {
+  throw new Error("Missing client copy data");
+}
 
-let messages = [{ role: "assistant", content: openingMessage }];
+const copy = JSON.parse(copyTemplate.content.textContent);
+
+let messages = [];
 let awaitingSafetyAnswer = false;
 let pending = false;
+let introDismissed = false;
 
 function addMessage(role, content, extraClass = "") {
   const article = document.createElement("article");
@@ -22,6 +27,7 @@ function addMessage(role, content, extraClass = "") {
   paragraph.textContent = content;
   article.appendChild(paragraph);
   chatLog.appendChild(article);
+  chatLog.hidden = false;
   chatLog.scrollTop = chatLog.scrollHeight;
   return article;
 }
@@ -33,7 +39,7 @@ function setPending(value) {
   quickActions.querySelectorAll("button").forEach((button) => {
     button.disabled = value;
   });
-  statusLine.textContent = value ? "Finding the smallest useful next step…" : "";
+  statusLine.textContent = value ? copy.pending : "";
 }
 
 function showEmergency() {
@@ -42,14 +48,16 @@ function showEmergency() {
 }
 
 function resetChat() {
-  messages = [{ role: "assistant", content: openingMessage }];
+  messages = [];
   awaitingSafetyAnswer = false;
+  introDismissed = false;
   emergencyPanel.hidden = true;
   statusLine.textContent = "";
   chatLog.replaceChildren();
-  addMessage("assistant", openingMessage);
+  chatLog.hidden = true;
   quickActions.hidden = false;
   input.value = "";
+  input.placeholder = copy.introPlaceholder;
   input.focus();
 }
 
@@ -57,12 +65,14 @@ async function sendMessage(text) {
   const clean = String(text || "").trim();
   if (!clean || pending) return;
 
+  introDismissed = true;
+  input.placeholder = copy.followupPlaceholder;
   quickActions.hidden = true;
   addMessage("user", clean);
   messages.push({ role: "user", content: clean });
   input.value = "";
   setPending(true);
-  const typing = addMessage("assistant", "Thinking…", "typing-message");
+  const typing = addMessage("assistant", copy.thinking, "typing-message");
 
   try {
     const response = await fetch("/api/chat", {
@@ -75,10 +85,10 @@ async function sendMessage(text) {
     typing.remove();
 
     if (!response.ok) {
-      throw new Error(result.error || "The request failed.");
+      throw new Error(result.error || copy.requestFailed);
     }
 
-    const reply = String(result.reply || "I could not generate a reply.");
+    const reply = String(result.reply || copy.missingReply);
     addMessage("assistant", reply);
     messages.push({ role: "assistant", content: reply });
     awaitingSafetyAnswer = result.awaitingSafetyAnswer === true;
@@ -86,7 +96,7 @@ async function sendMessage(text) {
     if (result.showEmergency === true) showEmergency();
   } catch (error) {
     typing.remove();
-    const message = error instanceof Error ? error.message : "Something went wrong.";
+    const message = error instanceof Error ? error.message : copy.unexpectedError;
     addMessage("assistant", message);
   } finally {
     setPending(false);
@@ -106,6 +116,13 @@ input.addEventListener("keydown", (event) => {
   }
 });
 
+input.addEventListener("input", () => {
+  if (!introDismissed && input.value.length > 0) {
+    introDismissed = true;
+    input.placeholder = copy.followupPlaceholder;
+  }
+});
+
 quickActions.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-prompt]");
   if (!button) return;
@@ -115,14 +132,12 @@ quickActions.addEventListener("click", (event) => {
 resetButton.addEventListener("click", resetChat);
 
 dangerButton.addEventListener("click", () => {
+  introDismissed = true;
+  input.placeholder = copy.followupPlaceholder;
   showEmergency();
-  addMessage(
-    "assistant",
-    "Move toward a safe person or staffed place now. In the U.S., call or text 988. If an attempt, overdose, medical emergency, or immediate danger may be happening, call 911 or go to an emergency department.",
-  );
+  addMessage("assistant", copy.dangerReply);
   messages.push({
     role: "assistant",
-    content:
-      "Move toward a safe person or staffed place now. In the U.S., call or text 988. If an attempt, overdose, medical emergency, or immediate danger may be happening, call 911 or go to an emergency department.",
+    content: copy.dangerReply,
   });
 });

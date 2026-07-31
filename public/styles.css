@@ -55,7 +55,7 @@ textarea:focus-visible {
 
 .site-header {
   text-align: center;
-  margin-bottom: 28px;
+  margin-bottom: 20px;
 }
 
 .protocol-label,
@@ -121,6 +121,10 @@ h1 {
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
+}
+
+.card-toolbar {
+  justify-content: flex-end;
 }
 
 h2 {
@@ -219,6 +223,10 @@ h2 {
   scroll-behavior: smooth;
 }
 
+.chat-log[hidden] {
+  display: none;
+}
+
 .message {
   width: fit-content;
   max-width: min(88%, 610px);
@@ -284,8 +292,8 @@ h2 {
 
 textarea {
   width: 100%;
-  min-height: 56px;
-  max-height: 180px;
+  min-height: 210px;
+  max-height: 360px;
   resize: vertical;
   border: 1px solid #bcc6bf;
   border-radius: 14px;
@@ -296,7 +304,9 @@ textarea {
 }
 
 textarea::placeholder {
-  color: #849087;
+  color: #657068;
+  line-height: 1.6;
+  opacity: 1;
 }
 
 .chat-form button {

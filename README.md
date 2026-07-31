@@ -7,7 +7,7 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 ## What is included
 
 - a Cloudflare Worker API
-- static HTML, CSS, and browser JavaScript
+- Worker-rendered HTML with static CSS and browser JavaScript
 - deterministic routes for immediate danger, possible overdose, unsafe shelter, and medication-change requests
 - Amazon Bedrock for ordinary AI replies
 - demo mode that works without an API key
@@ -21,13 +21,18 @@ The language model is not the only safety layer. Urgent phrases are routed to fi
 
 | Path | Purpose |
 | --- | --- |
-| `src/prompt.js` | Single source of truth for backend model instructions |
-| `src/safety.js` | Deterministic input routing and fixed urgent responses |
+| `src/copy.js` | Single source of truth for site text, replies, errors, and model instructions |
+| `src/page.js` | HTML layout rendered from `src/copy.js` |
+| `src/safety.js` | Deterministic input routing |
 | `src/index.js` | Cloudflare Worker API and Amazon Bedrock call |
-| `public/` | Static website and security headers |
+| `public/` | Static CSS, browser JavaScript, and asset security headers |
 | `test/` | Deterministic router and Worker endpoint tests |
 | `docs/` | Public-safe background material for the protocol |
 | `wrangler.jsonc` | Cloudflare configuration and non-secret model settings |
+
+## Edit site text
+
+All editable product language is in `src/copy.js`: page blurbs, buttons, quick prompts, emergency and medication replies, demo responses, public errors, and the backend model prompt. The other runtime files reference that module, so text changes do not need to be repeated across HTML, browser JavaScript, or routing logic.
 
 ## Run locally
 
@@ -68,7 +73,7 @@ To change the model without editing application code, update `BEDROCK_MODEL_ID` 
 
 In Cloudflare Workers & Pages, import this GitHub repository as a Worker project. Use `npx wrangler deploy` as the deploy command. Keep secrets in Cloudflare, not in repository settings or source files.
 
-The current Worker serves assets from `public/` and runs Worker code first only for `/api/*`. Static response security headers live in `public/_headers`; API headers are attached in `src/index.js`.
+The Worker renders `/` and `/index.html` from the centralized copy file, handles `/api/*`, and serves CSS and browser JavaScript from `public/`. Worker responses receive security headers in `src/index.js`; static asset headers live in `public/_headers`.
 
 ## Safety and launch limits
 

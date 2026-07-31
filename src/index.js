@@ -1,4 +1,5 @@
-import { SYSTEM_PROMPT } from "./prompt.js";
+import { COPY } from "./copy.js";
+import { renderPage } from "./page.js";
 import { classifyInput, fixedReplyForRoute } from "./safety.js";
 
 const MAX_BODY_BYTES = 32_000;
@@ -26,6 +27,20 @@ function apiHeaders() {
   };
 }
 
+function pageHeaders(contentType = "text/html; charset=utf-8") {
+  return {
+    "Cache-Control": "no-cache",
+    "Content-Security-Policy":
+      "default-src 'self'; connect-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    "Content-Type": contentType,
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+  };
+}
+
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -36,7 +51,7 @@ function jsonResponse(body, status = 200) {
 async function readBoundedJson(request) {
   const declaredLength = Number(request.headers.get("content-length") || 0);
   if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
-    throw new HttpError(413, "Request body is too large.");
+    throw new HttpError(413, COPY.api.bodyTooLarge);
   }
 
   if (!request.body) return {};
@@ -51,8 +66,8 @@ async function readBoundedJson(request) {
       if (done) break;
       total += value.byteLength;
       if (total > MAX_BODY_BYTES) {
-        await reader.cancel("Request body is too large");
-        throw new HttpError(413, "Request body is too large.");
+        await reader.cancel(COPY.api.bodyTooLarge);
+        throw new HttpError(413, COPY.api.bodyTooLarge);
       }
       chunks.push(value);
     }
@@ -70,7 +85,7 @@ async function readBoundedJson(request) {
   try {
     return JSON.parse(new TextDecoder().decode(bytes) || "{}");
   } catch {
-    throw new HttpError(400, "Invalid JSON.");
+    throw new HttpError(400, COPY.api.invalidJson);
   }
 }
 
@@ -109,18 +124,18 @@ function demoReply(route, latestText) {
   const text = latestText.toLowerCase();
 
   if (route === "LOW_SLEEP_URGENCY") {
-    return "Low sleep can make a major decision feel falsely urgent. Write the decision in one sentence, set a time to review it after sleep, and do not act on it tonight unless safety, medical care, shelter, or another real deadline cannot wait.";
+    return COPY.demo.LOW_SLEEP_URGENCY;
   }
   if (route === "FLOOR_FOOD") {
-    return "Your body needs a vote before the rest of your life gets analyzed. Eat the easiest substantial thing you can get in the next ten minutes, even if it is not ideal. Afterward, notice whether the problem still feels as large.";
+    return COPY.demo.FLOOR_FOOD;
   }
   if (route === "FLOOR_REST") {
-    return "Exhaustion is a poor time for a life verdict. Lower the input, put the decision down, and make rest the next task. If sleep is not available, sit somewhere quiet with your eyes closed for ten minutes.";
+    return COPY.demo.FLOOR_REST;
   }
   if (/\b(?:alone|lonely|nobody|no one)\b/.test(text)) {
-    return "That sounds heavy to carry alone. Send one low-pressure message to a safe person: “I’m having a rough moment. Could you stay on the phone or sit with me for a bit?”";
+    return COPY.demo.loneliness;
   }
-  return "This deployment is in demo mode, so it cannot answer open-ended questions yet. Make the problem one size smaller: choose body, connection, order, or direction, then take one action that lasts under ten minutes.";
+  return COPY.demo.default;
 }
 
 function validateModelReply(reply) {
@@ -171,7 +186,7 @@ async function generateReply(messages, route, env) {
       body: JSON.stringify({
         system: [
           {
-            text: `${SYSTEM_PROMPT}\n\nThe application selected route ${route}. Follow it and never downgrade an urgent route.`,
+            text: `${COPY.model.systemPrompt}\n\n${COPY.model.routeInstruction(route)}`,
           },
         ],
         messages,
@@ -214,7 +229,7 @@ async function handleChat(request, env) {
     .find((message) => message?.role === "user");
   const latestText = String(latestUser?.content || "").trim().slice(0, MAX_MESSAGE_CHARS);
 
-  if (!latestText) throw new HttpError(400, "Please enter a message.");
+  if (!latestText) throw new HttpError(400, COPY.api.messageRequired);
 
   const route = classifyInput(latestText, {
     awaitingSafetyAnswer: body?.awaitingSafetyAnswer === true,
@@ -224,14 +239,13 @@ async function handleChat(request, env) {
   if (fixed) return jsonResponse({ route, ...fixed });
 
   const messages = normalizeMessages(rawMessages);
-  if (!messages.length) throw new HttpError(400, "No valid conversation was supplied.");
+  if (!messages.length) throw new HttpError(400, COPY.api.invalidConversation);
 
   const reply = await generateReply(messages, route, env);
   if (!reply) {
     return jsonResponse({
       route,
-      reply:
-        "I couldn't produce a reliable reply. Take one small stabilizing step now—water, food, rest, or contact with a safe person—and try again in a moment.",
+      reply: COPY.api.unreliableReply,
       showEmergency: false,
       awaitingSafetyAnswer: false,
     });
@@ -250,9 +264,22 @@ const worker = {
     const url = new URL(request.url);
 
     try {
+      if (url.pathname === "/" || url.pathname === "/index.html") {
+        if (!["GET", "HEAD"].includes(request.method)) {
+          return new Response(COPY.api.methodNotAllowed, {
+            status: 405,
+            headers: pageHeaders("text/plain; charset=utf-8"),
+          });
+        }
+
+        return new Response(request.method === "HEAD" ? null : renderPage(), {
+          headers: pageHeaders(),
+        });
+      }
+
       if (url.pathname === "/api/health") {
         if (request.method !== "GET") {
-          return jsonResponse({ error: "Method not allowed." }, 405);
+          return jsonResponse({ error: COPY.api.methodNotAllowed }, 405);
         }
         const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
         return jsonResponse({
@@ -264,13 +291,13 @@ const worker = {
 
       if (url.pathname === "/api/chat") {
         if (request.method !== "POST") {
-          return jsonResponse({ error: "Method not allowed." }, 405);
+          return jsonResponse({ error: COPY.api.methodNotAllowed }, 405);
         }
         return await handleChat(request, env);
       }
 
       if (url.pathname.startsWith("/api/")) {
-        return jsonResponse({ error: "Not found." }, 404);
+        return jsonResponse({ error: COPY.api.notFound }, 404);
       }
 
       return await env.ASSETS.fetch(request);
@@ -279,7 +306,7 @@ const worker = {
       const publicMessage =
         error instanceof HttpError
           ? error.message
-          : "The AI is temporarily unavailable. Try again shortly, or contact a safe person if the situation cannot wait.";
+          : COPY.api.temporarilyUnavailable;
 
       if (!(error instanceof HttpError)) {
         console.error(
