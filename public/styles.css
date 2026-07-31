@@ -116,41 +116,15 @@ h1 {
   padding: 24px;
 }
 
-.card-topline {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.card-toolbar {
-  justify-content: flex-end;
-}
-
 h2 {
   margin: 0;
   font-size: clamp(1.35rem, 4vw, 1.85rem);
   letter-spacing: -0.025em;
 }
 
-.text-button {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  padding: 4px 0;
-  font-size: 0.9rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.text-button:hover {
-  color: var(--text);
-}
-
 .danger-button {
   width: 100%;
-  margin-top: 20px;
+  margin-top: 0;
   border: 1px solid rgba(143, 47, 47, 0.35);
   border-radius: 13px;
   background: transparent;
@@ -372,10 +346,6 @@ textarea:disabled {
   .chat-card {
     border-radius: 18px;
     padding: 17px;
-  }
-
-  .card-topline {
-    gap: 12px;
   }
 
   .chat-form {

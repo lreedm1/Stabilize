@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import worker from "../src/index.js";
 import { COPY } from "../src/copy.js";
 
@@ -8,8 +9,8 @@ const env = {
     fetch: async () => new Response("asset", { status: 200 }),
   },
   DEMO_MODE: "true",
-  OPENAI_MODEL: "gpt-5.4-mini",
-  OPENAI_REASONING_EFFORT: "low",
+  OPENAI_MODEL: "gpt-5.6-sol",
+  OPENAI_REASONING_EFFORT: "medium",
 };
 
 test("health endpoint reports demo mode", async () => {
@@ -36,7 +37,7 @@ test("health endpoint reports whether OpenAI is configured", async () => {
   assert.deepEqual(await configuredResponse.json(), {
     ok: true,
     mode: "openai",
-    model: "gpt-5.4-mini",
+    model: "gpt-5.6-sol",
   });
 
   const missingKeyResponse = await worker.fetch(
@@ -48,7 +49,7 @@ test("health endpoint reports whether OpenAI is configured", async () => {
   assert.deepEqual(await missingKeyResponse.json(), {
     ok: false,
     mode: "openai",
-    model: "gpt-5.4-mini",
+    model: "gpt-5.6-sol",
   });
 });
 
@@ -134,8 +135,11 @@ test("chat endpoint calls OpenAI without storing response state", async () => {
     assert.equal(providerRequest.init.headers.Authorization, "Bearer test-openai-key");
 
     const providerBody = JSON.parse(providerRequest.init.body);
-    assert.equal(providerBody.model, "gpt-5.4-mini");
-    assert.deepEqual(providerBody.reasoning, { effort: "low" });
+    assert.equal(providerBody.model, "gpt-5.6-sol");
+    assert.deepEqual(providerBody.reasoning, {
+      effort: "medium",
+      context: "current_turn",
+    });
     assert.equal(providerBody.store, false);
     assert.equal(providerBody.input[0].role, "user");
     assert.equal(providerBody.input[0].content, "Help me plan one next step.");
@@ -169,8 +173,10 @@ test("root page renders from the centralized copy", async () => {
   assert.match(response.headers.get("content-type"), /text\/html/);
   assert.match(response.headers.get("content-security-policy"), /script-src 'self'/);
   assert.ok(html.includes(COPY.page.chat.introPlaceholder));
+  assert.ok(COPY.page.chat.introPlaceholder.length < 300);
   assert.match(html, /<textarea[\s\S]*placeholder=/);
   assert.ok(html.includes("id=\"client-copy\""));
+  assert.doesNotMatch(html, /id=\"reset-button\"|Start over/);
 
   const encodedClientCopy = html.match(
     /<template id="client-copy">([\s\S]*?)<\/template>/,
@@ -187,6 +193,16 @@ test("root page renders from the centralized copy", async () => {
   assert.equal(clientCopy.introPlaceholder, COPY.page.chat.introPlaceholder);
   assert.equal(clientCopy.followupPlaceholder, COPY.page.chat.inputPlaceholder);
   assert.equal(clientCopy.dangerReply, COPY.client.dangerReply);
+});
+
+test("quick-start buttons are removed after the first message is sent", async () => {
+  const clientScript = await readFile(
+    new URL("../public/app.js", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(clientScript, /async function sendMessage[\s\S]*quickActions\.remove\(\)/);
+  assert.doesNotMatch(clientScript, /reset-button|resetChat/);
 });
 
 test("static asset requests pass through to the asset binding", async () => {

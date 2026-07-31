@@ -9,7 +9,6 @@ export const COPY = {
       name: "Stabilize",
     },
     chat: {
-      resetButton: "Start over",
       dangerButton: "I may be in immediate danger",
       emergency: {
         title: "Move toward human help now.",
@@ -23,7 +22,7 @@ export const COPY = {
         outsideUs: "Outside the U.S., use your local emergency or crisis service.",
       },
       introPlaceholder:
-        "Stabilize is a free, floor-first AI check-in for overloaded moments. Get steady enough for the next step. What needs attention first? You do not need to solve your whole life here. Tell me what feels most fragile, and we will find one small next step. No account. No chat database. Free quick chat. AI support—not therapy, diagnosis, or emergency care. When AI mode is enabled, OpenAI processes messages to generate replies. Early version intended for adults 18+.",
+        "Stabilize is a free AI check-in for overloaded moments. Tell me what feels most fragile, and we’ll choose one small next step. No account or app chat database. AI support—not therapy, diagnosis, or emergency care. OpenAI processes messages to reply. Adults 18+.",
       quickActionsLabel: "Quick starting prompts",
       quickActions: [
         {

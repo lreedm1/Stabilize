@@ -165,8 +165,8 @@ async function generateReply(messages, route, env) {
     throw error;
   }
 
-  const model = String(env.OPENAI_MODEL || "gpt-5.4-mini");
-  const reasoningEffort = String(env.OPENAI_REASONING_EFFORT || "low");
+  const model = String(env.OPENAI_MODEL || "gpt-5.6-sol");
+  const reasoningEffort = String(env.OPENAI_REASONING_EFFORT || "medium");
   if (
     !/^[A-Za-z0-9._:-]+$/.test(model) ||
     !OPENAI_REASONING_EFFORTS.has(reasoningEffort)
@@ -189,7 +189,7 @@ async function generateReply(messages, route, env) {
       },
       body: JSON.stringify({
         model,
-        reasoning: { effort: reasoningEffort },
+        reasoning: { effort: reasoningEffort, context: "current_turn" },
         instructions: `${COPY.model.systemPrompt}\n\n${COPY.model.routeInstruction(route)}`,
         input: messages,
         max_output_tokens: 650,
@@ -286,7 +286,7 @@ const worker = {
           {
             ok: configured,
             mode: demoMode ? "demo" : "openai",
-            model: demoMode ? null : String(env.OPENAI_MODEL || "gpt-5.4-mini"),
+            model: demoMode ? null : String(env.OPENAI_MODEL || "gpt-5.6-sol"),
           },
           configured ? 200 : 503,
         );

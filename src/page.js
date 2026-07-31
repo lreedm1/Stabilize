@@ -53,10 +53,6 @@ export function renderPage() {
       </header>
 
       <main class="chat-card" aria-label="${escapeHtml(page.title)}">
-        <div class="card-topline card-toolbar">
-          <button id="reset-button" class="text-button" type="button">${escapeHtml(page.chat.resetButton)}</button>
-        </div>
-
         <button id="danger-button" class="danger-button" type="button">${escapeHtml(page.chat.dangerButton)}</button>
 
         <section id="emergency-panel" class="emergency-panel" hidden aria-live="assertive">

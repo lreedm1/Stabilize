@@ -4,7 +4,6 @@ const sendButton = document.querySelector("#send-button");
 const chatLog = document.querySelector("#chat-log");
 const quickActions = document.querySelector("#quick-actions");
 const statusLine = document.querySelector("#status-line");
-const resetButton = document.querySelector("#reset-button");
 const dangerButton = document.querySelector("#danger-button");
 const emergencyPanel = document.querySelector("#emergency-panel");
 const copyTemplate = document.querySelector("#client-copy");
@@ -47,27 +46,13 @@ function showEmergency() {
   emergencyPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
-function resetChat() {
-  messages = [];
-  awaitingSafetyAnswer = false;
-  introDismissed = false;
-  emergencyPanel.hidden = true;
-  statusLine.textContent = "";
-  chatLog.replaceChildren();
-  chatLog.hidden = true;
-  quickActions.hidden = false;
-  input.value = "";
-  input.placeholder = copy.introPlaceholder;
-  input.focus();
-}
-
 async function sendMessage(text) {
   const clean = String(text || "").trim();
   if (!clean || pending) return;
 
   introDismissed = true;
   input.placeholder = copy.followupPlaceholder;
-  quickActions.hidden = true;
+  quickActions.remove();
   addMessage("user", clean);
   messages.push({ role: "user", content: clean });
   input.value = "";
@@ -128,8 +113,6 @@ quickActions.addEventListener("click", (event) => {
   if (!button) return;
   sendMessage(button.dataset.prompt);
 });
-
-resetButton.addEventListener("click", resetChat);
 
 dangerButton.addEventListener("click", () => {
   introDismissed = true;

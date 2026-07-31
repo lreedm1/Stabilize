@@ -48,7 +48,7 @@ Copy `.dev.vars.example` to `.dev.vars`, place an OpenAI API key in the local fi
 
 ## Enable OpenAI
 
-The default model is `gpt-5.4-mini` through OpenAI's Responses API, with low reasoning effort and `store: false`.
+The default model is `gpt-5.6-sol` through OpenAI's Responses API, with medium reasoning effort, current-turn reasoning context, and `store: false`.
 
 1. Use a project-scoped OpenAI API key with appropriate usage limits.
 2. For local development, copy `.dev.vars.example` to `.dev.vars` and place the key there.
