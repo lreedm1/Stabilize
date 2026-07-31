@@ -14,7 +14,7 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - a fixed bottom text composer beneath one panel for the intro, thinking, and latest reply
 - a self-hosted Lexend variable font
 - demo mode that works without an API key
-- no account, cookies, database, or persistent chat history in this code
+- no account and no full transcript database; browser-scoped memory uses a rolling summary with a bounded recent-message buffer
 - safety and route tests
 - public-safe protocol background documents
 
@@ -28,6 +28,7 @@ The language model is not the only safety layer. Urgent phrases are routed to fi
 | `src/page.js` | HTML layout rendered from `src/copy.js` |
 | `src/safety.js` | Deterministic input routing |
 | `src/index.js` | Cloudflare Worker API and OpenAI call |
+| `src/session-memory.js` | Per-browser Durable Object memory, expiry, and compaction state |
 | `public/` | Static CSS, browser JavaScript, safe Markdown renderer, Lexend font, and asset security headers |
 | `test/` | Deterministic router and Worker endpoint tests |
 | `docs/` | Public-safe background material for the protocol |
@@ -52,6 +53,8 @@ Copy `.dev.vars.example` to `.dev.vars`, place an OpenAI API key in the local fi
 ## Enable OpenAI
 
 The default model is `gpt-5.6-sol` through OpenAI's Responses API, with medium reasoning effort, current-turn reasoning context, and `store: false`.
+
+The same deployed OpenAI key also powers low-reasoning memory compaction. The Worker derives domain-separated, pseudonymous request aliases from the key without exposing it; rotating the key rotates those aliases.
 
 1. Use a project-scoped OpenAI API key with appropriate usage limits.
 2. For local development, copy `.dev.vars.example` to `.dev.vars` and place the key there.
@@ -95,7 +98,9 @@ See `SECURITY.md`, `PRIVACY.md`, and `RESPONSIBLE_USE.md`.
 
 ## Privacy behavior
 
-This repository contains no database and does not write chat messages to storage. The browser holds the active conversation in memory until the page is refreshed. In AI mode, recent messages are sent through the Worker to OpenAI with `store: false`. Cloudflare, OpenAI, and network infrastructure may still process request data and metadata. See `PRIVACY.md` for the implementation-level description and retention limits.
+The Worker uses a random, `HttpOnly` browser cookie to address one Durable Object. The object retains a rolling summary plus at most eight newest messages awaiting compaction and deletes the record 30 days after the last stored exchange. A visible forget control deletes it sooner. Retrieval is cookie-based rather than IP-based so users on a shared network do not receive each other's context.
+
+Each chat event logs a keyed alias of the connecting network address and a separate keyed session alias, but not raw addresses, messages, replies, route labels, or cookie values. Both reply and summary requests use OpenAI with `store: false`. Cloudflare, OpenAI, and network infrastructure may still process request data and metadata. See `PRIVACY.md` for the complete implementation-level description and limitations.
 
 ## License
 

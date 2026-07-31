@@ -81,6 +81,7 @@ export function renderPage() {
               required
             ></textarea>
             <button id="send-button" type="submit">${escapeHtml(page.chat.sendButton)}</button>
+            <button id="forget-memory-button" class="forget-memory-button" type="button">${escapeHtml(page.chat.forgetMemoryButton)}</button>
           </form>
         </section>
 
