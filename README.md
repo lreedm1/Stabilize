@@ -15,7 +15,7 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - safety and route tests
 - public-safe protocol background documents
 
-The language model is not the only safety layer. Urgent phrases are routed to fixed responses before model generation, and model output receives a small final validation check. This defense is intentionally conservative, but it is not comprehensive and requires independent review before a high-stakes public launch.
+The language model is not the only safety layer. Urgent phrases are routed to fixed responses before model generation, and every returned reply is capped server-side at 600 characters after a small final validation check. This defense is intentionally conservative, but it is not comprehensive and requires independent review before a high-stakes public launch.
 
 ## Project map
 

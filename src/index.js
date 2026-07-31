@@ -5,6 +5,9 @@ import { classifyInput, fixedReplyForRoute } from "./safety.js";
 const MAX_BODY_BYTES = 32_000;
 const MAX_MESSAGE_CHARS = 4_000;
 const MAX_MESSAGES = 12;
+const MAX_REPLY_CHARS = 600;
+// This includes hidden reasoning tokens. Visible text is capped separately.
+const MAX_MODEL_OUTPUT_TOKENS = 650;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const OPENAI_REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh"]);
 
@@ -140,6 +143,12 @@ function demoReply(route, latestText) {
   return COPY.demo.default;
 }
 
+function limitReply(reply) {
+  return Array.from(String(reply || "").trim())
+    .slice(0, MAX_REPLY_CHARS)
+    .join("");
+}
+
 function validateModelReply(reply) {
   const text = String(reply || "").trim();
   if (!text) return null;
@@ -150,7 +159,7 @@ function validateModelReply(reply) {
     /\b(?:i can keep you safe|you are definitely safe|you don't need human help)\b/i;
 
   if (unsafeMedication.test(text) || falseAssurance.test(text)) return null;
-  return text.slice(0, 2_500);
+  return limitReply(text);
 }
 
 async function generateReply(messages, route, env) {
@@ -192,7 +201,7 @@ async function generateReply(messages, route, env) {
         reasoning: { effort: reasoningEffort, context: "current_turn" },
         instructions: `${COPY.model.systemPrompt}\n\n${COPY.model.routeInstruction(route)}`,
         input: messages,
-        max_output_tokens: 650,
+        max_output_tokens: MAX_MODEL_OUTPUT_TOKENS,
         store: false,
       }),
       signal: controller.signal,
@@ -235,7 +244,13 @@ async function handleChat(request, env) {
   });
 
   const fixed = fixedReplyForRoute(route);
-  if (fixed) return jsonResponse({ route, ...fixed });
+  if (fixed) {
+    return jsonResponse({
+      route,
+      ...fixed,
+      reply: limitReply(fixed.reply),
+    });
+  }
 
   const messages = normalizeMessages(rawMessages);
   if (!messages.length) throw new HttpError(400, COPY.api.invalidConversation);
@@ -244,7 +259,7 @@ async function handleChat(request, env) {
   if (!reply) {
     return jsonResponse({
       route,
-      reply: COPY.api.unreliableReply,
+      reply: limitReply(COPY.api.unreliableReply),
       showEmergency: false,
       awaitingSafetyAnswer: false,
     });
@@ -252,7 +267,7 @@ async function handleChat(request, env) {
 
   return jsonResponse({
     route,
-    reply,
+    reply: limitReply(reply),
     showEmergency: false,
     awaitingSafetyAnswer: false,
   });

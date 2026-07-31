@@ -20,9 +20,14 @@
   box-sizing: border-box;
 }
 
+html {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   background:
     radial-gradient(circle at 12% 8%, rgba(76, 132, 105, 0.13), transparent 29rem),
     var(--background);
@@ -48,14 +53,23 @@ textarea:focus-visible {
 }
 
 .page-shell {
-  width: min(760px, calc(100% - 32px));
-  margin: 0 auto;
-  padding: 52px 0 28px;
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  flex-direction: column;
+  margin: 0;
+  padding:
+    max(18px, env(safe-area-inset-top))
+    max(18px, env(safe-area-inset-right))
+    max(18px, env(safe-area-inset-bottom))
+    max(18px, env(safe-area-inset-left));
 }
 
 .site-header {
+  flex: 0 0 auto;
   text-align: center;
-  margin-bottom: 20px;
+  margin-bottom: clamp(12px, 2vh, 20px);
 }
 
 .protocol-label,
@@ -109,6 +123,10 @@ h1 {
 }
 
 .chat-card {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
   border: 1px solid rgba(111, 126, 116, 0.25);
   border-radius: var(--radius);
   background: rgba(255, 253, 248, 0.96);
@@ -187,8 +205,8 @@ h2 {
 
 .chat-log {
   display: flex;
-  min-height: 215px;
-  max-height: 52vh;
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
   flex-direction: column;
   gap: 12px;
@@ -199,6 +217,21 @@ h2 {
 
 .chat-log[hidden] {
   display: none;
+}
+
+.chat-log[hidden] + .chat-form {
+  min-height: 210px;
+  flex: 1 1 auto;
+}
+
+.chat-log[hidden] + .chat-form textarea {
+  height: 100%;
+  max-height: none;
+}
+
+.chat-log:not([hidden]) + .chat-form textarea {
+  min-height: 88px;
+  max-height: 180px;
 }
 
 .message {
@@ -339,8 +372,11 @@ textarea:disabled {
 
 @media (max-width: 600px) {
   .page-shell {
-    width: min(100% - 20px, 760px);
-    padding-top: 30px;
+    padding:
+      max(10px, env(safe-area-inset-top))
+      max(10px, env(safe-area-inset-right))
+      max(10px, env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
   }
 
   .chat-card {
@@ -350,6 +386,14 @@ textarea:disabled {
 
   .chat-form {
     grid-template-columns: 1fr;
+  }
+
+  .chat-log[hidden] + .chat-form {
+    grid-template-rows: minmax(160px, 1fr) auto;
+  }
+
+  .chat-log[hidden] + .chat-form textarea {
+    min-height: 0;
   }
 
   .chat-form button {

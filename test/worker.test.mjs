@@ -141,11 +141,66 @@ test("chat endpoint calls OpenAI without storing response state", async () => {
       context: "current_turn",
     });
     assert.equal(providerBody.store, false);
+    assert.equal(providerBody.max_output_tokens, 650);
     assert.equal(providerBody.input[0].role, "user");
     assert.equal(providerBody.input[0].content, "Help me plan one next step.");
     assert.match(providerBody.instructions, /route ORDINARY/i);
+    assert.match(providerBody.instructions, /600 characters or fewer/i);
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("chat endpoint enforces a 600-character reply ceiling", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async () =>
+    Response.json({
+      output: [
+        {
+          type: "message",
+          role: "assistant",
+          content: [
+            {
+              type: "output_text",
+              text: "a".repeat(700),
+              annotations: [],
+            },
+          ],
+        },
+      ],
+    });
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: "Give me one next step." }],
+        }),
+      }),
+      { ...env, DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" },
+    );
+
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(Array.from(body.reply).length, 600);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("all fixed and fallback replies stay within the same ceiling", () => {
+  const fixedReplies = [
+    COPY.client.dangerReply,
+    ...Object.values(COPY.demo),
+    ...Object.values(COPY.routes).map((route) => route.reply),
+    COPY.api.unreliableReply,
+  ];
+
+  for (const reply of fixedReplies) {
+    assert.ok(Array.from(reply).length <= 600);
   }
 });
 
@@ -203,6 +258,18 @@ test("quick-start buttons are removed after the first message is sent", async ()
 
   assert.match(clientScript, /async function sendMessage[\s\S]*quickActions\.remove\(\)/);
   assert.doesNotMatch(clientScript, /reset-button|resetChat/);
+});
+
+test("layout fills the dynamic viewport without a fixed-width shell", async () => {
+  const styles = await readFile(
+    new URL("../public/styles.css", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(styles, /\.page-shell\s*{[\s\S]*?width:\s*100%;/);
+  assert.match(styles, /\.page-shell\s*{[\s\S]*?min-height:\s*100dvh;/);
+  assert.match(styles, /\.chat-card\s*{[\s\S]*?flex:\s*1 1 auto;/);
+  assert.doesNotMatch(styles, /width:\s*min\(760px/);
 });
 
 test("static asset requests pass through to the asset binding", async () => {
