@@ -9,4 +9,4 @@ These files are public-safe working materials related to Stabilize:
 - `sustainable-direction-condensed-core.txt` and `12-week-direction-plan.txt` — planning tools for stable periods
 - `tales-condensed.txt` — narrative explorations of the model
 
-These documents are background material, not individualized medical advice and not a substitute for professional review. The runtime model instructions are maintained separately in `src/prompt.js`; editing a document here does not automatically change deployed behavior.
+These documents are background material, not individualized medical advice and not a substitute for professional review. The runtime model instructions are maintained separately in `src/copy.js`; editing a document here does not automatically change deployed behavior.

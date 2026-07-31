@@ -5,6 +5,8 @@ import { classifyInput, fixedReplyForRoute } from "./safety.js";
 const MAX_BODY_BYTES = 32_000;
 const MAX_MESSAGE_CHARS = 4_000;
 const MAX_MESSAGES = 12;
+const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const OPENAI_REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh"]);
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -116,7 +118,7 @@ function normalizeMessages(messages) {
 
   return alternating.map((message) => ({
     role: message.role,
-    content: [{ text: message.text }],
+    content: message.text,
   }));
 }
 
@@ -152,49 +154,46 @@ function validateModelReply(reply) {
 }
 
 async function generateReply(messages, route, env) {
-  const latestText = messages.at(-1)?.content?.[0]?.text || "";
+  const latestText = messages.at(-1)?.content || "";
   const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
   if (demoMode) return demoReply(route, latestText);
 
-  const bedrockToken = String(env.AWS_BEARER_TOKEN_BEDROCK || "");
-  if (!bedrockToken) {
-    const error = new Error("Bedrock is not configured");
-    error.name = "MissingBedrockToken";
+  const apiKey = String(env.OPENAI_API_KEY || "");
+  if (!apiKey) {
+    const error = new Error("OpenAI is not configured");
+    error.name = "MissingOpenAIKey";
     throw error;
   }
 
-  const region = String(env.AWS_REGION || "us-east-1");
-  const modelId = String(env.BEDROCK_MODEL_ID || "us.amazon.nova-2-lite-v1:0");
-  if (!/^[a-z0-9-]+$/.test(region) || !/^[A-Za-z0-9._:-]+$/.test(modelId)) {
-    const error = new Error("Bedrock configuration is invalid");
-    error.name = "InvalidBedrockConfiguration";
+  const model = String(env.OPENAI_MODEL || "gpt-5.4-mini");
+  const reasoningEffort = String(env.OPENAI_REASONING_EFFORT || "low");
+  if (
+    !/^[A-Za-z0-9._:-]+$/.test(model) ||
+    !OPENAI_REASONING_EFFORTS.has(reasoningEffort)
+  ) {
+    const error = new Error("OpenAI configuration is invalid");
+    error.name = "InvalidOpenAIConfiguration";
     throw error;
   }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60_000);
-  const endpoint = `https://bedrock-runtime.${region}.amazonaws.com/model/${modelId}/converse`;
 
   let response;
   try {
-    response = await fetch(endpoint, {
+    response = await fetch(OPENAI_RESPONSES_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${bedrockToken}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        system: [
-          {
-            text: `${COPY.model.systemPrompt}\n\n${COPY.model.routeInstruction(route)}`,
-          },
-        ],
-        messages,
-        inferenceConfig: {
-          maxTokens: 350,
-          temperature: 0.4,
-          topP: 0.9,
-        },
+        model,
+        reasoning: { effort: reasoningEffort },
+        instructions: `${COPY.model.systemPrompt}\n\n${COPY.model.routeInstruction(route)}`,
+        input: messages,
+        max_output_tokens: 650,
+        store: false,
       }),
       signal: controller.signal,
     });
@@ -204,16 +203,16 @@ async function generateReply(messages, route, env) {
 
   const responseBody = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(`Bedrock returned HTTP ${response.status}`);
-    error.name = "BedrockHttpError";
+    const error = new Error(`OpenAI returned HTTP ${response.status}`);
+    error.name = "OpenAIHttpError";
     throw error;
   }
 
-  const blocks = Array.isArray(responseBody?.output?.message?.content)
-    ? responseBody.output.message.content
-    : [];
-  const text = blocks
-    .filter((block) => typeof block?.text === "string")
+  const output = Array.isArray(responseBody?.output) ? responseBody.output : [];
+  const text = output
+    .filter((item) => item?.type === "message" && Array.isArray(item.content))
+    .flatMap((item) => item.content)
+    .filter((block) => block?.type === "output_text" && typeof block.text === "string")
     .map((block) => block.text)
     .join("\n")
     .trim();
@@ -282,11 +281,15 @@ const worker = {
           return jsonResponse({ error: COPY.api.methodNotAllowed }, 405);
         }
         const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
-        return jsonResponse({
-          ok: true,
-          mode: demoMode ? "demo" : "bedrock",
-          model: demoMode ? null : String(env.BEDROCK_MODEL_ID || ""),
-        });
+        const configured = demoMode || Boolean(String(env.OPENAI_API_KEY || ""));
+        return jsonResponse(
+          {
+            ok: configured,
+            mode: demoMode ? "demo" : "openai",
+            model: demoMode ? null : String(env.OPENAI_MODEL || "gpt-5.4-mini"),
+          },
+          configured ? 200 : 503,
+        );
       }
 
       if (url.pathname === "/api/chat") {

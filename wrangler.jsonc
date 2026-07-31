@@ -12,9 +12,9 @@
     "run_worker_first": ["/api/*", "/", "/index.html"]
   },
   "vars": {
-    "DEMO_MODE": "true",
-    "AWS_REGION": "us-east-1",
-    "BEDROCK_MODEL_ID": "us.amazon.nova-2-lite-v1:0"
+    "DEMO_MODE": "false",
+    "OPENAI_MODEL": "gpt-5.4-mini",
+    "OPENAI_REASONING_EFFORT": "low"
   },
   "observability": {
     "enabled": true,

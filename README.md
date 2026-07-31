@@ -9,7 +9,7 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - a Cloudflare Worker API
 - Worker-rendered HTML with static CSS and browser JavaScript
 - deterministic routes for immediate danger, possible overdose, unsafe shelter, and medication-change requests
-- Amazon Bedrock for ordinary AI replies
+- OpenAI's Responses API for ordinary AI replies
 - demo mode that works without an API key
 - no account, cookies, database, or persistent chat history in this code
 - safety and route tests
@@ -24,7 +24,7 @@ The language model is not the only safety layer. Urgent phrases are routed to fi
 | `src/copy.js` | Single source of truth for site text, replies, errors, and model instructions |
 | `src/page.js` | HTML layout rendered from `src/copy.js` |
 | `src/safety.js` | Deterministic input routing |
-| `src/index.js` | Cloudflare Worker API and Amazon Bedrock call |
+| `src/index.js` | Cloudflare Worker API and OpenAI call |
 | `public/` | Static CSS, browser JavaScript, and asset security headers |
 | `test/` | Deterministic router and Worker endpoint tests |
 | `docs/` | Public-safe background material for the protocol |
@@ -44,18 +44,18 @@ npm test
 npm run dev
 ```
 
-Open the local URL Wrangler prints. The committed configuration uses `DEMO_MODE=true`, so no credential is needed for the interface and deterministic routes.
+Copy `.dev.vars.example` to `.dev.vars`, place an OpenAI API key in the local file, and open the URL Wrangler prints. `.dev.vars` is ignored by Git. To run only the interface and deterministic routes without an API call, temporarily set `DEMO_MODE` to `true` in your local configuration.
 
-## Enable Amazon Bedrock
+## Enable OpenAI
 
-The default model is Amazon Nova 2 Lite through Bedrock's Converse endpoint.
+The default model is `gpt-5.4-mini` through OpenAI's Responses API, with low reasoning effort and `store: false`.
 
-1. Copy `.dev.vars.example` to `.dev.vars` for local development and place a Bedrock API key there.
-2. Change `DEMO_MODE` to `false` in `wrangler.jsonc`.
-3. For a Cloudflare deployment, store the key as a secret:
+1. Use a project-scoped OpenAI API key with appropriate usage limits.
+2. For local development, copy `.dev.vars.example` to `.dev.vars` and place the key there.
+3. For a Cloudflare deployment, store the same key as a Worker runtime secret:
 
 ```bash
-npx wrangler secret put AWS_BEARER_TOKEN_BEDROCK
+npx wrangler secret put OPENAI_API_KEY
 ```
 
 4. Validate and deploy:
@@ -65,9 +65,9 @@ npm run check
 npm run deploy
 ```
 
-Never place the key in browser code, GitHub, or `wrangler.jsonc`. AWS recommends long-term Bedrock API keys only for exploration. A production deployment should use short-lived credentials with a rotation design or an AWS-hosted service that can use an IAM role.
+Never place the key in browser code, GitHub, `wrangler.jsonc`, or a Cloudflare plain-text variable. The browser calls the Worker, and only the Worker reads the secret at runtime. Rotate a key immediately if it is exposed, and set project-level spend limits before public use.
 
-To change the model without editing application code, update `BEDROCK_MODEL_ID` in `wrangler.jsonc`, rerun the tests, and validate the new model's behavior.
+To change the model without editing application code, update `OPENAI_MODEL` in `wrangler.jsonc`, rerun the tests, and validate the new model's behavior. `OPENAI_REASONING_EFFORT` accepts `none`, `low`, `medium`, `high`, or `xhigh` when the selected model supports that setting.
 
 ## Connect Cloudflare to GitHub
 
@@ -92,7 +92,7 @@ See `SECURITY.md`, `PRIVACY.md`, and `RESPONSIBLE_USE.md`.
 
 ## Privacy behavior
 
-This repository contains no database and does not write chat messages to storage. The browser holds the active conversation in memory until the page is refreshed. In AI mode, recent messages are sent through the Worker to Amazon Bedrock. Cloudflare, AWS, and network infrastructure may still process request data and metadata. See `PRIVACY.md` for the implementation-level description.
+This repository contains no database and does not write chat messages to storage. The browser holds the active conversation in memory until the page is refreshed. In AI mode, recent messages are sent through the Worker to OpenAI with `store: false`. Cloudflare, OpenAI, and network infrastructure may still process request data and metadata. See `PRIVACY.md` for the implementation-level description and retention limits.
 
 ## License
 
