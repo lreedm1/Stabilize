@@ -9,15 +9,6 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function renderEmergencyActions(actions) {
-  return actions
-    .map((action) => {
-      const className = action.primary ? ' class="emergency-primary"' : "";
-      return `<a${className} href="${escapeHtml(action.href)}">${escapeHtml(action.label)}</a>`;
-    })
-    .join("\n            ");
-}
-
 export function renderPage() {
   const { page, client } = COPY;
   const copyData = escapeHtml(JSON.stringify(client));
@@ -43,45 +34,9 @@ export function renderPage() {
     <div class="page-shell">
       <header class="site-header">
         <h1>${escapeHtml(page.header.name)}</h1>
-        <div class="sound-controls" role="group" aria-label="${escapeHtml(page.sound.groupLabel)}">
-          <button
-            id="sound-toggle"
-            class="sound-toggle"
-            type="button"
-            aria-pressed="false"
-            aria-label="${escapeHtml(COPY.client.soundTurnOn)}"
-          >
-            <span class="sound-icon" aria-hidden="true">♪</span>
-            <span class="sound-name">${escapeHtml(page.sound.toggleLabel)}</span>
-            <span id="sound-status" class="sound-status">${escapeHtml(page.sound.statusOff)}</span>
-          </button>
-          <label class="volume-control" for="sound-volume">
-            <span class="sr-only">${escapeHtml(page.sound.volumeLabel)}</span>
-            <input
-              id="sound-volume"
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value="0.36"
-              aria-label="${escapeHtml(page.sound.volumeLabel)}"
-            />
-          </label>
-        </div>
       </header>
 
       <main class="chat-card" aria-label="${escapeHtml(page.title)}">
-        <button id="danger-button" class="danger-button" type="button">${escapeHtml(page.chat.dangerButton)}</button>
-
-        <section id="emergency-panel" class="emergency-panel" hidden aria-live="assertive">
-          <h3>${escapeHtml(page.chat.emergency.title)}</h3>
-          <p>${escapeHtml(page.chat.emergency.body)}</p>
-          <div class="emergency-actions">
-            ${renderEmergencyActions(page.chat.emergency.actions)}
-          </div>
-          <p class="outside-us">${escapeHtml(page.chat.emergency.outsideUs)}</p>
-        </section>
-
         <section id="conversation-surface" class="conversation-surface" data-view="compose">
           <div
             id="chat-log"

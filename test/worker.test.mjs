@@ -441,7 +441,7 @@ test("the public API does not expose session deletion", async () => {
   assert.equal((await memory.getByName(token).readContext()).turnCount, 1);
 });
 
-test("root page renders memory disclosure without an erase control", async () => {
+test("root page renders the simplified chat without audio or a danger shortcut", async () => {
   const response = await worker.fetch(
     new Request("https://stabilize.test/"),
     createEnv(),
@@ -457,10 +457,9 @@ test("root page renders memory disclosure without an erase control", async () =>
   assert.ok(COPY.page.chat.introBlurb.length < 300);
   assert.doesNotMatch(html, /forget-memory|Forget remembered context/);
   assert.ok(html.includes('id="terrain-background"'));
-  assert.ok(html.includes('id="sound-toggle"'));
-  assert.ok(html.includes('id="sound-volume"'));
-  assert.match(html, /id="sound-toggle"[\s\S]*aria-pressed="false"/);
-  assert.doesNotMatch(html, /<audio|autoplay/);
+  assert.doesNotMatch(html, /sound-toggle|sound-volume|sound-controls/);
+  assert.doesNotMatch(html, /danger-button|emergency-panel|emergency-actions/);
+  assert.doesNotMatch(html, /<audio|autoplay|nature-sounds\.js/);
   assert.ok(html.includes('placeholder="' + COPY.page.chat.inputPlaceholder + '"'));
   assert.match(html, /id="conversation-surface"[\s\S]*data-view="compose"/);
   assert.ok(html.includes(COPY.page.chat.responseLabel));
@@ -491,7 +490,8 @@ test("root page renders memory disclosure without an erase control", async () =>
   const clientCopy = JSON.parse(decodedClientCopy);
   assert.equal(clientCopy.thinking, COPY.client.thinking);
   assert.equal(clientCopy.memoryCleared, undefined);
-  assert.equal(clientCopy.dangerReply, COPY.client.dangerReply);
+  assert.equal(clientCopy.dangerReply, undefined);
+  assert.equal(clientCopy.soundOn, undefined);
 });
 
 test("static asset requests pass through to the asset binding", async () => {

@@ -93,25 +93,30 @@ test("the terrain background is token-modulated and motion-aware", async () => {
     styles,
     /\.assistant-output\s*{[\s\S]*max-width:\s*78ch;[\s\S]*background:\s*var\(--reading-surface\);[\s\S]*line-height:\s*1\.72;/,
   );
+  assert.match(styles, /--composer-surface:\s*rgba\(255,\s*255,\s*252,\s*0\.5\)/);
+  assert.match(
+    styles,
+    /textarea\s*{[\s\S]*background:\s*var\(--composer-surface\);[\s\S]*color:\s*var\(--text\);[\s\S]*opacity:\s*1;/,
+  );
 });
 
-test("nature sounds are opt-in and have a volume control", async () => {
-  const [clientScript, soundScript, styles, pageSource] = await Promise.all([
+test("the page has no audio or separate immediate-danger shortcut", async () => {
+  const [clientScript, styles, pageSource] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/nature-sounds.js", import.meta.url), "utf8"),
     readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
   ]);
 
-  assert.match(clientScript, /import \{ createNatureSoundscape \}/);
-  assert.match(clientScript, /soundToggle\.addEventListener\("click"/);
-  assert.match(clientScript, /soundVolume\.addEventListener\("input"/);
-  assert.match(soundScript, /new AudioContextClass/);
-  assert.match(soundScript, /createBufferSource/);
-  assert.match(pageSource, /id="sound-toggle"[\s\S]*aria-pressed="false"/);
-  assert.match(pageSource, /id="sound-volume"[\s\S]*type="range"/);
-  assert.match(styles, /\.sound-controls\s*{[\s\S]*position:\s*absolute;/);
-  assert.doesNotMatch(pageSource, /<audio|autoplay/);
+  assert.doesNotMatch(clientScript, /nature-sounds|AudioContext|soundToggle|soundVolume/);
+  assert.doesNotMatch(clientScript, /dangerButton|showEmergency|emergencyPanel/);
+  assert.doesNotMatch(pageSource, /sound-toggle|sound-volume|sound-controls/);
+  assert.doesNotMatch(pageSource, /danger-button|emergency-panel|emergency-actions/);
+  assert.doesNotMatch(styles, /\.sound-|#sound-|\.volume-control/);
+  assert.doesNotMatch(styles, /\.danger-button|\.emergency-panel|\.emergency-actions/);
+  await assert.rejects(
+    readFile(new URL("../public/nature-sounds.js", import.meta.url), "utf8"),
+    { code: "ENOENT" },
+  );
 });
 
 test("Lexend is self-hosted and the response uses a single reading surface", async () => {

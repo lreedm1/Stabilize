@@ -8,25 +8,7 @@ export const COPY = {
     header: {
       name: "Stabilize",
     },
-    sound: {
-      groupLabel: "Nature sound controls",
-      toggleLabel: "Nature sounds",
-      volumeLabel: "Nature sound volume",
-      statusOff: "Off",
-    },
     chat: {
-      dangerButton: "I may be in immediate danger",
-      emergency: {
-        title: "Move toward human help now.",
-        body:
-          "Go to a safe person or staffed place. In the U.S., call or text 988. For an attempt, overdose, medical emergency, or immediate danger, call 911 or go to an emergency department.",
-        actions: [
-          { label: "Call 988", href: "tel:988" },
-          { label: "Text 988", href: "sms:988" },
-          { label: "Call 911", href: "tel:911", primary: true },
-        ],
-        outsideUs: "Outside the U.S., use your local emergency or crisis service.",
-      },
       introBlurb:
         "Free AI support for overloaded moments—not therapy, diagnosis, or emergency care. This browser’s context is condensed and remembered for 30 days; network addresses are logged as protected aliases. OpenAI processes messages. Adults 18+.",
       inputLabel: "Your message",
@@ -41,14 +23,6 @@ export const COPY = {
     requestFailed: "The request failed.",
     missingReply: "I could not generate a reply.",
     unexpectedError: "Something went wrong.",
-    soundOn: "On",
-    soundOff: "Off",
-    soundMuted: "Muted",
-    soundUnavailable: "Unavailable",
-    soundTurnOn: "Turn on nature sounds",
-    soundTurnOff: "Turn off nature sounds",
-    dangerReply:
-      "Move toward a safe person or staffed place now. In the U.S., call or text 988. If an attempt, overdose, medical emergency, or immediate danger may be happening, call 911 or go to an emergency department.",
   },
 
   demo: {
