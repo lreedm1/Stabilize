@@ -457,6 +457,18 @@ test("root page renders the simplified chat without audio or a danger shortcut",
   assert.ok(COPY.page.chat.introBlurb.length < 300);
   assert.doesNotMatch(html, /forget-memory|Forget remembered context/);
   assert.ok(html.includes('id="terrain-background"'));
+  assert.ok(html.includes('id="photo-backdrop"'));
+  assert.ok(html.includes('id="photo-backdrop-image"'));
+  assert.ok(html.includes("lake-valley-portrait-720.webp 720w"));
+  assert.ok(html.includes("lake-valley-landscape-3840.webp 3840w"));
+  assert.ok(
+    html.indexOf('id="terrain-background"') <
+      html.indexOf('id="photo-backdrop"'),
+  );
+  assert.ok(
+    html.indexOf('id="photo-backdrop"') <
+      html.indexOf('id="photo-background"'),
+  );
   assert.doesNotMatch(html, /sound-toggle|sound-volume|sound-controls/);
   assert.doesNotMatch(html, /danger-button|emergency-panel|emergency-actions/);
   assert.doesNotMatch(html, /<audio|autoplay|nature-sounds\.js/);

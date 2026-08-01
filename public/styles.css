@@ -69,6 +69,28 @@ body::before {
   pointer-events: none;
 }
 
+.photo-backdrop {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  contain: strict;
+  pointer-events: none;
+  user-select: none;
+}
+
+.photo-backdrop img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  filter: saturate(1.06) contrast(1.025) brightness(1.01);
+}
+
 .terrain-fallback {
   opacity: 1;
   filter: saturate(1.24) contrast(1.04) brightness(1.02);
@@ -481,10 +503,13 @@ textarea:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .terrain-fallback,
-  .terrain-fallback.is-photo-ready {
-    opacity: 0.84;
+  .terrain-fallback {
+    opacity: 1;
     transition: none;
+  }
+
+  .terrain-fallback.is-photo-ready {
+    opacity: 0;
   }
 
   .photo-background,

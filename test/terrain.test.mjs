@@ -98,7 +98,7 @@ test("photographic scene assets are responsive and bounded", async () => {
   }
 });
 
-test("reduced-motion and low-power clients retain the procedural fallback", () => {
+test("reduced-motion and low-power clients skip only the animated photo scene", () => {
   const scope = (overrides = {}) => ({
     matchMedia: () => ({ matches: false }),
     navigator: { hardwareConcurrency: 8, deviceMemory: 8, ...overrides },

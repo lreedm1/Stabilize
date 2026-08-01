@@ -35,6 +35,34 @@ export function renderPage() {
       class="terrain-background terrain-fallback"
       aria-hidden="true"
     ></canvas>
+    <picture
+      id="photo-backdrop"
+      class="photo-backdrop"
+      aria-hidden="true"
+    >
+      <source
+        media="(orientation: portrait)"
+        sizes="100vw"
+        srcset="
+          /scenes/lake-valley-portrait-720.webp 720w,
+          /scenes/lake-valley-portrait-1440.webp 1440w,
+          /scenes/lake-valley-portrait-2160.webp 2160w
+        "
+      />
+      <img
+        id="photo-backdrop-image"
+        src="/scenes/lake-valley-landscape-1280.webp"
+        srcset="
+          /scenes/lake-valley-landscape-1280.webp 1280w,
+          /scenes/lake-valley-landscape-2560.webp 2560w,
+          /scenes/lake-valley-landscape-3840.webp 3840w
+        "
+        sizes="100vw"
+        alt=""
+        decoding="async"
+        fetchpriority="high"
+      />
+    </picture>
     <canvas
       id="photo-background"
       class="terrain-background photo-background"

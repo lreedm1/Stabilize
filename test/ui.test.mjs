@@ -80,7 +80,9 @@ test("the terrain background is token-modulated and motion-aware", async () => {
   assert.match(terrainScript, /document\.hidden/);
   assert.doesNotMatch(terrainScript, /Math\.random/);
   assert.match(terrainScript, /createPhotoScene/);
-  assert.match(terrainScript, /terrain\?\.setActive\(false\)/);
+  assert.match(terrainScript, /#photo-backdrop-image/);
+  assert.match(terrainScript, /backdropReady \|\| animatedPhotoReady/);
+  assert.match(terrainScript, /terrain\?\.setActive\(!photoReady\)/);
   assert.match(photoScript, /u_image_size/);
   assert.match(photoScript, /float water/);
   assert.match(photoScript, /depthPixels/);
@@ -94,10 +96,28 @@ test("the terrain background is token-modulated and motion-aware", async () => {
     /\.terrain-background\s*{[\s\S]*position:\s*fixed;[\s\S]*pointer-events:\s*none;/,
   );
   assert.match(styles, /\.terrain-fallback\s*{[\s\S]*filter:\s*saturate\(1\.24\)/);
+  assert.match(
+    styles,
+    /\.photo-backdrop\s*{[\s\S]*position:\s*fixed;[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;/,
+  );
+  assert.match(
+    styles,
+    /\.photo-backdrop img\s*{[\s\S]*object-fit:\s*cover;[\s\S]*object-position:\s*center;/,
+  );
   assert.match(styles, /\.photo-background\s*{[\s\S]*filter:\s*saturate\(1\.06\)/);
   assert.match(styles, /\.photo-background\.is-ready\s*{[\s\S]*opacity:\s*1/);
   assert.match(pageSource, /id="terrain-background"[\s\S]*aria-hidden="true"/);
+  assert.match(pageSource, /id="photo-backdrop"[\s\S]*aria-hidden="true"/);
+  assert.match(pageSource, /id="photo-backdrop-image"/);
+  assert.match(pageSource, /lake-valley-portrait-720\.webp 720w/);
+  assert.match(pageSource, /lake-valley-portrait-2160\.webp 2160w/);
+  assert.match(pageSource, /lake-valley-landscape-1280\.webp 1280w/);
+  assert.match(pageSource, /lake-valley-landscape-3840\.webp 3840w/);
   assert.match(pageSource, /id="photo-background"[\s\S]*aria-hidden="true"/);
+  const reducedMotionStyles = styles.slice(
+    styles.indexOf("@media (prefers-reduced-motion: reduce)"),
+  );
+  assert.doesNotMatch(reducedMotionStyles, /\.photo-backdrop/);
   assert.match(styles, /--foreground-earth:\s*rgba\(133,\s*107,\s*72,\s*0\.3\)/);
   assert.match(
     styles,

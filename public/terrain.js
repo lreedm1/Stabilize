@@ -1049,6 +1049,38 @@ const photoCanvas =
   typeof document === "undefined"
     ? null
     : document.querySelector("#photo-background");
+const backdropImage =
+  typeof document === "undefined"
+    ? null
+    : document.querySelector("#photo-backdrop-image");
+let backdropReady = false;
+let animatedPhotoReady = false;
+
+function syncPhotoLayers() {
+  const photoReady = backdropReady || animatedPhotoReady;
+  terrainCanvas?.classList.toggle("is-photo-ready", photoReady);
+  terrain?.setActive(!photoReady);
+}
+
+if (
+  typeof HTMLImageElement !== "undefined" &&
+  backdropImage instanceof HTMLImageElement
+) {
+  backdropImage.addEventListener("load", () => {
+    backdropReady = true;
+    syncPhotoLayers();
+  });
+  backdropImage.addEventListener("error", () => {
+    backdropReady = false;
+    syncPhotoLayers();
+  });
+
+  if (backdropImage.complete && backdropImage.naturalWidth > 0) {
+    backdropReady = true;
+    syncPhotoLayers();
+  }
+}
+
 const photoScene =
   typeof window !== "undefined" &&
   typeof HTMLCanvasElement !== "undefined" &&
@@ -1056,14 +1088,14 @@ const photoScene =
   shouldUsePhotoScene(window)
     ? createPhotoScene(photoCanvas, {
         onReady() {
+          animatedPhotoReady = true;
           photoCanvas.classList.add("is-ready");
-          terrainCanvas?.classList.add("is-photo-ready");
-          terrain?.setActive(false);
+          syncPhotoLayers();
         },
         onFailure() {
+          animatedPhotoReady = false;
           photoCanvas.classList.remove("is-ready");
-          terrainCanvas?.classList.remove("is-photo-ready");
-          terrain?.setActive(true);
+          syncPhotoLayers();
         },
       })
     : null;
