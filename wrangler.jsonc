@@ -25,13 +25,7 @@
     "OPENAI_REASONING_EFFORT": "medium"
   },
   "secrets": {
-    "required": [
-      "OPENAI_API_KEY",
-      "GOOGLE_CLIENT_ID",
-      "GOOGLE_CLIENT_SECRET",
-      "AUTH_SECRET",
-      "PUBLIC_ORIGIN"
-    ]
+    "required": ["OPENAI_API_KEY"]
   },
   "observability": {
     "enabled": true,
