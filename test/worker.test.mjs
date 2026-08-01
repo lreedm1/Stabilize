@@ -453,8 +453,10 @@ test("root page renders the simplified chat without audio or a danger shortcut",
   assert.match(response.headers.get("content-security-policy"), /script-src 'self'/);
   assert.match(response.headers.get("content-security-policy"), /font-src 'self'/);
   assert.match(response.headers.get("set-cookie"), /SameSite=Strict/);
-  assert.ok(html.includes(COPY.page.chat.introBlurb));
-  assert.ok(COPY.page.chat.introBlurb.length < 300);
+  assert.ok(html.includes(COPY.page.chat.supportNote));
+  assert.ok(html.includes(COPY.page.chat.infoLabel));
+  assert.ok(html.includes(COPY.page.chat.infoDetails));
+  assert.ok(COPY.page.chat.supportNote.length < 80);
   assert.doesNotMatch(html, /forget-memory|Forget remembered context/);
   assert.ok(html.includes('id="terrain-background"'));
   assert.ok(html.includes('id="photo-backdrop"'));
@@ -482,11 +484,13 @@ test("root page renders the simplified chat without audio or a danger shortcut",
   assert.doesNotMatch(html, /quick-actions|data-prompt/);
 
   const outputIndex = html.indexOf('id="chat-log"');
-  const blurbIndex = html.indexOf(COPY.page.chat.introBlurb);
+  const noteIndex = html.indexOf(COPY.page.chat.supportNote);
+  const infoIndex = html.indexOf(COPY.page.chat.infoDetails);
   const composerIndex = html.indexOf('id="chat-form"');
-  assert.ok(outputIndex >= 0 && outputIndex < blurbIndex);
-  assert.ok(blurbIndex < composerIndex);
-  assert.doesNotMatch(html.slice(outputIndex, composerIndex), /\shidden(?:\s|>)/);
+  assert.ok(outputIndex >= 0 && outputIndex < noteIndex);
+  assert.ok(noteIndex < infoIndex && infoIndex < composerIndex);
+  assert.match(html.slice(outputIndex, noteIndex), /\shidden(?:\s|>)/);
+  assert.doesNotMatch(html.slice(outputIndex, noteIndex), /assistant-output/);
 
   const encodedClientCopy = html.match(
     /<template id="client-copy">([\s\S]*?)<\/template>/,

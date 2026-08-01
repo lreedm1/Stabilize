@@ -9,8 +9,11 @@ export const COPY = {
       name: "Stabilize",
     },
     chat: {
-      introBlurb:
-        "Free AI support for overloaded moments—not therapy, diagnosis, or emergency care. This browser’s context is condensed and remembered for 30 days; network addresses are logged as protected aliases. OpenAI processes messages. Adults 18+.",
+      supportNote:
+        "Free AI support for overloaded moments—not emergency care.",
+      infoLabel: "Info",
+      infoDetails:
+        "Not therapy or diagnosis. This browser’s context is condensed and remembered for 30 days. Network addresses are logged as protected aliases. OpenAI processes messages. Adults 18+.",
       inputLabel: "Your message",
       responseLabel: "Latest AI response",
       inputPlaceholder: "What is happening right now?",

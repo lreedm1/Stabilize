@@ -82,24 +82,33 @@ export function renderPage() {
             aria-label="${escapeHtml(page.chat.responseLabel)}"
             aria-live="polite"
             aria-atomic="true"
-          >
-            <article class="assistant-output intro-output">
-              <p>${escapeHtml(page.chat.introBlurb)}</p>
-            </article>
-          </div>
+            hidden
+          ></div>
 
-          <form id="chat-form" class="chat-form">
-            <label class="sr-only" for="message-input">${escapeHtml(page.chat.inputLabel)}</label>
-            <textarea
-              id="message-input"
-              name="message"
-              rows="2"
-              maxlength="4000"
-              placeholder="${escapeHtml(page.chat.inputPlaceholder)}"
-              required
-            ></textarea>
-            <button id="send-button" type="submit">${escapeHtml(page.chat.sendButton)}</button>
-          </form>
+          <div class="composer-dock">
+            <div class="composer-meta">
+              <p>${escapeHtml(page.chat.supportNote)}</p>
+              <details class="info-disclosure">
+                <summary>${escapeHtml(page.chat.infoLabel)}</summary>
+                <div class="info-popover">
+                  <p>${escapeHtml(page.chat.infoDetails)}</p>
+                </div>
+              </details>
+            </div>
+
+            <form id="chat-form" class="chat-form">
+              <label class="sr-only" for="message-input">${escapeHtml(page.chat.inputLabel)}</label>
+              <textarea
+                id="message-input"
+                name="message"
+                rows="2"
+                maxlength="4000"
+                placeholder="${escapeHtml(page.chat.inputPlaceholder)}"
+                required
+              ></textarea>
+              <button id="send-button" type="submit">${escapeHtml(page.chat.sendButton)}</button>
+            </form>
+          </div>
         </section>
 
       </main>
