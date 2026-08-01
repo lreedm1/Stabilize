@@ -36,6 +36,19 @@ function setPending(value) {
   sendButton.disabled = value;
 }
 
+function requestErrorMessage(message, reference = "") {
+  const parts = [
+    String(message || copy.requestFailed),
+    copy.draftRestored,
+    copy.helpCannotWait,
+  ];
+  const cleanReference = String(reference || "").trim();
+  if (cleanReference) {
+    parts.push(`${copy.errorReferenceLabel}: ${cleanReference}`);
+  }
+  return parts.filter(Boolean).join("\n\n");
+}
+
 async function sendMessage(text) {
   const clean = String(text || "").trim();
   if (!clean || pending) return;
@@ -55,16 +68,21 @@ async function sendMessage(text) {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      throw new Error(result.error || copy.requestFailed);
+      input.value = clean;
+      showOutput(
+        requestErrorMessage(result.error, result.reference),
+        "error-output",
+      );
+      return;
     }
 
     const reply = String(result.reply || copy.missingReply);
     showOutput(reply);
     modulateTerrain(reply);
     awaitingSafetyAnswer = result.awaitingSafetyAnswer === true;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : copy.unexpectedError;
-    showOutput(message);
+  } catch {
+    input.value = clean;
+    showOutput(requestErrorMessage(copy.unexpectedError), "error-output");
   } finally {
     setPending(false);
     input.focus({ preventScroll: true });

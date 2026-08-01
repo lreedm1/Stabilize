@@ -121,6 +121,16 @@ function responseWithText(text) {
   });
 }
 
+function responseWithError(status, error, headers = {}) {
+  return Response.json(
+    { error },
+    {
+      status,
+      headers,
+    },
+  );
+}
+
 test("health endpoint reports demo mode and session memory", async () => {
   const response = await worker.fetch(
     new Request("https://stabilize.test/api/health"),
@@ -241,6 +251,10 @@ test("chat endpoint calls OpenAI with store disabled", async () => {
       providerRequest.init.headers.Authorization,
       "Bearer test-openai-key",
     );
+    assert.match(
+      providerRequest.init.headers["X-Client-Request-Id"],
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
 
     const providerBody = JSON.parse(providerRequest.init.body);
     assert.equal(providerBody.model, "gpt-5.6-sol");
@@ -268,6 +282,187 @@ test("chat endpoint calls OpenAI with store disabled", async () => {
   } finally {
     globalThis.fetch = originalFetch;
     console.log = originalLog;
+  }
+});
+
+test("rate limits return a retry time and a safe traceable error", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  const logs = [];
+  let clientRequestId;
+
+  globalThis.fetch = async (_input, init) => {
+    clientRequestId = init.headers["X-Client-Request-Id"];
+    return responseWithError(
+      429,
+      {
+        code: "rate_limit_exceeded",
+        type: "rate_limit_error",
+        message: "raw provider detail must remain private",
+      },
+      {
+        "Retry-After": "7",
+        "X-Request-Id": "req_rate_limit_test",
+      },
+    );
+  };
+  console.error = (...values) => logs.push(values.join(" "));
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Help me plan one next step." }),
+      }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+    );
+    const body = await response.json();
+    const logged = logs.join("\n");
+
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get("retry-after"), "7");
+    assert.equal(body.error, COPY.api.aiBusy(7));
+    assert.match(body.reference, /^STB-[A-F0-9]{12}$/);
+    assert.equal(
+      body.reference,
+      "STB-" + clientRequestId.replaceAll("-", "").slice(0, 12).toUpperCase(),
+    );
+    assert.match(logged, /"event":"openai_request_failed"/);
+    assert.match(logged, /"code":"rate_limit_exceeded"/);
+    assert.match(logged, /"providerRequestId":"req_rate_limit_test"/);
+    assert.match(logged, new RegExp(clientRequestId));
+    assert.doesNotMatch(logged, /raw provider detail/);
+    assert.doesNotMatch(logged, /Help me plan one next step/);
+    assert.doesNotMatch(JSON.stringify(body), /rate_limit_exceeded|req_rate_limit_test/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalError;
+  }
+});
+
+test("spend and quota limits are not mislabeled as transient rate limits", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  console.error = () => {};
+  globalThis.fetch = async () =>
+    responseWithError(429, {
+      code: "project_spend_limit_exceeded",
+      type: "insufficient_quota",
+      message: "project limit detail",
+    });
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Help me plan one next step." }),
+      }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get("retry-after"), null);
+    assert.equal(body.error, COPY.api.aiServiceLimit);
+    assert.match(body.reference, /^STB-[A-F0-9]{12}$/);
+    assert.doesNotMatch(JSON.stringify(body), /project_spend|insufficient_quota/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalError;
+  }
+});
+
+test("one-message provider rejections suggest rewording without leaking details", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  console.error = () => {};
+  globalThis.fetch = async () =>
+    responseWithError(400, {
+      code: "invalid_request_error",
+      type: "invalid_request_error",
+      message: "sensitive provider explanation",
+    });
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Help me with this unusual request." }),
+      }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 422);
+    assert.equal(body.error, COPY.api.aiRequestRejected);
+    assert.match(body.reference, /^STB-[A-F0-9]{12}$/);
+    assert.doesNotMatch(JSON.stringify(body), /sensitive provider explanation/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalError;
+  }
+});
+
+test("an empty or rejected model reply becomes a retryable service error", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  console.error = () => {};
+  globalThis.fetch = async () =>
+    Response.json(
+      { output: [] },
+      { headers: { "X-Request-Id": "req_empty_reply_test" } },
+    );
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Help me plan one next step." }),
+      }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 502);
+    assert.equal(body.error, COPY.api.unreliableReply);
+    assert.match(body.reference, /^STB-[A-F0-9]{12}$/);
+    assert.doesNotMatch(JSON.stringify(body), /req_empty_reply_test/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalError;
+  }
+});
+
+test("provider connection failures return a safe reference", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  console.error = () => {};
+  globalThis.fetch = async () => {
+    throw new Error("private socket failure detail");
+  };
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Help me plan one next step." }),
+      }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 503);
+    assert.equal(body.error, COPY.api.aiConnection);
+    assert.match(body.reference, /^STB-[A-F0-9]{12}$/);
+    assert.doesNotMatch(JSON.stringify(body), /private socket failure detail/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalError;
   }
 });
 
@@ -505,6 +700,11 @@ test("root page renders the simplified chat without audio or a danger shortcut",
     .replaceAll("&amp;", "&");
   const clientCopy = JSON.parse(decodedClientCopy);
   assert.equal(clientCopy.thinking, COPY.client.thinking);
+  assert.equal(clientCopy.draftRestored, COPY.client.draftRestored);
+  assert.equal(
+    clientCopy.errorReferenceLabel,
+    COPY.client.errorReferenceLabel,
+  );
   assert.equal(clientCopy.memoryCleared, undefined);
   assert.equal(clientCopy.dangerReply, undefined);
   assert.equal(clientCopy.soundOn, undefined);

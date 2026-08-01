@@ -25,7 +25,12 @@ export const COPY = {
     thinking: "Thinking…",
     requestFailed: "The request failed.",
     missingReply: "I could not generate a reply.",
-    unexpectedError: "Something went wrong.",
+    unexpectedError:
+      "Stabilize couldn't reach the site. Check your connection and try again.",
+    draftRestored: "Your message is back in the box.",
+    helpCannotWait:
+      "If help cannot wait, contact someone who can respond now.",
+    errorReferenceLabel: "Error reference",
   },
 
   demo: {
@@ -86,11 +91,23 @@ export const COPY = {
     messageRequired: "Please enter a message.",
     invalidConversation: "No valid conversation was supplied.",
     unreliableReply:
-      "I couldn't produce a reliable reply. Take one small stabilizing step now—water, food, rest, or contact with a safe person—and try again in a moment.",
+      "Stabilize couldn't complete a reliable reply. Try sending the message again.",
     methodNotAllowed: "Method not allowed.",
     notFound: "Not found.",
+    aiBusy: (seconds) =>
+      `Stabilize is busy right now. Wait ${seconds} ${seconds === 1 ? "second" : "seconds"}, then try again.`,
+    aiTimeout:
+      "The AI took too long to reply. Try sending the message again.",
+    aiConnection:
+      "Stabilize couldn't reach the AI service. Try again in a moment.",
+    aiServiceLimit:
+      "Stabilize has reached a service limit. Please try again later.",
+    aiConfiguration:
+      "Stabilize's AI connection needs attention. Please try again later.",
+    aiRequestRejected:
+      "Stabilize couldn't process that message. Try shortening or rewording it.",
     temporarilyUnavailable:
-      "The AI is temporarily unavailable. Try again shortly, or contact a safe person if the situation cannot wait.",
+      "Stabilize couldn't get a reply this time. Try again in a moment.",
   },
 
   model: {

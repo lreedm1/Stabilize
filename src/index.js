@@ -23,6 +23,14 @@ const OPENAI_REASONING_EFFORTS = new Set([
   "high",
   "xhigh",
 ]);
+const OPENAI_ACCOUNT_LIMIT_CODES = new Set([
+  "credit_balance_exhausted",
+  "insufficient_quota",
+  "organization_spend_limit_exceeded",
+  "organization_usage_limit_exceeded",
+  "project_spend_limit_exceeded",
+]);
+const PROVIDER_FIELD_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 const SESSION_COOKIE_NAME = "stabilize_session";
 const SESSION_COOKIE_MAX_AGE = SESSION_RETENTION_DAYS * 24 * 60 * 60;
 const SESSION_TOKEN_PATTERN =
@@ -48,6 +56,29 @@ class HttpError extends Error {
     super(message);
     this.name = "HttpError";
     this.status = status;
+  }
+}
+
+class OpenAIRequestError extends Error {
+  constructor({
+    name,
+    failure,
+    status = 0,
+    code = null,
+    type = null,
+    providerRequestId = null,
+    clientRequestId,
+    retryAfterSeconds = null,
+  }) {
+    super("OpenAI request failed");
+    this.name = name;
+    this.failure = failure;
+    this.status = status;
+    this.code = code;
+    this.type = type;
+    this.providerRequestId = providerRequestId;
+    this.clientRequestId = clientRequestId;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -327,9 +358,76 @@ function responseText(responseBody) {
     .trim();
 }
 
+function safeProviderField(value) {
+  const text = String(value || "").trim();
+  return PROVIDER_FIELD_PATTERN.test(text) ? text : null;
+}
+
+function retryAfterSeconds(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+
+  const numeric = Number(text);
+  const seconds = Number.isFinite(numeric)
+    ? Math.ceil(numeric)
+    : Math.ceil((Date.parse(text) - Date.now()) / 1_000);
+  if (!Number.isFinite(seconds) || seconds < 1) return null;
+  return Math.min(seconds, 300);
+}
+
+function providerErrorFields(responseBody) {
+  const providerError = responseBody?.error;
+  if (!providerError || typeof providerError !== "object") {
+    return { code: null, type: null };
+  }
+  return {
+    code: safeProviderField(providerError.code),
+    type: safeProviderField(providerError.type),
+  };
+}
+
+function errorReference(clientRequestId) {
+  const compact = String(clientRequestId || "").replaceAll("-", "");
+  return "STB-" + compact.slice(0, 12).toUpperCase();
+}
+
+function publicOpenAIError(error) {
+  if (error.failure === "timeout" || error.status === 408) {
+    return { status: 504, message: COPY.api.aiTimeout };
+  }
+  if (error.failure === "connection") {
+    return { status: 503, message: COPY.api.aiConnection };
+  }
+  if (error.failure === "invalid_output") {
+    return { status: 502, message: COPY.api.unreliableReply };
+  }
+  if (
+    OPENAI_ACCOUNT_LIMIT_CODES.has(error.code) ||
+    error.type === "insufficient_quota"
+  ) {
+    return { status: 503, message: COPY.api.aiServiceLimit };
+  }
+  if (error.status === 429) {
+    const waitSeconds = error.retryAfterSeconds || 20;
+    return {
+      status: 429,
+      message: COPY.api.aiBusy(waitSeconds),
+      retryAfterSeconds: waitSeconds,
+    };
+  }
+  if ([401, 403, 404].includes(error.status)) {
+    return { status: 503, message: COPY.api.aiConfiguration };
+  }
+  if ([400, 413, 422].includes(error.status)) {
+    return { status: 422, message: COPY.api.aiRequestRejected };
+  }
+  return { status: 503, message: COPY.api.temporarilyUnavailable };
+}
+
 async function callOpenAI(payload, apiKey, timeoutMs, errorName) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const clientRequestId = crypto.randomUUID();
 
   let response;
   try {
@@ -338,22 +436,44 @@ async function callOpenAI(payload, apiKey, timeoutMs, errorName) {
       headers: {
         Authorization: "Bearer " + apiKey,
         "Content-Type": "application/json",
+        "X-Client-Request-Id": clientRequestId,
       },
       body: JSON.stringify(payload),
       signal: controller.signal,
+    });
+  } catch {
+    throw new OpenAIRequestError({
+      name: errorName,
+      failure: controller.signal.aborted ? "timeout" : "connection",
+      clientRequestId,
     });
   } finally {
     clearTimeout(timeout);
   }
 
   const responseBody = await response.json().catch(() => ({}));
+  const providerRequestId = safeProviderField(
+    response.headers.get("x-request-id"),
+  );
   if (!response.ok) {
-    const error = new Error("OpenAI returned HTTP " + response.status);
-    error.name = errorName;
-    throw error;
+    const fields = providerErrorFields(responseBody);
+    throw new OpenAIRequestError({
+      name: errorName,
+      failure: "http",
+      status: response.status,
+      code: fields.code,
+      type: fields.type,
+      providerRequestId,
+      clientRequestId,
+      retryAfterSeconds: retryAfterSeconds(response.headers.get("retry-after")),
+    });
   }
 
-  return responseText(responseBody);
+  return {
+    text: responseText(responseBody),
+    providerRequestId,
+    clientRequestId,
+  };
 }
 
 async function generateReply(messages, route, env, latestText) {
@@ -361,7 +481,7 @@ async function generateReply(messages, route, env, latestText) {
   if (demoMode) return demoReply(route, latestText);
 
   const { apiKey, model, reasoningEffort } = openAIConfig(env);
-  const text = await callOpenAI(
+  const result = await callOpenAI(
     {
       model,
       reasoning: { effort: reasoningEffort, context: "current_turn" },
@@ -380,7 +500,17 @@ async function generateReply(messages, route, env, latestText) {
     "OpenAIHttpError",
   );
 
-  return validateModelReply(text);
+  const reply = validateModelReply(result.text);
+  if (!reply) {
+    throw new OpenAIRequestError({
+      name: "OpenAIInvalidReplyError",
+      failure: "invalid_output",
+      status: 502,
+      providerRequestId: result.providerRequestId,
+      clientRequestId: result.clientRequestId,
+    });
+  }
+  return reply;
 }
 
 function sanitizeSummary(value) {
@@ -402,7 +532,7 @@ async function generateSummary(snapshot, env) {
     existing_summary: snapshot.summary || null,
     recent_messages: snapshot.messages,
   });
-  const text = await callOpenAI(
+  const result = await callOpenAI(
     {
       model,
       reasoning: { effort: "low", context: "current_turn" },
@@ -416,7 +546,7 @@ async function generateSummary(snapshot, env) {
     "OpenAISummaryHttpError",
   );
 
-  return sanitizeSummary(text) || null;
+  return sanitizeSummary(result.text) || null;
 }
 
 async function compactSession(stub, env) {
@@ -589,8 +719,7 @@ async function handleChat(request, env, ctx, token) {
   const messages = modelInput(memory, latestText);
   if (!messages.length) throw new HttpError(400, COPY.api.invalidConversation);
 
-  const generated = await generateReply(messages, route, env, latestText);
-  const reply = generated || COPY.api.unreliableReply;
+  const reply = await generateReply(messages, route, env, latestText);
   const result = await recordExchange(stub, {
     user: latestText,
     assistant: reply,
@@ -672,23 +801,58 @@ const worker = {
 
       return await env.ASSETS.fetch(request);
     } catch (error) {
-      const status = error instanceof HttpError ? error.status : 503;
-      const publicMessage =
-        error instanceof HttpError
-          ? error.message
-          : COPY.api.temporarilyUnavailable;
+      if (error instanceof HttpError) {
+        return jsonResponse({ error: error.message }, error.status);
+      }
 
-      if (!(error instanceof HttpError)) {
+      if (error instanceof OpenAIRequestError) {
+        const publicError = publicOpenAIError(error);
+        const reference = errorReference(error.clientRequestId);
         console.error(
           JSON.stringify({
-            message: "request failed",
-            error: error instanceof Error ? error.name : "UnknownError",
+            event: "openai_request_failed",
+            error: error.name,
+            failure: error.failure,
+            status: error.status || null,
+            code: error.code,
+            type: error.type,
+            providerRequestId: error.providerRequestId,
+            clientRequestId: error.clientRequestId,
+            retryAfterSeconds: error.retryAfterSeconds,
+            reference,
             path: url.pathname,
           }),
         );
+
+        const headers = publicError.retryAfterSeconds
+          ? { "Retry-After": String(publicError.retryAfterSeconds) }
+          : {};
+        return jsonResponse(
+          { error: publicError.message, reference },
+          publicError.status,
+          headers,
+        );
       }
 
-      return jsonResponse({ error: publicMessage }, status);
+      const clientRequestId = crypto.randomUUID();
+      const reference = errorReference(clientRequestId);
+      console.error(
+        JSON.stringify({
+          event: "request_failed",
+          error: error instanceof Error ? error.name : "UnknownError",
+          clientRequestId,
+          reference,
+          path: url.pathname,
+        }),
+      );
+
+      const publicMessage = [
+        "MissingOpenAIKey",
+        "InvalidOpenAIConfiguration",
+      ].includes(error instanceof Error ? error.name : "")
+        ? COPY.api.aiConfiguration
+        : COPY.api.temporarilyUnavailable;
+      return jsonResponse({ error: publicMessage, reference }, 503);
     }
   },
 };
