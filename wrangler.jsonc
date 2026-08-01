@@ -2,7 +2,7 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "stabilize",
   "main": "src/index.js",
-  "compatibility_date": "2026-07-31",
+  "compatibility_date": "2026-08-01",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": true,
@@ -25,7 +25,13 @@
     "OPENAI_REASONING_EFFORT": "medium"
   },
   "secrets": {
-    "required": ["OPENAI_API_KEY"]
+    "required": [
+      "OPENAI_API_KEY",
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_CLIENT_SECRET",
+      "AUTH_SECRET",
+      "PUBLIC_ORIGIN"
+    ]
   },
   "observability": {
     "enabled": true,

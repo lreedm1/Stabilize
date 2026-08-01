@@ -2,6 +2,15 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
 import { COPY } from "../src/copy.js";
+import {
+  AUTH_COOKIE_NAME,
+  createAuthSessionTokenForGoogleSubject,
+  readAuthSession,
+} from "../src/auth.js";
+
+const GOOGLE_CLIENT_ID =
+  "1234567890-stabilize-tests.apps.googleusercontent.com";
+const AUTH_SECRET = "test-auth-secret-with-at-least-thirty-two-characters";
 
 function freshState() {
   return {
@@ -98,8 +107,23 @@ function createEnv(overrides = {}) {
     DEMO_MODE: "true",
     OPENAI_MODEL: "gpt-5.6-sol",
     OPENAI_REASONING_EFFORT: "medium",
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: "test-google-client-secret",
+    AUTH_SECRET,
+    PUBLIC_ORIGIN: "https://stabilize.test",
     ...overrides,
   };
+}
+
+async function authenticatedIdentity(env, subject) {
+  const token = await createAuthSessionTokenForGoogleSubject(subject, env);
+  const cookie = `${AUTH_COOKIE_NAME}=${token}`;
+  const session = await readAuthSession(
+    new Request("https://stabilize.test/", { headers: { Cookie: cookie } }),
+    env,
+  );
+  assert.ok(session);
+  return { cookie, objectName: `google:${session.accountKey}` };
 }
 
 function responseWithText(text) {
@@ -143,6 +167,7 @@ test("health endpoint reports demo mode and session memory", async () => {
     mode: "demo",
     model: null,
     memory: true,
+    authentication: true,
   });
 });
 
@@ -158,6 +183,7 @@ test("health endpoint reports whether OpenAI is configured", async () => {
     mode: "openai",
     model: "gpt-5.6-sol",
     memory: true,
+    authentication: true,
   });
 
   const missingKeyResponse = await worker.fetch(
@@ -171,6 +197,7 @@ test("health endpoint reports whether OpenAI is configured", async () => {
     mode: "openai",
     model: "gpt-5.6-sol",
     memory: true,
+    authentication: true,
   });
 });
 
@@ -191,7 +218,7 @@ test("chat endpoint applies deterministic emergency routing", async () => {
   assert.equal(body.route, "IMMEDIATE_DANGER");
   assert.equal(body.showEmergency, true);
   assert.match(body.reply, /safe person|staffed place/i);
-  assert.match(response.headers.get("set-cookie"), /HttpOnly/);
+  assert.equal(response.headers.get("set-cookie"), null);
 });
 
 test("chat endpoint answers a Floor breach in demo mode", async () => {
@@ -217,7 +244,6 @@ test("chat endpoint calls OpenAI with store disabled", async () => {
   const originalLog = console.log;
   const logs = [];
   let providerRequest;
-  const token = "44444444-4444-4444-8444-444444444444";
 
   globalThis.fetch = async (input, init) => {
     providerRequest = { input: String(input), init };
@@ -232,7 +258,6 @@ test("chat endpoint calls OpenAI with store disabled", async () => {
         headers: {
           "Content-Type": "application/json",
           "CF-Connecting-IP": "203.0.113.7",
-          Cookie: "stabilize_session=" + token,
         },
         body: JSON.stringify({
           message: "Help me plan one next step.",
@@ -273,12 +298,11 @@ test("chat endpoint calls OpenAI with store disabled", async () => {
     assert.match(providerBody.instructions, /PRIOR CONTEXT MEMORY/i);
 
     const logged = logs.join("\n");
-    assert.match(logged, /"event":"chat_session"/);
-    assert.match(logged, /"ipAlias":"[a-f0-9]{24}"/);
+    assert.doesNotMatch(logged, /chat_session|ipAlias|sessionAlias/);
     assert.doesNotMatch(logged, /203\.0\.113\.7/);
     assert.doesNotMatch(logged, /Help me plan one next step/);
-    assert.doesNotMatch(logged, new RegExp(token));
     assert.doesNotMatch(logged, /"route"/);
+    assert.equal(response.headers.get("set-cookie"), null);
   } finally {
     globalThis.fetch = originalFetch;
     console.log = originalLog;
@@ -469,15 +493,19 @@ test("provider connection failures return a safe reference", async () => {
 test("remembered summary is supplied as untrusted context", async () => {
   const originalFetch = globalThis.fetch;
   let providerBody;
-  const token = "11111111-1111-4111-8111-111111111111";
   const memory = createSessionNamespace();
-  const stub = memory.getByName(token);
+  const env = createEnv({
+    SESSIONS: memory,
+    DEMO_MODE: "false",
+    OPENAI_API_KEY: "test-openai-key",
+  });
+  const identity = await authenticatedIdentity(env, "google-user-one");
+  const stub = memory.getByName(identity.objectName);
 
   await stub.recordExchange({
     user: "I prefer short plans.",
     assistant: "I will keep the next step small.",
     awaitingSafetyAnswer: false,
-    ipAlias: null,
   });
   const snapshot = await stub.getCompactionSnapshot();
   await stub.applySummary(
@@ -497,15 +525,11 @@ test("remembered summary is supplied as untrusted context", async () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: "stabilize_session=" + token,
+          Cookie: identity.cookie,
         },
         body: JSON.stringify({ message: "What should I do next?" }),
       }),
-      createEnv({
-        SESSIONS: memory,
-        DEMO_MODE: "false",
-        OPENAI_API_KEY: "test-openai-key",
-      }),
+      env,
     );
 
     assert.equal(response.status, 200);
@@ -524,8 +548,13 @@ test("recent turns compact in the background without OpenAI storage", async () =
   const originalFetch = globalThis.fetch;
   const providerBodies = [];
   const tasks = [];
-  const token = "22222222-2222-4222-8222-222222222222";
   const memory = createSessionNamespace();
+  const env = createEnv({
+    SESSIONS: memory,
+    DEMO_MODE: "false",
+    OPENAI_API_KEY: "test-openai-key",
+  });
+  const identity = await authenticatedIdentity(env, "google-user-two");
 
   globalThis.fetch = async (_input, init) => {
     const body = JSON.parse(init.body);
@@ -543,15 +572,11 @@ test("recent turns compact in the background without OpenAI storage", async () =
         headers: {
           "Content-Type": "application/json",
           "CF-Connecting-IP": "198.51.100.9",
-          Cookie: "stabilize_session=" + token,
+          Cookie: identity.cookie,
         },
         body: JSON.stringify({ message: "Help me start this task." }),
       }),
-      createEnv({
-        SESSIONS: memory,
-        DEMO_MODE: "false",
-        OPENAI_API_KEY: "test-openai-key",
-      }),
+      env,
       {
         waitUntil(promise) {
           tasks.push(promise);
@@ -562,7 +587,7 @@ test("recent turns compact in the background without OpenAI storage", async () =
     assert.equal(response.status, 200);
     await Promise.all(tasks);
 
-    const context = await memory.getByName(token).readContext();
+    const context = await memory.getByName(identity.objectName).readContext();
     assert.equal(
       context.summary,
       "The user wants a small next step for a current task.",
@@ -613,27 +638,60 @@ test("chat endpoint rejects oversized declared bodies", async () => {
   assert.equal(response.status, 413);
 });
 
-test("the public API does not expose session deletion", async () => {
-  const token = "33333333-3333-4333-8333-333333333333";
+test("cross-origin chat and logout posts are rejected", async () => {
+  const env = createEnv();
+  const [chatResponse, logoutResponse] = await Promise.all([
+    worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://untrusted.example",
+        },
+        body: JSON.stringify({ message: "Do not process this." }),
+      }),
+      env,
+    ),
+    worker.fetch(
+      new Request("https://stabilize.test/auth/logout", {
+        method: "POST",
+        headers: { Origin: "https://untrusted.example" },
+      }),
+      env,
+    ),
+  ]);
+
+  assert.equal(chatResponse.status, 403);
+  assert.equal((await chatResponse.json()).error, COPY.api.crossOriginRequest);
+  assert.equal(logoutResponse.status, 403);
+  assert.equal(await logoutResponse.text(), COPY.api.crossOriginRequest);
+  assert.equal(logoutResponse.headers.get("set-cookie"), null);
+});
+
+test("the public API does not expose account-memory deletion", async () => {
   const memory = createSessionNamespace();
-  await memory.getByName(token).recordExchange({
+  const env = createEnv({ SESSIONS: memory });
+  const identity = await authenticatedIdentity(env, "google-user-three");
+  await memory.getByName(identity.objectName).recordExchange({
     user: "Remember this.",
     assistant: "Okay.",
     awaitingSafetyAnswer: false,
-    ipAlias: null,
   });
 
   const response = await worker.fetch(
-    new Request("https://stabilize.test/api/session", {
+    new Request("https://stabilize.test/api/memory", {
       method: "DELETE",
-      headers: { Cookie: "stabilize_session=" + token },
+      headers: { Cookie: identity.cookie },
     }),
-    createEnv({ SESSIONS: memory }),
+    env,
   );
 
   assert.equal(response.status, 404);
   assert.equal((await response.json()).error, COPY.api.notFound);
-  assert.equal((await memory.getByName(token).readContext()).turnCount, 1);
+  assert.equal(
+    (await memory.getByName(identity.objectName).readContext()).turnCount,
+    1,
+  );
 });
 
 test("root page renders the simplified chat without audio or a danger shortcut", async () => {
@@ -645,9 +703,12 @@ test("root page renders the simplified chat without audio or a danger shortcut",
 
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /text\/html/);
+  assert.equal(response.headers.get("cache-control"), "no-store");
   assert.match(response.headers.get("content-security-policy"), /script-src 'self'/);
   assert.match(response.headers.get("content-security-policy"), /font-src 'self'/);
-  assert.match(response.headers.get("set-cookie"), /SameSite=Strict/);
+  assert.equal(response.headers.get("set-cookie"), null);
+  assert.ok(html.includes(`href="/auth/google"`));
+  assert.ok(html.includes(COPY.page.auth.signIn));
   assert.ok(html.includes(COPY.page.chat.supportNote));
   assert.ok(html.includes(COPY.page.chat.infoLabel));
   assert.ok(html.includes(COPY.page.chat.infoDetails));
@@ -708,6 +769,88 @@ test("root page renders the simplified chat without audio or a danger shortcut",
   assert.equal(clientCopy.memoryCleared, undefined);
   assert.equal(clientCopy.dangerReply, undefined);
   assert.equal(clientCopy.soundOn, undefined);
+});
+
+test("guest chats remain available and create no server-side memory", async () => {
+  const memory = createSessionNamespace();
+  const response = await worker.fetch(
+    new Request("https://stabilize.test/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "CF-Connecting-IP": "192.0.2.44",
+      },
+      body: JSON.stringify({ message: "I have not eaten all day" }),
+    }),
+    createEnv({ SESSIONS: memory }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(memory.states.size, 0);
+  assert.equal(response.headers.get("set-cookie"), null);
+});
+
+test("signed-in chats use account memory and ignore the connecting IP", async () => {
+  const memory = createSessionNamespace();
+  const env = createEnv({ SESSIONS: memory });
+  const identity = await authenticatedIdentity(env, "stable-google-user");
+
+  const response = await worker.fetch(
+    new Request("https://stabilize.test/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "CF-Connecting-IP": "192.0.2.55",
+        Cookie: identity.cookie,
+      },
+      body: JSON.stringify({ message: "I have not eaten all day" }),
+    }),
+    env,
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual([...memory.states.keys()], [identity.objectName]);
+  assert.equal(
+    (await memory.getByName(identity.objectName).readContext()).turnCount,
+    1,
+  );
+  assert.doesNotMatch(identity.objectName, /192\.0\.2\.55/);
+});
+
+test("auth status and the root page reflect a valid Google session", async () => {
+  const env = createEnv();
+  const identity = await authenticatedIdentity(env, "root-page-user");
+  const headers = { Cookie: identity.cookie };
+
+  const [statusResponse, pageResponse] = await Promise.all([
+    worker.fetch(new Request("https://stabilize.test/api/auth", { headers }), env),
+    worker.fetch(new Request("https://stabilize.test/", { headers }), env),
+  ]);
+  const html = await pageResponse.text();
+
+  assert.deepEqual(await statusResponse.json(), {
+    signedIn: true,
+    memory: true,
+    google: true,
+  });
+  assert.ok(html.includes(COPY.page.auth.signedIn));
+  assert.ok(html.includes(COPY.page.auth.signOut));
+  assert.match(html, /action="\/auth\/logout" method="post"/);
+  assert.doesNotMatch(html, /href="\/auth\/google"/);
+});
+
+test("the root retires the old anonymous session cookie", async () => {
+  const response = await worker.fetch(
+    new Request("https://stabilize.test/", {
+      headers: {
+        Cookie: "stabilize_session=44444444-4444-4444-8444-444444444444",
+      },
+    }),
+    createEnv(),
+  );
+
+  assert.match(response.headers.get("set-cookie"), /stabilize_session=;/);
+  assert.match(response.headers.get("set-cookie"), /Max-Age=0/);
 });
 
 test("static asset requests pass through to the asset binding", async () => {

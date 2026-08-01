@@ -1,10 +1,19 @@
 import { COPY } from "./copy.js";
+import {
+  AUTH_COOKIE_NAME,
+  GoogleAuthConfigurationError,
+  LEGACY_SESSION_COOKIE_NAME,
+  beginGoogleSignIn,
+  clearAuthCookie,
+  clearLegacySessionCookie,
+  completeGoogleSignIn,
+  googleAuthConfigured,
+  readAuthSession,
+  signOut,
+} from "./auth.js";
 import { renderPage } from "./page.js";
 import { classifyInput, fixedReplyForRoute } from "./safety.js";
-import {
-  SESSION_RETENTION_DAYS,
-  SessionMemory,
-} from "./session-memory.js";
+import { SessionMemory } from "./session-memory.js";
 
 export { SessionMemory };
 
@@ -31,10 +40,6 @@ const OPENAI_ACCOUNT_LIMIT_CODES = new Set([
   "project_spend_limit_exceeded",
 ]);
 const PROVIDER_FIELD_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
-const SESSION_COOKIE_NAME = "stabilize_session";
-const SESSION_COOKIE_MAX_AGE = SESSION_RETENTION_DAYS * 24 * 60 * 60;
-const SESSION_TOKEN_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const FIXED_ROUTE_MEMORY = {
   MEDICAL_EMERGENCY:
@@ -99,7 +104,7 @@ function apiHeaders(extra = {}) {
 
 function pageHeaders(contentType = "text/html; charset=utf-8", extra = {}) {
   const headers = new Headers({
-    "Cache-Control": "no-cache",
+    "Cache-Control": "no-store",
     "Content-Security-Policy":
       "default-src 'self'; connect-src 'self'; font-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
     "Content-Type": contentType,
@@ -132,29 +137,6 @@ function readCookie(request, name) {
   return null;
 }
 
-function getSessionToken(request) {
-  const candidate = readCookie(request, SESSION_COOKIE_NAME);
-  return SESSION_TOKEN_PATTERN.test(candidate || "")
-    ? candidate
-    : crypto.randomUUID();
-}
-
-function sessionCookie(request, token) {
-  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
-  return (
-    SESSION_COOKIE_NAME +
-    "=" +
-    token +
-    "; Path=/; HttpOnly; SameSite=Strict; Max-Age=" +
-    SESSION_COOKIE_MAX_AGE +
-    secure
-  );
-}
-
-function sessionHeaders(request, token) {
-  return { "Set-Cookie": sessionCookie(request, token) };
-}
-
 function emptyMemoryContext() {
   return {
     summary: "",
@@ -165,9 +147,10 @@ function emptyMemoryContext() {
   };
 }
 
-function sessionStub(env, token) {
+function accountMemoryStub(env, accountKey) {
+  if (!accountKey) return null;
   if (!env?.SESSIONS || typeof env.SESSIONS.getByName !== "function") return null;
-  return env.SESSIONS.getByName(token);
+  return env.SESSIONS.getByName("google:" + accountKey);
 }
 
 async function readMemoryContext(stub) {
@@ -570,54 +553,6 @@ async function compactSession(stub, env) {
   }
 }
 
-function bytesToHex(value) {
-  return Array.from(new Uint8Array(value))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-async function requestAliases(request, env, token) {
-  const secret = String(env.OPENAI_API_KEY || "");
-  if (!secret) return { ipAlias: null, sessionAlias: null };
-
-  const encoder = new TextEncoder();
-  const derivedKey = await crypto.subtle.digest(
-    "SHA-256",
-    encoder.encode("stabilize-session-aliases-v1\u0000" + secret),
-  );
-  const key = await crypto.subtle.importKey(
-    "raw",
-    derivedKey,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-
-  const ip = String(request.headers.get("CF-Connecting-IP") || "").slice(0, 128);
-  const values = [
-    ip ? crypto.subtle.sign("HMAC", key, encoder.encode("ip\u0000" + ip)) : null,
-    crypto.subtle.sign("HMAC", key, encoder.encode("session\u0000" + token)),
-  ];
-  const [ipSignature, sessionSignature] = await Promise.all(values);
-
-  return {
-    ipAlias: ipSignature ? bytesToHex(ipSignature).slice(0, 24) : null,
-    sessionAlias: bytesToHex(sessionSignature).slice(0, 24),
-  };
-}
-
-function logSessionEvent(aliases, memoryUsed, turnCount) {
-  console.log(
-    JSON.stringify({
-      event: "chat_session",
-      ipAlias: aliases.ipAlias,
-      sessionAlias: aliases.sessionAlias,
-      memoryUsed,
-      turnCount,
-    }),
-  );
-}
-
 async function recordExchange(stub, exchange) {
   if (!stub || typeof stub.recordExchange !== "function") return null;
   try {
@@ -642,36 +577,25 @@ function schedule(ctx, promise) {
 }
 
 async function recordFixedRoute(
-  request,
-  env,
   stub,
-  token,
   route,
   fixed,
-  priorTurnCount,
 ) {
-  const aliases = await requestAliases(request, env, token);
-  const result = await recordExchange(stub, {
+  await recordExchange(stub, {
     user:
       FIXED_ROUTE_MEMORY[route] ||
       "[A deterministic support route triggered a fixed response.]",
     assistant: fixed.reply,
     awaitingSafetyAnswer: fixed.awaitingSafetyAnswer === true,
-    ipAlias: aliases.ipAlias,
   });
-  logSessionEvent(
-    aliases,
-    priorTurnCount > 0,
-    result?.turnCount || priorTurnCount + 1,
-  );
 }
 
-async function handleChat(request, env, ctx, token) {
+async function handleChat(request, env, ctx, accountKey) {
   const body = await readBoundedJson(request);
   const latestText = latestUserText(body);
   if (!latestText) throw new HttpError(400, COPY.api.messageRequired);
 
-  const stub = sessionStub(env, token);
+  const stub = accountMemoryStub(env, accountKey);
   const clientAwaiting = body?.awaitingSafetyAnswer === true;
   let route = classifyInput(latestText, {
     awaitingSafetyAnswer: clientAwaiting,
@@ -679,23 +603,12 @@ async function handleChat(request, env, ctx, token) {
   let fixed = fixedReplyForRoute(route);
 
   if (fixed) {
-    const task = recordFixedRoute(
-      request,
-      env,
-      stub,
-      token,
-      route,
-      fixed,
-      0,
-    );
+    const task = recordFixedRoute(stub, route, fixed);
     if (!schedule(ctx, task)) await task;
-    return jsonResponse({ route, ...fixed }, 200, sessionHeaders(request, token));
+    return jsonResponse({ route, ...fixed });
   }
 
-  const [memory, aliases] = await Promise.all([
-    readMemoryContext(stub),
-    requestAliases(request, env, token),
-  ]);
+  const memory = await readMemoryContext(stub);
 
   route = classifyInput(latestText, {
     awaitingSafetyAnswer: clientAwaiting || memory.awaitingSafetyAnswer,
@@ -703,17 +616,9 @@ async function handleChat(request, env, ctx, token) {
   fixed = fixedReplyForRoute(route);
 
   if (fixed) {
-    const task = recordFixedRoute(
-      request,
-      env,
-      stub,
-      token,
-      route,
-      fixed,
-      memory.turnCount,
-    );
+    const task = recordFixedRoute(stub, route, fixed);
     if (!schedule(ctx, task)) await task;
-    return jsonResponse({ route, ...fixed }, 200, sessionHeaders(request, token));
+    return jsonResponse({ route, ...fixed });
   }
 
   const messages = modelInput(memory, latestText);
@@ -724,35 +629,43 @@ async function handleChat(request, env, ctx, token) {
     user: latestText,
     assistant: reply,
     awaitingSafetyAnswer: false,
-    ipAlias: aliases.ipAlias,
   });
-
-  logSessionEvent(
-    aliases,
-    Boolean(memory.summary || memory.recent.length),
-    result?.turnCount || memory.turnCount + 1,
-  );
 
   if (result?.shouldCompact && stub && ctx) {
     schedule(ctx, compactSession(stub, env));
   }
 
-  return jsonResponse(
-    {
-      route,
-      reply,
-      showEmergency: false,
-      awaitingSafetyAnswer: false,
-    },
-    200,
-    sessionHeaders(request, token),
-  );
+  return jsonResponse({
+    route,
+    reply,
+    showEmergency: false,
+    awaitingSafetyAnswer: false,
+  });
+}
+
+function authNotice(code) {
+  if (code === "cancelled") return COPY.page.auth.cancelled;
+  if (code === "failed") return COPY.page.auth.failed;
+  return "";
+}
+
+function appendRetiredCookieCleanup(headers, request, authSession) {
+  if (readCookie(request, LEGACY_SESSION_COOKIE_NAME)) {
+    headers.append("Set-Cookie", clearLegacySessionCookie(request));
+  }
+  if (!authSession && readCookie(request, AUTH_COOKIE_NAME)) {
+    headers.append("Set-Cookie", clearAuthCookie(request));
+  }
+}
+
+function sameOriginOrNonBrowser(request) {
+  const origin = request.headers.get("origin");
+  return !origin || origin === new URL(request.url).origin;
 }
 
 const worker = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const token = getSessionToken(request);
 
     try {
       if (url.pathname === "/" || url.pathname === "/index.html") {
@@ -763,11 +676,78 @@ const worker = {
           });
         }
 
-        return new Response(request.method === "HEAD" ? null : renderPage(), {
-          headers: pageHeaders(
-            "text/html; charset=utf-8",
-            sessionHeaders(request, token),
-          ),
+        const authSession = await readAuthSession(request, env);
+        const headers = pageHeaders();
+        appendRetiredCookieCleanup(headers, request, authSession);
+        return new Response(
+          request.method === "HEAD"
+            ? null
+            : renderPage({
+                signedIn: Boolean(authSession),
+                googleSignInAvailable: googleAuthConfigured(env),
+                authNotice: authNotice(url.searchParams.get("auth")),
+              }),
+          {
+            headers,
+          },
+        );
+      }
+
+      if (url.pathname === "/auth/google") {
+        if (request.method !== "GET") {
+          return new Response(COPY.api.methodNotAllowed, {
+            status: 405,
+            headers: pageHeaders("text/plain; charset=utf-8"),
+          });
+        }
+        try {
+          return await beginGoogleSignIn(request, env);
+        } catch (error) {
+          if (error instanceof GoogleAuthConfigurationError) {
+            return new Response(COPY.api.googleSignInUnavailable, {
+              status: 503,
+              headers: pageHeaders("text/plain; charset=utf-8"),
+            });
+          }
+          throw error;
+        }
+      }
+
+      if (url.pathname === "/auth/google/callback") {
+        if (request.method !== "GET") {
+          return new Response(COPY.api.methodNotAllowed, {
+            status: 405,
+            headers: pageHeaders("text/plain; charset=utf-8"),
+          });
+        }
+        return await completeGoogleSignIn(request, env);
+      }
+
+      if (url.pathname === "/auth/logout") {
+        if (request.method !== "POST") {
+          return new Response(COPY.api.methodNotAllowed, {
+            status: 405,
+            headers: pageHeaders("text/plain; charset=utf-8"),
+          });
+        }
+        if (!sameOriginOrNonBrowser(request)) {
+          return new Response(COPY.api.crossOriginRequest, {
+            status: 403,
+            headers: pageHeaders("text/plain; charset=utf-8"),
+          });
+        }
+        return signOut(request, env);
+      }
+
+      if (url.pathname === "/api/auth") {
+        if (request.method !== "GET") {
+          return jsonResponse({ error: COPY.api.methodNotAllowed }, 405);
+        }
+        const authSession = await readAuthSession(request, env);
+        return jsonResponse({
+          signedIn: Boolean(authSession),
+          memory: Boolean(authSession && env.SESSIONS),
+          google: googleAuthConfigured(env),
         });
       }
 
@@ -783,6 +763,7 @@ const worker = {
             mode: demoMode ? "demo" : "openai",
             model: demoMode ? null : String(env.OPENAI_MODEL || "gpt-5.6-sol"),
             memory: Boolean(env.SESSIONS),
+            authentication: googleAuthConfigured(env),
           },
           configured ? 200 : 503,
         );
@@ -792,7 +773,11 @@ const worker = {
         if (request.method !== "POST") {
           return jsonResponse({ error: COPY.api.methodNotAllowed }, 405);
         }
-        return await handleChat(request, env, ctx, token);
+        if (!sameOriginOrNonBrowser(request)) {
+          return jsonResponse({ error: COPY.api.crossOriginRequest }, 403);
+        }
+        const authSession = await readAuthSession(request, env);
+        return await handleChat(request, env, ctx, authSession?.accountKey);
       }
 
       if (url.pathname.startsWith("/api/")) {

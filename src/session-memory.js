@@ -6,15 +6,9 @@ const SESSION_RETENTION_MS = SESSION_RETENTION_DAYS * 24 * 60 * 60 * 1_000;
 const MAX_RECENT_MESSAGES = 8;
 const MAX_STORED_MESSAGE_CHARS = 4_000;
 const MAX_SUMMARY_CHARS = 1_600;
-const IP_ALIAS_PATTERN = /^[a-f0-9]{24}$/;
 
 function boundedText(value, limit) {
   return String(value || "").trim().slice(0, limit);
-}
-
-function normalizeIpAlias(value) {
-  const alias = boundedText(value, 24).toLowerCase();
-  return IP_ALIAS_PATTERN.test(alias) ? alias : null;
 }
 
 function emptyContext() {
@@ -39,7 +33,6 @@ export class SessionMemory extends DurableObject {
           summary_version INTEGER NOT NULL DEFAULT 0,
           turn_count INTEGER NOT NULL DEFAULT 0,
           awaiting_safety_answer INTEGER NOT NULL DEFAULT 0,
-          last_ip_alias TEXT,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
         );
@@ -91,7 +84,6 @@ export class SessionMemory extends DurableObject {
     if (!user || !assistant) throw new Error("Invalid memory exchange");
 
     const awaitingSafetyAnswer = exchange?.awaitingSafetyAnswer === true ? 1 : 0;
-    const ipAlias = normalizeIpAlias(exchange?.ipAlias);
     const now = Date.now();
 
     // Schedule expiry before writing so a transient alarm failure cannot leave
@@ -102,15 +94,13 @@ export class SessionMemory extends DurableObject {
       this.ctx.storage.sql.exec(
         `INSERT INTO memory_state (
            id, summary, summary_version, turn_count,
-           awaiting_safety_answer, last_ip_alias, created_at, updated_at
-         ) VALUES (1, '', 0, 1, ?, ?, ?, ?)
+           awaiting_safety_answer, created_at, updated_at
+         ) VALUES (1, '', 0, 1, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            turn_count = memory_state.turn_count + 1,
            awaiting_safety_answer = excluded.awaiting_safety_answer,
-           last_ip_alias = COALESCE(excluded.last_ip_alias, memory_state.last_ip_alias),
            updated_at = excluded.updated_at`,
         awaitingSafetyAnswer,
-        ipAlias,
         now,
         now,
       );

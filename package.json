@@ -2,7 +2,7 @@
   "name": "stabilize",
   "version": "0.1.0",
   "private": true,
-  "description": "A floor-first AI support website with privacy-bounded session memory on Cloudflare Workers.",
+  "description": "A floor-first AI support website with privacy-bounded account memory on Cloudflare Workers.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -13,7 +13,7 @@
     "dev": "wrangler dev",
     "test": "npm run test:node && npm run test:worker",
     "test:node": "node --test test/safety.test.mjs test/markdown.test.mjs test/terrain.test.mjs test/ui.test.mjs",
-    "test:worker": "vitest run --config vitest.config.js test/worker.test.mjs test/session-memory.test.mjs",
+    "test:worker": "vitest run --config vitest.config.js test/worker.test.mjs test/session-memory.test.mjs test/auth.test.mjs",
     "types": "wrangler types --include-runtime false"
   },
   "devDependencies": {

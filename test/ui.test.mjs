@@ -218,5 +218,35 @@ test("privacy detail stays behind a compact Info disclosure", async () => {
   assert.match(pageSource, /page\.chat\.infoDetails/);
   assert.match(copySource, /supportNote:[\s\S]*not emergency care/i);
   assert.match(copySource, /infoDetails:[\s\S]*remembered for 30 days/i);
+  assert.match(
+    copySource,
+    /infoDetails:[\s\S]*does not use IP addresses for memory or application logs/i,
+  );
   assert.match(styles, /\.info-popover\s*{[\s\S]*position:\s*absolute;/);
+});
+
+test("Google account controls stay compact and guest chat remains visible", async () => {
+  const [styles, pageSource] = await Promise.all([
+    readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(pageSource, /class="google-sign-in" href="\/auth\/google"/);
+  assert.match(pageSource, /action="\/auth\/logout" method="post"/);
+  assert.match(pageSource, /page\.auth\.signedIn/);
+  assert.match(pageSource, /id="chat-form" class="chat-form"/);
+  assert.match(styles, /\.auth-actions\s*{[\s\S]*justify-content:\s*flex-end;/);
+  assert.match(styles, /\.google-sign-in,[\s\S]*\.auth-link\s*{/);
+  assert.doesNotMatch(pageSource, /disabled[^>]*id="message-input"/);
+});
+
+test("the application never reads or stores a connecting-address alias", async () => {
+  const [workerSource, memorySource] = await Promise.all([
+    readFile(new URL("../src/index.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/session-memory.js", import.meta.url), "utf8"),
+  ]);
+  const runtimeSource = workerSource + "\n" + memorySource;
+
+  assert.doesNotMatch(runtimeSource, /CF-Connecting-IP/);
+  assert.doesNotMatch(runtimeSource, /ipAlias|last_ip_alias|network alias/i);
 });

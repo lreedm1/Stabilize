@@ -8,12 +8,21 @@ export const COPY = {
     header: {
       name: "Stabilize",
     },
+    auth: {
+      label: "Account",
+      signIn: "Sign in with Google",
+      signedIn: "Signed in",
+      signOut: "Sign out",
+      unavailable: "Google sign-in is not configured yet.",
+      cancelled: "Google sign-in was cancelled. Guest chat is still available.",
+      failed: "Google sign-in did not finish. Try again, or continue as a guest.",
+    },
     chat: {
       supportNote:
         "Free AI support for overloaded moments—not emergency care.",
       infoLabel: "Info",
       infoDetails:
-        "Not therapy or diagnosis. This browser’s context is condensed and remembered for 30 days. Network addresses are logged as protected aliases. OpenAI processes messages. Adults 18+.",
+        "Not therapy or diagnosis. Guest chats are not remembered. If you sign in, condensed context is remembered for 30 days and follows the same Google account. This app does not use IP addresses for memory or application logs; infrastructure providers may still process connection metadata. Google handles sign-in; OpenAI processes messages. Adults 18+.",
       inputLabel: "Your message",
       responseLabel: "Latest AI response",
       inputPlaceholder: "What is happening right now?",
@@ -90,6 +99,7 @@ export const COPY = {
     invalidJson: "Invalid JSON.",
     messageRequired: "Please enter a message.",
     invalidConversation: "No valid conversation was supplied.",
+    crossOriginRequest: "Cross-origin request rejected.",
     unreliableReply:
       "Stabilize couldn't complete a reliable reply. Try sending the message again.",
     methodNotAllowed: "Method not allowed.",
@@ -106,6 +116,8 @@ export const COPY = {
       "Stabilize's AI connection needs attention. Please try again later.",
     aiRequestRejected:
       "Stabilize couldn't process that message. Try shortening or rewording it.",
+    googleSignInUnavailable:
+      "Google sign-in is not configured yet. Guest chat is still available.",
     temporarilyUnavailable:
       "Stabilize couldn't get a reply this time. Try again in a moment.",
   },

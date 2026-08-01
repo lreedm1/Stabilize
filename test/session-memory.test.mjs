@@ -17,7 +17,6 @@ test("Durable Object stores and compacts one session", async () => {
     user: "I prefer short plans.",
     assistant: "Choose one five-minute action.",
     awaitingSafetyAnswer: false,
-    ipAlias: "0123456789abcdef01234567",
   });
   assert.equal(recorded.shouldCompact, true);
   assert.equal(recorded.turnCount, 1);
@@ -58,7 +57,6 @@ test("Durable Object bounds uncondensed recent messages", async () => {
       user: "User turn " + index,
       assistant: "Assistant turn " + index,
       awaitingSafetyAnswer: false,
-      ipAlias: null,
     });
   }
 
@@ -76,7 +74,6 @@ test("the retention alarm still erases an expired session", async () => {
     user: "Keep this only for the retention window.",
     assistant: "Stored for bounded continuity.",
     awaitingSafetyAnswer: false,
-    ipAlias: null,
   });
   assert.equal((await stub.readContext()).turnCount, 1);
 

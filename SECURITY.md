@@ -2,7 +2,7 @@
 
 ## Reporting a software vulnerability
 
-Please use GitHub's private security-advisory feature for vulnerabilities involving credential exposure, prompt or response disclosure, safety-route bypasses, injection, denial of service, or other exploitable behavior. Do not include real user conversations, credentials, or private health information in a public issue.
+Please use GitHub's private security-advisory feature for vulnerabilities involving credential exposure, OAuth state or callback handling, account-memory isolation, cookie forgery, prompt or response disclosure, safety-route bypasses, injection, denial of service, or other exploitable behavior. Do not include real user conversations, credentials, Google tokens, or private health information in a public issue.
 
 Public issues are appropriate for non-sensitive bugs and feature requests.
 

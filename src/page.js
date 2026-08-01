@@ -9,9 +9,20 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-export function renderPage() {
+export function renderPage(options = {}) {
   const { page, client } = COPY;
   const copyData = escapeHtml(JSON.stringify(client));
+  const signedIn = options.signedIn === true;
+  const googleSignInAvailable = options.googleSignInAvailable === true;
+  const notice = String(options.authNotice || "").trim();
+  const authControl = signedIn
+    ? `<form class="auth-session" action="/auth/logout" method="post">
+          <span class="auth-state">${escapeHtml(page.auth.signedIn)}</span>
+          <button class="auth-link" type="submit">${escapeHtml(page.auth.signOut)}</button>
+        </form>`
+    : googleSignInAvailable
+      ? `<a class="google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>`
+      : `<span class="auth-state auth-unavailable" title="${escapeHtml(page.auth.unavailable)}">${escapeHtml(page.auth.unavailable)}</span>`;
 
   return `<!doctype html>
 <html lang="${escapeHtml(page.language)}">
@@ -71,7 +82,12 @@ export function renderPage() {
     <div class="page-shell">
       <header class="site-header">
         <h1>${escapeHtml(page.header.name)}</h1>
+        <nav class="auth-actions" aria-label="${escapeHtml(page.auth.label)}">
+          ${authControl}
+        </nav>
       </header>
+
+      ${notice ? `<p class="auth-notice" role="status">${escapeHtml(notice)}</p>` : ""}
 
       <main class="chat-card" aria-label="${escapeHtml(page.title)}">
         <section id="conversation-surface" class="conversation-surface" data-view="compose">
