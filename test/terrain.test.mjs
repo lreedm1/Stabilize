@@ -1,10 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  lakeValleyOpening,
   minecraftTerrainHeight,
   modulateTerrain,
   terrainTokenSignal,
 } from "../public/terrain.js";
+
+test("the lake valley opens widest in the center", () => {
+  const width = 1_200;
+  const center = lakeValleyOpening(width / 2, width);
+  const quarter = lakeValleyOpening(width / 4, width);
+  const edge = lakeValleyOpening(0, width);
+
+  assert.equal(center, 1);
+  assert.ok(center > quarter);
+  assert.ok(quarter > edge);
+  assert.ok(edge >= 0 && edge <= 1);
+});
 
 test("token signals are local, bounded, and deterministic", () => {
   const first = terrainTokenSignal("Take one small step, then stop.");

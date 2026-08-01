@@ -68,6 +68,8 @@ test("the terrain background is token-modulated and motion-aware", async () => {
   assert.match(terrainScript, /continentalness/);
   assert.match(terrainScript, /erosion/);
   assert.match(terrainScript, /ridgedNoise/);
+  assert.match(terrainScript, /drawLake/);
+  assert.match(terrainScript, /drawValleyBanks/);
   assert.match(terrainScript, /prefers-reduced-motion: reduce/);
   assert.match(terrainScript, /document\.hidden/);
   assert.doesNotMatch(terrainScript, /Math\.random/);
@@ -76,6 +78,11 @@ test("the terrain background is token-modulated and motion-aware", async () => {
     /\.terrain-background\s*{[\s\S]*position:\s*fixed;[\s\S]*pointer-events:\s*none;/,
   );
   assert.match(pageSource, /id="terrain-background"[\s\S]*aria-hidden="true"/);
+  assert.match(styles, /--foreground-earth:\s*rgba\(133,\s*107,\s*72,\s*0\.3\)/);
+  assert.match(
+    styles,
+    /\.chat-card\s*{[\s\S]*background:\s*var\(--foreground-earth\)/,
+  );
 });
 
 test("Lexend is self-hosted and message bubbles are removed", async () => {

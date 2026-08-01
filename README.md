@@ -12,7 +12,7 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - OpenAI's Responses API for ordinary AI replies
 - safe, local Markdown rendering for assistant replies
 - a fixed bottom text composer beneath one panel for the intro, thinking, and latest reply
-- a continuous, token-modulated landscape generated locally from layered terrain noise
+- a continuous, token-modulated forested lake valley at dawn generated locally from layered terrain noise
 - a self-hosted Lexend variable font
 - demo mode that works without an API key
 - no account and no full transcript database; browser-scoped memory uses a rolling summary with a bounded recent-message buffer
