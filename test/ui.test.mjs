@@ -55,12 +55,14 @@ test("the site does not expose a remembered-context deletion control", async () 
 });
 
 test("the terrain background is token-modulated and motion-aware", async () => {
-  const [clientScript, terrainScript, styles, pageSource] = await Promise.all([
-    readFile(new URL("../public/app.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/terrain.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
-    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
-  ]);
+  const [clientScript, terrainScript, photoScript, styles, pageSource] =
+    await Promise.all([
+      readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+      readFile(new URL("../public/terrain.js", import.meta.url), "utf8"),
+      readFile(new URL("../public/photo-scene.js", import.meta.url), "utf8"),
+      readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
+      readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+    ]);
 
   assert.match(clientScript, /import \{ modulateTerrain \} from "\.\/terrain\.js"/);
   assert.match(clientScript, /modulateTerrain\(clean\)/);
@@ -77,12 +79,25 @@ test("the terrain background is token-modulated and motion-aware", async () => {
   assert.match(terrainScript, /prefers-reduced-motion: reduce/);
   assert.match(terrainScript, /document\.hidden/);
   assert.doesNotMatch(terrainScript, /Math\.random/);
+  assert.match(terrainScript, /createPhotoScene/);
+  assert.match(terrainScript, /terrain\?\.setActive\(false\)/);
+  assert.match(photoScript, /u_image_size/);
+  assert.match(photoScript, /float water/);
+  assert.match(photoScript, /depthPixels/);
+  assert.match(photoScript, /fogNoise/);
+  assert.match(photoScript, /rippleStrength/);
+  assert.match(photoScript, /TARGET_FRAME_MS/);
+  assert.match(photoScript, /document\.hidden/);
+  assert.doesNotMatch(photoScript, /Math\.random/);
   assert.match(
     styles,
     /\.terrain-background\s*{[\s\S]*position:\s*fixed;[\s\S]*pointer-events:\s*none;/,
   );
-  assert.match(styles, /\.terrain-background\s*{[\s\S]*filter:\s*saturate\(1\.24\)/);
+  assert.match(styles, /\.terrain-fallback\s*{[\s\S]*filter:\s*saturate\(1\.24\)/);
+  assert.match(styles, /\.photo-background\s*{[\s\S]*filter:\s*saturate\(1\.06\)/);
+  assert.match(styles, /\.photo-background\.is-ready\s*{[\s\S]*opacity:\s*1/);
   assert.match(pageSource, /id="terrain-background"[\s\S]*aria-hidden="true"/);
+  assert.match(pageSource, /id="photo-background"[\s\S]*aria-hidden="true"/);
   assert.match(styles, /--foreground-earth:\s*rgba\(133,\s*107,\s*72,\s*0\.3\)/);
   assert.match(
     styles,

@@ -6,6 +6,12 @@ import {
   modulateTerrain,
   terrainTokenSignal,
 } from "../public/terrain.js";
+import {
+  SCENE_ASSETS,
+  selectSceneAsset,
+  shouldUsePhotoScene,
+} from "../public/photo-scene.js";
+import { readFile } from "node:fs/promises";
 
 test("the lake valley opens widest in the center", () => {
   const width = 1_200;
@@ -65,5 +71,51 @@ test("Minecraft-inspired terrain is deterministic and responds to controls", () 
         offset: 800,
       }),
     ),
+  );
+});
+
+test("photographic scene assets are responsive and bounded", async () => {
+  assert.equal(
+    selectSceneAsset({ width: 390, height: 844, pixelRatio: 1.5 }).src,
+    "/scenes/lake-valley-portrait-720.webp",
+  );
+  assert.equal(
+    selectSceneAsset({ width: 1440, height: 900, pixelRatio: 1.5 }).src,
+    "/scenes/lake-valley-landscape-2560.webp",
+  );
+  assert.equal(
+    selectSceneAsset({ width: 2560, height: 1440, pixelRatio: 2 }).src,
+    "/scenes/lake-valley-landscape-3840.webp",
+  );
+
+  for (const asset of [...SCENE_ASSETS.landscape, ...SCENE_ASSETS.portrait]) {
+    const bytes = await readFile(
+      new URL("../public" + asset.src, import.meta.url),
+    );
+    assert.equal(bytes.subarray(0, 4).toString("ascii"), "RIFF");
+    assert.equal(bytes.subarray(8, 12).toString("ascii"), "WEBP");
+    assert.ok(bytes.byteLength < 600_000);
+  }
+});
+
+test("reduced-motion and low-power clients retain the procedural fallback", () => {
+  const scope = (overrides = {}) => ({
+    matchMedia: () => ({ matches: false }),
+    navigator: { hardwareConcurrency: 8, deviceMemory: 8, ...overrides },
+  });
+
+  assert.equal(shouldUsePhotoScene(scope()), true);
+  assert.equal(
+    shouldUsePhotoScene({
+      ...scope(),
+      matchMedia: () => ({ matches: true }),
+    }),
+    false,
+  );
+  assert.equal(shouldUsePhotoScene(scope({ hardwareConcurrency: 2 })), false);
+  assert.equal(shouldUsePhotoScene(scope({ deviceMemory: 2 })), false);
+  assert.equal(
+    shouldUsePhotoScene(scope({ connection: { saveData: true } })),
+    false,
   );
 });

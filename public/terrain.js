@@ -1,3 +1,5 @@
+import { createPhotoScene, shouldUsePhotoScene } from "./photo-scene.js";
+
 const UINT32_MAX = 0xffffffff;
 const MAX_SIGNAL_TOKENS = 256;
 const TARGET_FRAME_MS = 1000 / 30;
@@ -251,6 +253,7 @@ function createTerrain(canvas) {
   let resizeFrame = 0;
   let lastTime = performance.now();
   let lastPaint = -Infinity;
+  let active = true;
 
   const layers = [
     { base: 0.59, amplitude: 0.37, parallax: 0.34, scale: 1.45 },
@@ -904,7 +907,7 @@ function createTerrain(canvas) {
 
   function frame(now) {
     animationFrame = 0;
-    if (document.hidden || motionPreference.matches) return;
+    if (!active || document.hidden || motionPreference.matches) return;
 
     if (now - lastPaint >= TARGET_FRAME_MS) {
       const elapsed = clamp(now - lastTime, 0, 80);
@@ -920,7 +923,14 @@ function createTerrain(canvas) {
   }
 
   function start() {
-    if (animationFrame || document.hidden || motionPreference.matches) return;
+    if (
+      !active ||
+      animationFrame ||
+      document.hidden ||
+      motionPreference.matches
+    ) {
+      return;
+    }
     lastTime = performance.now();
     animationFrame = requestAnimationFrame(frame);
   }
@@ -934,7 +944,15 @@ function createTerrain(canvas) {
   function resize() {
     width = Math.max(1, document.documentElement.clientWidth || window.innerWidth);
     height = Math.max(1, document.documentElement.clientHeight || window.innerHeight);
-    pixelRatio = Math.min(window.devicePixelRatio || 1, 1.6);
+    pixelRatio = Math.max(
+      0.5,
+      Math.min(
+        window.devicePixelRatio || 1,
+        1.6,
+        2560 / Math.max(width, 1),
+        1440 / Math.max(height, 1),
+      ),
+    );
     canvas.width = Math.max(1, Math.round(width * pixelRatio));
     canvas.height = Math.max(1, Math.round(height * pixelRatio));
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
@@ -958,9 +976,15 @@ function createTerrain(canvas) {
       state.wind = state.targetWind;
       state.offset = state.targetOffset;
       draw();
-    } else {
+    } else if (active) {
       start();
     }
+  }
+
+  function setActive(value) {
+    active = Boolean(value);
+    if (active) start();
+    else stop();
   }
 
   function ingest(signal) {
@@ -999,7 +1023,7 @@ function createTerrain(canvas) {
   window.addEventListener("resize", scheduleResize, { passive: true });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) stop();
-    else start();
+    else if (active) start();
   });
   if (typeof motionPreference.addEventListener === "function") {
     motionPreference.addEventListener("change", handleMotionPreference);
@@ -1009,7 +1033,7 @@ function createTerrain(canvas) {
 
   resize();
   start();
-  return { ingest };
+  return { ingest, setActive };
 }
 
 const terrainCanvas =
@@ -1021,9 +1045,32 @@ const terrain =
   terrainCanvas instanceof HTMLCanvasElement
     ? createTerrain(terrainCanvas)
     : null;
+const photoCanvas =
+  typeof document === "undefined"
+    ? null
+    : document.querySelector("#photo-background");
+const photoScene =
+  typeof window !== "undefined" &&
+  typeof HTMLCanvasElement !== "undefined" &&
+  photoCanvas instanceof HTMLCanvasElement &&
+  shouldUsePhotoScene(window)
+    ? createPhotoScene(photoCanvas, {
+        onReady() {
+          photoCanvas.classList.add("is-ready");
+          terrainCanvas?.classList.add("is-photo-ready");
+          terrain?.setActive(false);
+        },
+        onFailure() {
+          photoCanvas.classList.remove("is-ready");
+          terrainCanvas?.classList.remove("is-photo-ready");
+          terrain?.setActive(true);
+        },
+      })
+    : null;
 
 export function modulateTerrain(value) {
   const signal = terrainTokenSignal(value);
   terrain?.ingest(signal);
+  photoScene?.ingest(signal);
   return signal;
 }

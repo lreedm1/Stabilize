@@ -30,7 +30,16 @@ export function renderPage() {
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <canvas id="terrain-background" class="terrain-background" aria-hidden="true"></canvas>
+    <canvas
+      id="terrain-background"
+      class="terrain-background terrain-fallback"
+      aria-hidden="true"
+    ></canvas>
+    <canvas
+      id="photo-background"
+      class="terrain-background photo-background"
+      aria-hidden="true"
+    ></canvas>
     <div class="page-shell">
       <header class="site-header">
         <h1>${escapeHtml(page.header.name)}</h1>
