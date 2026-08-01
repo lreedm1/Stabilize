@@ -207,6 +207,10 @@ function colorMix(from, to, amount, alpha = 1) {
   return `rgba(${mixed[0]}, ${mixed[1]}, ${mixed[2]}, ${alpha})`;
 }
 
+function wrap(value, size) {
+  return ((value % size) + size) % size;
+}
+
 export function lakeValleyOpening(screenX, viewportWidth, centerRatio = 0.5) {
   const safeWidth = Math.max(1, Number(viewportWidth) || 1);
   const center = safeWidth * clamp(Number(centerRatio) || 0.5, 0.35, 0.65);
@@ -249,9 +253,9 @@ function createTerrain(canvas) {
   let lastPaint = -Infinity;
 
   const layers = [
-    { base: 0.56, amplitude: 0.3, parallax: 0.34, scale: 1.45 },
-    { base: 0.7, amplitude: 0.29, parallax: 0.62, scale: 1.18 },
-    { base: 0.83, amplitude: 0.27, parallax: 1, scale: 1 },
+    { base: 0.59, amplitude: 0.37, parallax: 0.34, scale: 1.45 },
+    { base: 0.72, amplitude: 0.33, parallax: 0.62, scale: 1.18 },
+    { base: 0.84, amplitude: 0.28, parallax: 1, scale: 1 },
   ];
 
   function controlsFor(layerIndex) {
@@ -336,10 +340,10 @@ function createTerrain(canvas) {
   }
 
   function drawSky() {
-    const coolTop = [68, 105, 138];
-    const warmTop = [121, 91, 126];
-    const coolHorizon = [195, 222, 213];
-    const warmHorizon = [250, 186, 128];
+    const coolTop = [36, 91, 148];
+    const warmTop = [103, 72, 145];
+    const coolHorizon = [132, 211, 219];
+    const warmHorizon = [255, 169, 101];
     const warmth = clamp(state.temperature * 0.78 + state.energy * 0.12);
 
     const sky = context.createLinearGradient(0, 0, 0, height);
@@ -348,7 +352,7 @@ function createTerrain(canvas) {
       0.7,
       colorMix(coolHorizon, warmHorizon, warmth, 1),
     );
-    sky.addColorStop(1, colorMix([196, 217, 209], [232, 202, 163], warmth));
+    sky.addColorStop(1, colorMix([91, 176, 180], [239, 182, 116], warmth));
     context.fillStyle = sky;
     context.fillRect(0, 0, width, height);
 
@@ -363,16 +367,104 @@ function createTerrain(canvas) {
       glowY,
       glowRadius,
     );
-    glow.addColorStop(0, `rgba(255, 239, 184, ${0.34 + state.energy * 0.14})`);
-    glow.addColorStop(0.22, "rgba(255, 235, 181, 0.13)");
+    glow.addColorStop(0, `rgba(255, 241, 184, ${0.56 + state.energy * 0.14})`);
+    glow.addColorStop(0.24, "rgba(255, 219, 147, 0.22)");
     glow.addColorStop(1, "rgba(255, 244, 213, 0)");
     context.fillStyle = glow;
     context.fillRect(0, 0, width, height);
 
     context.beginPath();
     context.arc(glowX, glowY, Math.max(12, height * 0.024), 0, Math.PI * 2);
-    context.fillStyle = `rgba(255, 235, 180, ${0.28 + state.energy * 0.08})`;
+    context.fillStyle = `rgba(255, 240, 184, ${0.62 + state.energy * 0.08})`;
     context.fill();
+  }
+
+  function drawClouds() {
+    const fieldWidth = width * 1.55;
+    const drift = state.worldX * (0.035 + state.wind * 0.022);
+    const warmth = clamp(state.temperature * 0.76);
+
+    for (let cloudIndex = 0; cloudIndex < 8; cloudIndex += 1) {
+      const cloudSeed = latticeNoise(cloudIndex, state.seed ^ 0x7f4a7c15);
+      const heightSeed = latticeNoise(cloudIndex, state.seed ^ 0xb5297a4d);
+      const x =
+        wrap(cloudIndex * fieldWidth * 0.23 - drift + cloudSeed * width, fieldWidth) -
+        width * 0.28;
+      const y = height * (0.075 + heightSeed * 0.235);
+      const cloudWidth = width * (0.055 + cloudSeed * 0.085);
+      const cloudHeight = cloudWidth * (0.16 + heightSeed * 0.13);
+      const alpha = 0.09 + state.moisture * 0.075;
+
+      context.fillStyle = colorMix(
+        [221, 241, 239],
+        [255, 222, 190],
+        warmth,
+        alpha,
+      );
+      context.beginPath();
+      context.ellipse(x, y, cloudWidth, cloudHeight, 0, 0, Math.PI * 2);
+      context.ellipse(
+        x - cloudWidth * 0.45,
+        y + cloudHeight * 0.18,
+        cloudWidth * 0.5,
+        cloudHeight * 0.68,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      context.ellipse(
+        x + cloudWidth * 0.4,
+        y + cloudHeight * 0.08,
+        cloudWidth * 0.62,
+        cloudHeight * 0.76,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      context.fill();
+
+      context.beginPath();
+      context.ellipse(
+        x + cloudWidth * 0.12,
+        y + cloudHeight * 0.72,
+        cloudWidth * 1.15,
+        cloudHeight * 0.28,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      context.fillStyle = `rgba(40, 99, 112, ${0.025 + state.moisture * 0.025})`;
+      context.fill();
+    }
+  }
+
+  function drawBirds() {
+    const fieldWidth = width * 1.35;
+    const drift = state.worldX * 0.11;
+    context.lineCap = "round";
+    context.lineWidth = Math.max(1, width / 1_100);
+    context.strokeStyle = "rgba(16, 52, 48, 0.4)";
+
+    for (let birdIndex = 0; birdIndex < 5; birdIndex += 1) {
+      const position = latticeNoise(birdIndex, state.seed ^ 0x4f9939f5);
+      const altitude = latticeNoise(birdIndex, state.seed ^ 0x91e10da5);
+      const x =
+        wrap(birdIndex * 197 + position * width - drift, fieldWidth) -
+        width * 0.15;
+      const y = height * (0.12 + altitude * 0.18);
+      const span = 4 + position * 5;
+      const wing = Math.sin(state.worldX * 0.013 + birdIndex * 2.3) * 2.2;
+      context.beginPath();
+      context.moveTo(x - span, y + wing);
+      context.quadraticCurveTo(x - span * 0.42, y - span * 0.35, x, y);
+      context.quadraticCurveTo(
+        x + span * 0.42,
+        y - span * 0.35,
+        x + span,
+        y + wing,
+      );
+      context.stroke();
+    }
   }
 
   function drawTerrainLayer(layerIndex, points = terrainPoints(layerIndex)) {
@@ -384,27 +476,27 @@ function createTerrain(canvas) {
     context.closePath();
 
     const coolColors = [
-      [[84, 116, 116], [65, 96, 94]],
-      [[57, 99, 78], [40, 76, 59]],
-      [[42, 81, 59], [27, 60, 42]],
+      [[78, 132, 146], [38, 87, 94]],
+      [[43, 116, 84], [20, 76, 55]],
+      [[28, 99, 58], [12, 55, 35]],
     ];
     const warmColors = [
-      [[129, 126, 91], [99, 107, 76]],
-      [[96, 111, 66], [68, 91, 53]],
-      [[65, 93, 49], [38, 69, 39]],
+      [[157, 143, 92], [105, 108, 70]],
+      [[105, 126, 67], [64, 96, 48]],
+      [[67, 110, 44], [32, 75, 35]],
     ];
     const warmth = clamp(state.temperature * 0.78);
     const top = colorMix(
       coolColors[layerIndex][0],
       warmColors[layerIndex][0],
       warmth,
-      0.78 + layerIndex * 0.08,
+      0.88 + layerIndex * 0.055,
     );
     const bottom = colorMix(
       coolColors[layerIndex][1],
       warmColors[layerIndex][1],
       warmth,
-      0.9 + layerIndex * 0.04,
+      0.94 + layerIndex * 0.025,
     );
     const fill = context.createLinearGradient(0, height * 0.42, 0, height);
     fill.addColorStop(0, top);
@@ -416,12 +508,61 @@ function createTerrain(canvas) {
       [233, 240, 224],
       [246, 226, 174],
       warmth,
-      0.14 + layerIndex * 0.04,
+      0.24 + layerIndex * 0.035,
     );
     context.lineWidth = 1;
     context.stroke();
 
     return points;
+  }
+
+  function drawMountainDetail(points, layerIndex) {
+    const warmth = clamp(state.temperature * 0.72);
+    context.save();
+    context.lineCap = "round";
+    context.strokeStyle = colorMix(
+      [207, 238, 232],
+      [255, 218, 158],
+      warmth,
+      0.18 + (2 - layerIndex) * 0.04,
+    );
+    context.lineWidth = 1.15;
+    context.beginPath();
+    traceSurface(points);
+    context.stroke();
+
+    context.strokeStyle = `rgba(9, 54, 48, ${0.08 + layerIndex * 0.025})`;
+    context.lineWidth = 0.8;
+    for (let index = 5; index < points.length - 3; index += 11) {
+      const point = points[index];
+      const direction =
+        latticeNoise(index, state.seed ^ 0x2c1b3c6d) > 0.5 ? 1 : -1;
+      context.beginPath();
+      context.moveTo(point.x, point.y + 2);
+      context.lineTo(
+        point.x + direction * width * 0.035,
+        point.y + height * (0.045 + layerIndex * 0.018),
+      );
+      context.stroke();
+    }
+
+    if (layerIndex === 0) {
+      context.fillStyle = "rgba(239, 248, 241, 0.42)";
+      for (let index = 1; index < points.length - 1; index += 1) {
+        const point = points[index];
+        if (point.y > height * 0.36) continue;
+        const next = points[index + 1];
+        const capDepth = height * 0.018;
+        context.beginPath();
+        context.moveTo(point.x, point.y);
+        context.lineTo(next.x, next.y);
+        context.lineTo(next.x, next.y + capDepth * 0.75);
+        context.lineTo(point.x, point.y + capDepth);
+        context.closePath();
+        context.fill();
+      }
+    }
+    context.restore();
   }
 
   function drawMountainReflection(points, color, strength) {
@@ -444,15 +585,15 @@ function createTerrain(canvas) {
     const water = context.createLinearGradient(0, horizon, 0, height);
     water.addColorStop(
       0,
-      colorMix([180, 204, 201], [231, 194, 145], warmth),
+      colorMix([132, 207, 211], [247, 187, 121], warmth),
     );
     water.addColorStop(
       0.45,
-      colorMix([105, 148, 151], [162, 139, 100], warmth),
+      colorMix([61, 150, 164], [177, 132, 85], warmth),
     );
     water.addColorStop(
       1,
-      colorMix([55, 96, 105], [93, 91, 67], warmth),
+      colorMix([20, 83, 105], [88, 78, 48], warmth),
     );
     context.fillStyle = water;
     context.fillRect(0, horizon, width, height - horizon);
@@ -461,12 +602,12 @@ function createTerrain(canvas) {
     context.beginPath();
     context.rect(0, horizon, width, height - horizon);
     context.clip();
-    drawMountainReflection(farMountains, [65, 94, 98], 0.15);
-    drawMountainReflection(middleMountains, [37, 78, 69], 0.2);
+    drawMountainReflection(farMountains, [48, 103, 112], 0.2);
+    drawMountainReflection(middleMountains, [20, 83, 66], 0.25);
 
     const glowX = width * (0.7 + Math.sin(state.worldX * 0.00012) * 0.025);
     const reflection = context.createLinearGradient(0, horizon, 0, height);
-    reflection.addColorStop(0, `rgba(255, 231, 176, ${0.24 + state.energy * 0.08})`);
+    reflection.addColorStop(0, `rgba(255, 236, 172, ${0.4 + state.energy * 0.08})`);
     reflection.addColorStop(1, "rgba(255, 218, 148, 0)");
     context.beginPath();
     context.moveTo(glowX - width * 0.018, horizon);
@@ -504,7 +645,44 @@ function createTerrain(canvas) {
       context.lineWidth = 0.7;
       context.stroke();
     }
+
+    for (let index = 0; index < 42; index += 1) {
+      const depth = latticeNoise(index, state.seed ^ 0xd3a2646c);
+      const horizontal = latticeNoise(index, state.seed ^ 0x8c3c010b);
+      const y = horizon + lakeDepth * (0.08 + depth * depth * 0.9);
+      const drift = Math.sin(phase * 0.42 + index * 1.37) * width * 0.018;
+      const x = wrap(horizontal * width + drift, width);
+      const shimmerLength = mix(4, 32, depth) * (0.55 + horizontal * 0.7);
+      context.beginPath();
+      context.moveTo(x - shimmerLength, y);
+      context.lineTo(x + shimmerLength, y);
+      context.strokeStyle = colorMix(
+        [199, 239, 231],
+        [255, 216, 153],
+        warmth,
+        mix(0.12, 0.035, depth),
+      );
+      context.lineWidth = mix(0.65, 1.5, depth);
+      context.stroke();
+    }
     context.restore();
+
+    const horizonMist = context.createLinearGradient(
+      0,
+      horizon - height * 0.035,
+      0,
+      horizon + height * 0.055,
+    );
+    horizonMist.addColorStop(0, "rgba(222, 242, 232, 0)");
+    horizonMist.addColorStop(0.48, "rgba(232, 241, 222, 0.16)");
+    horizonMist.addColorStop(1, "rgba(232, 241, 222, 0)");
+    context.fillStyle = horizonMist;
+    context.fillRect(
+      0,
+      horizon - height * 0.035,
+      width,
+      height * 0.09,
+    );
   }
 
   function drawValleyBanks() {
@@ -517,9 +695,9 @@ function createTerrain(canvas) {
 
     const warmth = clamp(state.temperature * 0.72);
     const bank = context.createLinearGradient(0, lakeHorizonY(), 0, height);
-    bank.addColorStop(0, colorMix([43, 76, 61], [74, 83, 49], warmth));
-    bank.addColorStop(0.72, colorMix([27, 60, 43], [55, 68, 37], warmth));
-    bank.addColorStop(1, colorMix([29, 47, 35], [57, 52, 32], warmth));
+    bank.addColorStop(0, colorMix([32, 101, 70], [91, 108, 47], warmth));
+    bank.addColorStop(0.72, colorMix([14, 72, 46], [57, 82, 34], warmth));
+    bank.addColorStop(1, colorMix([11, 45, 33], [48, 54, 26], warmth));
     context.fillStyle = bank;
     context.fill();
 
@@ -527,10 +705,57 @@ function createTerrain(canvas) {
       [190, 210, 188],
       [230, 201, 145],
       warmth,
-      0.22,
+      0.34,
     );
     context.lineWidth = 1;
     context.stroke();
+  }
+
+  function drawConifer(x, groundY, treeHeight, treeWidth) {
+    context.fillRect(
+      x - treeWidth * 0.055,
+      groundY - treeHeight * 0.26,
+      treeWidth * 0.11,
+      treeHeight * 0.28,
+    );
+    context.beginPath();
+    context.moveTo(x, groundY - treeHeight);
+    context.lineTo(x - treeWidth * 0.46, groundY - treeHeight * 0.56);
+    context.lineTo(x - treeWidth * 0.27, groundY - treeHeight * 0.58);
+    context.lineTo(x - treeWidth * 0.78, groundY - treeHeight * 0.28);
+    context.lineTo(x - treeWidth * 0.46, groundY - treeHeight * 0.3);
+    context.lineTo(x - treeWidth, groundY - treeHeight * 0.06);
+    context.lineTo(x + treeWidth, groundY - treeHeight * 0.06);
+    context.lineTo(x + treeWidth * 0.46, groundY - treeHeight * 0.3);
+    context.lineTo(x + treeWidth * 0.78, groundY - treeHeight * 0.28);
+    context.lineTo(x + treeWidth * 0.27, groundY - treeHeight * 0.58);
+    context.lineTo(x + treeWidth * 0.46, groundY - treeHeight * 0.56);
+    context.closePath();
+    context.fill();
+  }
+
+  function drawFarForest(layerIndex = 1) {
+    const spacing = Math.max(17, width / 78);
+    const drift = state.worldX * layers[layerIndex].parallax * 0.22;
+    const startIndex = Math.floor(drift / spacing) - 2;
+    const endIndex = startIndex + Math.ceil(width / spacing) + 5;
+    const warmth = clamp(state.temperature * 0.7);
+    const controls = controlsFor(layerIndex);
+    context.fillStyle = colorMix(
+      [16, 74, 61],
+      [58, 88, 39],
+      warmth,
+      0.54,
+    );
+
+    for (let treeIndex = startIndex; treeIndex <= endIndex; treeIndex += 1) {
+      const treeNoise = latticeNoise(treeIndex, state.seed ^ 0x31d48a3f);
+      if (treeNoise < 0.16) continue;
+      const x = treeIndex * spacing - drift;
+      const groundY = terrainY(x, layerIndex, controls) + 4;
+      const treeHeight = 8 + treeNoise * 16;
+      drawConifer(x, groundY, treeHeight, treeHeight * 0.38);
+    }
   }
 
   function drawForest() {
@@ -540,13 +765,6 @@ function createTerrain(canvas) {
     const endIndex = startIndex + Math.ceil(width / spacing) + 5;
     const warmth = clamp(state.temperature * 0.7);
     const foregroundControls = controlsFor(2);
-
-    context.fillStyle = colorMix(
-      [21, 56, 43],
-      [42, 70, 35],
-      warmth,
-      0.55,
-    );
 
     for (let treeIndex = startIndex; treeIndex <= endIndex; treeIndex += 1) {
       const treeNoise = latticeNoise(treeIndex, state.seed ^ 0x6d2b79f5);
@@ -560,35 +778,112 @@ function createTerrain(canvas) {
       );
       const treeHeight = (16 + treeNoise * 28) * mix(0.75, 1.3, perspective);
       const treeWidth = treeHeight * 0.42;
+      context.fillStyle = colorMix(
+        [8, 57 + treeNoise * 19, 40],
+        [37, 79 + treeNoise * 20, 28],
+        warmth,
+        0.72 + perspective * 0.2,
+      );
+      drawConifer(x, groundY, treeHeight, treeWidth);
+    }
+  }
 
-      context.fillRect(x - 0.7, groundY - treeHeight * 0.22, 1.4, treeHeight * 0.24);
+  function drawShorelineDetails() {
+    const horizon = lakeHorizonY();
+    const controls = controlsFor(2);
+    const warmth = clamp(state.temperature * 0.7);
+    context.lineCap = "round";
+    context.strokeStyle = colorMix(
+      [39, 104, 65],
+      [109, 114, 48],
+      warmth,
+      0.72,
+    );
+    context.lineWidth = 1.1;
+
+    for (let side = 0; side < 2; side += 1) {
+      for (let index = 0; index < 28; index += 1) {
+        const placement = latticeNoise(index, state.seed ^ (side ? 0x9e81cf45 : 0x4b2a3d17));
+        const x = side
+          ? width * (0.72 + placement * 0.29)
+          : width * (placement * 0.28);
+        const groundY = bankY(x, controls) + 2;
+        if (groundY < horizon || groundY > height + 10) continue;
+        const reedHeight = 7 + placement * 19;
+        const sway = Math.sin(state.worldX * 0.009 + index * 0.77) * (1 + state.wind * 2.5);
+        context.beginPath();
+        context.moveTo(x, groundY);
+        context.quadraticCurveTo(
+          x + sway * 0.45,
+          groundY - reedHeight * 0.55,
+          x + sway,
+          groundY - reedHeight,
+        );
+        context.stroke();
+      }
+    }
+
+    context.fillStyle = colorMix(
+      [69, 91, 78],
+      [112, 98, 61],
+      warmth,
+      0.68,
+    );
+    for (let rockIndex = 0; rockIndex < 10; rockIndex += 1) {
+      const side = rockIndex % 2;
+      const placement = latticeNoise(rockIndex, state.seed ^ 0x67c18b2d);
+      const x = side
+        ? width * (0.79 + placement * 0.22)
+        : width * (placement * 0.21);
+      const y = bankY(x, controls) + 2;
+      const rockWidth = 5 + placement * 13;
       context.beginPath();
-      context.moveTo(x, groundY - treeHeight);
-      context.lineTo(x - treeWidth * 0.55, groundY - treeHeight * 0.45);
-      context.lineTo(x - treeWidth * 0.27, groundY - treeHeight * 0.48);
-      context.lineTo(x - treeWidth, groundY - treeHeight * 0.1);
-      context.lineTo(x + treeWidth, groundY - treeHeight * 0.1);
-      context.lineTo(x + treeWidth * 0.27, groundY - treeHeight * 0.48);
-      context.lineTo(x + treeWidth * 0.55, groundY - treeHeight * 0.45);
-      context.closePath();
+      context.ellipse(
+        x,
+        y,
+        rockWidth,
+        rockWidth * 0.42,
+        -0.16 + placement * 0.3,
+        Math.PI,
+        Math.PI * 2,
+      );
       context.fill();
     }
   }
 
   function draw() {
     drawSky();
+    drawClouds();
+    drawBirds();
     const farMountains = drawTerrainLayer(0);
+    drawMountainDetail(farMountains, 0);
     const middleMountains = drawTerrainLayer(1);
+    drawMountainDetail(middleMountains, 1);
+    drawFarForest();
     drawLake(farMountains, middleMountains);
     drawValleyBanks();
     drawForest();
+    drawShorelineDetails();
 
     const veil = context.createLinearGradient(0, 0, 0, height);
-    veil.addColorStop(0, "rgba(248, 247, 238, 0.025)");
-    veil.addColorStop(0.52, "rgba(248, 241, 220, 0.065)");
-    veil.addColorStop(0.62, "rgba(238, 243, 232, 0.12)");
-    veil.addColorStop(1, "rgba(226, 235, 223, 0.06)");
+    veil.addColorStop(0, "rgba(255, 247, 220, 0.018)");
+    veil.addColorStop(0.52, "rgba(255, 231, 178, 0.035)");
+    veil.addColorStop(0.62, "rgba(226, 244, 230, 0.045)");
+    veil.addColorStop(1, "rgba(8, 54, 45, 0.04)");
     context.fillStyle = veil;
+    context.fillRect(0, 0, width, height);
+
+    const vignette = context.createRadialGradient(
+      width * 0.52,
+      height * 0.42,
+      Math.min(width, height) * 0.16,
+      width * 0.52,
+      height * 0.42,
+      Math.max(width, height) * 0.78,
+    );
+    vignette.addColorStop(0.58, "rgba(6, 41, 35, 0)");
+    vignette.addColorStop(1, "rgba(5, 33, 29, 0.18)");
+    context.fillStyle = vignette;
     context.fillRect(0, 0, width, height);
   }
 

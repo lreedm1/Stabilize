@@ -457,6 +457,10 @@ test("root page renders memory disclosure without an erase control", async () =>
   assert.ok(COPY.page.chat.introBlurb.length < 300);
   assert.doesNotMatch(html, /forget-memory|Forget remembered context/);
   assert.ok(html.includes('id="terrain-background"'));
+  assert.ok(html.includes('id="sound-toggle"'));
+  assert.ok(html.includes('id="sound-volume"'));
+  assert.match(html, /id="sound-toggle"[\s\S]*aria-pressed="false"/);
+  assert.doesNotMatch(html, /<audio|autoplay/);
   assert.ok(html.includes('placeholder="' + COPY.page.chat.inputPlaceholder + '"'));
   assert.match(html, /id="conversation-surface"[\s\S]*data-view="compose"/);
   assert.ok(html.includes(COPY.page.chat.responseLabel));

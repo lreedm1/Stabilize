@@ -70,6 +70,10 @@ test("the terrain background is token-modulated and motion-aware", async () => {
   assert.match(terrainScript, /ridgedNoise/);
   assert.match(terrainScript, /drawLake/);
   assert.match(terrainScript, /drawValleyBanks/);
+  assert.match(terrainScript, /drawClouds/);
+  assert.match(terrainScript, /drawMountainDetail/);
+  assert.match(terrainScript, /drawFarForest/);
+  assert.match(terrainScript, /drawShorelineDetails/);
   assert.match(terrainScript, /prefers-reduced-motion: reduce/);
   assert.match(terrainScript, /document\.hidden/);
   assert.doesNotMatch(terrainScript, /Math\.random/);
@@ -77,15 +81,40 @@ test("the terrain background is token-modulated and motion-aware", async () => {
     styles,
     /\.terrain-background\s*{[\s\S]*position:\s*fixed;[\s\S]*pointer-events:\s*none;/,
   );
+  assert.match(styles, /\.terrain-background\s*{[\s\S]*filter:\s*saturate\(1\.24\)/);
   assert.match(pageSource, /id="terrain-background"[\s\S]*aria-hidden="true"/);
   assert.match(styles, /--foreground-earth:\s*rgba\(133,\s*107,\s*72,\s*0\.3\)/);
   assert.match(
     styles,
     /\.chat-card\s*{[\s\S]*background:\s*var\(--foreground-earth\)/,
   );
+  assert.match(styles, /--reading-surface:\s*rgba\(255,\s*252,\s*242,\s*0\.9\)/);
+  assert.match(
+    styles,
+    /\.assistant-output\s*{[\s\S]*max-width:\s*78ch;[\s\S]*background:\s*var\(--reading-surface\);[\s\S]*line-height:\s*1\.72;/,
+  );
 });
 
-test("Lexend is self-hosted and message bubbles are removed", async () => {
+test("nature sounds are opt-in and have a volume control", async () => {
+  const [clientScript, soundScript, styles, pageSource] = await Promise.all([
+    readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/nature-sounds.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(clientScript, /import \{ createNatureSoundscape \}/);
+  assert.match(clientScript, /soundToggle\.addEventListener\("click"/);
+  assert.match(clientScript, /soundVolume\.addEventListener\("input"/);
+  assert.match(soundScript, /new AudioContextClass/);
+  assert.match(soundScript, /createBufferSource/);
+  assert.match(pageSource, /id="sound-toggle"[\s\S]*aria-pressed="false"/);
+  assert.match(pageSource, /id="sound-volume"[\s\S]*type="range"/);
+  assert.match(styles, /\.sound-controls\s*{[\s\S]*position:\s*absolute;/);
+  assert.doesNotMatch(pageSource, /<audio|autoplay/);
+});
+
+test("Lexend is self-hosted and the response uses a single reading surface", async () => {
   const [styles, font, license] = await Promise.all([
     readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
     readFile(
@@ -99,7 +128,7 @@ test("Lexend is self-hosted and message bubbles are removed", async () => {
 
   assert.match(styles, /@font-face[\s\S]*font-family:\s*"Lexend"/);
   assert.match(styles, /font-family:\s*"Lexend", ui-sans-serif/);
-  assert.match(styles, /\.assistant-output\s*{[\s\S]*max-width:\s*none;/);
+  assert.match(styles, /\.assistant-output\s*{[\s\S]*max-width:\s*78ch;/);
   assert.doesNotMatch(styles, /\.assistant-message|\.user-message/);
   assert.equal(font.subarray(0, 4).toString("ascii"), "wOF2");
   assert.ok(font.byteLength > 30_000);

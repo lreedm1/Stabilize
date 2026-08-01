@@ -43,6 +43,31 @@ export function renderPage() {
     <div class="page-shell">
       <header class="site-header">
         <h1>${escapeHtml(page.header.name)}</h1>
+        <div class="sound-controls" role="group" aria-label="${escapeHtml(page.sound.groupLabel)}">
+          <button
+            id="sound-toggle"
+            class="sound-toggle"
+            type="button"
+            aria-pressed="false"
+            aria-label="${escapeHtml(COPY.client.soundTurnOn)}"
+          >
+            <span class="sound-icon" aria-hidden="true">♪</span>
+            <span class="sound-name">${escapeHtml(page.sound.toggleLabel)}</span>
+            <span id="sound-status" class="sound-status">${escapeHtml(page.sound.statusOff)}</span>
+          </button>
+          <label class="volume-control" for="sound-volume">
+            <span class="sr-only">${escapeHtml(page.sound.volumeLabel)}</span>
+            <input
+              id="sound-volume"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value="0.36"
+              aria-label="${escapeHtml(page.sound.volumeLabel)}"
+            />
+          </label>
+        </div>
       </header>
 
       <main class="chat-card" aria-label="${escapeHtml(page.title)}">

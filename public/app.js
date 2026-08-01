@@ -1,4 +1,5 @@
 import { renderMarkdown } from "./markdown.js";
+import { createNatureSoundscape } from "./nature-sounds.js";
 import { modulateTerrain } from "./terrain.js";
 
 const form = document.querySelector("#chat-form");
@@ -9,6 +10,9 @@ const chatLog = document.querySelector("#chat-log");
 const dangerButton = document.querySelector("#danger-button");
 const emergencyPanel = document.querySelector("#emergency-panel");
 const copyTemplate = document.querySelector("#client-copy");
+const soundToggle = document.querySelector("#sound-toggle");
+const soundStatus = document.querySelector("#sound-status");
+const soundVolume = document.querySelector("#sound-volume");
 
 if (!(copyTemplate instanceof HTMLTemplateElement)) {
   throw new Error("Missing client copy data");
@@ -18,6 +22,69 @@ const copy = JSON.parse(copyTemplate.content.textContent);
 
 let awaitingSafetyAnswer = false;
 let pending = false;
+
+function readSavedVolume() {
+  try {
+    const stored = window.localStorage.getItem("stabilize_nature_volume");
+    if (stored === null) return 0.36;
+    const value = Number(stored);
+    return Number.isFinite(value) ? value : 0.36;
+  } catch {
+    return 0.36;
+  }
+}
+
+function saveVolume(value) {
+  try {
+    window.localStorage.setItem("stabilize_nature_volume", String(value));
+  } catch {
+    // Sound remains fully usable when storage is unavailable.
+  }
+}
+
+if (
+  soundToggle instanceof HTMLButtonElement &&
+  soundStatus instanceof HTMLElement &&
+  soundVolume instanceof HTMLInputElement
+) {
+  const initialVolume = readSavedVolume();
+  soundVolume.value = String(initialVolume);
+
+  const soundscape = createNatureSoundscape({
+    initialVolume,
+    onStateChange({ available, enabled, volume }) {
+      soundVolume.value = String(volume);
+      soundToggle.disabled = !available;
+      soundToggle.setAttribute("aria-pressed", String(enabled));
+      soundToggle.classList.toggle("is-playing", enabled && volume > 0);
+      soundVolume.disabled = !available;
+
+      if (!available) {
+        soundStatus.textContent = copy.soundUnavailable;
+        soundToggle.setAttribute("aria-label", copy.soundUnavailable);
+      } else if (enabled && volume === 0) {
+        soundStatus.textContent = copy.soundMuted;
+        soundToggle.setAttribute("aria-label", copy.soundTurnOff);
+      } else {
+        soundStatus.textContent = enabled ? copy.soundOn : copy.soundOff;
+        soundToggle.setAttribute(
+          "aria-label",
+          enabled ? copy.soundTurnOff : copy.soundTurnOn,
+        );
+      }
+    },
+  });
+
+  soundToggle.addEventListener("click", () => {
+    void soundscape.toggle();
+  });
+
+  soundVolume.addEventListener("input", () => {
+    const volume = soundscape.setVolume(soundVolume.value);
+    soundVolume.value = String(volume);
+    saveVolume(volume);
+  });
+}
 
 function showOutput(content, extraClass = "", view = "response") {
   chatLog.replaceChildren();

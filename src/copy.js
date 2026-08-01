@@ -8,6 +8,12 @@ export const COPY = {
     header: {
       name: "Stabilize",
     },
+    sound: {
+      groupLabel: "Nature sound controls",
+      toggleLabel: "Nature sounds",
+      volumeLabel: "Nature sound volume",
+      statusOff: "Off",
+    },
     chat: {
       dangerButton: "I may be in immediate danger",
       emergency: {
@@ -35,6 +41,12 @@ export const COPY = {
     requestFailed: "The request failed.",
     missingReply: "I could not generate a reply.",
     unexpectedError: "Something went wrong.",
+    soundOn: "On",
+    soundOff: "Off",
+    soundMuted: "Muted",
+    soundUnavailable: "Unavailable",
+    soundTurnOn: "Turn on nature sounds",
+    soundTurnOff: "Turn off nature sounds",
     dangerReply:
       "Move toward a safe person or staffed place now. In the U.S., call or text 988. If an attempt, overdose, medical emergency, or immediate danger may be happening, call 911 or go to an emergency department.",
   },
