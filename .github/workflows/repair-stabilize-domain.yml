@@ -1,0 +1,132 @@
+name: Repair stabilize.info Worker domain
+
+on:
+  push:
+    branches:
+      - agent/repair-stabilize-domain
+    paths:
+      - .github/workflows/repair-stabilize-domain.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repair branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/repair-stabilize-domain
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+
+      - name: Redeploy Worker and custom-domain configuration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
+
+      - name: Reattach stabilize.info directly to the Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          response="$(curl --fail-with-body --silent --show-error \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/domains" \
+            --request PUT \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data '{"hostname":"stabilize.info","service":"stabilize","zone_name":"stabilize.info"}')"
+
+          RESPONSE="$response" python - <<'PY'
+          import json
+          import os
+
+          payload = json.loads(os.environ["RESPONSE"])
+          if payload.get("success") is not True:
+              raise SystemExit(json.dumps(payload.get("errors", [])))
+          domain = payload.get("result") or {}
+          if domain.get("hostname") != "stabilize.info":
+              raise SystemExit(f"Unexpected hostname: {domain.get('hostname')}")
+          if domain.get("service") != "stabilize":
+              raise SystemExit(f"Unexpected Worker: {domain.get('service')}")
+          if not domain.get("cert_id"):
+              raise SystemExit("Cloudflare did not return a certificate ID")
+          print(json.dumps({
+              "hostname": domain.get("hostname"),
+              "service": domain.get("service"),
+              "zone_name": domain.get("zone_name"),
+              "certificate_attached": True,
+          }))
+          PY
+
+      - name: Verify Worker-domain registration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          response="$(curl --fail-with-body --silent --show-error \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/domains?hostname=stabilize.info" \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")"
+
+          RESPONSE="$response" python - <<'PY'
+          import json
+          import os
+
+          payload = json.loads(os.environ["RESPONSE"])
+          domains = payload.get("result") or []
+          matching = [
+              domain for domain in domains
+              if domain.get("hostname") == "stabilize.info"
+              and domain.get("service") == "stabilize"
+              and domain.get("cert_id")
+          ]
+          if not matching:
+              raise SystemExit("stabilize.info is not attached to the stabilize Worker")
+          print("Custom domain and certificate registration verified")
+          PY
+
+      - name: Verify live HTTPS response
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 18); do
+            status="$(curl --silent --show-error --output /tmp/stabilize-body \
+              --write-out '%{http_code}' --max-time 20 https://stabilize.info/ || true)"
+            if [ "$status" = "200" ] || [ "$status" = "302" ] || [ "$status" = "308" ]; then
+              echo "stabilize.info responded over HTTPS with status $status"
+              exit 0
+            fi
+            echo "Attempt $attempt returned ${status:-no-status}; waiting for certificate propagation"
+            sleep 10
+          done
+          cat /tmp/stabilize-body || true
+          exit 1
+
+      - name: Remove one-time repair workflow
+        if: success()
+        run: |
+          rm .github/workflows/repair-stabilize-domain.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/repair-stabilize-domain.yml
+          git commit -m "Remove completed domain repair workflow"
+          git push origin HEAD:agent/repair-stabilize-domain
