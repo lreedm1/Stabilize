@@ -12,13 +12,25 @@ function escapeHtml(value) {
 export function renderPage(options = {}) {
   const { page, client } = COPY;
   const copyData = escapeHtml(JSON.stringify(client));
+  const productCopyData = escapeHtml(
+    JSON.stringify({
+      outcomeQuestion: "Did this help you identify one useful next step?",
+      outcomeYes: "Yes",
+      outcomeNo: "Not yet",
+      outcomeYesMessage: "Good. Do that step before opening another problem.",
+      outcomeNoMessage:
+        "I put a smaller follow-up in the box. Edit it or send it as written.",
+      outcomeFollowUp:
+        "Make this smaller and give me one concrete next step I can do in ten minutes.",
+    }),
+  );
   const signedIn = options.signedIn === true;
   const googleSignInAvailable = options.googleSignInAvailable === true;
   const notice = String(options.authNotice || "").trim();
   const canonicalUrl = "https://reedlokken.com/";
-  const seoTitle = "Stabilize — Free AI Check-In for Overwhelmed Moments";
+  const seoTitle = "Stabilize — One Manageable Next Step When You Feel Overwhelmed";
   const seoDescription =
-    "A free, floor-first AI check-in that helps adults reduce overload, protect immediate needs, and choose one manageable next step. Not therapy or emergency care.";
+    "Free, floor-first AI support that helps adults protect immediate needs, reduce overload, and choose one safe, manageable next step. Not therapy or emergency care.";
   const structuredData = JSON.stringify({
     "@context": "https://schema.org",
     "@type": "WebApplication",
@@ -46,6 +58,30 @@ export function renderPage(options = {}) {
     : googleSignInAvailable
       ? `<a class="google-sign-in header-google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>`
       : "";
+
+  const exampleStarts = [
+    {
+      label: "Everything feels urgent",
+      message: "Everything feels urgent and I cannot tell what to do first.",
+    },
+    {
+      label: "I have not eaten",
+      message: "I have not eaten and everything feels impossible right now.",
+    },
+    {
+      label: "I am stuck on one message",
+      message:
+        "I need to send a difficult message, but I keep spiraling instead.",
+    },
+  ]
+    .map(
+      ({ label, message }) => `<button
+        class="example-start"
+        type="button"
+        data-example-message="${escapeHtml(message)}"
+      >${escapeHtml(label)}</button>`,
+    )
+    .join("");
 
   return `<!doctype html>
 <html lang="${escapeHtml(page.language)}">
@@ -75,6 +111,7 @@ export function renderPage(options = {}) {
     />
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/seo.css" />
+    <link rel="stylesheet" href="/product.css" />
   </head>
   <body>
     <canvas
@@ -158,16 +195,32 @@ export function renderPage(options = {}) {
             hidden
           ></div>
 
-          <section id="seo-intro" class="seo-intro" aria-labelledby="seo-heading">
+          <section id="seo-intro" class="seo-intro product-intro" aria-labelledby="seo-heading">
             <p class="eyebrow">Floor-first support</p>
-            <h1 id="seo-heading">A free AI check-in for overwhelmed moments</h1>
-            <p>
-              Stabilize helps adults protect immediate needs, reduce overload, and choose one
-              manageable next step. It is not therapy, diagnosis, or emergency care.
+            <h1 id="seo-heading">Get unstuck without solving your whole life</h1>
+            <p class="product-promise">
+              Tell Stabilize what is happening. It checks the most urgent need, reduces the
+              problem, and helps you choose one safe, manageable next step.
             </p>
-            <p class="seo-start-cue">Describe what is happening right now to begin.</p>
+
+            <ol class="how-it-works-strip" aria-label="How Stabilize works">
+              <li><span>1</span><strong>Say what is happening</strong></li>
+              <li><span>2</span><strong>Find the weak point</strong></li>
+              <li><span>3</span><strong>Take one next step</strong></li>
+            </ol>
+
+            <div class="example-starts" aria-labelledby="example-starts-label">
+              <p id="example-starts-label">Try it with:</p>
+              <div class="example-start-grid">${exampleStarts}</div>
+            </div>
+
+            <p class="product-boundary">
+              Not a therapist or companion bot. Practical support for overloaded moments.
+            </p>
+            <p class="seo-start-cue">Or describe what is happening in your own words below.</p>
             <div class="landing-meta">
               <p class="landing-note">${escapeHtml(page.chat.supportNote)}</p>
+              <p class="privacy-signal">Guest chats are not remembered.</p>
               <details class="info-disclosure">
                 <summary>${escapeHtml(page.chat.infoLabel)}</summary>
                 <div class="info-popover">
@@ -196,6 +249,7 @@ export function renderPage(options = {}) {
     </div>
 
     <template id="client-copy">${copyData}</template>
+    <template id="product-copy">${productCopyData}</template>
     <script type="module" src="/app.js"></script>
   </body>
 </html>`;
