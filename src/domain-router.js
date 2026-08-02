@@ -4,6 +4,7 @@ import { signOut } from "./auth.js";
 export { BillingAccount, SessionMemory };
 
 const CANONICAL_ORIGIN = "https://stabilize.info";
+const HSTS_VALUE = "max-age=31536000; includeSubDomains";
 const REDIRECT_HOSTS = new Set([
   "reedlokken.com",
   "www.reedlokken.com",
@@ -28,6 +29,16 @@ function redirectToCanonical(request) {
   });
 }
 
+function withStrictTransportSecurity(response) {
+  const headers = new Headers(response.headers);
+  headers.set("Strict-Transport-Security", HSTS_VALUE);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function canonicalEnvironment(env) {
   return new Proxy(env, {
     get(target, property, receiver) {
@@ -38,19 +49,22 @@ function canonicalEnvironment(env) {
 }
 
 export default {
-  fetch(request, env, ctx) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const hostname = url.hostname.toLowerCase();
-    if (REDIRECT_HOSTS.has(hostname)) return redirectToCanonical(request);
+    if (url.protocol !== "https:" || REDIRECT_HOSTS.has(hostname)) {
+      return redirectToCanonical(request);
+    }
 
     const canonicalEnv = canonicalEnvironment(env);
     // Logout only expires cookies in the current browser. Handle it before the
     // inner same-origin check because iOS and embedded browsers can submit an
     // opaque Origin header (`Origin: null`).
-    if (url.pathname === "/auth/logout" && request.method === "POST") {
-      return signOut(request, canonicalEnv);
-    }
+    const response =
+      url.pathname === "/auth/logout" && request.method === "POST"
+        ? await signOut(request, canonicalEnv)
+        : await worker.fetch(request, canonicalEnv, ctx);
 
-    return worker.fetch(request, canonicalEnv, ctx);
+    return withStrictTransportSecurity(response);
   },
 };
