@@ -46,11 +46,11 @@ function webpDimensions(buffer) {
   throw new Error("No supported WebP image chunk found");
 }
 
-test("mobile loads high-resolution photography and a forced portrait animation", async () => {
+test("mobile keeps responsive high-resolution photography without a tiny animation override", async () => {
   const [
     pageSource,
     mobileQuality,
-    animationModule,
+    memoryPromptWorker,
     tuningStyles,
     small,
     medium,
@@ -58,7 +58,7 @@ test("mobile loads high-resolution photography and a forced portrait animation",
   ] = await Promise.all([
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
     readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/mobile-creek-gif.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/memory-prompt-worker.js", import.meta.url), "utf8"),
     readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
     readFile(
       new URL("../public/scenes/mobile-sunlit-green-path-v4-1440.webp", import.meta.url),
@@ -87,25 +87,28 @@ test("mobile loads high-resolution photography and a forced portrait animation",
     /rel="preload"[\s\S]*as="image"[\s\S]*mobile-sunlit-green-path-v4-2160\.webp/,
   );
 
-  const mobileQualityTag =
-    '<script src="/mobile-quality.js?v=20260802-6"></script>';
+  const sourceTag = '<script src="/mobile-quality.js?v=20260802-6"></script>';
   const appModuleTag = pageSource.match(
     /<script type="module" src="\/app\.js(?:\?v=[^"]+)?"><\/script>/,
   )?.[0];
   assert.ok(appModuleTag);
-  assert.ok(
-    pageSource.indexOf(mobileQualityTag) < pageSource.indexOf(appModuleTag),
+  assert.ok(pageSource.indexOf(sourceTag) < pageSource.indexOf(appModuleTag));
+  assert.match(memoryPromptWorker, /MOBILE_QUALITY_LEGACY = "\/mobile-quality\.js\?v=20260802-6"/);
+  assert.match(memoryPromptWorker, /MOBILE_QUALITY_CURRENT = "\/mobile-quality\.js\?v=20260802-7"/);
+  assert.match(
+    memoryPromptWorker,
+    /html = html\.replace\(MOBILE_QUALITY_LEGACY, MOBILE_QUALITY_CURRENT\)/,
   );
 
   assert.match(mobileQuality, /max-width: 980px/);
   assert.match(mobileQuality, /orientation: portrait/);
-  assert.doesNotMatch(mobileQuality, /prefers-reduced-motion/);
-  assert.match(mobileQuality, /mobile-creek-gif\.js\?v=20260802-6/);
-  assert.match(mobileQuality, /data-mobile-background|mobileBackground/);
-  assert.match(mobileQuality, /#photo-background/);
-  assert.match(mobileQuality, /\.remove\(\)/);
-  assert.match(animationModule, /data:image\/webp;base64,UklGR/);
-  assert.doesNotMatch(animationModule, /data:image\/gif/);
+  assert.match(mobileQuality, /mobileBackground = "static"/);
+  assert.match(mobileQuality, /mobileBackground = "static-ready"/);
+  assert.match(mobileQuality, /backdropImage\.naturalWidth > 0/);
+  assert.doesNotMatch(mobileQuality, /mobile-creek-gif/);
+  assert.doesNotMatch(mobileQuality, /\bimport\s*\(/);
+  assert.doesNotMatch(mobileQuality, /removeAttribute\("srcset"\)/);
+  assert.doesNotMatch(mobileQuality, /querySelectorAll\("source"\)/);
   assert.doesNotMatch(tuningStyles, /translateZ/);
   assert.match(
     tuningStyles,
