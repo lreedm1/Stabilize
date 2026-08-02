@@ -1,6 +1,11 @@
 name: Send smaller prompt immediately
 
 on:
+  push:
+    branches:
+      - ui/send-smaller-prompt
+    paths:
+      - .github/workflows/send-smaller-prompt.yml
   pull_request:
     branches:
       - main
