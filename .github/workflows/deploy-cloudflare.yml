@@ -53,12 +53,12 @@ jobs:
           command: deploy --keep-vars
           packageManager: npm
 
-      - name: Verify production Google sign-in
+      - name: Verify canonical production domain
         if: github.event_name != 'pull_request'
         shell: bash
         run: |
           for attempt in {1..12}; do
-            response="$(curl --fail --silent --show-error https://reedlokken.com/api/auth || true)"
+            response="$(curl --fail --silent --show-error https://stabilize.info/api/auth || true)"
             echo "Auth check attempt ${attempt}: ${response}"
             if node -e '
               try {
@@ -68,9 +68,13 @@ jobs:
                 process.exit(1);
               }
             ' "$response"; then
-              exit 0
+              redirect="$(curl --silent --show-error --output /dev/null --write-out "%{http_code} %{redirect_url}" https://reedlokken.com/ || true)"
+              echo "Legacy-domain redirect: ${redirect}"
+              case "$redirect" in
+                "308 https://stabilize.info/"*) exit 0 ;;
+              esac
             fi
             sleep 5
           done
-          echo "::error::Production /api/auth did not report google=true after deployment."
+          echo "::error::Canonical domain or legacy-domain redirect did not verify after deployment."
           exit 1

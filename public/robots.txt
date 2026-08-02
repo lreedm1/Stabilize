@@ -3,4 +3,4 @@ Allow: /
 Disallow: /api/
 Disallow: /auth/
 
-Sitemap: https://reedlokken.com/sitemap.xml
+Sitemap: https://stabilize.info/sitemap.xml

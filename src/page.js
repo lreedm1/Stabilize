@@ -28,7 +28,7 @@ export function renderPage(options = {}) {
   const emergencyBoundary = /not emergency care/i.test(page.chat.supportNote)
     ? "Not emergency care."
     : page.chat.supportNote;
-  const canonicalUrl = "https://reedlokken.com/";
+  const canonicalUrl = "https://stabilize.info/";
   const seoTitle = "Stabilize — Get One Clear Next Step";
   const seoDescription =
     "Free, floor-first AI support for overloaded moments. Describe what is happening and get one clear next step.";
