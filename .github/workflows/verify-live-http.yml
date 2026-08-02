@@ -1,0 +1,19 @@
+name: Verify live HTTP redirect
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check public HTTP and HTTPS responses
+        shell: bash
+        run: |
+          echo "HTTP response:"
+          curl --max-time 20 --silent --show-error --dump-header - --output /dev/null http://stabilize.info/
+          echo
+          echo "HTTPS response:"
+          curl --max-time 20 --silent --show-error --dump-header - --output /dev/null https://stabilize.info/
