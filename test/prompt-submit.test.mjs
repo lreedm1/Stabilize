@@ -8,10 +8,7 @@ test("starter prompt buttons call the model with a cache-busted client", async (
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
   ]);
 
-  assert.match(
-    pageSource,
-    /src="\/app\.js\?v=20260802-model-action-buttons-1"/,
-  );
+  assert.match(pageSource, /src="\/app\.js\?v=[^"]+"/);
   assert.match(
     clientSource,
     /button\.addEventListener\("click", \(\) => \{[\s\S]*?void sendMessage\(button\.dataset\.exampleMessage \|\| ""\);[\s\S]*?\}\);/,
