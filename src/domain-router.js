@@ -27,10 +27,19 @@ function redirectToCanonical(request) {
   });
 }
 
+function canonicalEnvironment(env) {
+  return new Proxy(env, {
+    get(target, property, receiver) {
+      if (property === "PUBLIC_ORIGIN") return CANONICAL_ORIGIN;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}
+
 export default {
   fetch(request, env, ctx) {
     const hostname = new URL(request.url).hostname.toLowerCase();
     if (REDIRECT_HOSTS.has(hostname)) return redirectToCanonical(request);
-    return worker.fetch(request, env, ctx);
+    return worker.fetch(request, canonicalEnvironment(env), ctx);
   },
 };
