@@ -1,0 +1,101 @@
+name: Send smaller prompt immediately
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: ui/send-smaller-prompt
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Make Not yet send immediately
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          app = Path("public/app.js")
+          app_text = app.read_text()
+          old_handler = '''  noButton.addEventListener("click", () => {
+            input.value = productCopy.outcomeFollowUp;
+            finish(productCopy.outcomeNoMessage);
+            input.focus({ preventScroll: true });
+            input.setSelectionRange(input.value.length, input.value.length);
+          });'''.replace("          ", "")
+          new_handler = '''  noButton.addEventListener("click", () => {
+            finish("");
+            void sendMessage(productCopy.outcomeFollowUp);
+          });'''.replace("          ", "")
+          if old_handler not in app_text:
+              raise SystemExit("Existing Not yet handler was not found")
+          app.write_text(app_text.replace(old_handler, new_handler, 1))
+
+          page = Path("src/page.js")
+          page_text = page.read_text()
+          old_copy = '      outcomeNoMessage: "A smaller prompt is ready below.",\n'
+          if old_copy not in page_text:
+              raise SystemExit("Smaller-prompt status copy was not found")
+          page_text = page_text.replace(old_copy, "", 1)
+          old_script = '/app.js?v=20260802-prompt-auto-send-2'
+          new_script = '/app.js?v=20260802-smaller-prompt-auto-send-1'
+          if old_script not in page_text:
+              raise SystemExit("Current app cache key was not found")
+          page.write_text(page_text.replace(old_script, new_script, 1))
+
+          tests = Path("test/product.test.mjs")
+          test_text = tests.read_text()
+          if "Not yet sends the smaller prompt immediately" not in test_text:
+              test_text += r'''
+
+test("Not yet sends the smaller prompt immediately", async () => {
+  const [clientScript, pageSource] = await Promise.all([
+    readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(
+    clientScript,
+    /noButton\.addEventListener\("click"[\s\S]{0,180}void sendMessage\(productCopy\.outcomeFollowUp\)/,
+  );
+  assert.doesNotMatch(clientScript, /input\.value = productCopy\.outcomeFollowUp/);
+  assert.doesNotMatch(pageSource, /A smaller prompt is ready below\./);
+  assert.match(pageSource, /app\.js\?v=20260802-smaller-prompt-auto-send-1/);
+});
+'''
+          tests.write_text(test_text)
+          PY
+
+      - name: Run full test suite
+        run: npm test
+
+      - name: Validate Worker build
+        run: npm run check
+
+      - name: Commit verified change
+        shell: bash
+        run: |
+          rm .github/workflows/send-smaller-prompt.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/app.js src/page.js test/product.test.mjs .github/workflows/send-smaller-prompt.yml
+          git commit -m "Send the smaller follow-up prompt immediately"
+          git push origin HEAD:ui/send-smaller-prompt
