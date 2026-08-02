@@ -47,7 +47,7 @@ test("ordinary replies offer a private next-step check", async () => {
   assert.match(pageSource, /Did this help you identify one useful next step\?/);
   assert.match(clientScript, /function appendOutcomeCheck/);
   assert.match(clientScript, /ROUTES_WITHOUT_OUTCOME_CHECK/);
-  assert.match(clientScript, /result\.showEmergency !== true/);
+  assert.match(clientScript, /result\.awaitingSafetyAnswer !== true/);
   assert.match(pageSource, /Make this smaller and give me one concrete next step/);
   assert.doesNotMatch(clientScript, /\/api\/feedback|localStorage|sessionStorage/);
   assert.doesNotMatch(clientScript, /innerHTML\s*=/);
