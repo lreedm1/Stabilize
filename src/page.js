@@ -110,6 +110,16 @@ export function renderPage(options = {}) {
       type="font/woff2"
       crossorigin
     />
+    <link
+      rel="preload"
+      as="image"
+      href="/scenes/mobile-forest-hq-v1-1620.webp"
+      imagesrcset="/scenes/mobile-forest-hq-v1-1080.webp 1080w, /scenes/mobile-forest-hq-v1-1620.webp 1620w, /scenes/mobile-forest-hq-v1-2430.webp 2430w"
+      imagesizes="100vw"
+      media="(max-width: 980px) and (orientation: portrait)"
+      type="image/webp"
+      fetchpriority="high"
+    />
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/seo.css" />
     <link rel="stylesheet" href="/product.css" />
@@ -131,9 +141,9 @@ export function renderPage(options = {}) {
         type="image/webp"
         sizes="100vw"
         srcset="
-          /scenes/lake-valley-portrait-720.webp 720w,
-          /scenes/lake-valley-portrait-1440.webp 1440w,
-          /scenes/lake-valley-portrait-2160.webp 2160w
+          /scenes/mobile-forest-hq-v1-1080.webp 1080w,
+          /scenes/mobile-forest-hq-v1-1620.webp 1620w,
+          /scenes/mobile-forest-hq-v1-2430.webp 2430w
         "
       />
       <img
@@ -242,6 +252,7 @@ export function renderPage(options = {}) {
 
     <template id="client-copy">${copyData}</template>
     <template id="product-copy">${productCopyData}</template>
+    <script src="/mobile-quality.js"></script>
     <script type="module" src="/app.js"></script>
   </body>
 </html>`;
