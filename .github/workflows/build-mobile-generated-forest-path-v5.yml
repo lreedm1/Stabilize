@@ -1,6 +1,9 @@
 name: Build generated mobile forest path v5
 
 on:
+  push:
+    branches:
+      - agent/mobile-generated-forest-path-v5
   pull_request:
     branches:
       - main
