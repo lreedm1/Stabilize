@@ -71,12 +71,12 @@ test("mobile loads cache-busted high-resolution static photography", async () =>
     assert.ok(image.byteLength < 5_000_000);
   }
 
-  assert.match(pageSource, /mobile-walking-path-natural-v3-1440\.webp 1440w/);
-  assert.match(pageSource, /mobile-walking-path-natural-v3-2160\.webp 2160w/);
-  assert.match(pageSource, /mobile-walking-path-natural-v3-2880\.webp 2880w/);
+  assert.match(pageSource, /mobile-sunlit-green-path-v4-1440\.webp 1440w/);
+  assert.match(pageSource, /mobile-sunlit-green-path-v4-2160\.webp 2160w/);
+  assert.match(pageSource, /mobile-sunlit-green-path-v4-2880\.webp 2880w/);
   assert.match(
     pageSource,
-    /rel="preload"[\s\S]*as="image"[\s\S]*mobile-walking-path-natural-v3-2160\.webp/,
+    /rel="preload"[\s\S]*as="image"[\s\S]*mobile-sunlit-green-path-v4-2160\.webp/,
   );
   assert.ok(
     pageSource.indexOf('<script src="/mobile-quality.js"></script>') <
