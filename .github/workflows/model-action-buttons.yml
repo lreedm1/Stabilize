@@ -1,6 +1,11 @@
 name: Build model action buttons
 
 on:
+  push:
+    branches:
+      - ui/model-action-buttons
+    paths:
+      - .github/workflows/model-action-buttons.yml
   pull_request:
     branches:
       - main
