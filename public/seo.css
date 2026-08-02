@@ -187,11 +187,11 @@
   line-height: 1.45;
 }
 
-.landing-info {
+.landing-meta .info-disclosure {
   margin-top: 8px;
 }
 
-.landing-info summary {
+.landing-meta .info-disclosure summary {
   width: fit-content;
   margin: 0 auto;
   border-radius: 5px;
@@ -205,17 +205,28 @@
   text-underline-offset: 0.16em;
 }
 
-.landing-info summary::-webkit-details-marker {
+.landing-meta .info-disclosure summary::-webkit-details-marker {
   display: none;
 }
 
-.landing-info summary:focus-visible {
+.landing-meta .info-disclosure summary:focus-visible {
   outline: 3px solid rgba(46, 101, 80, 0.28);
   outline-offset: 3px;
 }
 
-.seo-intro .landing-info p {
+.landing-meta .info-popover {
+  position: static;
+  width: auto;
   margin-top: 9px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  text-align: center;
+}
+
+.seo-intro .landing-meta .info-popover p {
   color: var(--muted);
   font-size: 0.72rem;
   line-height: 1.5;
