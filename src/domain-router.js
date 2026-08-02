@@ -1,7 +1,12 @@
-import worker, { BillingAccount, SessionMemory } from "./paid-worker.js";
+import worker, {
+  BillingAccount,
+  FeedbackGate,
+  FeedbackInbox,
+  SessionMemory,
+} from "./feedback-worker.js";
 import { signOut } from "./auth.js";
 
-export { BillingAccount, SessionMemory };
+export { BillingAccount, FeedbackGate, FeedbackInbox, SessionMemory };
 
 const CANONICAL_ORIGIN = "https://stabilize.info";
 const HSTS_VALUE = "max-age=31536000; includeSubDomains";

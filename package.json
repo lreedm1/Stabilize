@@ -8,14 +8,12 @@
     "node": ">=22"
   },
   "scripts": {
-    "apply:prompt-policy": "node scripts/apply-prompt-policy.mjs && node scripts/align-current-build-tests.mjs && node scripts/align-uncapped-body-test.mjs",
-    "postinstall": "npm run apply:prompt-policy",
-    "check": "npm run apply:prompt-policy && wrangler types --include-runtime false && wrangler deploy --dry-run",
-    "deploy": "npm run apply:prompt-policy && wrangler deploy",
-    "dev": "npm run apply:prompt-policy && wrangler dev",
-    "test": "npm run apply:prompt-policy && npm run test:node && npm run test:worker",
-    "test:node": "node --test test/safety.test.mjs test/markdown.test.mjs test/terrain.test.mjs test/ui.test.mjs test/product.test.mjs test/mobile-quality.test.mjs test/domain.test.mjs test/billing.test.mjs test/prompt-submit.test.mjs test/outcome-followup.test.mjs test/document-export.test.mjs",
-    "test:worker": "vitest run --config vitest.config.js test/worker.test.mjs test/session-memory.test.mjs test/billing-account.test.mjs test/auth.test.mjs",
+    "check": "wrangler types --include-runtime false && wrangler deploy --dry-run",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "test": "npm run test:node && npm run test:worker",
+    "test:node": "node --test test/safety.test.mjs test/markdown.test.mjs test/terrain.test.mjs test/ui.test.mjs test/product.test.mjs test/mobile-quality.test.mjs test/domain.test.mjs test/billing.test.mjs test/feedback.test.mjs test/prompt-submit.test.mjs test/outcome-followup.test.mjs test/document-export.test.mjs",
+    "test:worker": "vitest run --config vitest.config.js test/worker.test.mjs test/session-memory.test.mjs test/billing-account.test.mjs test/feedback-gate.test.mjs test/feedback-worker.test.mjs test/auth.test.mjs",
     "types": "wrangler types --include-runtime false"
   },
   "devDependencies": {

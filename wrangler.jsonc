@@ -25,12 +25,15 @@
   "durable_objects": {
     "bindings": [
       { "name": "SESSIONS", "class_name": "SessionMemory" },
-      { "name": "BILLING", "class_name": "BillingAccount" }
+      { "name": "BILLING", "class_name": "BillingAccount" },
+      { "name": "FEEDBACK_LIMITS", "class_name": "FeedbackGate" },
+      { "name": "FEEDBACK_INBOX", "class_name": "FeedbackInbox" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["SessionMemory"] },
-    { "tag": "v2", "new_sqlite_classes": ["BillingAccount"] }
+    { "tag": "v2", "new_sqlite_classes": ["BillingAccount"] },
+    { "tag": "v3", "new_sqlite_classes": ["FeedbackGate", "FeedbackInbox"] }
   ],
   "vars": {
     "DEMO_MODE": "false",
@@ -39,7 +42,10 @@
     "PUBLIC_ORIGIN": "https://stabilize.info",
     "MODEL_CHOICES": "gpt-5.6-sol|Stabilize default,gpt-5.1|GPT-5.1,gpt-5-mini|GPT-5 mini",
     "PAID_MONTHLY_MESSAGE_LIMIT": "200",
-    "STRIPE_MODEL_CHOICE_PRICE_ID": "price_1U01Jp96tfbPOBGIbQNXDlPx"
+    "STRIPE_MODEL_CHOICE_PRICE_ID": "price_1U01Jp96tfbPOBGIbQNXDlPx",
+    "FEEDBACK_REPOSITORY": "lreedm1/Stabilize",
+    "FEEDBACK_BRANCH": "feedback-inbox",
+    "FEEDBACK_PATH": "feedback"
   },
   "secrets": {
     "required": [
