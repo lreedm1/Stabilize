@@ -42,7 +42,9 @@ export function renderPage(options = {}) {
       ? `<a class="google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>`
       : `<span class="menu-account-note">Guest chat is available without an account.</span>`;
   const headerAuthControl = signedIn
-    ? `<span class="header-auth-state">${escapeHtml(page.auth.signedIn)}</span>`
+    ? `<form class="auth-session header-auth-session" action="/auth/logout" method="post">
+          <button class="auth-link header-sign-out" type="submit">${escapeHtml(page.auth.signOut)}</button>
+        </form>`
     : googleSignInAvailable
       ? `<a class="google-sign-in header-google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>`
       : "";
