@@ -3,11 +3,6 @@ name: Repair stabilize.info Worker domain
 on:
   push:
     branches:
-      - agent/repair-stabilize-domain
-    paths:
-      - .github/workflows/repair-stabilize-domain.yml
-  pull_request:
-    branches:
       - main
     paths:
       - .github/workflows/repair-stabilize-domain.yml
@@ -19,10 +14,10 @@ jobs:
   repair:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repair branch
+      - name: Check out main
         uses: actions/checkout@v6
         with:
-          ref: agent/repair-stabilize-domain
+          ref: main
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -134,4 +129,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .github/workflows/repair-stabilize-domain.yml
           git commit -m "Remove completed domain repair workflow"
-          git push origin HEAD:agent/repair-stabilize-domain
+          git push origin HEAD:main
