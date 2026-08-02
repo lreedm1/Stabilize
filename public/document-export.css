@@ -1,0 +1,69 @@
+.document-export {
+  margin-top: 1rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.85rem;
+}
+
+.assistant-output .document-export-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 680;
+  line-height: 1.4;
+}
+
+.document-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 0.6rem;
+}
+
+.document-export-button {
+  min-height: 36px;
+  border: 1px solid rgba(31, 111, 84, 0.34);
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: var(--accent-dark);
+  cursor: pointer;
+  padding: 7px 13px;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.document-export-button:hover,
+.document-export-button:focus-visible {
+  background: var(--accent-soft);
+}
+
+.document-export-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.assistant-output .document-export-status {
+  display: block;
+  min-height: 1.25em;
+  margin-top: 0.45rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.document-export + .outcome-check {
+  margin-top: 0.8rem;
+}
+
+@media (max-width: 620px) {
+  .document-export-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .document-export-button {
+    width: 100%;
+    border-radius: 11px;
+  }
+}
