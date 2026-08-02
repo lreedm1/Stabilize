@@ -1,0 +1,27 @@
+name: Validate mobile woodland background
+
+on:
+  pull_request:
+    paths:
+      - "public/mobile-quality.js"
+      - "public/mobile-woodland-*.js"
+      - "test/mobile-woodland-loader.test.mjs"
+  push:
+    branches: [main]
+    paths:
+      - "public/mobile-quality.js"
+      - "public/mobile-woodland-*.js"
+      - "test/mobile-woodland-loader.test.mjs"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node --test test/mobile-woodland-loader.test.mjs
