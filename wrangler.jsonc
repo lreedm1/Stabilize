@@ -9,12 +9,12 @@
   "preview_urls": true,
   "routes": [
     {
-      "pattern": "stabilize.info",
-      "custom_domain": true
+      "pattern": "stabilize.info/*",
+      "zone_name": "stabilize.info"
     },
     {
-      "pattern": "reedlokken.com",
-      "custom_domain": true
+      "pattern": "reedlokken.com/*",
+      "zone_name": "reedlokken.com"
     }
   ],
   "assets": {
