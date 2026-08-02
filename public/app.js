@@ -30,6 +30,7 @@ const ROUTES_WITHOUT_OUTCOME_CHECK = new Set([
 
 let awaitingSafetyAnswer = false;
 let pending = false;
+let lastSubmittedText = "";
 
 function appendOutcomeCheck(article) {
   const section = document.createElement("section");
@@ -106,6 +107,18 @@ function setPending(value) {
   for (const button of exampleStarts) button.disabled = value;
 }
 
+function restoreComposeView() {
+  chatLog.replaceChildren();
+  chatLog.hidden = true;
+  chatLog.tabIndex = -1;
+  conversationSurface.dataset.view = "compose";
+  setPending(false);
+
+  if (!input.value && lastSubmittedText) {
+    input.value = lastSubmittedText;
+  }
+}
+
 function requestErrorMessage(message, reference = "") {
   const parts = [
     String(message || copy.requestFailed),
@@ -123,6 +136,7 @@ async function sendMessage(text) {
   const clean = String(text || "").trim();
   if (!clean || pending) return;
 
+  lastSubmittedText = clean;
   modulateTerrain(clean);
   input.value = "";
   setPending(true);
@@ -139,6 +153,7 @@ async function sendMessage(text) {
 
     if (!response.ok) {
       input.value = clean;
+      lastSubmittedText = "";
       showOutput(
         requestErrorMessage(result.error, result.reference),
         "error-output",
@@ -154,8 +169,10 @@ async function sendMessage(text) {
     showOutput(reply, "", "response", { offerOutcomeCheck });
     modulateTerrain(reply);
     awaitingSafetyAnswer = result.awaitingSafetyAnswer === true;
+    lastSubmittedText = "";
   } catch {
     input.value = clean;
+    lastSubmittedText = "";
     showOutput(requestErrorMessage(copy.unexpectedError), "error-output");
   } finally {
     setPending(false);
@@ -183,3 +200,13 @@ for (const button of exampleStarts) {
     input.setSelectionRange(input.value.length, input.value.length);
   });
 }
+
+window.addEventListener("pageshow", (event) => {
+  const view = conversationSurface.dataset.view || "compose";
+  const outputIsMissing = chatLog.hidden || chatLog.childElementCount === 0;
+  const interruptedThinkingView = event.persisted && view === "thinking";
+
+  if (interruptedThinkingView || (view !== "compose" && outputIsMissing)) {
+    restoreComposeView();
+  }
+});
