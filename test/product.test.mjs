@@ -148,6 +148,28 @@ test("example starts submit their prompt immediately", async () => {
   );
 });
 
+test("the latest assistant answer persists within the current tab", async () => {
+  const [clientScript, privacyPage] = await Promise.all([
+    readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/privacy.html", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(clientScript, /LAST_ANSWER_STORAGE_KEY/);
+  assert.match(clientScript, /sessionStorage\.setItem/);
+  assert.match(clientScript, /sessionStorage\.getItem/);
+  assert.match(clientScript, /sessionStorage\.removeItem/);
+  assert.match(
+    clientScript,
+    /persistLatestAnswer\(reply, route, needsSafetyAnswer\)/,
+  );
+  assert.match(clientScript, /restorePersistedAnswer\(\);/);
+  assert.match(clientScript, /form\[action="\/auth\/logout"\]/);
+  assert.doesNotMatch(clientScript, /localStorage/);
+  assert.match(privacyPage, /latest assistant reply/i);
+  assert.match(privacyPage, /current browser tab/i);
+  assert.match(privacyPage, /user's prompt is not included/i);
+});
+
 test("ordinary replies offer a private next-step check", async () => {
   const [clientScript, pageSource, productStyles] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
@@ -158,9 +180,9 @@ test("ordinary replies offer a private next-step check", async () => {
   assert.match(pageSource, /Do you have a next step\?/);
   assert.match(clientScript, /function appendOutcomeCheck/);
   assert.match(clientScript, /ROUTES_WITHOUT_OUTCOME_CHECK/);
-  assert.match(clientScript, /result\.awaitingSafetyAnswer !== true/);
+  assert.match(clientScript, /result\.awaitingSafetyAnswer !== true|needsSafetyAnswer/);
   assert.match(pageSource, /Give me one step I can do in ten minutes/);
-  assert.doesNotMatch(clientScript, /\/api\/feedback|localStorage|sessionStorage/);
+  assert.doesNotMatch(clientScript, /\/api\/feedback|localStorage/);
   assert.doesNotMatch(clientScript, /innerHTML\s*=/);
   assert.match(productStyles, /\.outcome-check/);
   assert.match(productStyles, /\.outcome-button/);
