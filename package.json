@@ -8,8 +8,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "apply:prompt-policy": "node scripts/apply-prompt-policy.mjs",
-    "postinstall": "node scripts/apply-prompt-policy.mjs",
+    "apply:prompt-policy": "node scripts/apply-prompt-policy.mjs && node scripts/align-current-build-tests.mjs",
+    "postinstall": "npm run apply:prompt-policy",
     "check": "npm run apply:prompt-policy && wrangler types --include-runtime false && wrangler deploy --dry-run",
     "deploy": "npm run apply:prompt-policy && wrangler deploy",
     "dev": "npm run apply:prompt-policy && wrangler dev",
