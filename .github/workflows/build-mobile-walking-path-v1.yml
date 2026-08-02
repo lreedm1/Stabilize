@@ -85,14 +85,18 @@ jobs:
               rendered = rendered.filter(
                   ImageFilter.UnsharpMask(radius=0.7, percent=35, threshold=5)
               )
-              rendered.save(path, "WEBP", quality=95, method=6)
+              quality = 95 if size[0] <= 1080 else 93 if size[0] <= 1620 else 89
+              rendered.save(path, "WEBP", quality=quality, method=6)
               with Image.open(path) as check:
                   if check.size != size:
                       raise SystemExit(f"Unexpected size for {path}: {check.size}")
               byte_size = path.stat().st_size
               if not 180_000 < byte_size < 3_000_000:
                   raise SystemExit(f"Unexpected file size for {path}: {byte_size}")
-              print(f"Wrote {path}: {size[0]}x{size[1]}, {byte_size:,} bytes")
+              print(
+                  f"Wrote {path}: {size[0]}x{size[1]}, quality {quality}, "
+                  f"{byte_size:,} bytes"
+              )
           PY
 
       - name: Wire the new walking path into mobile
