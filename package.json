@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "apply:prompt-policy": "node scripts/apply-prompt-policy.mjs && node scripts/align-current-build-tests.mjs",
+    "apply:prompt-policy": "node scripts/apply-prompt-policy.mjs && node scripts/align-current-build-tests.mjs && node scripts/align-uncapped-body-test.mjs",
     "postinstall": "npm run apply:prompt-policy",
     "check": "npm run apply:prompt-policy && wrangler types --include-runtime false && wrangler deploy --dry-run",
     "deploy": "npm run apply:prompt-policy && wrangler deploy",
