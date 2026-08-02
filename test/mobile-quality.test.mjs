@@ -78,11 +78,14 @@ test("mobile loads cache-busted high-resolution static photography", async () =>
     pageSource,
     /rel="preload"[\s\S]*as="image"[\s\S]*mobile-sunlit-green-path-v4-2160\.webp/,
   );
+
+  const mobileQualityTag = '<script src="/mobile-quality.js"></script>';
+  const appModuleTag = pageSource.match(
+    /<script type="module" src="\/app\.js(?:\?v=[^"]+)?"><\/script>/,
+  )?.[0];
+  assert.ok(appModuleTag);
   assert.ok(
-    pageSource.indexOf('<script src="/mobile-quality.js"></script>') <
-      pageSource.indexOf(
-        '<script type="module" src="/app.js?v=20260802-prompt-auto-send-2"></script>',
-      ),
+    pageSource.indexOf(mobileQualityTag) < pageSource.indexOf(appModuleTag),
   );
 
   assert.match(mobileQuality, /matchMedia\?\.\("\(max-width: 980px\)"\)/);

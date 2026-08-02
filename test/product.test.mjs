@@ -170,18 +170,21 @@ test("the latest assistant answer persists within the current tab", async () => 
   assert.match(privacyPage, /user's prompt is not included/i);
 });
 
-test("ordinary replies offer a private next-step check", async () => {
+test("ordinary replies offer useful model follow-up actions", async () => {
   const [clientScript, pageSource, productStyles] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
     readFile(new URL("../public/product.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(pageSource, /Do you have a next step\?/);
+  assert.match(pageSource, /What would help next\?/);
+  assert.match(pageSource, /Make it smaller/);
+  assert.match(pageSource, /Another option/);
+  assert.match(pageSource, /Help me start now/);
   assert.match(clientScript, /function appendOutcomeCheck/);
   assert.match(clientScript, /ROUTES_WITHOUT_OUTCOME_CHECK/);
   assert.match(clientScript, /result\.awaitingSafetyAnswer !== true|needsSafetyAnswer/);
-  assert.match(pageSource, /Give me one step I can do in ten minutes/);
+  assert.match(clientScript, /buildOutcomeActionPrompt/);
   assert.doesNotMatch(clientScript, /\/api\/feedback|localStorage/);
   assert.doesNotMatch(clientScript, /innerHTML\s*=/);
   assert.match(productStyles, /\.outcome-check/);

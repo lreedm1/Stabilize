@@ -10,7 +10,7 @@ test("starter prompt buttons call the model with a cache-busted client", async (
 
   assert.match(
     pageSource,
-    /src="\/app\.js\?v=20260802-prompt-auto-send-2"/,
+    /src="\/app\.js\?v=20260802-model-action-buttons-1"/,
   );
   assert.match(
     clientSource,
