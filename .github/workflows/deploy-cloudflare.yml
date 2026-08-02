@@ -15,6 +15,7 @@ concurrency:
 
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   test-and-deploy:
@@ -31,6 +32,21 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - name: Mark Cloudflare deployment pending
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          payload="$(printf '{"state":"pending","context":"deployment/cloudflare","description":"Deploying Stabilize to Cloudflare","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
 
       - name: Install dependencies
         run: npm ci
@@ -78,3 +94,26 @@ jobs:
           done
           echo "::error::Canonical domain or legacy-domain redirect did not verify after deployment."
           exit 1
+
+      - name: Publish Cloudflare deployment result
+        if: always() && github.event_name != 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [[ "$JOB_STATUS" == "success" ]]; then
+            state="success"
+            description="Cloudflare deploy and domain checks passed"
+          else
+            state="failure"
+            description="Cloudflare deploy or domain checks failed"
+          fi
+          payload="$(printf '{"state":"%s","context":"deployment/cloudflare","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
