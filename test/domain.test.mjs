@@ -33,6 +33,8 @@ test("stabilize.info is the canonical production domain", async () => {
   assert.match(router, /"reedlokken\.com"/);
   assert.match(router, /status: 308/);
   assert.match(router, /property === "PUBLIC_ORIGIN"/);
+  assert.match(router, /url\.pathname === "\/auth\/logout"/);
+  assert.match(router, /return signOut\(request, canonicalEnv\)/);
   assert.match(page, /const canonicalUrl = "https:\/\/stabilize\.info\/"/);
   assert.match(sitemap, /https:\/\/stabilize\.info\//);
   assert.doesNotMatch(sitemap, /reedlokken\.com/);
