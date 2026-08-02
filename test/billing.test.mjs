@@ -7,6 +7,8 @@ if (!globalThis.crypto) {
 }
 
 const {
+  MANAGED_PAYMENTS_STRIPE_VERSION,
+  createCheckoutSession,
   modelChoices,
   stateFromStripeEvent,
   subscriptionHasAccess,
@@ -30,6 +32,65 @@ test("only active and trialing subscriptions grant model choice", () => {
   assert.equal(subscriptionHasAccess("trialing"), true);
   assert.equal(subscriptionHasAccess("past_due"), false);
   assert.equal(subscriptionHasAccess("canceled"), false);
+});
+
+test("managed payments Checkout uses the blueprint version and parameters", async () => {
+  const originalFetch = globalThis.fetch;
+  let request;
+  globalThis.fetch = async (input, init) => {
+    request = { input: String(input), init };
+    return Response.json({
+      id: "cs_test_12345678",
+      url: "https://checkout.stripe.com/c/pay/cs_test_12345678",
+    });
+  };
+
+  try {
+    const accountAlias = "A".repeat(43);
+    const checkoutUrl = await createCheckoutSession(
+      {
+        STRIPE_SECRET_KEY: "sk_test_1234567890abcdefghijklmnop",
+        STRIPE_WEBHOOK_SECRET: "whsec_1234567890abcdefghijklmnop",
+        STRIPE_MODEL_CHOICE_PRICE_ID: "price_12345678",
+        PUBLIC_ORIGIN: "https://reedlokken.com",
+      },
+      {},
+      accountAlias,
+    );
+
+    assert.equal(
+      checkoutUrl,
+      "https://checkout.stripe.com/c/pay/cs_test_12345678",
+    );
+    assert.equal(request.input, "https://api.stripe.com/v1/checkout/sessions");
+    assert.equal(request.init.method, "POST");
+    assert.equal(
+      request.init.headers["Stripe-Version"],
+      MANAGED_PAYMENTS_STRIPE_VERSION,
+    );
+
+    const params = new URLSearchParams(request.init.body);
+    assert.equal(params.get("mode"), "subscription");
+    assert.equal(params.get("managed_payments[enabled]"), "true");
+    assert.equal(params.get("line_items[0][price]"), "price_12345678");
+    assert.equal(params.get("line_items[0][quantity]"), "1");
+    assert.equal(params.get("client_reference_id"), accountAlias);
+    assert.equal(params.get("metadata[account_key]"), accountAlias);
+    assert.equal(
+      params.get("subscription_data[metadata][account_key]"),
+      accountAlias,
+    );
+    assert.equal(
+      params.get("success_url"),
+      "https://reedlokken.com/?billing=success&session_id={CHECKOUT_SESSION_ID}",
+    );
+    assert.equal(
+      params.get("cancel_url"),
+      "https://reedlokken.com/?billing=cancelled",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("Stripe subscription events map to one account alias", () => {
