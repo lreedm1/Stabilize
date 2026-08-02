@@ -41,6 +41,11 @@ export function renderPage(options = {}) {
     : googleSignInAvailable
       ? `<a class="google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>`
       : `<span class="menu-account-note">Guest chat is available without an account.</span>`;
+  const headerAuthControl = signedIn
+    ? `<span class="header-auth-state">${escapeHtml(page.auth.signedIn)}</span>`
+    : googleSignInAvailable
+      ? `<a class="google-sign-in header-google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>`
+      : "";
 
   return `<!doctype html>
 <html lang="${escapeHtml(page.language)}">
@@ -113,27 +118,30 @@ export function renderPage(options = {}) {
     <div class="page-shell">
       <header class="site-header">
         <a class="site-name" href="/" aria-label="Stabilize home">${escapeHtml(page.header.name)}</a>
-        <details class="site-menu">
-          <summary class="menu-toggle" aria-label="Open site menu">
-            <span class="sr-only">Menu</span>
-            <span class="menu-icon" aria-hidden="true">
-              <span></span>
-              <span></span>
-              <span></span>
-            </span>
-          </summary>
-          <div class="menu-panel">
-            <nav class="menu-links" aria-label="Site pages">
-              <a href="/how-it-works.html">How it works</a>
-              <a href="/floor-first.html">Floor-first approach</a>
-              <a href="/safety.html">Safety and limits</a>
-              <a href="/privacy.html">Privacy</a>
-            </nav>
-            <div class="menu-account" aria-label="${escapeHtml(page.auth.label)}">
-              ${authControl}
+        <div class="header-actions">
+          ${headerAuthControl ? `<nav class="auth-actions header-auth-actions" aria-label="${escapeHtml(page.auth.label)}">${headerAuthControl}</nav>` : ""}
+          <details class="site-menu">
+            <summary class="menu-toggle" aria-label="Open site menu">
+              <span class="sr-only">Menu</span>
+              <span class="menu-icon" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+              </span>
+            </summary>
+            <div class="menu-panel">
+              <nav class="menu-links" aria-label="Site pages">
+                <a href="/how-it-works.html">How it works</a>
+                <a href="/floor-first.html">Floor-first approach</a>
+                <a href="/safety.html">Safety and limits</a>
+                <a href="/privacy.html">Privacy</a>
+              </nav>
+              <div class="menu-account" aria-label="${escapeHtml(page.auth.label)}">
+                ${authControl}
+              </div>
             </div>
-          </div>
-        </details>
+          </details>
+        </div>
       </header>
 
       ${notice ? `<p class="auth-notice" role="status">${escapeHtml(notice)}</p>` : ""}
