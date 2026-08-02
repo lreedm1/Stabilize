@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "stabilize",
-  "main": "src/index.js",
+  "main": "src/paid-worker.js",
   "compatibility_date": "2026-08-01",
   "compatibility_flags": ["nodejs_compat"],
   "keep_vars": true,
@@ -10,21 +10,32 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*", "/", "/index.html"]
+    "run_worker_first": [
+      "/api/*",
+      "/auth/*",
+      "/billing/*",
+      "/account/*",
+      "/",
+      "/index.html"
+    ]
   },
   "durable_objects": {
     "bindings": [
-      { "name": "SESSIONS", "class_name": "SessionMemory" }
+      { "name": "SESSIONS", "class_name": "SessionMemory" },
+      { "name": "BILLING", "class_name": "BillingAccount" }
     ]
   },
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["SessionMemory"] }
+    { "tag": "v1", "new_sqlite_classes": ["SessionMemory"] },
+    { "tag": "v2", "new_sqlite_classes": ["BillingAccount"] }
   ],
   "vars": {
     "DEMO_MODE": "false",
     "OPENAI_MODEL": "gpt-5.6-sol",
     "OPENAI_REASONING_EFFORT": "medium",
-    "PUBLIC_ORIGIN": "https://reedlokken.com"
+    "PUBLIC_ORIGIN": "https://reedlokken.com",
+    "MODEL_CHOICES": "gpt-5.6-sol|Stabilize default,gpt-5.1|GPT-5.1,gpt-5-mini|GPT-5 mini",
+    "PAID_MONTHLY_MESSAGE_LIMIT": "200"
   },
   "secrets": {
     "required": [

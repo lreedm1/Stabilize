@@ -1,0 +1,98 @@
+.billing-menu {
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+  padding: 12px 2px 2px;
+}
+
+.billing-menu h2 {
+  margin: 0 8px 6px;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 760;
+  letter-spacing: -0.01em;
+}
+
+.billing-menu p {
+  margin: 0 8px 9px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.billing-menu form + form {
+  margin-top: 7px;
+}
+
+.billing-menu button,
+.billing-menu select {
+  width: 100%;
+  min-height: 40px;
+  border-radius: 10px;
+  font: inherit;
+}
+
+.billing-menu button {
+  cursor: pointer;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  font-weight: 760;
+}
+
+.billing-primary {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+}
+
+.billing-primary:hover {
+  background: var(--accent-dark);
+}
+
+.billing-secondary {
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+  color: var(--accent-dark);
+}
+
+.model-choice-form {
+  display: grid;
+  gap: 7px;
+}
+
+.model-choice-form label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 680;
+}
+
+.model-choice-form select {
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 0.8rem;
+}
+
+.billing-menu .billing-fine-print,
+.billing-menu .billing-usage {
+  margin-top: 8px;
+  margin-bottom: 0;
+  font-size: 0.68rem;
+}
+
+.billing-notice {
+  width: fit-content;
+  max-width: min(620px, 100%);
+  flex: 0 0 auto;
+  align-self: center;
+  margin: 4px auto 2px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 10px;
+  background: rgba(255, 252, 242, 0.94);
+  box-shadow: 0 4px 14px rgba(10, 33, 23, 0.15);
+  color: var(--text);
+  padding: 8px 11px;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  text-align: center;
+}
