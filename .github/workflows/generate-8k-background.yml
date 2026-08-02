@@ -1,0 +1,63 @@
+name: Generate 8K background
+
+on:
+  push:
+    branches:
+      - agent/simplify-visible-8k-background
+    paths:
+      - .github/workflows/generate-8k-background.yml
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/simplify-visible-8k-background
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Pillow
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Generate 7680 by 4320 WebP
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageFilter
+
+          source = Path("public/scenes/lake-valley-landscape-3840.webp")
+          target = Path("public/scenes/lake-valley-landscape-7680.webp")
+
+          with Image.open(source) as image:
+              image = image.convert("RGB")
+              image = image.resize((7680, 4320), Image.Resampling.LANCZOS)
+              image = image.filter(ImageFilter.UnsharpMask(radius=1.2, percent=70, threshold=3))
+              image.save(target, "WEBP", quality=88, method=6)
+
+          with Image.open(target) as generated:
+              if generated.size != (7680, 4320):
+                  raise SystemExit(f"Unexpected output size: {generated.size}")
+
+          print(f"Generated {target} ({target.stat().st_size:,} bytes)")
+          PY
+
+      - name: Commit generated asset
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/scenes/lake-valley-landscape-7680.webp
+          if git diff --cached --quiet; then
+            echo "8K asset already exists"
+            exit 0
+          fi
+          git commit -m "Add 8K landscape background"
+          git push origin HEAD:agent/simplify-visible-8k-background
