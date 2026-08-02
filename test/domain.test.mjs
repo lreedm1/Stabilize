@@ -20,9 +20,14 @@ test("stabilize.info is the canonical production domain", async () => {
   assert.equal(config.vars.PUBLIC_ORIGIN, "https://stabilize.info");
   assert.equal(config.assets.run_worker_first, true);
   assert.deepEqual(config.routes, [
-    { pattern: "stabilize.info", custom_domain: true },
-    { pattern: "reedlokken.com", custom_domain: true },
+    { pattern: "stabilize.info/*", zone_name: "stabilize.info" },
+    { pattern: "reedlokken.com/*", zone_name: "reedlokken.com" },
   ]);
+  assert.equal(
+    config.routes.some((route) => route.custom_domain === true),
+    false,
+    "production domains must be Worker routes so requests are answered at the edge before an origin TLS handshake",
+  );
 
   assert.match(router, /const CANONICAL_ORIGIN = "https:\/\/stabilize\.info"/);
   assert.match(router, /"reedlokken\.com"/);
