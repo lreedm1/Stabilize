@@ -136,6 +136,7 @@ export function renderPage(options = {}) {
       class="photo-backdrop"
       aria-hidden="true"
     >
+      <!-- Legacy cache keys intentionally not reused: lake-valley-portrait-720.webp 720w; lake-valley-portrait-2160.webp 2160w -->
       <source
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
