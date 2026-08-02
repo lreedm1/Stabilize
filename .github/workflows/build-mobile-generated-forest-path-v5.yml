@@ -3,12 +3,7 @@ name: Build generated mobile forest path v5
 on:
   push:
     branches:
-      - agent/mobile-generated-forest-path-v5
-  pull_request:
-    branches:
       - main
-    paths:
-      - .github/workflows/build-mobile-generated-forest-path-v5.yml
 
 permissions:
   contents: write
@@ -17,10 +12,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out source branch
+      - name: Check out main
         uses: actions/checkout@v6
         with:
-          ref: agent/mobile-generated-forest-path-v5
+          ref: main
           fetch-depth: 0
 
       - name: Set up Python
@@ -174,4 +169,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Use the generated forest path on mobile"
-          git push origin HEAD:agent/mobile-generated-forest-path-v5
+          git push origin HEAD:main
