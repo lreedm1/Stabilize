@@ -40,7 +40,7 @@ export function renderPage(options = {}) {
         </form>`
     : googleSignInAvailable
       ? `<a class="google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>`
-      : "";
+      : `<span class="menu-account-note">Guest chat is available without an account.</span>`;
 
   return `<!doctype html>
 <html lang="${escapeHtml(page.language)}">
@@ -113,15 +113,27 @@ export function renderPage(options = {}) {
     <div class="page-shell">
       <header class="site-header">
         <a class="site-name" href="/" aria-label="Stabilize home">${escapeHtml(page.header.name)}</a>
-        <nav class="resource-nav" aria-label="Resources">
-          <a href="/how-it-works.html">How it works</a>
-          <a href="/floor-first.html">Floor-first</a>
-          <a href="/safety.html">Safety</a>
-          <a href="/privacy.html">Privacy</a>
-        </nav>
-        <nav class="auth-actions" aria-label="${escapeHtml(page.auth.label)}">
-          ${authControl}
-        </nav>
+        <details class="site-menu">
+          <summary class="menu-toggle" aria-label="Open site menu">
+            <span class="sr-only">Menu</span>
+            <span class="menu-icon" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </summary>
+          <div class="menu-panel">
+            <nav class="menu-links" aria-label="Site pages">
+              <a href="/how-it-works.html">How it works</a>
+              <a href="/floor-first.html">Floor-first approach</a>
+              <a href="/safety.html">Safety and limits</a>
+              <a href="/privacy.html">Privacy</a>
+            </nav>
+            <div class="menu-account" aria-label="${escapeHtml(page.auth.label)}">
+              ${authControl}
+            </div>
+          </div>
+        </details>
       </header>
 
       ${notice ? `<p class="auth-notice" role="status">${escapeHtml(notice)}</p>` : ""}
@@ -136,6 +148,15 @@ export function renderPage(options = {}) {
               manageable next step. It is not therapy, diagnosis, or emergency care.
             </p>
             <p class="seo-start-cue">Describe what is happening right now to begin.</p>
+            <div class="landing-meta">
+              <p class="landing-note">${escapeHtml(page.chat.supportNote)}</p>
+              <details class="info-disclosure">
+                <summary>${escapeHtml(page.chat.infoLabel)}</summary>
+                <div class="info-popover">
+                  <p>${escapeHtml(page.chat.infoDetails)}</p>
+                </div>
+              </details>
+            </div>
           </section>
 
           <div
@@ -149,16 +170,6 @@ export function renderPage(options = {}) {
           ></div>
 
           <div class="composer-dock">
-            <div class="composer-meta">
-              <p>${escapeHtml(page.chat.supportNote)}</p>
-              <details class="info-disclosure">
-                <summary>${escapeHtml(page.chat.infoLabel)}</summary>
-                <div class="info-popover">
-                  <p>${escapeHtml(page.chat.infoDetails)}</p>
-                </div>
-              </details>
-            </div>
-
             <form id="chat-form" class="chat-form">
               <label class="sr-only" for="message-input">${escapeHtml(page.chat.inputLabel)}</label>
               <textarea
