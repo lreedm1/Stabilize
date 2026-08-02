@@ -87,7 +87,8 @@ test("mobile loads high-resolution photography and a portrait animation", async 
     /rel="preload"[\s\S]*as="image"[\s\S]*mobile-sunlit-green-path-v4-2160\.webp/,
   );
 
-  const mobileQualityTag = '<script src="/mobile-quality.js"></script>';
+  const mobileQualityTag =
+    '<script src="/mobile-quality.js?v=20260802-5"></script>';
   const appModuleTag = pageSource.match(
     /<script type="module" src="\/app\.js(?:\?v=[^"]+)?"><\/script>/,
   )?.[0];
