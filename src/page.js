@@ -206,7 +206,10 @@ export function renderPage(options = {}) {
               <div class="example-start-grid">${exampleStarts}</div>
             </div>
 
-            <div class="landing-meta">
+            <div
+              class="landing-meta"
+              data-support-note="${escapeHtml(page.chat.supportNote)}"
+            >
               <p class="privacy-signal">Guest chats aren't remembered. ${escapeHtml(emergencyBoundary)}</p>
               <details class="info-disclosure">
                 <summary>${escapeHtml(page.chat.infoLabel)}</summary>
