@@ -25,6 +25,9 @@ export function renderPage(options = {}) {
   const signedIn = options.signedIn === true;
   const googleSignInAvailable = options.googleSignInAvailable === true;
   const notice = String(options.authNotice || "").trim();
+  const emergencyBoundary = /not emergency care/i.test(page.chat.supportNote)
+    ? "Not emergency care."
+    : page.chat.supportNote;
   const canonicalUrl = "https://reedlokken.com/";
   const seoTitle = "Stabilize — Get One Clear Next Step";
   const seoDescription =
@@ -204,7 +207,7 @@ export function renderPage(options = {}) {
             </div>
 
             <div class="landing-meta">
-              <p class="privacy-signal">Guest chats aren't remembered. Not emergency care.</p>
+              <p class="privacy-signal">Guest chats aren't remembered. ${escapeHtml(emergencyBoundary)}</p>
               <details class="info-disclosure">
                 <summary>${escapeHtml(page.chat.infoLabel)}</summary>
                 <div class="info-popover">
