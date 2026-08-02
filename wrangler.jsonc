@@ -1,12 +1,22 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "stabilize",
-  "main": "src/paid-worker.js",
+  "main": "src/domain-router.js",
   "compatibility_date": "2026-08-01",
   "compatibility_flags": ["nodejs_compat"],
   "keep_vars": true,
   "workers_dev": true,
   "preview_urls": true,
+  "routes": [
+    {
+      "pattern": "stabilize.info",
+      "custom_domain": true
+    },
+    {
+      "pattern": "reedlokken.com",
+      "custom_domain": true
+    }
+  ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
@@ -33,7 +43,7 @@
     "DEMO_MODE": "false",
     "OPENAI_MODEL": "gpt-5.6-sol",
     "OPENAI_REASONING_EFFORT": "medium",
-    "PUBLIC_ORIGIN": "https://reedlokken.com",
+    "PUBLIC_ORIGIN": "https://stabilize.info",
     "MODEL_CHOICES": "gpt-5.6-sol|Stabilize default,gpt-5.1|GPT-5.1,gpt-5-mini|GPT-5 mini",
     "PAID_MONTHLY_MESSAGE_LIMIT": "200",
     "STRIPE_MODEL_CHOICE_PRICE_ID": "price_1U01Jp96tfbPOBGIbQNXDlPx"
