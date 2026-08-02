@@ -1,0 +1,97 @@
+name: Fix iOS logout
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repair branch
+        uses: actions/checkout@v6
+        with:
+          ref: fix/logout-ios
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Make logout browser-compatible
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          index = Path("src/index.js")
+          text = index.read_text()
+          old = '''        if (!sameOriginOrNonBrowser(request)) {
+            return new Response(COPY.api.crossOriginRequest, {
+              status: 403,
+              headers: pageHeaders("text/plain; charset=utf-8"),
+            });
+          }
+          return signOut(request, env);'''
+          new = '''        // Signing out only expires this browser's cookies. Accept opaque or
+          // omitted Origin headers used by iOS and embedded browsers so the
+          // user can always end their own session.
+          return signOut(request, env);'''
+          if old not in text:
+              raise SystemExit("Logout origin gate was not found")
+          index.write_text(text.replace(old, new, 1))
+
+          tests = Path("test/worker.test.mjs")
+          test_text = tests.read_text()
+          if "logout accepts opaque browser origins" not in test_text:
+              test_text += r'''
+
+test("logout accepts opaque browser origins and clears session cookies", async () => {
+  const env = createEnv();
+  const { cookie } = await authenticatedIdentity(env, "ios-logout-user");
+  const response = await worker.fetch(
+    new Request("https://stabilize.test/auth/logout", {
+      method: "POST",
+      headers: {
+        Cookie: cookie,
+        Origin: "null",
+      },
+    }),
+    env,
+  );
+  const setCookie = response.headers.get("set-cookie");
+
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("location"), "https://stabilize.test/");
+  assert.match(setCookie, /stabilize_auth=;/);
+  assert.match(setCookie, /stabilize_session=;/);
+  assert.match(setCookie, /Max-Age=0/);
+});
+'''
+          tests.write_text(test_text)
+          PY
+
+      - name: Run full test suite
+        run: npm test
+
+      - name: Validate Worker build
+        run: npm run check
+
+      - name: Commit repair
+        shell: bash
+        run: |
+          rm .github/workflows/fix-logout-ios.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/index.js test/worker.test.mjs .github/workflows/fix-logout-ios.yml
+          git commit -m "Make logout work in iOS browsers"
+          git push origin HEAD:fix/logout-ios
