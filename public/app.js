@@ -195,9 +195,7 @@ input.addEventListener("keydown", (event) => {
 for (const button of exampleStarts) {
   button.addEventListener("click", () => {
     if (pending) return;
-    input.value = button.dataset.exampleMessage || "";
-    input.focus({ preventScroll: true });
-    input.setSelectionRange(input.value.length, input.value.length);
+    void sendMessage(button.dataset.exampleMessage || "");
   });
 }
 
