@@ -6,6 +6,9 @@ on:
       - fix/ai-model-button
     paths:
       - .github/workflows/fix-ai-model-button.yml
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
