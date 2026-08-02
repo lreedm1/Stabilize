@@ -1,1 +1,0 @@
-Temporary branch note for the mobile woodland background change. Remove after merge.
