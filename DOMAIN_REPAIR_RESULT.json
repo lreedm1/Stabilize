@@ -1,6 +1,0 @@
-{
-  "checked_at": "2026-08-02T16:00:35.711423+00:00",
-  "stage": "credentials",
-  "success": false,
-  "message": "Required Cloudflare deployment secrets are missing."
-}
