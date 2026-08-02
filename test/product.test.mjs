@@ -57,6 +57,7 @@ test("the homepage gives a short product promise", async () => {
   assert.match(pageSource, /Guest chats aren't remembered/);
   assert.match(pageSource, /data-example-message=/);
   assert.match(pageSource, /href="\/product\.css"/);
+  assert.match(pageSource, /href="\/photo-tuning\.css"/);
   assert.doesNotMatch(pageSource, /how-it-works-strip/);
   assert.doesNotMatch(pageSource, /Not a therapist or companion bot/);
   assert.match(
@@ -86,27 +87,45 @@ test("the responsive background includes a real 8K WebP", async () => {
   assert.deepEqual(webpDimensions(eightK), { width: 7680, height: 4320 });
 });
 
-test("mobile screens load a separate portrait photo", async () => {
-  const [pageSource, mobilePhoto, desktopPhoto, credit] = await Promise.all([
-    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
-    readFile(
-      new URL("../public/scenes/lake-valley-portrait-720.webp", import.meta.url),
-    ),
-    readFile(
-      new URL("../public/scenes/lake-valley-landscape-1280.webp", import.meta.url),
-    ),
-    readFile(
-      new URL("../public/scenes/MOBILE_PHOTO_CREDIT.md", import.meta.url),
-      "utf8",
-    ),
-  ]);
+test("photos preserve screen proportion and use a greener treatment", async () => {
+  const [pageSource, tuningStyles, mobilePhoto, desktopPhoto, credit] =
+    await Promise.all([
+      readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+      readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
+      readFile(
+        new URL("../public/scenes/lake-valley-portrait-720.webp", import.meta.url),
+      ),
+      readFile(
+        new URL("../public/scenes/lake-valley-landscape-1280.webp", import.meta.url),
+      ),
+      readFile(
+        new URL("../public/scenes/MOBILE_PHOTO_CREDIT.md", import.meta.url),
+        "utf8",
+      ),
+    ]);
 
-  assert.match(pageSource, /media="\(max-width: 980px\)"/);
+  assert.match(
+    pageSource,
+    /media="\(max-width: 980px\) and \(orientation: portrait\)"/,
+  );
   assert.match(pageSource, /type="image\/webp"/);
   assert.deepEqual(webpDimensions(mobilePhoto), { width: 720, height: 1280 });
   assert.equal(mobilePhoto.equals(desktopPhoto), false);
   assert.match(credit, /Royce Fonseca/);
   assert.match(credit, /Unsplash License/);
+  assert.match(
+    tuningStyles,
+    /\.photo-backdrop img\s*{[\s\S]*object-fit:\s*cover;[\s\S]*object-position:\s*50% 50%;/,
+  );
+  assert.match(
+    tuningStyles,
+    /filter:\s*saturate\(1\.24\) contrast\(1\.035\) brightness\(0\.98\)/,
+  );
+  assert.match(
+    tuningStyles,
+    /@media \(max-width: 980px\) and \(orientation: portrait\)[\s\S]*object-position:\s*50% 42%;/,
+  );
+  assert.match(tuningStyles, /rgba\(5, 55, 29, 0\.1\)/);
 });
 
 test("example starts fill the composer without sending for the user", async () => {

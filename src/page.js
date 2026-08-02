@@ -113,6 +113,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/seo.css" />
     <link rel="stylesheet" href="/product.css" />
+    <link rel="stylesheet" href="/photo-tuning.css" />
   </head>
   <body>
     <canvas
@@ -126,7 +127,7 @@ export function renderPage(options = {}) {
       aria-hidden="true"
     >
       <source
-        media="(max-width: 980px)"
+        media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
         srcset="
