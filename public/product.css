@@ -141,6 +141,13 @@
     0 0 0 3px rgba(31, 111, 84, 0.16);
 }
 
+.conversation-surface[data-view="compose"] .seo-intro {
+  grid-row: 1;
+  align-self: center;
+  justify-self: center;
+  margin: 0 auto;
+}
+
 @media (max-width: 620px) {
   .example-start-grid {
     display: grid;
@@ -154,6 +161,11 @@
 }
 
 @media (max-height: 610px) {
+  .conversation-surface[data-view="compose"] .seo-intro {
+    align-self: end;
+    margin-bottom: 4px;
+  }
+
   .example-starts {
     margin-top: 8px;
   }
