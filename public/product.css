@@ -106,21 +106,15 @@
   opacity: 0.55;
 }
 
-.assistant-output .outcome-status {
-  min-height: 1.4em;
-  margin-top: 0.65rem;
-  color: var(--muted);
-  font-size: 0.76rem;
-  line-height: 1.4;
-}
-
 @media (max-width: 620px) {
-  .example-start-grid {
+  .example-start-grid,
+  .outcome-actions {
     display: grid;
     grid-template-columns: 1fr;
   }
 
-  .example-start {
+  .example-start,
+  .outcome-button {
     width: 100%;
     border-radius: 11px;
   }
