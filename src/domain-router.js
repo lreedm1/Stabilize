@@ -3,7 +3,7 @@ import worker, {
   FeedbackGate,
   FeedbackInbox,
   SessionMemory,
-} from "./feedback-worker.js";
+} from "./memory-prompt-worker.js";
 import { signOut } from "./auth.js";
 
 export { BillingAccount, FeedbackGate, FeedbackInbox, SessionMemory };
