@@ -30,7 +30,7 @@ test("signed-out users get a one-time memory reminder on their second send", asy
   assert.match(wrapperSource, /readAuthSession\(request, env\)/);
   assert.match(
     wrapperSource,
-    /if \(authSession \|\| !googleAuthConfigured\(env\)\) return response;/,
+    /if \(!authSession && googleAuthConfigured\(env\)\) \{/,
   );
   assert.match(wrapperSource, /Stabilize only remembers chat context between visits when you sign in/);
   assert.match(wrapperSource, /href="\/auth\/google"/);
