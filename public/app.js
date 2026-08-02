@@ -150,7 +150,6 @@ async function sendMessage(text) {
     const route = String(result.route || "ORDINARY");
     const offerOutcomeCheck =
       result.awaitingSafetyAnswer !== true &&
-      result.showEmergency !== true &&
       !ROUTES_WITHOUT_OUTCOME_CHECK.has(route);
     showOutput(reply, "", "response", { offerOutcomeCheck });
     modulateTerrain(reply);
