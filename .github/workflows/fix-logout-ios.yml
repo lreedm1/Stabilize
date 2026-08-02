@@ -1,6 +1,11 @@
 name: Fix iOS logout
 
 on:
+  push:
+    branches:
+      - fix/logout-ios
+    paths:
+      - .github/workflows/fix-logout-ios.yml
   pull_request:
     branches:
       - main
