@@ -1,0 +1,113 @@
+name: One-time iOS logout repair
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/fix-logout-main.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Repair logout
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          index = Path("src/index.js")
+          text = index.read_text()
+          old = '''        if (!sameOriginOrNonBrowser(request)) {
+            return new Response(COPY.api.crossOriginRequest, {
+              status: 403,
+              headers: pageHeaders("text/plain; charset=utf-8"),
+            });
+          }
+          return signOut(request, env);'''
+          new = '''        // Logout only expires cookies in this browser. Some iOS and embedded
+          // browsers submit forms with an opaque Origin header, so logout must
+          // remain available even when Origin is "null".
+          return signOut(request, env);'''
+          if old not in text:
+              raise SystemExit("Logout origin check was not found")
+          index.write_text(text.replace(old, new, 1))
+
+          Path("test/logout.test.mjs").write_text(r'''import { test } from "vitest";
+          import assert from "node:assert/strict";
+          import worker from "../src/index.js";
+
+          function createEnv() {
+            return {
+              ASSETS: { fetch: async () => new Response("asset") },
+              DEMO_MODE: "true",
+              OPENAI_MODEL: "gpt-5.6-sol",
+              OPENAI_REASONING_EFFORT: "medium",
+              GOOGLE_CLIENT_ID: "1234567890-logout-test.apps.googleusercontent.com",
+              GOOGLE_CLIENT_SECRET: "test-google-client-secret",
+              AUTH_SECRET: "test-auth-secret-with-at-least-thirty-two-characters",
+              PUBLIC_ORIGIN: "https://stabilize.test",
+            };
+          }
+
+          test("logout accepts an opaque iOS origin and expires session cookies", async () => {
+            const response = await worker.fetch(
+              new Request("https://stabilize.test/auth/logout", {
+                method: "POST",
+                headers: { Origin: "null" },
+              }),
+              createEnv(),
+            );
+            const cookies = response.headers.get("set-cookie");
+
+            assert.equal(response.status, 303);
+            assert.equal(response.headers.get("location"), "https://stabilize.test/");
+            assert.match(cookies, /stabilize_auth=;/);
+            assert.match(cookies, /stabilize_session=;/);
+            assert.match(cookies, /Max-Age=0/);
+          });
+          '''.replace("          ", ""))
+
+          package = Path("package.json")
+          package_text = package.read_text()
+          old_script = "test/auth.test.mjs\""
+          new_script = "test/auth.test.mjs test/logout.test.mjs\""
+          if old_script not in package_text:
+              raise SystemExit("Worker test script was not found")
+          package.write_text(package_text.replace(old_script, new_script, 1))
+          PY
+
+      - name: Run full test suite
+        run: npm test
+
+      - name: Validate Worker build
+        run: npm run check
+
+      - name: Commit and deploy through connected Git integration
+        shell: bash
+        run: |
+          rm .github/workflows/fix-logout-main.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/index.js test/logout.test.mjs package.json .github/workflows/fix-logout-main.yml
+          git commit -m "Make logout work in iOS browsers"
+          git push origin HEAD:main
