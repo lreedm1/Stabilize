@@ -74,10 +74,8 @@ function appendOutcomeCheck(article) {
   });
 
   noButton.addEventListener("click", () => {
-    input.value = productCopy.outcomeFollowUp;
-    finish(productCopy.outcomeNoMessage);
-    input.focus({ preventScroll: true });
-    input.setSelectionRange(input.value.length, input.value.length);
+    finish("");
+    void sendMessage(productCopy.outcomeFollowUp);
   });
 
   actions.append(yesButton, noButton);
