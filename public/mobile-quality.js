@@ -21,14 +21,14 @@ if (mobilePortrait?.matches) {
     document.documentElement.dataset.mobileBackground = "loading-video";
 
     void Promise.all([
-      import("/mobile-creek-video-0.js?v=20260802-8"),
-      import("/mobile-creek-video-1.js?v=20260802-8"),
-      import("/mobile-creek-video-2.js?v=20260802-8"),
-      import("/mobile-creek-video-3.js?v=20260802-8"),
-      import("/mobile-creek-video-4.js?v=20260802-8"),
-      import("/mobile-creek-video-5.js?v=20260802-8"),
-      import("/mobile-creek-video-6.js?v=20260802-8"),
-      import("/mobile-creek-video-7.js?v=20260802-8"),
+      import("/mobile-creek-video-0.js?v=20260802-7"),
+      import("/mobile-creek-video-1.js?v=20260802-7"),
+      import("/mobile-creek-video-2.js?v=20260802-7"),
+      import("/mobile-creek-video-3.js?v=20260802-7"),
+      import("/mobile-creek-video-4.js?v=20260802-7"),
+      import("/mobile-creek-video-5.js?v=20260802-7"),
+      import("/mobile-creek-video-6.js?v=20260802-7"),
+      import("/mobile-creek-video-7.js?v=20260802-7"),
     ])
       .then((parts) => parts.map((part) => part.default).join(""))
       .then((encoded) => {
