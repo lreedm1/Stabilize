@@ -53,13 +53,13 @@ test("mobile loads cache-busted high-resolution static photography", async () =>
       readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
       readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
       readFile(
-        new URL("../public/scenes/mobile-walking-path-hq-v2-1440.webp", import.meta.url),
+        new URL("../public/scenes/mobile-walking-path-natural-v3-1440.webp", import.meta.url),
       ),
       readFile(
-        new URL("../public/scenes/mobile-walking-path-hq-v2-2160.webp", import.meta.url),
+        new URL("../public/scenes/mobile-walking-path-natural-v3-2160.webp", import.meta.url),
       ),
       readFile(
-        new URL("../public/scenes/mobile-walking-path-hq-v2-2880.webp", import.meta.url),
+        new URL("../public/scenes/mobile-walking-path-natural-v3-2880.webp", import.meta.url),
       ),
     ]);
 
@@ -71,12 +71,12 @@ test("mobile loads cache-busted high-resolution static photography", async () =>
     assert.ok(image.byteLength < 5_000_000);
   }
 
-  assert.match(pageSource, /mobile-walking-path-hq-v2-1440\.webp 1440w/);
-  assert.match(pageSource, /mobile-walking-path-hq-v2-2160\.webp 2160w/);
-  assert.match(pageSource, /mobile-walking-path-hq-v2-2880\.webp 2880w/);
+  assert.match(pageSource, /mobile-walking-path-natural-v3-1440\.webp 1440w/);
+  assert.match(pageSource, /mobile-walking-path-natural-v3-2160\.webp 2160w/);
+  assert.match(pageSource, /mobile-walking-path-natural-v3-2880\.webp 2880w/);
   assert.match(
     pageSource,
-    /rel="preload"[\s\S]*as="image"[\s\S]*mobile-walking-path-hq-v2-2160\.webp/,
+    /rel="preload"[\s\S]*as="image"[\s\S]*mobile-walking-path-natural-v3-2160\.webp/,
   );
   assert.ok(
     pageSource.indexOf('<script src="/mobile-quality.js"></script>') <

@@ -94,7 +94,7 @@ test("photos preserve screen proportion and use a calm mobile treatment", async 
       readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
       readFile(
         new URL(
-          "../public/scenes/mobile-walking-path-hq-v2-1440.webp",
+          "../public/scenes/mobile-walking-path-natural-v3-1440.webp",
           import.meta.url,
         ),
       ),
@@ -126,7 +126,7 @@ test("photos preserve screen proportion and use a calm mobile treatment", async 
   );
   assert.match(
     tuningStyles,
-    /@media \(max-width: 980px\) and \(orientation: portrait\)[\s\S]*object-position:\s*50% 50%;[\s\S]*filter:\s*saturate\(1\.02\) contrast\(0\.98\) brightness\(1\.01\)/,
+    /@media \(max-width: 980px\) and \(orientation: portrait\)[\s\S]*object-position:\s*50% 50%;[\s\S]*filter:\s*none/,
   );
   assert.match(tuningStyles, /rgba\(5, 55, 29, 0\.1\)/);
 });
