@@ -1,23 +1,28 @@
-const eightKPhoto = "/scenes/lake-valley-landscape-7680.webp";
-const photo = document.querySelector("#photo-backdrop-image");
-const responsiveSources = document.querySelectorAll("#photo-backdrop source");
+const mobileViewport = globalThis.matchMedia?.("(max-width: 980px)");
 
-// Keep the original 8K WebP as the visible image at every viewport size.
-// The animated canvas was rendered below the source resolution and softened
-// the photograph when placed above it, so remove that layer.
-document.querySelector("#photo-background")?.remove();
+if (mobileViewport?.matches) {
+  // Keep the sharper mobile-only animated image visible. The animated photo
+  // canvas is intentionally removed on phones so it cannot cover the GIF.
+  document.querySelector("#photo-background")?.remove();
 
-for (const source of responsiveSources) {
-  source.setAttribute("type", "image/webp");
-  source.setAttribute("srcset", `${eightKPhoto} 7680w`);
-  source.setAttribute("sizes", "100vw");
-}
+  const mobileSource = document.querySelector(
+    '#photo-backdrop source[data-mobile-animation]'
+  );
+  if (mobileSource instanceof HTMLSourceElement) {
+    mobileSource.srcset = mobileSource.dataset.mobileAnimation || "";
+  }
 
-if (photo) {
-  photo.src = eightKPhoto;
-  photo.srcset = `${eightKPhoto} 7680w`;
-  photo.sizes = "100vw";
-  photo.decoding = "async";
-  photo.loading = "eager";
-  photo.fetchPriority = "high";
+  const backdropImage = document.querySelector("#photo-backdrop-image");
+  if (backdropImage instanceof HTMLImageElement) {
+    backdropImage.addEventListener(
+      "load",
+      () => {
+        backdropImage.classList.add("is-ready");
+        document
+          .querySelector("#terrain-background")
+          ?.classList.add("is-photo-ready");
+      },
+      { once: true },
+    );
+  }
 }
