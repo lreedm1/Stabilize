@@ -46,22 +46,30 @@ function webpDimensions(buffer) {
   throw new Error("No supported WebP image chunk found");
 }
 
-test("mobile loads cache-busted high-resolution static photography", async () => {
-  const [pageSource, mobileQuality, tuningStyles, small, medium, large] =
-    await Promise.all([
-      readFile(new URL("../src/page.js", import.meta.url), "utf8"),
-      readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
-      readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
-      readFile(
-        new URL("../public/scenes/mobile-sunlit-green-path-v4-1440.webp", import.meta.url),
-      ),
-      readFile(
-        new URL("../public/scenes/mobile-sunlit-green-path-v4-2160.webp", import.meta.url),
-      ),
-      readFile(
-        new URL("../public/scenes/mobile-sunlit-green-path-v4-2880.webp", import.meta.url),
-      ),
-    ]);
+test("mobile loads high-resolution photography and a portrait animation", async () => {
+  const [
+    pageSource,
+    mobileQuality,
+    animationModule,
+    tuningStyles,
+    small,
+    medium,
+    large,
+  ] = await Promise.all([
+    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/mobile-creek-gif.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
+    readFile(
+      new URL("../public/scenes/mobile-sunlit-green-path-v4-1440.webp", import.meta.url),
+    ),
+    readFile(
+      new URL("../public/scenes/mobile-sunlit-green-path-v4-2160.webp", import.meta.url),
+    ),
+    readFile(
+      new URL("../public/scenes/mobile-sunlit-green-path-v4-2880.webp", import.meta.url),
+    ),
+  ]);
 
   assert.deepEqual(webpDimensions(small), { width: 1440, height: 2560 });
   assert.deepEqual(webpDimensions(medium), { width: 2160, height: 3840 });
@@ -88,10 +96,14 @@ test("mobile loads cache-busted high-resolution static photography", async () =>
     pageSource.indexOf(mobileQualityTag) < pageSource.indexOf(appModuleTag),
   );
 
-  assert.match(mobileQuality, /eightKPhoto/);
-  assert.match(mobileQuality, /lake-valley-landscape-7680\.webp/);
+  assert.match(mobileQuality, /max-width: 980px/);
+  assert.match(mobileQuality, /orientation: portrait/);
+  assert.match(mobileQuality, /prefers-reduced-motion: reduce/);
+  assert.match(mobileQuality, /mobile-creek-gif\.js/);
   assert.match(mobileQuality, /#photo-background/);
   assert.match(mobileQuality, /\.remove\(\)/);
+  assert.match(animationModule, /data:image\/webp;base64,UklGR/);
+  assert.doesNotMatch(animationModule, /data:image\/gif/);
   assert.doesNotMatch(tuningStyles, /translateZ/);
   assert.match(
     tuningStyles,
