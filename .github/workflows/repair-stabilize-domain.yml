@@ -6,6 +6,11 @@ on:
       - agent/repair-stabilize-domain
     paths:
       - .github/workflows/repair-stabilize-domain.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/repair-stabilize-domain.yml
 
 permissions:
   contents: write
