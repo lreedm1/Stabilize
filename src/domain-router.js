@@ -1,4 +1,5 @@
 import worker, { BillingAccount, SessionMemory } from "./paid-worker.js";
+import { signOut } from "./auth.js";
 
 export { BillingAccount, SessionMemory };
 
@@ -38,8 +39,18 @@ function canonicalEnvironment(env) {
 
 export default {
   fetch(request, env, ctx) {
-    const hostname = new URL(request.url).hostname.toLowerCase();
+    const url = new URL(request.url);
+    const hostname = url.hostname.toLowerCase();
     if (REDIRECT_HOSTS.has(hostname)) return redirectToCanonical(request);
-    return worker.fetch(request, canonicalEnvironment(env), ctx);
+
+    const canonicalEnv = canonicalEnvironment(env);
+    // Logout only expires cookies in the current browser. Handle it before the
+    // inner same-origin check because iOS and embedded browsers can submit an
+    // opaque Origin header (`Origin: null`).
+    if (url.pathname === "/auth/logout" && request.method === "POST") {
+      return signOut(request, canonicalEnv);
+    }
+
+    return worker.fetch(request, canonicalEnv, ctx);
   },
 };
