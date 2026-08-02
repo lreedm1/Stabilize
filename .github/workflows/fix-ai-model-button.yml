@@ -1,0 +1,304 @@
+name: Fix AI model button
+
+on:
+  push:
+    branches:
+      - fix/ai-model-button
+    paths:
+      - .github/workflows/fix-ai-model-button.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repair branch
+        uses: actions/checkout@v6
+        with:
+          ref: fix/ai-model-button
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Repair checkout and button behavior
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          billing = Path("src/billing.js")
+          text = billing.read_text()
+          old_version = 'export const MANAGED_PAYMENTS_STRIPE_VERSION = "2026-02-25.preview";'
+          new_version = 'export const MANAGED_PAYMENTS_STRIPE_VERSION = "2026-03-04.preview";'
+          if old_version not in text:
+              raise SystemExit("Expected Managed Payments preview version was not found")
+          text = text.replace(old_version, new_version, 1)
+
+          replacement = r'''function checkoutSessionParams(config, state, key, managedPayments) {
+            const params = new URLSearchParams();
+            params.set("mode", "subscription");
+            if (managedPayments) params.set("managed_payments[enabled]", "true");
+            params.set("line_items[0][price]", config.priceId);
+            params.set("line_items[0][quantity]", "1");
+            params.set("client_reference_id", key);
+            params.set("metadata[account_key]", key);
+            params.set("subscription_data[metadata][account_key]", key);
+            params.set(
+              "success_url",
+              `${config.origin}/?billing=success&session_id={CHECKOUT_SESSION_ID}`,
+            );
+            params.set("cancel_url", `${config.origin}/?billing=cancelled`);
+            params.set("allow_promotion_codes", "true");
+            const existingCustomer = customerId(state?.customerId);
+            if (existingCustomer) params.set("customer", existingCustomer);
+            return params;
+          }
+
+          function checkoutSessionUrl(session) {
+            const url = boundedText(session?.url, 2_048);
+            return url.startsWith("https://checkout.stripe.com/") ? url : null;
+          }
+
+          export async function createCheckoutSession(env, state, accountAlias) {
+            const config = stripeConfig(env);
+            const key = accountKey(accountAlias);
+            if (!key) throw new BillingRequestError("A signed-in account is required.", 401);
+
+            try {
+              const managedSession = await stripeRequest(env, "/checkout/sessions", {
+                params: checkoutSessionParams(config, state, key, true),
+                stripeVersion: MANAGED_PAYMENTS_STRIPE_VERSION,
+                idempotencyKey: `checkout-managed-${key}-${crypto.randomUUID()}`,
+              });
+              const managedUrl = checkoutSessionUrl(managedSession);
+              if (!managedUrl) {
+                throw new BillingRequestError("Stripe did not return a checkout link.");
+              }
+              return managedUrl;
+            } catch (error) {
+              if (!(error instanceof BillingRequestError)) throw error;
+              console.warn(JSON.stringify({
+                event: "managed_payments_checkout_fallback",
+                reason: error.name,
+              }));
+            }
+
+            const standardSession = await stripeRequest(env, "/checkout/sessions", {
+              params: checkoutSessionParams(config, state, key, false),
+              idempotencyKey: `checkout-standard-${key}-${crypto.randomUUID()}`,
+            });
+            const standardUrl = checkoutSessionUrl(standardSession);
+            if (!standardUrl) {
+              throw new BillingRequestError("Stripe did not return a checkout link.");
+            }
+            return standardUrl;
+          }
+
+          export async function createPortalSession'''
+
+          pattern = re.compile(
+              r'export async function createCheckoutSession\(env, state, accountAlias\) \{.*?\n\}\n\nexport async function createPortalSession',
+              re.S,
+          )
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit("Could not replace createCheckoutSession")
+          billing.write_text(text)
+
+          worker = Path("src/paid-worker.js")
+          text = worker.read_text()
+          old_guest = '''  if (!signedIn) {
+            return `<section class="billing-menu" aria-labelledby="billing-heading">
+              <h2 id="billing-heading">AI model</h2>
+              <p>Sign in to unlock paid model choice.</p>
+            </section>`;
+          }'''
+          new_guest = '''  if (!signedIn) {
+            return `<section class="billing-menu" aria-labelledby="billing-heading">
+              <h2 id="billing-heading">AI model</h2>
+              <p>Sign in to unlock paid model choice.</p>
+              <a class="billing-primary billing-link" href="/auth/google">Sign in to choose a model</a>
+            </section>`;
+          }'''
+          if old_guest not in text:
+              raise SystemExit("Guest billing markup was not found")
+          text = text.replace(old_guest, new_guest, 1)
+          replacements = {
+              '<form action="/billing/checkout" method="post">': '<form action="/billing/checkout" method="post" data-billing-action="checkout">',
+              '<form action="/billing/portal" method="post">': '<form action="/billing/portal" method="post" data-billing-action="portal">',
+              '<form action="/account/model" method="post" class="model-choice-form">': '<form action="/account/model" method="post" class="model-choice-form" data-billing-action="model">',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f"Expected billing form was not found: {old}")
+              text = text.replace(old, new)
+
+          script_injection = '''  if (markup && !html.includes('src="/billing-client.js"')) {
+            html = html.replace(
+              "</body>",
+              '    <script type="module" src="/billing-client.js"></script>\\n  </body>',
+            );
+          }
+          '''
+          marker = '''  if (notice) {
+            html = html.replace('''
+          if marker not in text:
+              raise SystemExit("Billing notice marker was not found")
+          text = text.replace(marker, script_injection + marker, 1)
+          worker.write_text(text)
+
+          css = Path("public/billing.css")
+          text = css.read_text()
+          addition = '''
+          .billing-link {
+            display: flex;
+            width: 100%;
+            min-height: 40px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-size: 0.8rem;
+            font-weight: 760;
+            text-align: center;
+            text-decoration: none;
+          }
+
+          .billing-menu button:disabled {
+            cursor: wait;
+            opacity: 0.72;
+          }
+          '''
+          if ".billing-link" not in text:
+              text += addition
+          css.write_text(text)
+
+          Path("public/billing-client.js").write_text('''const progressLabels = {
+            checkout: "Opening Stripe…",
+            portal: "Opening billing…",
+            model: "Saving model…",
+          };
+
+          for (const form of document.querySelectorAll(
+            ".billing-menu form[data-billing-action]",
+          )) {
+            form.addEventListener("submit", () => {
+              const button = form.querySelector('button[type="submit"]');
+              if (!(button instanceof HTMLButtonElement) || button.disabled) return;
+              const action = form.dataset.billingAction || "";
+              button.disabled = true;
+              button.setAttribute("aria-busy", "true");
+              button.textContent = progressLabels[action] || "Working…";
+            });
+          }
+          ''')
+
+          tests = Path("test/billing.test.mjs")
+          text = tests.read_text()
+          fallback_test = r'''
+
+          test("checkout falls back to standard Checkout when Managed Payments rejects the request", async () => {
+            const originalFetch = globalThis.fetch;
+            const requests = [];
+            globalThis.fetch = async (input, init) => {
+              requests.push({ input: String(input), init });
+              if (requests.length === 1) {
+                return Response.json(
+                  { error: { type: "invalid_request_error", code: "parameter_unknown" } },
+                  { status: 400 },
+                );
+              }
+              return Response.json({
+                id: "cs_test_87654321",
+                url: "https://checkout.stripe.com/c/pay/cs_test_87654321",
+              });
+            };
+
+            try {
+              const accountAlias = "B".repeat(43);
+              const checkoutUrl = await createCheckoutSession(
+                {
+                  STRIPE_SECRET_KEY: "sk_test_1234567890abcdefghijklmnop",
+                  STRIPE_WEBHOOK_SECRET: "whsec_1234567890abcdefghijklmnop",
+                  STRIPE_MODEL_CHOICE_PRICE_ID: "price_12345678",
+                  PUBLIC_ORIGIN: "https://stabilize.info",
+                },
+                {},
+                accountAlias,
+              );
+
+              assert.equal(
+                checkoutUrl,
+                "https://checkout.stripe.com/c/pay/cs_test_87654321",
+              );
+              assert.equal(requests.length, 2);
+              assert.equal(
+                new URLSearchParams(requests[0].init.body).get(
+                  "managed_payments[enabled]",
+                ),
+                "true",
+              );
+              assert.equal(
+                new URLSearchParams(requests[1].init.body).has(
+                  "managed_payments[enabled]",
+                ),
+                false,
+              );
+              assert.equal(requests[1].init.headers["Stripe-Version"], undefined);
+            } finally {
+              globalThis.fetch = originalFetch;
+            }
+          });
+          '''
+          if "checkout falls back to standard Checkout" not in text:
+              text += fallback_test
+          tests.write_text(text)
+
+          product_tests = Path("test/product.test.mjs")
+          text = product_tests.read_text()
+          ui_test = r'''
+
+          test("AI model controls are actionable and show progress", async () => {
+            const [workerSource, clientSource, billingStyles] = await Promise.all([
+              readFile(new URL("../src/paid-worker.js", import.meta.url), "utf8"),
+              readFile(new URL("../public/billing-client.js", import.meta.url), "utf8"),
+              readFile(new URL("../public/billing.css", import.meta.url), "utf8"),
+            ]);
+
+            assert.match(workerSource, /Sign in to choose a model/);
+            assert.match(workerSource, /data-billing-action="checkout"/);
+            assert.match(workerSource, /src="\/billing-client\.js"/);
+            assert.match(clientSource, /Opening Stripe/);
+            assert.match(clientSource, /aria-busy/);
+            assert.match(billingStyles, /\.billing-link/);
+          });
+          '''
+          if "AI model controls are actionable" not in text:
+              text += ui_test
+          product_tests.write_text(text)
+          PY
+
+      - name: Run full test suite
+        run: npm test
+
+      - name: Validate Worker build
+        run: npm run check
+
+      - name: Commit repaired files
+        run: |
+          rm .github/workflows/fix-ai-model-button.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/billing.js src/paid-worker.js public/billing.css public/billing-client.js test/billing.test.mjs test/product.test.mjs .github/workflows/fix-ai-model-button.yml
+          git commit -m "Fix AI model checkout button"
+          git push origin HEAD:fix/ai-model-button
