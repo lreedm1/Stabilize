@@ -87,13 +87,16 @@ test("the responsive background includes a real 8K WebP", async () => {
   assert.deepEqual(webpDimensions(eightK), { width: 7680, height: 4320 });
 });
 
-test("photos preserve screen proportion and use a greener treatment", async () => {
+test("photos preserve screen proportion and use a calm mobile treatment", async () => {
   const [pageSource, tuningStyles, mobilePhoto, desktopPhoto, credit] =
     await Promise.all([
       readFile(new URL("../src/page.js", import.meta.url), "utf8"),
       readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
       readFile(
-        new URL("../public/scenes/lake-valley-portrait-720.webp", import.meta.url),
+        new URL(
+          "../public/scenes/mobile-walking-path-v1-1080.webp",
+          import.meta.url,
+        ),
       ),
       readFile(
         new URL("../public/scenes/lake-valley-landscape-1280.webp", import.meta.url),
@@ -109,9 +112,9 @@ test("photos preserve screen proportion and use a greener treatment", async () =
     /media="\(max-width: 980px\) and \(orientation: portrait\)"/,
   );
   assert.match(pageSource, /type="image\/webp"/);
-  assert.deepEqual(webpDimensions(mobilePhoto), { width: 720, height: 1280 });
+  assert.deepEqual(webpDimensions(mobilePhoto), { width: 1080, height: 1920 });
   assert.equal(mobilePhoto.equals(desktopPhoto), false);
-  assert.match(credit, /Royce Fonseca/);
+  assert.match(credit, /Fethi Benattallah/);
   assert.match(credit, /Unsplash License/);
   assert.match(
     tuningStyles,
@@ -123,7 +126,7 @@ test("photos preserve screen proportion and use a greener treatment", async () =
   );
   assert.match(
     tuningStyles,
-    /@media \(max-width: 980px\) and \(orientation: portrait\)[\s\S]*object-position:\s*50% 42%;/,
+    /@media \(max-width: 980px\) and \(orientation: portrait\)[\s\S]*object-position:\s*50% 50%;[\s\S]*filter:\s*saturate\(1\.02\) contrast\(0\.98\) brightness\(1\.01\)/,
   );
   assert.match(tuningStyles, /rgba\(5, 55, 29, 0\.1\)/);
 });

@@ -16,8 +16,8 @@ body::before {
 
 @media (max-width: 980px) and (orientation: portrait) {
   .photo-backdrop img {
-    object-position: 50% 42%;
-    filter: saturate(1.14) contrast(1.045) brightness(0.96);
+    object-position: 50% 50%;
+    filter: saturate(1.02) contrast(0.98) brightness(1.01);
   }
 
   .photo-background {
