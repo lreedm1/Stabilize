@@ -193,14 +193,13 @@ jobs:
           test ! -d tmp
           test ! -e public/scenes/mobile-sunlit-green-path-v4-1440.webp
 
-      - name: Commit the clean generated-photo update
+      - name: Publish the clean result branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Use the generated forest path on mobile"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          git push --force origin HEAD:agent/generated-photo-output-v5
 
   test:
     runs-on: ubuntu-latest
