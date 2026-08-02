@@ -35,8 +35,11 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Validate Worker build
+      - name: Validate Worker and required production secrets
         run: npm run check
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deploy current main commit
         uses: cloudflare/wrangler-action@v3
@@ -45,3 +48,24 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy --keep-vars
           packageManager: npm
+
+      - name: Verify production Google sign-in
+        shell: bash
+        run: |
+          for attempt in {1..12}; do
+            response="$(curl --fail --silent --show-error https://reedlokken.com/api/auth || true)"
+            echo "Auth check attempt ${attempt}: ${response}"
+            if node -e '
+              try {
+                const value = JSON.parse(process.argv[1]);
+                process.exit(value.google === true ? 0 : 1);
+              } catch {
+                process.exit(1);
+              }
+            ' "$response"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Production /api/auth did not report google=true after deployment."
+          exit 1
