@@ -133,6 +133,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/seo.css" />
     <link rel="stylesheet" href="/product.css" />
+    <link rel="stylesheet" href="/document-export.css?v=20260802-document-exports-1" />
     <link rel="stylesheet" href="/photo-tuning.css" />
   </head>
   <body>
@@ -265,6 +266,7 @@ export function renderPage(options = {}) {
     <template id="product-copy">${productCopyData}</template>
     <script src="/mobile-quality.js"></script>
     <script type="module" src="/app.js?v=20260802-context-aware-actions-1"></script>
+    <script type="module" src="/document-export-ui.js?v=20260802-document-exports-1"></script>
   </body>
 </html>`;
 }
