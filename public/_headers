@@ -6,5 +6,11 @@
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
 
+/mobile-quality.js
+  Cache-Control: no-store, max-age=0
+
+/mobile-creek-gif.js
+  Cache-Control: no-store, max-age=0
+
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
