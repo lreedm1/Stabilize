@@ -1,0 +1,257 @@
+name: Apply high-quality mobile background v1
+
+on:
+  push:
+    branches:
+      - agent/mobile-hq-v1
+    paths:
+      - .github/workflows/apply-mobile-hq-v1.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/mobile-hq-v1
+          fetch-depth: 0
+
+      - name: Patch mobile image loading and tests
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              file = Path(path)
+              text = file.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected one match in {path}, found {count}")
+              file.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "src/page.js",
+              '''    <link
+              rel="preload"
+              href="/fonts/lexend-latin-wght-normal.woff2"
+              as="font"
+              type="font/woff2"
+              crossorigin
+            />
+            <link rel="stylesheet" href="/styles.css" />'''.replace("          ", ""),
+              '''    <link
+              rel="preload"
+              href="/fonts/lexend-latin-wght-normal.woff2"
+              as="font"
+              type="font/woff2"
+              crossorigin
+            />
+            <link
+              rel="preload"
+              as="image"
+              href="/scenes/mobile-forest-hq-v1-1620.webp"
+              imagesrcset="/scenes/mobile-forest-hq-v1-1080.webp 1080w, /scenes/mobile-forest-hq-v1-1620.webp 1620w, /scenes/mobile-forest-hq-v1-2430.webp 2430w"
+              imagesizes="100vw"
+              media="(max-width: 980px) and (orientation: portrait)"
+              type="image/webp"
+              fetchpriority="high"
+            />
+            <link rel="stylesheet" href="/styles.css" />'''.replace("          ", ""),
+          )
+
+          replace_once(
+              "src/page.js",
+              '''          /scenes/lake-valley-portrait-720.webp 720w,
+          /scenes/lake-valley-portrait-1440.webp 1440w,
+          /scenes/lake-valley-portrait-2160.webp 2160w''',
+              '''          /scenes/mobile-forest-hq-v1-1080.webp 1080w,
+          /scenes/mobile-forest-hq-v1-1620.webp 1620w,
+          /scenes/mobile-forest-hq-v1-2430.webp 2430w''',
+          )
+
+          replace_once(
+              "public/photo-scene.js",
+              '''  portrait: Object.freeze([
+    Object.freeze({
+      width: 720,
+      height: 1280,
+      src: "/scenes/lake-valley-portrait-720.webp",
+    }),
+    Object.freeze({
+      width: 1440,
+      height: 2560,
+      src: "/scenes/lake-valley-portrait-1440.webp",
+    }),
+    Object.freeze({
+      width: 2160,
+      height: 3840,
+      src: "/scenes/lake-valley-portrait-2160.webp",
+    }),
+  ]),''',
+              '''  portrait: Object.freeze([
+    Object.freeze({
+      width: 1080,
+      height: 1920,
+      src: "/scenes/mobile-forest-hq-v1-1080.webp",
+    }),
+    Object.freeze({
+      width: 1620,
+      height: 2880,
+      src: "/scenes/mobile-forest-hq-v1-1620.webp",
+    }),
+    Object.freeze({
+      width: 2430,
+      height: 4320,
+      src: "/scenes/mobile-forest-hq-v1-2430.webp",
+    }),
+  ]),''',
+          )
+
+          replace_once(
+              "public/photo-scene.js",
+              '''export function shouldUsePhotoScene(scope = globalThis) {
+  const motionQuery = scope?.matchMedia?.("(prefers-reduced-motion: reduce)");''',
+              '''export function shouldUsePhotoScene(scope = globalThis) {
+  const mobileQuery = scope?.matchMedia?.("(max-width: 980px)");
+  if (mobileQuery?.matches) return false;
+
+  const motionQuery = scope?.matchMedia?.("(prefers-reduced-motion: reduce)");''',
+          )
+
+          replace_once(
+              "public/photo-tuning.css",
+              '''  filter: saturate(1.24) contrast(1.035) brightness(0.98);
+  transform: translateZ(0);''',
+              '''  filter: saturate(1.24) contrast(1.035) brightness(0.98);''',
+          )
+
+          replace_once(
+              "public/photo-tuning.css",
+              '''@media (max-width: 980px) and (orientation: portrait) {
+  .photo-backdrop img {
+    object-position: 50% 42%;
+  }
+}''',
+              '''@media (max-width: 980px) and (orientation: portrait) {
+  .photo-backdrop img {
+    object-position: 50% 42%;
+    filter: saturate(1.14) contrast(1.045) brightness(0.96);
+  }
+
+  .photo-background {
+    display: none;
+  }
+}''',
+          )
+
+          replace_once(
+              "test/terrain.test.mjs",
+              '''    "/scenes/lake-valley-portrait-720.webp",''',
+              '''    "/scenes/mobile-forest-hq-v1-1080.webp",''',
+          )
+          replace_once(
+              "test/terrain.test.mjs",
+              '''    assert.ok(bytes.byteLength < 600_000);''',
+              '''    assert.ok(bytes.byteLength < 3_000_000);''',
+          )
+
+          replace_once(
+              "test/terrain.test.mjs",
+              '''test("reduced-motion and low-power clients skip only the animated photo scene", () => {
+  const scope = (overrides = {}) => ({
+    matchMedia: () => ({ matches: false }),
+    navigator: { hardwareConcurrency: 8, deviceMemory: 8, ...overrides },
+  });
+
+  assert.equal(shouldUsePhotoScene(scope()), true);
+  assert.equal(
+    shouldUsePhotoScene({
+      ...scope(),
+      matchMedia: () => ({ matches: true }),
+    }),
+    false,
+  );
+  assert.equal(shouldUsePhotoScene(scope({ hardwareConcurrency: 2 })), false);
+  assert.equal(shouldUsePhotoScene(scope({ deviceMemory: 2 })), false);
+  assert.equal(
+    shouldUsePhotoScene(scope({ connection: { saveData: true } })),
+    false,
+  );
+});''',
+              '''test("mobile, reduced-motion, and low-power clients skip the animated photo scene", () => {
+  const scope = ({ mobile = false, reducedMotion = false, navigator = {} } = {}) => ({
+    matchMedia: (query) => ({
+      matches:
+        (query === "(max-width: 980px)" && mobile) ||
+        (query === "(prefers-reduced-motion: reduce)" && reducedMotion),
+    }),
+    navigator: { hardwareConcurrency: 8, deviceMemory: 8, ...navigator },
+  });
+
+  assert.equal(shouldUsePhotoScene(scope()), true);
+  assert.equal(shouldUsePhotoScene(scope({ mobile: true })), false);
+  assert.equal(shouldUsePhotoScene(scope({ reducedMotion: true })), false);
+  assert.equal(
+    shouldUsePhotoScene(scope({ navigator: { hardwareConcurrency: 2 } })),
+    false,
+  );
+  assert.equal(
+    shouldUsePhotoScene(scope({ navigator: { deviceMemory: 2 } })),
+    false,
+  );
+  assert.equal(
+    shouldUsePhotoScene(
+      scope({ navigator: { connection: { saveData: true } } }),
+    ),
+    false,
+  );
+});''',
+          )
+
+          replace_once(
+              "test/ui.test.mjs",
+              '''  assert.match(pageSource, /lake-valley-portrait-720\\.webp 720w/);
+  assert.match(pageSource, /lake-valley-portrait-2160\\.webp 2160w/);''',
+              '''  assert.match(pageSource, /mobile-forest-hq-v1-1080\\.webp 1080w/);
+  assert.match(pageSource, /mobile-forest-hq-v1-2430\\.webp 2430w/);
+  assert.match(pageSource, /rel="preload"[\\s\\S]*mobile-forest-hq-v1-1620\\.webp/);''',
+          )
+
+          replace_once(
+              "test/product.test.mjs",
+              '''        new URL("../public/scenes/lake-valley-portrait-720.webp", import.meta.url),''',
+              '''        new URL("../public/scenes/mobile-forest-hq-v1-1080.webp", import.meta.url),''',
+          )
+          replace_once(
+              "test/product.test.mjs",
+              '''  assert.deepEqual(webpDimensions(mobilePhoto), { width: 720, height: 1280 });''',
+              '''  assert.deepEqual(webpDimensions(mobilePhoto), { width: 1080, height: 1920 });
+  assert.match(pageSource, /mobile-forest-hq-v1-2430\\.webp 2430w/);
+  assert.match(pageSource, /rel="preload"[\\s\\S]*mobile-forest-hq-v1-1620\\.webp/);''',
+          )
+
+          Path(".github/workflows/apply-mobile-hq-v1.yml").unlink()
+          PY
+
+      - name: Verify patched files parse
+        run: |
+          node --check src/page.js
+          node --check public/photo-scene.js
+
+      - name: Commit implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/page.js \
+                  public/photo-scene.js \
+                  public/photo-tuning.css \
+                  test/terrain.test.mjs \
+                  test/ui.test.mjs \
+                  test/product.test.mjs \
+                  .github/workflows/apply-mobile-hq-v1.yml
+          git commit -m "Load sharp static backgrounds on mobile"
+          git push origin HEAD:agent/mobile-hq-v1
