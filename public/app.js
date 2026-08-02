@@ -9,6 +9,7 @@ const chatLog = document.querySelector("#chat-log");
 const copyTemplate = document.querySelector("#client-copy");
 const productCopyTemplate = document.querySelector("#product-copy");
 const exampleStarts = document.querySelectorAll("[data-example-message]");
+const signOutForm = document.querySelector('form[action="/auth/logout"]');
 
 if (!(copyTemplate instanceof HTMLTemplateElement)) {
   throw new Error("Missing client copy data");
@@ -27,6 +28,9 @@ const ROUTES_WITHOUT_OUTCOME_CHECK = new Set([
   "MEDICATION_CHANGE",
   "MEDICATION_ACCESS",
 ]);
+const LAST_ANSWER_STORAGE_KEY = "stabilize:last-answer:v1";
+const LAST_ANSWER_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const MAX_PERSISTED_REPLY_CHARS = 12_000;
 
 let awaitingSafetyAnswer = false;
 let pending = false;
@@ -100,6 +104,79 @@ function showOutput(
   return article;
 }
 
+function clearPersistedAnswer() {
+  try {
+    sessionStorage.removeItem(LAST_ANSWER_STORAGE_KEY);
+  } catch {
+    // Storage can be unavailable in hardened or private browser contexts.
+  }
+}
+
+function persistLatestAnswer(reply, route, needsSafetyAnswer) {
+  const cleanReply = String(reply || "").trim().slice(0, MAX_PERSISTED_REPLY_CHARS);
+  if (!cleanReply) return;
+
+  const cleanRoute = /^[A-Z_]{1,64}$/.test(String(route || ""))
+    ? String(route)
+    : "ORDINARY";
+  const record = {
+    v: 1,
+    reply: cleanReply,
+    route: cleanRoute,
+    awaitingSafetyAnswer: needsSafetyAnswer === true,
+    savedAt: Date.now(),
+  };
+
+  try {
+    sessionStorage.setItem(LAST_ANSWER_STORAGE_KEY, JSON.stringify(record));
+  } catch {
+    // A successful response should remain usable even when storage is blocked.
+  }
+}
+
+function readPersistedAnswer() {
+  try {
+    const raw = sessionStorage.getItem(LAST_ANSWER_STORAGE_KEY);
+    if (!raw) return null;
+
+    const record = JSON.parse(raw);
+    const age = Date.now() - Number(record?.savedAt);
+    const valid =
+      record?.v === 1 &&
+      typeof record.reply === "string" &&
+      record.reply.trim().length > 0 &&
+      record.reply.length <= MAX_PERSISTED_REPLY_CHARS &&
+      /^[A-Z_]{1,64}$/.test(String(record.route || "")) &&
+      typeof record.awaitingSafetyAnswer === "boolean" &&
+      Number.isFinite(age) &&
+      age >= 0 &&
+      age <= LAST_ANSWER_MAX_AGE_MS;
+
+    if (!valid) {
+      clearPersistedAnswer();
+      return null;
+    }
+
+    return record;
+  } catch {
+    clearPersistedAnswer();
+    return null;
+  }
+}
+
+function restorePersistedAnswer() {
+  const record = readPersistedAnswer();
+  if (!record) return false;
+
+  awaitingSafetyAnswer = record.awaitingSafetyAnswer;
+  const offerOutcomeCheck =
+    !record.awaitingSafetyAnswer &&
+    !ROUTES_WITHOUT_OUTCOME_CHECK.has(record.route);
+  showOutput(record.reply, "", "response", { offerOutcomeCheck });
+  modulateTerrain(record.reply);
+  return true;
+}
+
 function setPending(value) {
   pending = value;
   input.disabled = value;
@@ -163,12 +240,13 @@ async function sendMessage(text) {
 
     const reply = String(result.reply || copy.missingReply);
     const route = String(result.route || "ORDINARY");
+    const needsSafetyAnswer = result.awaitingSafetyAnswer === true;
     const offerOutcomeCheck =
-      result.awaitingSafetyAnswer !== true &&
-      !ROUTES_WITHOUT_OUTCOME_CHECK.has(route);
+      !needsSafetyAnswer && !ROUTES_WITHOUT_OUTCOME_CHECK.has(route);
     showOutput(reply, "", "response", { offerOutcomeCheck });
     modulateTerrain(reply);
-    awaitingSafetyAnswer = result.awaitingSafetyAnswer === true;
+    awaitingSafetyAnswer = needsSafetyAnswer;
+    persistLatestAnswer(reply, route, needsSafetyAnswer);
     lastSubmittedText = "";
   } catch {
     input.value = clean;
@@ -199,12 +277,18 @@ for (const button of exampleStarts) {
   });
 }
 
+if (signOutForm instanceof HTMLFormElement) {
+  signOutForm.addEventListener("submit", clearPersistedAnswer);
+}
+
+restorePersistedAnswer();
+
 window.addEventListener("pageshow", (event) => {
   const view = conversationSurface.dataset.view || "compose";
   const outputIsMissing = chatLog.hidden || chatLog.childElementCount === 0;
   const interruptedThinkingView = event.persisted && view === "thinking";
 
   if (interruptedThinkingView || (view !== "compose" && outputIsMissing)) {
-    restoreComposeView();
+    if (!restorePersistedAnswer()) restoreComposeView();
   }
 });
