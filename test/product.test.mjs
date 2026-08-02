@@ -86,6 +86,29 @@ test("the responsive background includes a real 8K WebP", async () => {
   assert.deepEqual(webpDimensions(eightK), { width: 7680, height: 4320 });
 });
 
+test("mobile screens load a separate portrait photo", async () => {
+  const [pageSource, mobilePhoto, desktopPhoto, credit] = await Promise.all([
+    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+    readFile(
+      new URL("../public/scenes/lake-valley-portrait-720.webp", import.meta.url),
+    ),
+    readFile(
+      new URL("../public/scenes/lake-valley-landscape-1280.webp", import.meta.url),
+    ),
+    readFile(
+      new URL("../public/scenes/MOBILE_PHOTO_CREDIT.md", import.meta.url),
+      "utf8",
+    ),
+  ]);
+
+  assert.match(pageSource, /media="\(max-width: 980px\)"/);
+  assert.match(pageSource, /type="image\/webp"/);
+  assert.deepEqual(webpDimensions(mobilePhoto), { width: 720, height: 1280 });
+  assert.equal(mobilePhoto.equals(desktopPhoto), false);
+  assert.match(credit, /Royce Fonseca/);
+  assert.match(credit, /Unsplash License/);
+});
+
 test("example starts fill the composer without sending for the user", async () => {
   const clientScript = await readFile(
     new URL("../public/app.js", import.meta.url),
