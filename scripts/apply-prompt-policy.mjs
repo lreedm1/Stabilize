@@ -196,21 +196,4 @@ test("prompt and reply lengths use instructions rather than app hard caps", asyn
 `;
 });
 
-await transform("test/mobile-quality.test.mjs", (source) => {
-  let text = source;
-  text = replaceOrVerify(
-    text,
-    "assert.match(mobileQuality, /eightKPhoto/);",
-    "assert.match(mobileQuality, /matchMedia/);",
-    "the stale 8K mobile assertion",
-  );
-  text = replaceOrVerify(
-    text,
-    "assert.match(mobileQuality, /lake-valley-landscape-7680\\.webp/);",
-    "assert.match(mobileQuality, /data-mobile-animation/);",
-    "the stale landscape mobile assertion",
-  );
-  return text;
-});
-
 console.log("Applied uncapped prompt and 500-word response policy.");
