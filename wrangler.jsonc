@@ -4,6 +4,7 @@
   "main": "src/index.js",
   "compatibility_date": "2026-08-01",
   "compatibility_flags": ["nodejs_compat"],
+  "keep_vars": true,
   "workers_dev": true,
   "preview_urls": true,
   "assets": {
