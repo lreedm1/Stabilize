@@ -113,8 +113,8 @@ export function renderPage(options = {}) {
     <link
       rel="preload"
       as="image"
-      href="/scenes/mobile-walking-path-hq-v2-2160.webp"
-      imagesrcset="/scenes/mobile-walking-path-hq-v2-1440.webp 1440w, /scenes/mobile-walking-path-hq-v2-2160.webp 2160w, /scenes/mobile-walking-path-hq-v2-2880.webp 2880w"
+      href="/scenes/mobile-walking-path-natural-v3-2160.webp"
+      imagesrcset="/scenes/mobile-walking-path-natural-v3-1440.webp 1440w, /scenes/mobile-walking-path-natural-v3-2160.webp 2160w, /scenes/mobile-walking-path-natural-v3-2880.webp 2880w"
       imagesizes="100vw"
       media="(max-width: 980px) and (orientation: portrait)"
       type="image/webp"
@@ -142,9 +142,9 @@ export function renderPage(options = {}) {
         type="image/webp"
         sizes="100vw"
         srcset="
-          /scenes/mobile-walking-path-hq-v2-1440.webp 1440w,
-          /scenes/mobile-walking-path-hq-v2-2160.webp 2160w,
-          /scenes/mobile-walking-path-hq-v2-2880.webp 2880w
+          /scenes/mobile-walking-path-natural-v3-1440.webp 1440w,
+          /scenes/mobile-walking-path-natural-v3-2160.webp 2160w,
+          /scenes/mobile-walking-path-natural-v3-2880.webp 2880w
         "
       />
       <img

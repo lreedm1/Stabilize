@@ -53,13 +53,13 @@ test("mobile loads cache-busted high-resolution static photography", async () =>
       readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
       readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
       readFile(
-        new URL("../public/scenes/mobile-walking-path-hq-v2-1440.webp", import.meta.url),
+        new URL("../public/scenes/mobile-walking-path-natural-v3-1440.webp", import.meta.url),
       ),
       readFile(
-        new URL("../public/scenes/mobile-walking-path-hq-v2-2160.webp", import.meta.url),
+        new URL("../public/scenes/mobile-walking-path-natural-v3-2160.webp", import.meta.url),
       ),
       readFile(
-        new URL("../public/scenes/mobile-walking-path-hq-v2-2880.webp", import.meta.url),
+        new URL("../public/scenes/mobile-walking-path-natural-v3-2880.webp", import.meta.url),
       ),
     ]);
 
