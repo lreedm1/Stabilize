@@ -20,14 +20,7 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": [
-      "/api/*",
-      "/auth/*",
-      "/billing/*",
-      "/account/*",
-      "/",
-      "/index.html"
-    ]
+    "run_worker_first": true
   },
   "durable_objects": {
     "bindings": [
