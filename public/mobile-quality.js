@@ -1,18 +1,17 @@
 const mobilePortrait = globalThis.matchMedia?.(
   "(max-width: 980px) and (orientation: portrait)",
 );
-const reducedMotion = globalThis.matchMedia?.(
-  "(prefers-reduced-motion: reduce)",
-);
 
-if (mobilePortrait?.matches && !reducedMotion?.matches) {
-  // Only portrait phones import the animation payload. Desktop, landscape
-  // mobile, and reduced-motion users keep the existing responsive still.
+if (mobilePortrait?.matches) {
+  // Portrait phones always request the animated woodland background. Desktop
+  // and landscape mobile keep the existing responsive high-resolution still.
   const backdrop = document.querySelector("#photo-backdrop");
   const backdropImage = document.querySelector("#photo-backdrop-image");
 
   if (backdrop instanceof HTMLElement && backdropImage instanceof HTMLImageElement) {
-    void import("/mobile-creek-gif.js?v=20260802-4")
+    document.documentElement.dataset.mobileBackground = "loading";
+
+    void import("/mobile-creek-gif.js?v=20260802-6")
       .then(({ default: animationDataUrl }) => {
         // The lower-resolution canvas would cover and soften the selected image.
         document.querySelector("#photo-background")?.remove();
@@ -23,13 +22,20 @@ if (mobilePortrait?.matches && !reducedMotion?.matches) {
         backdropImage.style.transition = "opacity 350ms ease";
         backdropImage.style.filter = "none";
 
+        const revealAnimation = () => {
+          backdropImage.style.opacity = "1";
+          document.documentElement.dataset.mobileBackground = "animated";
+          document
+            .querySelector("#terrain-background")
+            ?.classList.add("is-photo-ready");
+        };
+
+        backdropImage.addEventListener("load", revealAnimation, { once: true });
         backdropImage.addEventListener(
-          "load",
+          "error",
           () => {
+            document.documentElement.dataset.mobileBackground = "failed";
             backdropImage.style.opacity = "1";
-            document
-              .querySelector("#terrain-background")
-              ?.classList.add("is-photo-ready");
           },
           { once: true },
         );
@@ -38,9 +44,14 @@ if (mobilePortrait?.matches && !reducedMotion?.matches) {
         backdropImage.decoding = "async";
         backdropImage.loading = "eager";
         backdropImage.fetchPriority = "high";
+
+        if (backdropImage.complete && backdropImage.naturalWidth > 0) {
+          revealAnimation();
+        }
       })
-      .catch(() => {
-        // The responsive high-resolution still remains visible on failure.
+      .catch((error) => {
+        document.documentElement.dataset.mobileBackground = "failed";
+        console.error("Mobile woodland animation failed to load", error);
       });
   }
 }
