@@ -1,4 +1,5 @@
 const desktopPhoto = "/scenes/lake-valley-landscape-7680.webp";
+const mobileViewport = globalThis.matchMedia?.("(max-width: 980px)");
 const mobilePortrait = globalThis.matchMedia?.(
   "(max-width: 980px) and (orientation: portrait)",
 );
@@ -46,7 +47,9 @@ async function showMobileWoodland() {
   if (!photo) return;
 
   const encoded = await loadMobileWoodlandData();
-  if (!mobilePortrait?.matches || reducedMotion?.matches) return;
+  if (!mobileViewport?.matches || !mobilePortrait?.matches || reducedMotion?.matches) {
+    return;
+  }
 
   // Remove picture sources before setting the image so a responsive source
   // cannot override the mobile-only animated WebP data URL.
@@ -61,7 +64,11 @@ async function showMobileWoodland() {
 }
 
 function applyBackground() {
-  if (mobilePortrait?.matches && !reducedMotion?.matches) {
+  if (
+    mobileViewport?.matches &&
+    mobilePortrait?.matches &&
+    !reducedMotion?.matches
+  ) {
     showMobileWoodland().catch((error) => {
       console.error("Mobile woodland background failed to load", error);
       showDesktopPhoto();
@@ -72,5 +79,6 @@ function applyBackground() {
 }
 
 applyBackground();
+mobileViewport?.addEventListener?.("change", applyBackground);
 mobilePortrait?.addEventListener?.("change", applyBackground);
 reducedMotion?.addEventListener?.("change", applyBackground);
