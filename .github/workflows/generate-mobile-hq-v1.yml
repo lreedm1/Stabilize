@@ -1,0 +1,92 @@
+name: Generate high-quality mobile background v1
+
+on:
+  push:
+    branches:
+      - agent/mobile-hq-v1
+    paths:
+      - .github/workflows/generate-mobile-hq-v1.yml
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/mobile-hq-v1
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Pillow
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Generate native-resolution portrait WebPs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageEnhance, ImageFilter, ImageStat
+
+          source_path = Path("public/scenes/lake-valley-landscape-7680.webp")
+          outputs = {
+              Path("public/scenes/mobile-forest-hq-v1-1080.webp"): (1080, 1920),
+              Path("public/scenes/mobile-forest-hq-v1-1620.webp"): (1620, 2880),
+              Path("public/scenes/mobile-forest-hq-v1-2430.webp"): (2430, 4320),
+          }
+
+          with Image.open(source_path) as source:
+              image = source.convert("RGB")
+
+          width, height = image.size
+          crop_width = round(height * 9 / 16)
+          center_x = round(width * 0.54)
+          left = max(0, min(width - crop_width, center_x - crop_width // 2))
+          portrait = image.crop((left, 0, left + crop_width, height))
+
+          portrait = ImageEnhance.Brightness(portrait).enhance(0.94)
+          portrait = ImageEnhance.Contrast(portrait).enhance(1.09)
+          portrait = ImageEnhance.Color(portrait).enhance(1.08)
+          green = Image.new("RGB", portrait.size, (12, 48, 26))
+          portrait = Image.blend(portrait, green, 0.025)
+          portrait = portrait.filter(
+              ImageFilter.UnsharpMask(radius=1.0, percent=72, threshold=3)
+          )
+
+          for path, size in outputs.items():
+              rendered = portrait.resize(size, Image.Resampling.LANCZOS)
+              rendered.save(path, "WEBP", quality=95, method=6, exact=True)
+              with Image.open(path) as check:
+                  if check.size != size:
+                      raise SystemExit(f"Unexpected size for {path}: {check.size}")
+                  top = check.convert("RGB").crop((0, 0, size[0], size[1] // 5))
+                  top_luma = ImageStat.Stat(top.convert("L")).mean[0]
+                  if top_luma > 218:
+                      raise SystemExit(
+                          f"Top fifth is still too washed out for {path}: {top_luma:.1f}"
+                      )
+              if path.stat().st_size < 180_000:
+                  raise SystemExit(f"Unexpectedly small high-quality asset: {path}")
+              print(
+                  f"Wrote {path} at {size[0]}x{size[1]} "
+                  f"({path.stat().st_size:,} bytes)"
+              )
+          PY
+
+      - name: Commit generated assets and remove workflow
+        run: |
+          rm .github/workflows/generate-mobile-hq-v1.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/scenes/mobile-forest-hq-v1-1080.webp \
+                  public/scenes/mobile-forest-hq-v1-1620.webp \
+                  public/scenes/mobile-forest-hq-v1-2430.webp \
+                  .github/workflows/generate-mobile-hq-v1.yml
+          git commit -m "Generate high-quality mobile background assets"
+          git push origin HEAD:agent/mobile-hq-v1
