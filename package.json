@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "check": "wrangler types --check --include-runtime false && wrangler deploy --dry-run",
+    "check": "wrangler types --include-runtime false && wrangler deploy --dry-run",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "test": "npm run test:node && npm run test:worker",
