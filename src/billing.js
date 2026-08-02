@@ -190,7 +190,6 @@ export async function createCheckoutSession(env, state, accountAlias) {
 
   const params = new URLSearchParams();
   params.set("mode", "subscription");
-  params.set("managed_payments[enabled]", "true");
   params.set("line_items[0][price]", config.priceId);
   params.set("line_items[0][quantity]", "1");
   params.set("client_reference_id", key);
@@ -207,7 +206,6 @@ export async function createCheckoutSession(env, state, accountAlias) {
 
   const session = await stripeRequest(env, "/checkout/sessions", {
     params,
-    stripeVersion: MANAGED_PAYMENTS_STRIPE_VERSION,
     idempotencyKey: `checkout-${key}-${crypto.randomUUID()}`,
   });
   const url = boundedText(session?.url, 2_048);

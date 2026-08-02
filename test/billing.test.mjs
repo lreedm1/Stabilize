@@ -34,7 +34,7 @@ test("only active and trialing subscriptions grant model choice", () => {
   assert.equal(subscriptionHasAccess("canceled"), false);
 });
 
-test("managed payments Checkout uses the blueprint version and parameters", async () => {
+test("model subscription uses standard Stripe Checkout parameters", async () => {
   const originalFetch = globalThis.fetch;
   let request;
   globalThis.fetch = async (input, init) => {
@@ -64,14 +64,11 @@ test("managed payments Checkout uses the blueprint version and parameters", asyn
     );
     assert.equal(request.input, "https://api.stripe.com/v1/checkout/sessions");
     assert.equal(request.init.method, "POST");
-    assert.equal(
-      request.init.headers["Stripe-Version"],
-      MANAGED_PAYMENTS_STRIPE_VERSION,
-    );
+    assert.equal(request.init.headers["Stripe-Version"], undefined);
 
     const params = new URLSearchParams(request.init.body);
     assert.equal(params.get("mode"), "subscription");
-    assert.equal(params.get("managed_payments[enabled]"), "true");
+    assert.equal(params.has("managed_payments[enabled]"), false);
     assert.equal(params.get("line_items[0][price]"), "price_12345678");
     assert.equal(params.get("line_items[0][quantity]"), "1");
     assert.equal(params.get("client_reference_id"), accountAlias);

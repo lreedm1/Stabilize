@@ -96,3 +96,18 @@
   line-height: 1.4;
   text-align: center;
 }
+
+
+.billing-link {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  font-weight: 760;
+  text-align: center;
+  text-decoration: none;
+}

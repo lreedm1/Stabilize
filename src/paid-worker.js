@@ -142,13 +142,14 @@ function billingNotice(url, reconciled) {
 function billingMenuMarkup({ signedIn, configured, state, choices, defaultModel, limit }) {
   if (!configured) return "";
   if (!signedIn) {
-    return `<section class="billing-menu" aria-labelledby="billing-heading">
-      <h2 id="billing-heading">AI model</h2>
-      <p>Sign in to unlock paid model choice.</p>
-    </section>`;
-  }
+  return `<section class="billing-menu" aria-labelledby="billing-heading">
+    <h2 id="billing-heading">AI model</h2>
+    <p>Sign in to unlock paid model choice.</p>
+    <a class="billing-primary billing-link" href="/auth/google">Sign in to choose a model</a>
+  </section>`;
+}
 
-  if (!state.entitled) {
+if (!state.entitled) {
     return `<section class="billing-menu" aria-labelledby="billing-heading">
       <h2 id="billing-heading">AI model</h2>
       <p>Use the standard model free, or subscribe to choose from additional models.</p>

@@ -159,3 +159,14 @@ test("ordinary replies offer a private next-step check", async () => {
   assert.match(productStyles, /\.outcome-check/);
   assert.match(productStyles, /\.outcome-button/);
 });
+
+
+test("guest model choice includes a working sign-in action", async () => {
+  const [workerSource, billingStyles] = await Promise.all([
+    readFile(new URL("../src/paid-worker.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/billing.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(workerSource, /href="\/auth\/google">Sign in to choose a model/);
+  assert.match(billingStyles, /\.billing-link/);
+});
