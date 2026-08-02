@@ -2,7 +2,6 @@
   object-fit: cover;
   object-position: 50% 50%;
   filter: saturate(1.24) contrast(1.035) brightness(0.98);
-  transform: translateZ(0);
 }
 
 .photo-background {
@@ -18,6 +17,11 @@ body::before {
 @media (max-width: 980px) and (orientation: portrait) {
   .photo-backdrop img {
     object-position: 50% 42%;
+    filter: saturate(1.14) contrast(1.045) brightness(0.96);
+  }
+
+  .photo-background {
+    display: none;
   }
 }
 

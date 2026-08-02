@@ -1,0 +1,94 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+function webpDimensions(buffer) {
+  assert.equal(buffer.subarray(0, 4).toString("ascii"), "RIFF");
+  assert.equal(buffer.subarray(8, 12).toString("ascii"), "WEBP");
+
+  let offset = 12;
+  while (offset + 8 <= buffer.length) {
+    const type = buffer.subarray(offset, offset + 4).toString("ascii");
+    const size = buffer.readUInt32LE(offset + 4);
+    const data = offset + 8;
+
+    if (type === "VP8X" && data + 10 <= buffer.length) {
+      return {
+        width: 1 + buffer.readUIntLE(data + 4, 3),
+        height: 1 + buffer.readUIntLE(data + 7, 3),
+      };
+    }
+
+    if (
+      type === "VP8 " &&
+      data + 10 <= buffer.length &&
+      buffer[data + 3] === 0x9d &&
+      buffer[data + 4] === 0x01 &&
+      buffer[data + 5] === 0x2a
+    ) {
+      return {
+        width: buffer.readUInt16LE(data + 6) & 0x3fff,
+        height: buffer.readUInt16LE(data + 8) & 0x3fff,
+      };
+    }
+
+    if (type === "VP8L" && data + 5 <= buffer.length && buffer[data] === 0x2f) {
+      const bits = buffer.readUInt32LE(data + 1);
+      return {
+        width: 1 + (bits & 0x3fff),
+        height: 1 + ((bits >>> 14) & 0x3fff),
+      };
+    }
+
+    offset = data + size + (size % 2);
+  }
+
+  throw new Error("No supported WebP image chunk found");
+}
+
+test("mobile loads cache-busted high-resolution static photography", async () => {
+  const [pageSource, mobileQuality, tuningStyles, small, medium, large] =
+    await Promise.all([
+      readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+      readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
+      readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
+      readFile(
+        new URL("../public/scenes/mobile-forest-hq-v1-1080.webp", import.meta.url),
+      ),
+      readFile(
+        new URL("../public/scenes/mobile-forest-hq-v1-1620.webp", import.meta.url),
+      ),
+      readFile(
+        new URL("../public/scenes/mobile-forest-hq-v1-2430.webp", import.meta.url),
+      ),
+    ]);
+
+  assert.deepEqual(webpDimensions(small), { width: 1080, height: 1920 });
+  assert.deepEqual(webpDimensions(medium), { width: 1620, height: 2880 });
+  assert.deepEqual(webpDimensions(large), { width: 2430, height: 4320 });
+  for (const image of [small, medium, large]) {
+    assert.ok(image.byteLength > 180_000);
+    assert.ok(image.byteLength < 3_000_000);
+  }
+
+  assert.match(pageSource, /mobile-forest-hq-v1-1080\.webp 1080w/);
+  assert.match(pageSource, /mobile-forest-hq-v1-1620\.webp 1620w/);
+  assert.match(pageSource, /mobile-forest-hq-v1-2430\.webp 2430w/);
+  assert.match(
+    pageSource,
+    /rel="preload"[\s\S]*as="image"[\s\S]*mobile-forest-hq-v1-1620\.webp/,
+  );
+  assert.ok(
+    pageSource.indexOf('<script src="/mobile-quality.js"></script>') <
+      pageSource.indexOf('<script type="module" src="/app.js"></script>'),
+  );
+
+  assert.match(mobileQuality, /matchMedia\?\.\("\(max-width: 980px\)"\)/);
+  assert.match(mobileQuality, /#photo-background/);
+  assert.match(mobileQuality, /\.remove\(\)/);
+  assert.doesNotMatch(tuningStyles, /translateZ/);
+  assert.match(
+    tuningStyles,
+    /@media \(max-width: 980px\) and \(orientation: portrait\)[\s\S]*\.photo-background\s*{[\s\S]*display:\s*none;/,
+  );
+});

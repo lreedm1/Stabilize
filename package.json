@@ -12,7 +12,7 @@
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "test": "npm run test:node && npm run test:worker",
-    "test:node": "node --test test/safety.test.mjs test/markdown.test.mjs test/terrain.test.mjs test/ui.test.mjs test/product.test.mjs test/domain.test.mjs test/billing.test.mjs",
+    "test:node": "node --test test/safety.test.mjs test/markdown.test.mjs test/terrain.test.mjs test/ui.test.mjs test/product.test.mjs test/mobile-quality.test.mjs test/domain.test.mjs test/billing.test.mjs",
     "test:worker": "vitest run --config vitest.config.js test/worker.test.mjs test/session-memory.test.mjs test/billing-account.test.mjs test/auth.test.mjs",
     "types": "wrangler types --include-runtime false"
   },
