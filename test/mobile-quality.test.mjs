@@ -53,30 +53,30 @@ test("mobile loads cache-busted high-resolution static photography", async () =>
       readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
       readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
       readFile(
-        new URL("../public/scenes/mobile-walking-path-v1-1080.webp", import.meta.url),
+        new URL("../public/scenes/mobile-walking-path-hq-v2-1440.webp", import.meta.url),
       ),
       readFile(
-        new URL("../public/scenes/mobile-walking-path-v1-1620.webp", import.meta.url),
+        new URL("../public/scenes/mobile-walking-path-hq-v2-2160.webp", import.meta.url),
       ),
       readFile(
-        new URL("../public/scenes/mobile-walking-path-v1-2430.webp", import.meta.url),
+        new URL("../public/scenes/mobile-walking-path-hq-v2-2880.webp", import.meta.url),
       ),
     ]);
 
-  assert.deepEqual(webpDimensions(small), { width: 1080, height: 1920 });
-  assert.deepEqual(webpDimensions(medium), { width: 1620, height: 2880 });
-  assert.deepEqual(webpDimensions(large), { width: 2430, height: 4320 });
+  assert.deepEqual(webpDimensions(small), { width: 1440, height: 2560 });
+  assert.deepEqual(webpDimensions(medium), { width: 2160, height: 3840 });
+  assert.deepEqual(webpDimensions(large), { width: 2880, height: 5120 });
   for (const image of [small, medium, large]) {
-    assert.ok(image.byteLength > 180_000);
-    assert.ok(image.byteLength < 3_000_000);
+    assert.ok(image.byteLength > 250_000);
+    assert.ok(image.byteLength < 5_000_000);
   }
 
-  assert.match(pageSource, /mobile-walking-path-v1-1080\.webp 1080w/);
-  assert.match(pageSource, /mobile-walking-path-v1-1620\.webp 1620w/);
-  assert.match(pageSource, /mobile-walking-path-v1-2430\.webp 2430w/);
+  assert.match(pageSource, /mobile-walking-path-hq-v2-1440\.webp 1440w/);
+  assert.match(pageSource, /mobile-walking-path-hq-v2-2160\.webp 2160w/);
+  assert.match(pageSource, /mobile-walking-path-hq-v2-2880\.webp 2880w/);
   assert.match(
     pageSource,
-    /rel="preload"[\s\S]*as="image"[\s\S]*mobile-walking-path-v1-1620\.webp/,
+    /rel="preload"[\s\S]*as="image"[\s\S]*mobile-walking-path-hq-v2-2160\.webp/,
   );
   assert.ok(
     pageSource.indexOf('<script src="/mobile-quality.js"></script>') <
@@ -91,4 +91,18 @@ test("mobile loads cache-busted high-resolution static photography", async () =>
     tuningStyles,
     /@media \(max-width: 980px\) and \(orientation: portrait\)[\s\S]*\.photo-background\s*{[\s\S]*display:\s*none;/,
   );
+});
+
+test("restored tabs recover from interrupted blank thinking views", async () => {
+  const clientScript = await readFile(
+    new URL("../public/app.js", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(clientScript, /function restoreComposeView\(\)/);
+  assert.match(clientScript, /window\.addEventListener\("pageshow"/);
+  assert.match(clientScript, /event\.persisted && view === "thinking"/);
+  assert.match(clientScript, /conversationSurface\.dataset\.view = "compose"/);
+  assert.match(clientScript, /chatLog\.hidden = true/);
+  assert.match(clientScript, /lastSubmittedText/);
 });

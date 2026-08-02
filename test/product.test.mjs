@@ -94,7 +94,7 @@ test("photos preserve screen proportion and use a calm mobile treatment", async 
       readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
       readFile(
         new URL(
-          "../public/scenes/mobile-walking-path-v1-1080.webp",
+          "../public/scenes/mobile-walking-path-hq-v2-1440.webp",
           import.meta.url,
         ),
       ),
@@ -112,7 +112,7 @@ test("photos preserve screen proportion and use a calm mobile treatment", async 
     /media="\(max-width: 980px\) and \(orientation: portrait\)"/,
   );
   assert.match(pageSource, /type="image\/webp"/);
-  assert.deepEqual(webpDimensions(mobilePhoto), { width: 1080, height: 1920 });
+  assert.deepEqual(webpDimensions(mobilePhoto), { width: 1440, height: 2560 });
   assert.equal(mobilePhoto.equals(desktopPhoto), false);
   assert.match(credit, /Fethi Benattallah/);
   assert.match(credit, /Unsplash License/);
