@@ -14,12 +14,22 @@ export function renderPage(options = {}) {
   const copyData = escapeHtml(JSON.stringify(client));
   const productCopyData = escapeHtml(
     JSON.stringify({
-      outcomeQuestion: "Do you have a next step?",
-      outcomeYes: "Yes",
-      outcomeNo: "Not yet",
-      outcomeYesMessage: "Good. Do that first.",
-      outcomeNoMessage: "A smaller prompt is ready below.",
-      outcomeFollowUp: "Give me one step I can do in ten minutes.",
+      outcomeQuestion: "What would help next?",
+      outcomeActions: [
+        {
+          label: "Make it smaller",
+          prompt: "Make the practical next step smaller and easier to start.",
+        },
+        {
+          label: "Another option",
+          prompt: "Give me a different practical next step.",
+        },
+        {
+          label: "Help me start now",
+          prompt:
+            "Help me begin the next step right now with one concrete first move.",
+        },
+      ],
     }),
   );
   const signedIn = options.signedIn === true;
@@ -254,7 +264,7 @@ export function renderPage(options = {}) {
     <template id="client-copy">${copyData}</template>
     <template id="product-copy">${productCopyData}</template>
     <script src="/mobile-quality.js"></script>
-    <script type="module" src="/app.js?v=20260802-prompt-auto-send-2"></script>
+    <script type="module" src="/app.js?v=20260802-model-action-buttons-1"></script>
   </body>
 </html>`;
 }
