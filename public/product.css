@@ -142,12 +142,14 @@
 }
 
 @media (max-width: 620px) {
-  .example-start-grid {
+  .example-start-grid,
+  .outcome-actions {
     display: grid;
     grid-template-columns: 1fr;
   }
 
-  .example-start {
+  .example-start,
+  .outcome-button {
     width: 100%;
     border-radius: 11px;
   }
