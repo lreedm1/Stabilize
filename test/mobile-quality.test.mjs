@@ -80,7 +80,9 @@ test("mobile loads cache-busted high-resolution static photography", async () =>
   );
   assert.ok(
     pageSource.indexOf('<script src="/mobile-quality.js"></script>') <
-      pageSource.indexOf('<script type="module" src="/app.js"></script>'),
+      pageSource.indexOf(
+        '<script type="module" src="/app.js?v=20260802-prompt-auto-send-2"></script>',
+      ),
   );
 
   assert.match(mobileQuality, /matchMedia\?\.\("\(max-width: 980px\)"\)/);

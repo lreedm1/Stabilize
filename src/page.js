@@ -254,7 +254,7 @@ export function renderPage(options = {}) {
     <template id="client-copy">${copyData}</template>
     <template id="product-copy">${productCopyData}</template>
     <script src="/mobile-quality.js"></script>
-    <script type="module" src="/app.js"></script>
+    <script type="module" src="/app.js?v=20260802-prompt-auto-send-2"></script>
   </body>
 </html>`;
 }
