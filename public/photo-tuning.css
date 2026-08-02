@@ -16,7 +16,7 @@ body::before {
 
 @media (max-width: 980px) and (orientation: portrait) {
   .photo-backdrop img {
-    object-position: 50% 50%;
+    object-position: 50% 56%;
     filter: none;
   }
 

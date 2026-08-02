@@ -94,7 +94,7 @@ test("photos preserve screen proportion and use a calm mobile treatment", async 
       readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
       readFile(
         new URL(
-          "../public/scenes/mobile-walking-path-natural-v3-1440.webp",
+          "../public/scenes/mobile-sunlit-green-path-v4-1440.webp",
           import.meta.url,
         ),
       ),
