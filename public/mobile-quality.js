@@ -1,23 +1,76 @@
-const eightKPhoto = "/scenes/lake-valley-landscape-7680.webp";
+const desktopPhoto = "/scenes/lake-valley-landscape-7680.webp";
+const mobilePortrait = globalThis.matchMedia?.(
+  "(max-width: 980px) and (orientation: portrait)",
+);
+const reducedMotion = globalThis.matchMedia?.(
+  "(prefers-reduced-motion: reduce)",
+);
 const photo = document.querySelector("#photo-backdrop-image");
+const photoBackdrop = document.querySelector("#photo-backdrop");
 const responsiveSources = document.querySelectorAll("#photo-backdrop source");
 
-// Keep the original 8K WebP as the visible image at every viewport size.
-// The animated canvas was rendered below the source resolution and softened
-// the photograph when placed above it, so remove that layer.
+// The lower-resolution animated canvas softened both photo sources. The
+// responsive image itself now owns the background at every viewport size.
 document.querySelector("#photo-background")?.remove();
 
-for (const source of responsiveSources) {
-  source.setAttribute("type", "image/webp");
-  source.setAttribute("srcset", `${eightKPhoto} 7680w`);
-  source.setAttribute("sizes", "100vw");
+let mobileDataPromise;
+
+function loadMobileWoodlandData() {
+  mobileDataPromise ??= Promise.all([
+    import("/mobile-woodland-0.js"),
+    import("/mobile-woodland-1.js"),
+    import("/mobile-woodland-2.js"),
+    import("/mobile-woodland-3.js"),
+  ]).then((parts) => parts.map((part) => part.default).join(""));
+  return mobileDataPromise;
 }
 
-if (photo) {
-  photo.src = eightKPhoto;
-  photo.srcset = `${eightKPhoto} 7680w`;
+function showDesktopPhoto() {
+  for (const source of responsiveSources) {
+    source.setAttribute("type", "image/webp");
+    source.setAttribute("srcset", `${desktopPhoto} 7680w`);
+    source.setAttribute("sizes", "100vw");
+  }
+
+  if (!photo) return;
+  photo.src = desktopPhoto;
+  photo.srcset = `${desktopPhoto} 7680w`;
   photo.sizes = "100vw";
   photo.decoding = "async";
   photo.loading = "eager";
   photo.fetchPriority = "high";
+  photoBackdrop?.classList.remove("is-mobile-woodland");
 }
+
+async function showMobileWoodland() {
+  if (!photo) return;
+
+  const encoded = await loadMobileWoodlandData();
+  if (!mobilePortrait?.matches || reducedMotion?.matches) return;
+
+  // Remove picture sources before setting the image so a responsive source
+  // cannot override the mobile-only animated WebP data URL.
+  for (const source of responsiveSources) source.remove();
+  photo.removeAttribute("srcset");
+  photo.removeAttribute("sizes");
+  photo.src = `data:image/webp;base64,${encoded}`;
+  photo.decoding = "async";
+  photo.loading = "eager";
+  photo.fetchPriority = "high";
+  photoBackdrop?.classList.add("is-mobile-woodland");
+}
+
+function applyBackground() {
+  if (mobilePortrait?.matches && !reducedMotion?.matches) {
+    showMobileWoodland().catch((error) => {
+      console.error("Mobile woodland background failed to load", error);
+      showDesktopPhoto();
+    });
+    return;
+  }
+  showDesktopPhoto();
+}
+
+applyBackground();
+mobilePortrait?.addEventListener?.("change", applyBackground);
+reducedMotion?.addEventListener?.("change", applyBackground);
