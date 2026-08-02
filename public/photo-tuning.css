@@ -27,7 +27,8 @@ body::before {
 
 @media (max-aspect-ratio: 9 / 16) {
   .photo-backdrop img {
-    object-position: 50% 39%;
+    object-position: 50% 50%;
+    image-rendering: auto;
   }
 }
 
