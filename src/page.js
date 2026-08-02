@@ -15,6 +15,24 @@ export function renderPage(options = {}) {
   const signedIn = options.signedIn === true;
   const googleSignInAvailable = options.googleSignInAvailable === true;
   const notice = String(options.authNotice || "").trim();
+  const canonicalUrl = "https://reedlokken.com/";
+  const seoTitle = "Stabilize — Free AI Check-In for Overwhelmed Moments";
+  const seoDescription =
+    "A free, floor-first AI check-in that helps adults reduce overload, protect immediate needs, and choose one manageable next step. Not therapy or emergency care.";
+  const structuredData = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    name: "Stabilize",
+    url: canonicalUrl,
+    applicationCategory: "LifestyleApplication",
+    operatingSystem: "Any",
+    isAccessibleForFree: true,
+    description: seoDescription,
+    creator: {
+      "@type": "Person",
+      name: "Reed Lokken",
+    },
+  }).replaceAll("<", "\\u003c");
   const authControl = signedIn
     ? `<form class="auth-session" action="/auth/logout" method="post">
           <span class="auth-state">${escapeHtml(page.auth.signedIn)}</span>
@@ -22,15 +40,27 @@ export function renderPage(options = {}) {
         </form>`
     : googleSignInAvailable
       ? `<a class="google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>`
-      : `<span class="auth-state auth-unavailable" title="${escapeHtml(page.auth.unavailable)}">${escapeHtml(page.auth.unavailable)}</span>`;
+      : "";
 
   return `<!doctype html>
 <html lang="${escapeHtml(page.language)}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="${escapeHtml(page.description)}" />
-    <title>${escapeHtml(page.title)}</title>
+    <meta name="description" content="${escapeHtml(seoDescription)}" />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <meta name="theme-color" content="#173f31" />
+    <link rel="canonical" href="${canonicalUrl}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Stabilize" />
+    <meta property="og:title" content="${escapeHtml(seoTitle)}" />
+    <meta property="og:description" content="${escapeHtml(seoDescription)}" />
+    <meta property="og:url" content="${canonicalUrl}" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="${escapeHtml(seoTitle)}" />
+    <meta name="twitter:description" content="${escapeHtml(seoDescription)}" />
+    <title>${escapeHtml(seoTitle)}</title>
+    <script type="application/ld+json">${structuredData}</script>
     <link
       rel="preload"
       href="/fonts/lexend-latin-wght-normal.woff2"
@@ -39,6 +69,7 @@ export function renderPage(options = {}) {
       crossorigin
     />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/seo.css" />
   </head>
   <body>
     <canvas
@@ -81,7 +112,13 @@ export function renderPage(options = {}) {
     ></canvas>
     <div class="page-shell">
       <header class="site-header">
-        <h1>${escapeHtml(page.header.name)}</h1>
+        <a class="site-name" href="/" aria-label="Stabilize home">${escapeHtml(page.header.name)}</a>
+        <nav class="resource-nav" aria-label="Resources">
+          <a href="/how-it-works.html">How it works</a>
+          <a href="/floor-first.html">Floor-first</a>
+          <a href="/safety.html">Safety</a>
+          <a href="/privacy.html">Privacy</a>
+        </nav>
         <nav class="auth-actions" aria-label="${escapeHtml(page.auth.label)}">
           ${authControl}
         </nav>
@@ -89,8 +126,18 @@ export function renderPage(options = {}) {
 
       ${notice ? `<p class="auth-notice" role="status">${escapeHtml(notice)}</p>` : ""}
 
-      <main class="chat-card" aria-label="${escapeHtml(page.title)}">
+      <main class="chat-card" aria-label="Stabilize AI check-in">
         <section id="conversation-surface" class="conversation-surface" data-view="compose">
+          <section id="seo-intro" class="seo-intro" aria-labelledby="seo-heading">
+            <p class="eyebrow">Floor-first support</p>
+            <h1 id="seo-heading">A free AI check-in for overwhelmed moments</h1>
+            <p>
+              Stabilize helps adults protect immediate needs, reduce overload, and choose one
+              manageable next step. It is not therapy, diagnosis, or emergency care.
+            </p>
+            <p class="seo-start-cue">Describe what is happening right now to begin.</p>
+          </section>
+
           <div
             id="chat-log"
             class="chat-log"
@@ -126,7 +173,6 @@ export function renderPage(options = {}) {
             </form>
           </div>
         </section>
-
       </main>
     </div>
 
