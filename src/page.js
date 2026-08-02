@@ -264,7 +264,7 @@ export function renderPage(options = {}) {
     <template id="client-copy">${copyData}</template>
     <template id="product-copy">${productCopyData}</template>
     <script src="/mobile-quality.js"></script>
-    <script type="module" src="/app.js?v=20260802-model-action-buttons-1"></script>
+    <script type="module" src="/app.js?v=20260802-context-aware-actions-1"></script>
   </body>
 </html>`;
 }
