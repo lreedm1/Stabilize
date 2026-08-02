@@ -9,6 +9,8 @@ const CHECKOUT_SESSION_ID_PATTERN = /^cs_(?:test|live)_[A-Za-z0-9]{8,}$/;
 const PRICE_ID_PATTERN = /^price_[A-Za-z0-9]{8,}$/;
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
 
+export const MANAGED_PAYMENTS_STRIPE_VERSION = "2026-02-25.preview";
+
 export class BillingConfigurationError extends Error {
   constructor(message = "Billing is not configured") {
     super(message);
@@ -147,15 +149,22 @@ async function stripeRequest(env, path, options = {}) {
     body = params.toString();
   }
 
+  const headers = {
+    Authorization: `Bearer ${secretKey}`,
+    ...(method === "GET"
+      ? {}
+      : { "Content-Type": "application/x-www-form-urlencoded" }),
+    ...(options.stripeVersion
+      ? { "Stripe-Version": String(options.stripeVersion) }
+      : {}),
+  };
+  if (method !== "GET") {
+    headers["Idempotency-Key"] = options.idempotencyKey || crypto.randomUUID();
+  }
+
   const response = await fetch(url, {
     method,
-    headers: {
-      Authorization: `Bearer ${secretKey}`,
-      ...(method === "GET"
-        ? {}
-        : { "Content-Type": "application/x-www-form-urlencoded" }),
-      "Idempotency-Key": options.idempotencyKey || crypto.randomUUID(),
-    },
+    headers,
     body,
   });
   const result = await response.json().catch(() => ({}));
@@ -181,6 +190,7 @@ export async function createCheckoutSession(env, state, accountAlias) {
 
   const params = new URLSearchParams();
   params.set("mode", "subscription");
+  params.set("managed_payments[enabled]", "true");
   params.set("line_items[0][price]", config.priceId);
   params.set("line_items[0][quantity]", "1");
   params.set("client_reference_id", key);
@@ -197,6 +207,7 @@ export async function createCheckoutSession(env, state, accountAlias) {
 
   const session = await stripeRequest(env, "/checkout/sessions", {
     params,
+    stripeVersion: MANAGED_PAYMENTS_STRIPE_VERSION,
     idempotencyKey: `checkout-${key}-${crypto.randomUUID()}`,
   });
   const url = boundedText(session?.url, 2_048);
