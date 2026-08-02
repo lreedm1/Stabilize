@@ -1,0 +1,138 @@
+name: Apply prompt limit policy
+
+on:
+  push:
+    branches: [feature/remove-hard-prompt-limits]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/remove-hard-prompt-limits
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply changes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected one {label}; found {count}")
+              return text.replace(old, new, 1)
+
+          p = Path('src/index.js')
+          s = p.read_text()
+          s = once(s, 'const MAX_BODY_BYTES = 32_000;\n', '', 'body cap')
+          s = once(s, 'const MAX_MESSAGE_CHARS = 4_000;\n', '', 'message cap')
+          s = once(s, '// OpenAI counts visible output, hidden reasoning, and formatting tokens here.\nconst MAX_MODEL_OUTPUT_TOKENS = 500;\n', '', 'model output cap')
+          a = s.index('async function readBoundedJson(request) {')
+          b = s.index('\nfunction normalizeMessages(messages) {', a)
+          s = s[:a] + '''async function readRequestJson(request) {
+            try {
+              return await request.json();
+            } catch {
+              throw new HttpError(400, COPY.api.invalidJson);
+            }
+          }
+          ''' + s[b:]
+          s = once(s, 'text: String(message.content || "").trim().slice(0, MAX_MESSAGE_CHARS),', 'text: String(message.content || "").trim(),', 'normalization cap')
+          s = once(s, '''      previous.text = (previous.text + "\\n" + message.text).slice(
+                0,
+                MAX_MESSAGE_CHARS,
+              );''', '''      previous.text = previous.text + "\\n" + message.text;''', 'merge cap')
+          s = once(s, 'if (direct) return direct.slice(0, MAX_MESSAGE_CHARS);', 'if (direct) return direct;', 'direct cap')
+          s = once(s, 'return String(latestUser?.content || "").trim().slice(0, MAX_MESSAGE_CHARS);', 'return String(latestUser?.content || "").trim();', 'conversation cap')
+          s = once(s, 'readBoundedJson(request)', 'readRequestJson(request)', 'JSON reader call')
+          s = once(s, '      max_output_tokens: MAX_MODEL_OUTPUT_TOKENS,\n', '', 'chat output field')
+          p.write_text(s)
+
+          p = Path('src/page.js')
+          s = p.read_text()
+          s = once(s, '                maxlength="4000"\n', '', 'textarea maxlength')
+          s = s.replace('/app.js?v=20260802-context-aware-actions-1', '/app.js?v=20260802-unbounded-prompts-1')
+          p.write_text(s)
+
+          p = Path('src/copy.js')
+          s = p.read_text()
+          rule = 'LENGTH: Keep ordinary responses to 500 words or fewer. When the user asks you to create, draft, expand, or revise a document, report, letter, bill, résumé, plan, brief, or other document-ready content, use the length needed to complete it well and do not apply the 500-word ceiling.'
+          s = once(s, '\n\nFINAL: Use the smallest sufficient intervention.', f'\n\n{rule}\n\nFINAL: Use the smallest sufficient intervention.', 'FINAL anchor')
+          p.write_text(s)
+
+          p = Path('test/worker.test.mjs')
+          s = p.read_text()
+          s = once(s, '    assert.equal(providerBody.max_output_tokens, 500);', '    assert.equal("max_output_tokens" in providerBody, false);', 'output assertion')
+          s = once(s, '    assert.match(providerBody.instructions, /Systems > willpower/i);', '    assert.match(providerBody.instructions, /Systems > willpower/i);\n    assert.match(providerBody.instructions, /500 words or fewer/i);\n    assert.match(providerBody.instructions, /document-ready content/i);', 'instruction anchor')
+          marker = 'test("rate limits return a retry time and a safe traceable error"'
+          test = r'''
+
+test("chat forwards long prompts without app-level truncation", async () => {
+  const originalFetch = globalThis.fetch;
+  let providerBody;
+  globalThis.fetch = async (_input, init) => {
+    providerBody = JSON.parse(init.body);
+    return responseWithText("Received the full request.");
+  };
+
+  try {
+    const longMessage = "Long prompt detail. ".repeat(700);
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: longMessage }),
+      }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+    );
+    assert.equal(response.status, 200);
+    assert.equal(providerBody.input.at(-1).content, longMessage.trim());
+    assert.ok(providerBody.input.at(-1).content.length > 4_000);
+    assert.equal("max_output_tokens" in providerBody, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+'''
+          pos = s.index(marker)
+          s = s[:pos] + test + s[pos:]
+          p.write_text(s)
+
+          p = Path('test/prompt-submit.test.mjs')
+          s = p.read_text() + r'''
+
+test("prompt and reply lengths use instructions rather than app hard caps", async () => {
+  const [pageSource, workerSource, copySource] = await Promise.all([
+    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/index.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/copy.js", import.meta.url), "utf8"),
+  ]);
+  assert.doesNotMatch(pageSource, /maxlength="4000"/);
+  assert.doesNotMatch(workerSource, /MAX_BODY_BYTES|MAX_MESSAGE_CHARS|MAX_MODEL_OUTPUT_TOKENS/);
+  assert.match(copySource, /Keep ordinary responses to 500 words or fewer/);
+  assert.match(copySource, /document-ready content/);
+  assert.match(copySource, /do not apply the 500-word ceiling/);
+});
+'''
+          p.write_text(s)
+
+          Path('.github/workflows/apply-prompt-limit-policy.yml').unlink()
+          PY
+      - name: Commit result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Remove hard prompt caps and use a 500-word instruction"
+          git push origin HEAD:feature/remove-hard-prompt-limits
