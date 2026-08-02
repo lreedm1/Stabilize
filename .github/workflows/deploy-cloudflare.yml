@@ -39,7 +39,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          payload="$(printf '{"state":"pending","context":"deployment/cloudflare","description":"Deploying Stabilize to Cloudflare","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          payload="$(printf '{"state":"pending","context":"deployment/cloudflare","description":"Waiting for Cloudflare deployment and domain checks","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           curl --fail-with-body --silent --show-error \
             --request POST \
             --header "Accept: application/vnd.github+json" \
@@ -54,14 +54,26 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Validate Worker and required production secrets
+      - name: Validate Worker build
         run: npm run check
+
+      - name: Detect GitHub-held Cloudflare credentials
+        id: cloudflare
+        if: github.event_name != 'pull_request'
+        shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "GitHub Cloudflare credentials are absent; Cloudflare's native Git integration will deploy this commit."
+          fi
 
-      - name: Deploy current main commit
-        if: github.event_name != 'pull_request'
+      - name: Deploy current main commit with Wrangler
+        if: github.event_name != 'pull_request' && steps.cloudflare.outputs.configured == 'true'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -73,8 +85,8 @@ jobs:
         if: github.event_name != 'pull_request'
         shell: bash
         run: |
-          for attempt in {1..12}; do
-            response="$(curl --fail --silent --show-error https://stabilize.info/api/auth || true)"
+          for attempt in {1..30}; do
+            response="$(curl --fail --max-time 15 --silent --show-error https://stabilize.info/api/auth || true)"
             echo "Auth check attempt ${attempt}: ${response}"
             if node -e '
               try {
@@ -84,15 +96,15 @@ jobs:
                 process.exit(1);
               }
             ' "$response"; then
-              redirect="$(curl --silent --show-error --output /dev/null --write-out "%{http_code} %{redirect_url}" https://reedlokken.com/ || true)"
+              redirect="$(curl --max-time 15 --silent --show-error --output /dev/null --write-out "%{http_code} %{redirect_url}" https://reedlokken.com/ || true)"
               echo "Legacy-domain redirect: ${redirect}"
               case "$redirect" in
                 "308 https://stabilize.info/"*) exit 0 ;;
               esac
             fi
-            sleep 5
+            sleep 10
           done
-          echo "::error::Canonical domain or legacy-domain redirect did not verify after deployment."
+          echo "::error::stabilize.info did not serve the Stabilize Worker, or reedlokken.com did not permanently redirect to it."
           exit 1
 
       - name: Publish Cloudflare deployment result
@@ -104,10 +116,10 @@ jobs:
         run: |
           if [[ "$JOB_STATUS" == "success" ]]; then
             state="success"
-            description="Cloudflare deploy and domain checks passed"
+            description="Cloudflare deployment and domain checks passed"
           else
             state="failure"
-            description="Cloudflare deploy or domain checks failed"
+            description="Cloudflare deployment or domain checks failed"
           fi
           payload="$(printf '{"state":"%s","context":"deployment/cloudflare","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           curl --fail-with-body --silent --show-error \
