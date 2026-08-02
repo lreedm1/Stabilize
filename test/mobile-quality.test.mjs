@@ -46,12 +46,6 @@ function webpDimensions(buffer) {
   throw new Error("No supported WebP image chunk found");
 }
 
-function modulePayload(source) {
-  const match = source.match(/^export default "([A-Za-z0-9+/=]+)";\s*$/);
-  assert.ok(match, "video data module should export base64 only");
-  return match[1];
-}
-
 test("mobile loads high-resolution photography and an H.264 portrait video", async () => {
   const [
     pageSource,
@@ -75,9 +69,8 @@ test("mobile loads high-resolution photography and an H.264 portrait video", asy
       new URL("../public/scenes/mobile-sunlit-green-path-v4-2880.webp", import.meta.url),
     ),
     ...Array.from({ length: 8 }, (_, index) =>
-      readFile(
-        new URL(`../public/mobile-creek-video-${index}.js`, import.meta.url),
-        "utf8",
+      import(new URL(`../public/mobile-creek-video-${index}.js`, import.meta.url)).then(
+        (module) => module.default,
       ),
     ),
   ]);
@@ -90,7 +83,12 @@ test("mobile loads high-resolution photography and an H.264 portrait video", asy
     assert.ok(image.byteLength < 5_000_000);
   }
 
-  const encodedVideo = videoModules.map(modulePayload).join("");
+  for (const [index, payload] of videoModules.entries()) {
+    assert.equal(typeof payload, "string", `video module ${index} should export text`);
+    assert.match(payload, /^[A-Za-z0-9+/=]+$/, `video module ${index} should export base64`);
+  }
+
+  const encodedVideo = videoModules.join("");
   const video = Buffer.from(encodedVideo, "base64");
   assert.equal(video.byteLength, 172_581);
   assert.equal(video.subarray(4, 8).toString("ascii"), "ftyp");
