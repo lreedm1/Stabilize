@@ -126,7 +126,8 @@ export function renderPage(options = {}) {
       aria-hidden="true"
     >
       <source
-        media="(orientation: portrait)"
+        media="(max-width: 980px)"
+        type="image/webp"
         sizes="100vw"
         srcset="
           /scenes/lake-valley-portrait-720.webp 720w,
