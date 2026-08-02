@@ -88,7 +88,8 @@ test("mobile loads cache-busted high-resolution static photography", async () =>
     pageSource.indexOf(mobileQualityTag) < pageSource.indexOf(appModuleTag),
   );
 
-  assert.match(mobileQuality, /matchMedia\?\.\("\(max-width: 980px\)"\)/);
+  assert.match(mobileQuality, /eightKPhoto/);
+  assert.match(mobileQuality, /lake-valley-landscape-7680\.webp/);
   assert.match(mobileQuality, /#photo-background/);
   assert.match(mobileQuality, /\.remove\(\)/);
   assert.doesNotMatch(tuningStyles, /translateZ/);
