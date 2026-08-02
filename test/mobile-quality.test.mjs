@@ -46,7 +46,7 @@ function webpDimensions(buffer) {
   throw new Error("No supported WebP image chunk found");
 }
 
-test("mobile loads high-resolution photography and a portrait animation", async () => {
+test("mobile loads high-resolution photography and a forced portrait animation", async () => {
   const [
     pageSource,
     mobileQuality,
@@ -88,7 +88,7 @@ test("mobile loads high-resolution photography and a portrait animation", async 
   );
 
   const mobileQualityTag =
-    '<script src="/mobile-quality.js?v=20260802-5"></script>';
+    '<script src="/mobile-quality.js?v=20260802-6"></script>';
   const appModuleTag = pageSource.match(
     /<script type="module" src="\/app\.js(?:\?v=[^"]+)?"><\/script>/,
   )?.[0];
@@ -99,8 +99,9 @@ test("mobile loads high-resolution photography and a portrait animation", async 
 
   assert.match(mobileQuality, /max-width: 980px/);
   assert.match(mobileQuality, /orientation: portrait/);
-  assert.match(mobileQuality, /prefers-reduced-motion: reduce/);
-  assert.match(mobileQuality, /mobile-creek-gif\.js/);
+  assert.doesNotMatch(mobileQuality, /prefers-reduced-motion/);
+  assert.match(mobileQuality, /mobile-creek-gif\.js\?v=20260802-6/);
+  assert.match(mobileQuality, /data-mobile-background|mobileBackground/);
   assert.match(mobileQuality, /#photo-background/);
   assert.match(mobileQuality, /\.remove\(\)/);
   assert.match(animationModule, /data:image\/webp;base64,UklGR/);
