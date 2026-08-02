@@ -1,0 +1,55 @@
+name: Run context-aware action update
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    if: github.head_ref == 'ui/context-aware-action-buttons'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: ui/context-aware-action-buttons
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply embedded update
+        shell: bash
+        run: |
+          awk '
+            /python - <<'"'"'PY'"'"'/ { capture=1; next }
+            capture && /^          PY$/ { capture=0; exit }
+            capture { sub(/^          /, ""); print }
+          ' .github/workflows/context-aware-action-buttons.yml > /tmp/context-aware-actions.py
+          python /tmp/context-aware-actions.py
+
+      - name: Run full test suite
+        run: npm test
+
+      - name: Validate Worker build
+        run: npm run check
+
+      - name: Commit verified changes
+        shell: bash
+        run: |
+          rm .github/workflows/context-aware-action-buttons.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/app.js src/page.js test/outcome-followup.test.mjs .github/workflows/context-aware-action-buttons.yml
+          git commit -m "Make follow-up buttons response-aware"
+          git push origin HEAD:ui/context-aware-action-buttons
