@@ -131,17 +131,20 @@ test("photos preserve screen proportion and use a calm mobile treatment", async 
   assert.match(tuningStyles, /rgba\(5, 55, 29, 0\.1\)/);
 });
 
-test("example starts fill the composer without sending for the user", async () => {
+test("example starts submit their prompt immediately", async () => {
   const clientScript = await readFile(
     new URL("../public/app.js", import.meta.url),
     "utf8",
   );
 
   assert.match(clientScript, /querySelectorAll\("\[data-example-message\]"\)/);
-  assert.match(clientScript, /input\.value = button\.dataset\.exampleMessage/);
+  assert.match(
+    clientScript,
+    /void sendMessage\(button\.dataset\.exampleMessage \|\| ""\)/,
+  );
   assert.doesNotMatch(
     clientScript,
-    /button\.addEventListener\("click"[\s\S]{0,300}sendMessage\(/,
+    /input\.value = button\.dataset\.exampleMessage/,
   );
 });
 
