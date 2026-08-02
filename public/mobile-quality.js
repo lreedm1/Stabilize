@@ -2,56 +2,109 @@ const mobilePortrait = globalThis.matchMedia?.(
   "(max-width: 980px) and (orientation: portrait)",
 );
 
+function decodeBase64(encoded) {
+  const binary = atob(encoded);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
+}
+
 if (mobilePortrait?.matches) {
-  // Portrait phones always request the animated woodland background. Desktop
-  // and landscape mobile keep the existing responsive high-resolution still.
   const backdrop = document.querySelector("#photo-backdrop");
-  const backdropImage = document.querySelector("#photo-backdrop-image");
+  const terrain = document.querySelector("#terrain-background");
 
-  if (backdrop instanceof HTMLElement && backdropImage instanceof HTMLImageElement) {
-    document.documentElement.dataset.mobileBackground = "loading";
+  if (backdrop instanceof HTMLElement) {
+    document.documentElement.dataset.mobileBackground = "loading-video";
 
-    void import("/mobile-creek-gif.js?v=20260802-6")
-      .then(({ default: animationDataUrl }) => {
-        // The lower-resolution canvas would cover and soften the selected image.
-        document.querySelector("#photo-background")?.remove();
-        backdrop.querySelectorAll("source").forEach((source) => source.remove());
-        backdropImage.removeAttribute("srcset");
-        backdropImage.removeAttribute("sizes");
-        backdropImage.style.opacity = "0";
-        backdropImage.style.transition = "opacity 350ms ease";
-        backdropImage.style.filter = "none";
+    void Promise.all([
+      import("/mobile-creek-video-0.js?v=20260802-7"),
+      import("/mobile-creek-video-1.js?v=20260802-7"),
+      import("/mobile-creek-video-2.js?v=20260802-7"),
+      import("/mobile-creek-video-3.js?v=20260802-7"),
+      import("/mobile-creek-video-4.js?v=20260802-7"),
+      import("/mobile-creek-video-5.js?v=20260802-7"),
+      import("/mobile-creek-video-6.js?v=20260802-7"),
+      import("/mobile-creek-video-7.js?v=20260802-7"),
+    ])
+      .then((parts) => parts.map((part) => part.default).join(""))
+      .then((encoded) => {
+        const objectUrl = URL.createObjectURL(
+          new Blob([decodeBase64(encoded)], { type: "video/mp4" }),
+        );
+        const video = document.createElement("video");
 
-        const revealAnimation = () => {
-          backdropImage.style.opacity = "1";
-          document.documentElement.dataset.mobileBackground = "animated";
-          document
-            .querySelector("#terrain-background")
-            ?.classList.add("is-photo-ready");
+        video.id = "mobile-creek-video";
+        video.className = "mobile-creek-video";
+        video.muted = true;
+        video.defaultMuted = true;
+        video.loop = true;
+        video.autoplay = true;
+        video.playsInline = true;
+        video.preload = "auto";
+        video.setAttribute("muted", "");
+        video.setAttribute("playsinline", "");
+        video.setAttribute("webkit-playsinline", "");
+        video.setAttribute("aria-hidden", "true");
+        video.disablePictureInPicture = true;
+        video.src = objectUrl;
+
+        Object.assign(video.style, {
+          position: "fixed",
+          zIndex: "0",
+          inset: "0",
+          display: "block",
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          objectPosition: "50% 50%",
+          pointerEvents: "none",
+          opacity: "0",
+          transition: "opacity 350ms ease",
+        });
+
+        backdrop.style.transition = "opacity 350ms ease";
+        backdrop.insertAdjacentElement("afterend", video);
+
+        let revealed = false;
+        const revealVideo = () => {
+          if (revealed) return;
+          revealed = true;
+          video.style.opacity = "1";
+          backdrop.style.opacity = "0";
+          document.querySelector("#photo-background")?.remove();
+          terrain?.classList.add("is-photo-ready");
+          document.documentElement.dataset.mobileBackground = "video-playing";
         };
 
-        backdropImage.addEventListener("load", revealAnimation, { once: true });
-        backdropImage.addEventListener(
+        const failVideo = (error) => {
+          document.documentElement.dataset.mobileBackground = "video-failed";
+          console.error("Mobile creek video failed to play", error);
+          backdrop.style.opacity = "1";
+          URL.revokeObjectURL(objectUrl);
+          video.remove();
+        };
+
+        video.addEventListener("playing", revealVideo, { once: true });
+        video.addEventListener(
           "error",
-          () => {
-            document.documentElement.dataset.mobileBackground = "failed";
-            backdropImage.style.opacity = "1";
-          },
+          () => failVideo(video.error ?? new Error("Video playback failed")),
           { once: true },
         );
 
-        backdropImage.src = animationDataUrl;
-        backdropImage.decoding = "async";
-        backdropImage.loading = "eager";
-        backdropImage.fetchPriority = "high";
-
-        if (backdropImage.complete && backdropImage.naturalWidth > 0) {
-          revealAnimation();
-        }
+        void video.play().catch(failVideo);
+        window.addEventListener(
+          "pagehide",
+          () => URL.revokeObjectURL(objectUrl),
+          { once: true },
+        );
       })
       .catch((error) => {
-        document.documentElement.dataset.mobileBackground = "failed";
-        console.error("Mobile woodland animation failed to load", error);
+        document.documentElement.dataset.mobileBackground = "video-failed";
+        console.error("Mobile creek video failed to load", error);
       });
   }
 }
