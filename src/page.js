@@ -150,9 +150,11 @@ export function renderPage(options = {}) {
             <p class="seo-start-cue">Describe what is happening right now to begin.</p>
             <div class="landing-meta">
               <p class="landing-note">${escapeHtml(page.chat.supportNote)}</p>
-              <details class="landing-info">
+              <details class="info-disclosure">
                 <summary>${escapeHtml(page.chat.infoLabel)}</summary>
-                <p>${escapeHtml(page.chat.infoDetails)}</p>
+                <div class="info-popover">
+                  <p>${escapeHtml(page.chat.infoDetails)}</p>
+                </div>
               </details>
             </div>
           </section>
