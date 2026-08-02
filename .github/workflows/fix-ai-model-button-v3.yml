@@ -1,0 +1,162 @@
+name: Fix AI model button v3
+
+on:
+  push:
+    branches:
+      - fix/ai-model-button
+    paths:
+      - .github/workflows/fix-ai-model-button-v3.yml
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repair branch
+        uses: actions/checkout@v6
+        with:
+          ref: fix/ai-model-button
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply functional repair
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          billing = Path("src/billing.js")
+          billing_text = billing.read_text()
+          billing_text, managed_count = re.subn(
+              r'\n\s*params\.set\("managed_payments\[enabled\]", "true"\);',
+              '',
+              billing_text,
+              count=1,
+          )
+          billing_text, version_count = re.subn(
+              r'\n\s*stripeVersion: MANAGED_PAYMENTS_STRIPE_VERSION,',
+              '',
+              billing_text,
+              count=1,
+          )
+          if managed_count != 1 or version_count != 1:
+              raise SystemExit("Could not convert model subscription to standard Checkout")
+          billing.write_text(billing_text)
+
+          worker = Path("src/paid-worker.js")
+          worker_text = worker.read_text()
+          guest_pattern = re.compile(
+              r'  if \(!signedIn\) \{.*?\n  \}\n\n  if \(!state\.entitled\)',
+              re.S,
+          )
+          guest_replacement = '''  if (!signedIn) {
+            return `<section class="billing-menu" aria-labelledby="billing-heading">
+              <h2 id="billing-heading">AI model</h2>
+              <p>Sign in to unlock paid model choice.</p>
+              <a class="billing-primary billing-link" href="/auth/google">Sign in to choose a model</a>
+            </section>`;
+          }
+
+          if (!state.entitled)'''
+          worker_text, guest_count = guest_pattern.subn(
+              guest_replacement,
+              worker_text,
+              count=1,
+          )
+          if guest_count != 1:
+              raise SystemExit("Could not add a working model-choice sign-in action")
+          worker.write_text(worker_text)
+
+          css = Path("public/billing.css")
+          css_text = css.read_text()
+          if ".billing-link" not in css_text:
+              css_text += '''
+
+          .billing-link {
+            display: flex;
+            width: 100%;
+            min-height: 40px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-size: 0.8rem;
+            font-weight: 760;
+            text-align: center;
+            text-decoration: none;
+          }
+          '''
+          css.write_text(css_text)
+
+          tests = Path("test/billing.test.mjs")
+          test_text = tests.read_text()
+          test_text, name_count = re.subn(
+              r'test\("managed payments Checkout uses the blueprint version and parameters"',
+              'test("model subscription uses standard Stripe Checkout parameters"',
+              test_text,
+              count=1,
+          )
+          test_text, header_count = re.subn(
+              r'\n\s*assert\.equal\(\n\s*request\.init\.headers\["Stripe-Version"\],\n\s*MANAGED_PAYMENTS_STRIPE_VERSION,\n\s*\);',
+              '\n    assert.equal(request.init.headers["Stripe-Version"], undefined);',
+              test_text,
+              count=1,
+          )
+          test_text, param_count = re.subn(
+              r'assert\.equal\(params\.get\("managed_payments\[enabled\]"\), "true"\);',
+              'assert.equal(params.has("managed_payments[enabled]"), false);',
+              test_text,
+              count=1,
+          )
+          if name_count != 1 or header_count != 1 or param_count != 1:
+              raise SystemExit("Could not update the Checkout regression test")
+          tests.write_text(test_text)
+
+          product_tests = Path("test/product.test.mjs")
+          product_text = product_tests.read_text()
+          if "model-choice sign-in action" not in product_text:
+              product_text += r'''
+
+          test("guest model choice includes a working sign-in action", async () => {
+            const [workerSource, billingStyles] = await Promise.all([
+              readFile(new URL("../src/paid-worker.js", import.meta.url), "utf8"),
+              readFile(new URL("../public/billing.css", import.meta.url), "utf8"),
+            ]);
+
+            assert.match(workerSource, /href="\/auth\/google">Sign in to choose a model/);
+            assert.match(billingStyles, /\.billing-link/);
+          });
+          '''
+          product_tests.write_text(product_text)
+          PY
+
+      - name: Run full test suite
+        run: npm test
+
+      - name: Validate Worker build
+        run: npm run check
+
+      - name: Commit repaired files
+        run: |
+          rm -f .github/workflows/fix-ai-model-button.yml
+          rm -f .github/workflows/fix-ai-model-button-v2.yml
+          rm -f .github/workflows/fix-ai-model-button-v3.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/billing.js src/paid-worker.js public/billing.css test/billing.test.mjs test/product.test.mjs .github/workflows/fix-ai-model-button.yml .github/workflows/fix-ai-model-button-v2.yml .github/workflows/fix-ai-model-button-v3.yml
+          git commit -m "Fix AI model checkout button"
+          git push origin HEAD:fix/ai-model-button
