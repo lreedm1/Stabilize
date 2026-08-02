@@ -8,6 +8,9 @@ import { googleAuthConfigured, readAuthSession } from "./auth.js";
 
 export { BillingAccount, FeedbackGate, FeedbackInbox, SessionMemory };
 
+const MOBILE_QUALITY_LEGACY = "/mobile-quality.js?v=20260802-6";
+const MOBILE_QUALITY_CURRENT = "/mobile-quality.js?v=20260802-7";
+
 const PROMPT_MARKUP = `<aside
   id="guest-memory-prompt"
   class="guest-memory-prompt"
@@ -33,26 +36,28 @@ const PROMPT_MARKUP = `<aside
   </div>
 </aside>`;
 
-async function injectGuestMemoryPrompt(response, request, env) {
+async function enhanceHomePage(response, request, env) {
   if (request.method === "HEAD" || !response.ok) return response;
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("text/html")) return response;
 
-  const authSession = await readAuthSession(request, env);
-  if (authSession || !googleAuthConfigured(env)) return response;
-
   let html = await response.text();
-  if (!html.includes('href="/guest-memory-prompt.css')) {
-    html = html.replace(
-      "</head>",
-      '    <link rel="stylesheet" href="/guest-memory-prompt.css?v=20260802-1" />\n  </head>',
-    );
-  }
-  if (!html.includes('id="guest-memory-prompt"')) {
-    html = html.replace(
-      "</body>",
-      `    ${PROMPT_MARKUP}\n    <script type="module" src="/guest-memory-prompt.js?v=20260802-1"></script>\n  </body>`,
-    );
+  html = html.replace(MOBILE_QUALITY_LEGACY, MOBILE_QUALITY_CURRENT);
+
+  const authSession = await readAuthSession(request, env);
+  if (!authSession && googleAuthConfigured(env)) {
+    if (!html.includes('href="/guest-memory-prompt.css')) {
+      html = html.replace(
+        "</head>",
+        '    <link rel="stylesheet" href="/guest-memory-prompt.css?v=20260802-1" />\n  </head>',
+      );
+    }
+    if (!html.includes('id="guest-memory-prompt"')) {
+      html = html.replace(
+        "</body>",
+        `    ${PROMPT_MARKUP}\n    <script type="module" src="/guest-memory-prompt.js?v=20260802-1"></script>\n  </body>`,
+      );
+    }
   }
 
   const headers = new Headers(response.headers);
@@ -70,6 +75,6 @@ export default {
     const response = await worker.fetch(request, env, ctx);
     const path = new URL(request.url).pathname;
     if (path !== "/" && path !== "/index.html") return response;
-    return injectGuestMemoryPrompt(response, request, env);
+    return enhanceHomePage(response, request, env);
   },
 };
