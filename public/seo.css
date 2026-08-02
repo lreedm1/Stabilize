@@ -8,10 +8,36 @@
   text-shadow: 0 2px 8px rgba(5, 25, 18, 0.78);
 }
 
+.header-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.header-auth-actions {
+  flex: 0 1 auto;
+}
+
+.header-google-sign-in {
+  min-height: 42px;
+  border-radius: 12px;
+  padding-inline: 13px;
+}
+
+.header-auth-state {
+  color: rgba(255, 255, 250, 0.96);
+  font-size: 0.75rem;
+  font-weight: 680;
+  text-shadow: 0 1px 5px rgba(3, 20, 14, 0.95);
+  white-space: nowrap;
+}
+
 .site-menu {
   position: relative;
   z-index: 10;
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .menu-toggle {
@@ -244,6 +270,23 @@
 
   .menu-panel {
     width: min(280px, calc(100vw - 20px));
+  }
+}
+
+@media (max-width: 430px) {
+  .header-google-sign-in {
+    min-height: 36px;
+    padding-inline: 10px;
+    font-size: 0.68rem;
+  }
+
+  .header-auth-state {
+    display: none;
+  }
+
+  .menu-toggle {
+    width: 38px;
+    height: 38px;
   }
 }
 
