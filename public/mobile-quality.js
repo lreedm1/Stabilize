@@ -12,7 +12,7 @@ if (mobilePortrait?.matches && !reducedMotion?.matches) {
   const backdropImage = document.querySelector("#photo-backdrop-image");
 
   if (backdrop instanceof HTMLElement && backdropImage instanceof HTMLImageElement) {
-    void import("/mobile-creek-gif.js?v=20260802-3")
+    void import("/mobile-creek-gif.js?v=20260802-4")
       .then(({ default: animationDataUrl }) => {
         // The lower-resolution canvas would cover and soften the selected image.
         document.querySelector("#photo-background")?.remove();
