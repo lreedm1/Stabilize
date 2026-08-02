@@ -36,7 +36,15 @@ let awaitingSafetyAnswer = false;
 let pending = false;
 let lastSubmittedText = "";
 
-function appendOutcomeCheck(article) {
+function buildOutcomeActionPrompt(instruction, previousReply) {
+  const request = String(instruction || "").trim();
+  const context = String(previousReply || "").trim().slice(0, 3000);
+  if (!request) return "";
+  if (!context) return request;
+  return `${request}\n\nUse this previous answer as context:\n\n${context}`;
+}
+
+function appendOutcomeCheck(article, previousReply) {
   const section = document.createElement("section");
   section.className = "outcome-check";
   section.setAttribute("aria-label", productCopy.outcomeQuestion);
@@ -48,38 +56,34 @@ function appendOutcomeCheck(article) {
   const actions = document.createElement("div");
   actions.className = "outcome-actions";
 
-  const status = document.createElement("p");
-  status.className = "outcome-status";
-  status.setAttribute("role", "status");
+  const configuredActions = Array.isArray(productCopy.outcomeActions)
+    ? productCopy.outcomeActions.slice(0, 3)
+    : [];
+  const buttons = [];
 
-  const yesButton = document.createElement("button");
-  yesButton.type = "button";
-  yesButton.className = "outcome-button";
-  yesButton.textContent = productCopy.outcomeYes;
-
-  const noButton = document.createElement("button");
-  noButton.type = "button";
-  noButton.className = "outcome-button";
-  noButton.textContent = productCopy.outcomeNo;
-
-  function finish(message) {
-    yesButton.disabled = true;
-    noButton.disabled = true;
-    status.textContent = message;
+  function disableButtons() {
+    for (const button of buttons) button.disabled = true;
   }
 
-  yesButton.addEventListener("click", () => {
-    finish(productCopy.outcomeYesMessage);
-    input.focus({ preventScroll: true });
-  });
+  for (const action of configuredActions) {
+    const label = String(action?.label || "").trim();
+    const prompt = String(action?.prompt || "").trim();
+    if (!label || !prompt) continue;
 
-  noButton.addEventListener("click", () => {
-    finish("");
-    void sendMessage(productCopy.outcomeFollowUp);
-  });
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "outcome-button";
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      if (pending) return;
+      disableButtons();
+      void sendMessage(buildOutcomeActionPrompt(prompt, previousReply));
+    });
+    buttons.push(button);
+    actions.appendChild(button);
+  }
 
-  actions.append(yesButton, noButton);
-  section.append(question, actions, status);
+  section.append(question, actions);
   article.appendChild(section);
 }
 
@@ -93,7 +97,7 @@ function showOutput(
   const article = document.createElement("article");
   article.className = `assistant-output ${extraClass}`.trim();
   article.appendChild(renderMarkdown(content));
-  if (offerOutcomeCheck) appendOutcomeCheck(article);
+  if (offerOutcomeCheck) appendOutcomeCheck(article, content);
   chatLog.appendChild(article);
   chatLog.hidden = false;
   chatLog.tabIndex = view === "response" ? 0 : -1;
