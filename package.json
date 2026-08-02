@@ -5,7 +5,7 @@
   "description": "A floor-first AI support website with privacy-bounded account memory on Cloudflare Workers.",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "check": "wrangler types --check --include-runtime false && wrangler deploy --dry-run",
