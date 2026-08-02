@@ -148,6 +148,16 @@ export function renderPage(options = {}) {
 
       <main class="chat-card" aria-label="Stabilize AI check-in">
         <section id="conversation-surface" class="conversation-surface" data-view="compose">
+          <div
+            id="chat-log"
+            class="chat-log"
+            role="log"
+            aria-label="${escapeHtml(page.chat.responseLabel)}"
+            aria-live="polite"
+            aria-atomic="true"
+            hidden
+          ></div>
+
           <section id="seo-intro" class="seo-intro" aria-labelledby="seo-heading">
             <p class="eyebrow">Floor-first support</p>
             <h1 id="seo-heading">A free AI check-in for overwhelmed moments</h1>
@@ -166,16 +176,6 @@ export function renderPage(options = {}) {
               </details>
             </div>
           </section>
-
-          <div
-            id="chat-log"
-            class="chat-log"
-            role="log"
-            aria-label="${escapeHtml(page.chat.responseLabel)}"
-            aria-live="polite"
-            aria-atomic="true"
-            hidden
-          ></div>
 
           <div class="composer-dock">
             <form id="chat-form" class="chat-form">
