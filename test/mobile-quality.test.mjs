@@ -46,19 +46,24 @@ function webpDimensions(buffer) {
   throw new Error("No supported WebP image chunk found");
 }
 
-test("mobile loads high-resolution photography and a forced portrait animation", async () => {
+function modulePayload(source) {
+  const match = source.match(/^export default "([A-Za-z0-9+/=]+)";\s*$/);
+  assert.ok(match, "video data module should export base64 only");
+  return match[1];
+}
+
+test("mobile loads high-resolution photography and an H.264 portrait video", async () => {
   const [
     pageSource,
     mobileQuality,
-    animationModule,
     tuningStyles,
     small,
     medium,
     large,
+    ...videoModules
   ] = await Promise.all([
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
     readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/mobile-creek-gif.js", import.meta.url), "utf8"),
     readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
     readFile(
       new URL("../public/scenes/mobile-sunlit-green-path-v4-1440.webp", import.meta.url),
@@ -68,6 +73,12 @@ test("mobile loads high-resolution photography and a forced portrait animation",
     ),
     readFile(
       new URL("../public/scenes/mobile-sunlit-green-path-v4-2880.webp", import.meta.url),
+    ),
+    ...Array.from({ length: 8 }, (_, index) =>
+      readFile(
+        new URL(`../public/mobile-creek-video-${index}.js`, import.meta.url),
+        "utf8",
+      ),
     ),
   ]);
 
@@ -79,6 +90,14 @@ test("mobile loads high-resolution photography and a forced portrait animation",
     assert.ok(image.byteLength < 5_000_000);
   }
 
+  const encodedVideo = videoModules.map(modulePayload).join("");
+  const video = Buffer.from(encodedVideo, "base64");
+  assert.equal(video.byteLength, 172_581);
+  assert.equal(video.subarray(4, 8).toString("ascii"), "ftyp");
+  assert.ok(video.includes(Buffer.from("avc1")));
+  assert.ok(video.includes(Buffer.from("moov")));
+  assert.ok(video.includes(Buffer.from("mdat")));
+
   assert.match(pageSource, /mobile-sunlit-green-path-v4-1440\.webp 1440w/);
   assert.match(pageSource, /mobile-sunlit-green-path-v4-2160\.webp 2160w/);
   assert.match(pageSource, /mobile-sunlit-green-path-v4-2880\.webp 2880w/);
@@ -88,7 +107,7 @@ test("mobile loads high-resolution photography and a forced portrait animation",
   );
 
   const mobileQualityTag =
-    '<script src="/mobile-quality.js?v=20260802-6"></script>';
+    '<script src="/mobile-quality.js?v=20260802-7"></script>';
   const appModuleTag = pageSource.match(
     /<script type="module" src="\/app\.js(?:\?v=[^"]+)?"><\/script>/,
   )?.[0];
@@ -100,12 +119,20 @@ test("mobile loads high-resolution photography and a forced portrait animation",
   assert.match(mobileQuality, /max-width: 980px/);
   assert.match(mobileQuality, /orientation: portrait/);
   assert.doesNotMatch(mobileQuality, /prefers-reduced-motion/);
-  assert.match(mobileQuality, /mobile-creek-gif\.js\?v=20260802-6/);
-  assert.match(mobileQuality, /data-mobile-background|mobileBackground/);
-  assert.match(mobileQuality, /#photo-background/);
-  assert.match(mobileQuality, /\.remove\(\)/);
-  assert.match(animationModule, /data:image\/webp;base64,UklGR/);
-  assert.doesNotMatch(animationModule, /data:image\/gif/);
+  assert.match(mobileQuality, /mobile-creek-video-0\.js\?v=20260802-7/);
+  assert.match(mobileQuality, /mobile-creek-video-7\.js\?v=20260802-7/);
+  assert.match(mobileQuality, /new Blob/);
+  assert.match(mobileQuality, /video\/mp4/);
+  assert.match(mobileQuality, /URL\.createObjectURL/);
+  assert.match(mobileQuality, /document\.createElement\("video"\)/);
+  assert.match(mobileQuality, /video\.muted = true/);
+  assert.match(mobileQuality, /video\.loop = true/);
+  assert.match(mobileQuality, /video\.autoplay = true/);
+  assert.match(mobileQuality, /video\.playsInline = true/);
+  assert.match(mobileQuality, /video\.play\(\)/);
+  assert.match(mobileQuality, /"playing"/);
+  assert.match(mobileQuality, /mobileBackground = "video-playing"/);
+  assert.doesNotMatch(mobileQuality, /mobile-creek-gif/);
   assert.doesNotMatch(tuningStyles, /translateZ/);
   assert.match(
     tuningStyles,
