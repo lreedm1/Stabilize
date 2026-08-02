@@ -94,7 +94,7 @@ test("photos preserve screen proportion and use a calm mobile treatment", async 
       readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
       readFile(
         new URL(
-          "../public/scenes/mobile-walking-path-natural-v3-1440.webp",
+          "../public/scenes/mobile-sunlit-green-path-v4-1440.webp",
           import.meta.url,
         ),
       ),
@@ -114,7 +114,7 @@ test("photos preserve screen proportion and use a calm mobile treatment", async 
   assert.match(pageSource, /type="image\/webp"/);
   assert.deepEqual(webpDimensions(mobilePhoto), { width: 1440, height: 2560 });
   assert.equal(mobilePhoto.equals(desktopPhoto), false);
-  assert.match(credit, /Fethi Benattallah/);
+  assert.match(credit, /Wolfgang Hasselmann/);
   assert.match(credit, /Unsplash License/);
   assert.match(
     tuningStyles,
@@ -126,7 +126,7 @@ test("photos preserve screen proportion and use a calm mobile treatment", async 
   );
   assert.match(
     tuningStyles,
-    /@media \(max-width: 980px\) and \(orientation: portrait\)[\s\S]*object-position:\s*50% 50%;[\s\S]*filter:\s*none/,
+    /@media \(max-width: 980px\) and \(orientation: portrait\)[\s\S]*object-position:\s*50% 56%;[\s\S]*filter:\s*none/,
   );
   assert.match(tuningStyles, /rgba\(5, 55, 29, 0\.1\)/);
 });
