@@ -1,0 +1,103 @@
+.guest-memory-prompt {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(23, 63, 49, 0.18);
+  border-radius: 1rem;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  box-shadow: 0 18px 48px rgba(17, 35, 28, 0.22);
+  box-sizing: border-box;
+  color: #173f31;
+  left: 50%;
+  max-width: min(92vw, 30rem);
+  padding: 1rem 1rem 0.9rem;
+  position: fixed;
+  transform: translateX(-50%);
+  width: calc(100% - 2rem);
+  z-index: 30;
+}
+
+.guest-memory-prompt[hidden] {
+  display: none;
+}
+
+.guest-memory-prompt h2 {
+  font-size: 1rem;
+  line-height: 1.25;
+  margin: 0 2rem 0.4rem 0;
+}
+
+.guest-memory-prompt p {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  margin: 0 0 0.8rem;
+}
+
+.guest-memory-prompt-close {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 1.35rem;
+  height: 2rem;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  right: 0.55rem;
+  top: 0.45rem;
+  width: 2rem;
+}
+
+.guest-memory-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.guest-memory-prompt-actions a,
+.guest-memory-prompt-actions button {
+  align-items: center;
+  border-radius: 0.65rem;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  justify-content: center;
+  min-height: 2.4rem;
+  padding: 0.5rem 0.75rem;
+  text-decoration: none;
+}
+
+.guest-memory-prompt-sign-in {
+  background: #173f31;
+  border: 1px solid #173f31;
+  color: #fff;
+}
+
+#guest-memory-prompt-dismiss {
+  background: transparent;
+  border: 1px solid rgba(23, 63, 49, 0.28);
+  color: #173f31;
+}
+
+.guest-memory-prompt button:focus-visible,
+.guest-memory-prompt a:focus-visible {
+  outline: 3px solid rgba(23, 63, 49, 0.28);
+  outline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+  .guest-memory-prompt-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .guest-memory-prompt-actions a,
+  .guest-memory-prompt-actions button {
+    width: 100%;
+  }
+}
