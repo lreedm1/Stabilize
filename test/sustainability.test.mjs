@@ -26,7 +26,7 @@ test("the public sustainability page provides a real revenue route with firm bou
   assert.match(page, /Support Stabilize and unlock model choice/);
   assert.match(page, /organizational pilots/i);
   assert.match(page, /fixed monthly ceiling/i);
-  assert.match(page, /should not count “lives saved”/i);
+  assert.match(page, /should not count “lives saved[,.”]/i);
   assert.match(page, /should not fund itself with advertising, sale of conversation data/i);
   assert.match(homePageSource, /href="\/about\.html">About<\/a>/);
   assert.match(homePageSource, /href="\/sustainability\.html">Sustainability<\/a>/);
@@ -43,5 +43,5 @@ test("the internal business plan includes pricing, unit economics, decision gate
   assert.match(plan, /Twelve-month operating plan/);
   assert.match(plan, /Main risks and stop conditions/);
   assert.match(plan, /Illustrative use of a \$10,000 bootstrap grant/);
-  assert.match(plan, /Do not report “lives saved”/);
+  assert.match(plan, /Do not report “lives saved[.”]/);
 });
