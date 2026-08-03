@@ -70,30 +70,6 @@ export function renderPage(options = {}) {
       ? `<a class="google-sign-in header-google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>`
       : "";
 
-  const exampleStarts = [
-    {
-      label: "Everything feels urgent",
-      message: "Everything feels urgent and I cannot tell what to do first.",
-    },
-    {
-      label: "I haven't eaten",
-      message: "I have not eaten and everything feels impossible right now.",
-    },
-    {
-      label: "I'm stuck on a message",
-      message:
-        "I need to send a difficult message, but I keep spiraling instead.",
-    },
-  ]
-    .map(
-      ({ label, message }) => `<button
-        class="example-start"
-        type="button"
-        data-example-message="${escapeHtml(message)}"
-      >${escapeHtml(label)}</button>`,
-    )
-    .join("");
-
   return `<!doctype html>
 <html lang="${escapeHtml(page.language)}">
   <head>
@@ -232,11 +208,6 @@ export function renderPage(options = {}) {
           <section id="seo-intro" class="seo-intro product-intro" aria-labelledby="seo-heading">
             <h1 id="seo-heading">Get unstuck.</h1>
             <p class="product-promise">Tell Stabilize what is happening. Get one clear next step.</p>
-
-            <div class="example-starts" aria-labelledby="example-starts-label">
-              <p id="example-starts-label">Start here</p>
-              <div class="example-start-grid">${exampleStarts}</div>
-            </div>
 
             <div
               class="landing-meta"
