@@ -46,34 +46,22 @@ function webpDimensions(buffer) {
   throw new Error("No supported WebP image chunk found");
 }
 
-test("mobile loads high-resolution photography and an H.264 portrait video", async () => {
-  const [
-    pageSource,
-    mobileQuality,
-    tuningStyles,
-    small,
-    medium,
-    large,
-    ...videoModules
-  ] = await Promise.all([
-    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
-    readFile(
-      new URL("../public/scenes/mobile-sunlit-green-path-v4-1440.webp", import.meta.url),
-    ),
-    readFile(
-      new URL("../public/scenes/mobile-sunlit-green-path-v4-2160.webp", import.meta.url),
-    ),
-    readFile(
-      new URL("../public/scenes/mobile-sunlit-green-path-v4-2880.webp", import.meta.url),
-    ),
-    ...Array.from({ length: 8 }, (_, index) =>
-      import(new URL(`../public/mobile-creek-video-${index}.js`, import.meta.url)).then(
-        (module) => module.default,
+test("mobile loads high-resolution photography with guaranteed CSS motion", async () => {
+  const [pageSource, mobileQuality, tuningStyles, small, medium, large] =
+    await Promise.all([
+      readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+      readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
+      readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
+      readFile(
+        new URL("../public/scenes/mobile-sunlit-green-path-v4-1440.webp", import.meta.url),
       ),
-    ),
-  ]);
+      readFile(
+        new URL("../public/scenes/mobile-sunlit-green-path-v4-2160.webp", import.meta.url),
+      ),
+      readFile(
+        new URL("../public/scenes/mobile-sunlit-green-path-v4-2880.webp", import.meta.url),
+      ),
+    ]);
 
   assert.deepEqual(webpDimensions(small), { width: 1440, height: 2560 });
   assert.deepEqual(webpDimensions(medium), { width: 2160, height: 3840 });
@@ -83,19 +71,6 @@ test("mobile loads high-resolution photography and an H.264 portrait video", asy
     assert.ok(image.byteLength < 5_000_000);
   }
 
-  for (const [index, payload] of videoModules.entries()) {
-    assert.equal(typeof payload, "string", `video module ${index} should export text`);
-    assert.match(payload, /^[A-Za-z0-9+/=]+$/, `video module ${index} should export base64`);
-  }
-
-  const encodedVideo = videoModules.join("");
-  const video = Buffer.from(encodedVideo, "base64");
-  assert.equal(video.byteLength, 172_581);
-  assert.equal(video.subarray(4, 8).toString("ascii"), "ftyp");
-  assert.ok(video.includes(Buffer.from("avc1")));
-  assert.ok(video.includes(Buffer.from("moov")));
-  assert.ok(video.includes(Buffer.from("mdat")));
-
   assert.match(pageSource, /mobile-sunlit-green-path-v4-1440\.webp 1440w/);
   assert.match(pageSource, /mobile-sunlit-green-path-v4-2160\.webp 2160w/);
   assert.match(pageSource, /mobile-sunlit-green-path-v4-2880\.webp 2880w/);
@@ -103,9 +78,10 @@ test("mobile loads high-resolution photography and an H.264 portrait video", asy
     pageSource,
     /rel="preload"[\s\S]*as="image"[\s\S]*mobile-sunlit-green-path-v4-2160\.webp/,
   );
+  assert.match(pageSource, /photo-tuning\.css\?v=20260802-8/);
 
   const mobileQualityTag =
-    '<script src="/mobile-quality.js?v=20260802-7"></script>';
+    '<script src="/mobile-quality.js?v=20260802-8"></script>';
   const appModuleTag = pageSource.match(
     /<script type="module" src="\/app\.js(?:\?v=[^"]+)?"><\/script>/,
   )?.[0];
@@ -116,22 +92,23 @@ test("mobile loads high-resolution photography and an H.264 portrait video", asy
 
   assert.match(mobileQuality, /max-width: 980px/);
   assert.match(mobileQuality, /orientation: portrait/);
-  assert.doesNotMatch(mobileQuality, /prefers-reduced-motion/);
-  assert.match(mobileQuality, /mobile-creek-video-0\.js\?v=20260802-7/);
-  assert.match(mobileQuality, /mobile-creek-video-7\.js\?v=20260802-7/);
-  assert.match(mobileQuality, /new Blob/);
-  assert.match(mobileQuality, /video\/mp4/);
-  assert.match(mobileQuality, /URL\.createObjectURL/);
-  assert.match(mobileQuality, /document\.createElement\("video"\)/);
-  assert.match(mobileQuality, /video\.muted = true/);
-  assert.match(mobileQuality, /video\.loop = true/);
-  assert.match(mobileQuality, /video\.autoplay = true/);
-  assert.match(mobileQuality, /video\.playsInline = true/);
-  assert.match(mobileQuality, /video\.play\(\)/);
-  assert.match(mobileQuality, /"playing"/);
-  assert.match(mobileQuality, /mobileBackground = "video-playing"/);
-  assert.doesNotMatch(mobileQuality, /mobile-creek-gif/);
-  assert.doesNotMatch(tuningStyles, /translateZ/);
+  assert.match(mobileQuality, /mobileBackground = "css-motion"/);
+  assert.match(mobileQuality, /mobileBackground = "css-motion-ready"/);
+  assert.doesNotMatch(mobileQuality, /createElement\("video"\)/);
+  assert.doesNotMatch(mobileQuality, /mobile-creek-video/);
+
+  assert.match(tuningStyles, /@keyframes mobile-background-drift/);
+  assert.match(tuningStyles, /@keyframes mobile-light-shimmer/);
+  assert.match(
+    tuningStyles,
+    /animation:\s*mobile-background-drift 9s ease-in-out -2s infinite alternate/,
+  );
+  assert.match(
+    tuningStyles,
+    /\.photo-backdrop::after[\s\S]*animation:\s*mobile-light-shimmer 5\.5s ease-in-out -1s infinite alternate/,
+  );
+  assert.match(tuningStyles, /will-change:\s*transform/);
+  assert.doesNotMatch(tuningStyles, /prefers-reduced-motion/);
   assert.match(
     tuningStyles,
     /@media \(max-width: 980px\) and \(orientation: portrait\)[\s\S]*\.photo-background\s*{[\s\S]*display:\s*none;/,
