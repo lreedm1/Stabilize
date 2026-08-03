@@ -272,6 +272,13 @@ test("publication recovery transitions cannot be combined with another state act
   );
   assert.throws(
     () => inferStateTransition({
+      initialState: publishingState,
+      finalState: { "feedback-checkpoint": `${intent.feedbackHead}\n` },
+    }),
+    /not an allowed atomic transition/,
+  );
+  assert.throws(
+    () => inferStateTransition({
       initialState: reviewState,
       finalState: { "feedback-checkpoint": `${"f".repeat(40)}\n` },
       proposal: true,

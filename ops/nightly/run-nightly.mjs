@@ -968,6 +968,7 @@ function remoteBranchOid(branch, runLogsDir) {
 
 function pendingPullRequestState(pendingPath, runLogsDir) {
   let pending = validatePendingReview(readJson(pendingPath));
+  let publicationCompleted = false;
   if (pending.phase === "publishing") {
     let pullRequest = pullRequestView(pending.headRefName, runLogsDir, true);
     if (!pullRequest) {
@@ -988,18 +989,28 @@ function pendingPullRequestState(pendingPath, runLogsDir) {
     pending = completePublishingIntent(pending, pullRequest);
     writeJson(pendingPath, pending);
     syncCloudState(path.dirname(pendingPath));
+    publicationCompleted = true;
   }
   const pullRequest = pullRequestView(pending.pullRequest, runLogsDir);
   validatePullRequestIdentity(pending, pullRequest);
-  return { pending, pullRequest, retry: false, recovery: false };
+  return {
+    pending,
+    pullRequest,
+    retry: false,
+    recovery: false,
+    publicationCompleted,
+  };
 }
 
 function resolvePendingReview(pendingPath, checkpointPath, runLogsDir) {
   if (!existsSync(pendingPath)) return false;
-  const { pending, pullRequest, retry, recovery } = pendingPullRequestState(
-    pendingPath,
-    runLogsDir,
-  );
+  const {
+    pending,
+    pullRequest,
+    retry,
+    recovery,
+    publicationCompleted,
+  } = pendingPullRequestState(pendingPath, runLogsDir);
   if (retry) {
     process.stdout.write(
       cloudPrepareMode()
@@ -1010,6 +1021,10 @@ function resolvePendingReview(pendingPath, checkpointPath, runLogsDir) {
   }
   if (recovery) {
     process.stdout.write("A previous publication needs recovery on the write-only runner.\n");
+    return true;
+  }
+  if (publicationCompleted && cloudPrepareMode()) {
+    process.stdout.write("Persisting the recovered pull request identity before its disposition.\n");
     return true;
   }
   if (pullRequest.state === "OPEN") {
