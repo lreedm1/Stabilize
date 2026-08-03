@@ -2,11 +2,16 @@
   .photo-backdrop {
     isolation: isolate;
     overflow: hidden;
-    background:
-      url("/scenes/mobile-golden-alpine.avif?v=20260803-10")
-      50% 50% / cover no-repeat,
-      url("/scenes/mobile-woodland-spring-still.webp?v=20260802-9")
-      50% 50% / cover no-repeat;
+    background-image:
+      url("/scenes/mobile-golden-alpine.avif?v=20260803-11"),
+      url("/scenes/mobile-woodland-spring-still.webp?v=20260802-9");
+    background-position: 50% 50%, 50% 50%;
+    background-size: auto 103%, cover;
+    background-repeat: no-repeat;
+    filter: saturate(1.04) contrast(1.055) brightness(1.01);
+    transform: translateZ(0);
+    animation: golden-scene-breathe 11s ease-in-out infinite alternate;
+    will-change: background-position, background-size;
   }
 
   .photo-backdrop img {
@@ -26,34 +31,32 @@
   .photo-backdrop::before,
   .photo-backdrop::after {
     position: absolute;
-    inset: -1.5%;
+    inset: -1%;
     content: "";
     pointer-events: none;
     background:
-      url("/scenes/mobile-golden-alpine.avif?v=20260803-10")
-      50% 50% / cover no-repeat;
+      url("/scenes/mobile-golden-alpine.avif?v=20260803-11")
+      50% 50% / auto 103% no-repeat;
     backface-visibility: hidden;
   }
 
   .photo-backdrop::before {
     z-index: 1;
     clip-path: polygon(
-      46% 41%,
-      59% 47%,
-      68% 55%,
-      77% 64%,
-      89% 75%,
-      100% 82%,
+      45% 40%,
+      61% 47%,
+      72% 57%,
+      84% 69%,
+      100% 80%,
       100% 100%,
-      47% 100%,
-      53% 85%,
-      51% 71%,
-      48% 57%
+      45% 100%,
+      51% 83%,
+      49% 65%
     );
-    opacity: 0.2;
-    filter: brightness(1.08) saturate(1.05);
+    opacity: 0.09;
+    filter: brightness(1.15) contrast(1.08);
     mix-blend-mode: screen;
-    animation: golden-water-flow 3.8s ease-in-out infinite alternate;
+    animation: golden-water-flow 2.8s linear infinite;
     will-change: transform, opacity;
   }
 
@@ -62,18 +65,18 @@
     clip-path: polygon(
       0 0,
       100% 0,
-      100% 66%,
-      82% 61%,
-      70% 70%,
-      57% 59%,
-      44% 62%,
-      31% 51%,
-      0 59%
+      100% 64%,
+      81% 59%,
+      68% 67%,
+      55% 57%,
+      42% 61%,
+      29% 49%,
+      0 57%
     );
-    opacity: 0.14;
-    filter: brightness(1.04) saturate(1.08);
-    mix-blend-mode: soft-light;
-    animation: golden-foliage-breeze 7s ease-in-out infinite alternate;
+    opacity: 0.07;
+    filter: brightness(1.08) saturate(1.12);
+    mix-blend-mode: screen;
+    animation: golden-foliage-breeze 5.8s ease-in-out infinite alternate;
     will-change: transform, opacity;
   }
 
@@ -82,7 +85,20 @@
   }
 }
 
+@keyframes golden-scene-breathe {
+  0% {
+    background-position: 49.2% 50.4%, 50% 50%;
+    background-size: auto 103%, cover;
+  }
+
+  100% {
+    background-position: 50.8% 49.2%, 50% 50%;
+    background-size: auto 106%, cover;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .photo-backdrop,
   .photo-backdrop::before,
   .photo-backdrop::after {
     animation: none !important;
