@@ -44,8 +44,8 @@ await transform("src/index.js", (source) => {
     text = text.replace(requiredCheck, limitCheck);
   }
 
-  // Response length is controlled by the written 500-word instruction, not a
-  // 500-token API field that also counts hidden reasoning and formatting.
+  // Do not use a tight API output ceiling: hidden reasoning shares that budget
+  // with the visible answer. Written verbosity rules control ordinary length.
   text = text.replace(
     "// OpenAI counts visible output, hidden reasoning, and formatting tokens here.\nconst MAX_MODEL_OUTPUT_TOKENS = 500;\n",
     "",
@@ -72,7 +72,7 @@ await transform("src/page.js", (source) => {
   }
   text = text.replace(
     /\/app\.js\?v=[^"\s]+/,
-    "/app.js?v=20260802-4000-character-limit-1",
+    "/app.js?v=20260803-max-reasoning-slim-runtime-1",
   );
   return text;
 });
@@ -92,7 +92,7 @@ await transform("src/copy.js", (source) => {
   }
 
   const lengthRule =
-    "LENGTH: Keep ordinary responses to 500 words or fewer. When the user asks you to create, draft, expand, or revise a document, report, letter, bill, résumé, plan, brief, or other document-ready content, use the length needed to complete it well and do not apply the 500-word ceiling.";
+    "LENGTH: Keep ordinary responses to 220 words or fewer. When the user asks you to create, draft, expand, or revise a document, report, letter, bill, résumé, plan, brief, or other document-ready content, use the length needed to complete it well and do not apply the 220-word ceiling.";
   if (!text.includes(lengthRule)) {
     const anchor = "\n\nFINAL: Use the smallest sufficient intervention.";
     if (!text.includes(anchor)) {
@@ -113,15 +113,17 @@ await transform("test/worker.test.mjs", (source) => {
 
   const instructionAnchor =
     "    assert.match(providerBody.instructions, /Systems > willpower/i);";
-  if (!text.includes("/500 words or fewer/i")) {
+  if (!text.includes("/220 words or fewer/i")) {
     if (!text.includes(instructionAnchor)) {
       throw new Error("4,000-character policy could not find the instruction assertion anchor");
     }
     text = text.replace(
       instructionAnchor,
-      `${instructionAnchor}\n    assert.match(providerBody.instructions, /500 words or fewer/i);\n    assert.match(providerBody.instructions, /document-ready content/i);`,
+      `${instructionAnchor}\n    assert.match(providerBody.instructions, /220 words or fewer/i);\n    assert.match(providerBody.instructions, /document-ready content/i);`,
     );
   }
+  text = text.replaceAll("/500 words or fewer/i", "/220 words or fewer/i");
+  text = text.replaceAll("500-word ceiling", "220-word ceiling");
 
   if (!text.includes('test("chat rejects messages over 4,000 characters"')) {
     const marker = 'test("rate limits return a retry time and a safe traceable error"';
@@ -135,8 +137,12 @@ await transform("test/worker.test.mjs", (source) => {
 });
 
 await transform("test/prompt-submit.test.mjs", (source) => {
-  if (source.includes('test("the prompt limit is 4,000 characters"')) return source;
-  return `${source}\n\ntest("the prompt limit is 4,000 characters", async () => {\n  const [pageSource, workerSource, copySource] = await Promise.all([\n    readFile(new URL("../src/page.js", import.meta.url), "utf8"),\n    readFile(new URL("../src/index.js", import.meta.url), "utf8"),\n    readFile(new URL("../src/copy.js", import.meta.url), "utf8"),\n  ]);\n\n  assert.match(pageSource, /id="message-input"[\\s\\S]*maxlength="4000"/);\n  assert.match(workerSource, /const MAX_MESSAGE_CHARS = 4_000/);\n  assert.match(workerSource, /latestText.length > MAX_MESSAGE_CHARS/);\n  assert.match(copySource, /Please keep your message to 4,000 characters or fewer/);\n  assert.doesNotMatch(workerSource, /MAX_MODEL_OUTPUT_TOKENS/);\n  assert.match(copySource, /Keep ordinary responses to 500 words or fewer/);\n  assert.match(copySource, /do not apply the 500-word ceiling/);\n});\n`;
+  let text = source
+    .replaceAll("Keep ordinary responses to 500 words or fewer", "Keep ordinary responses to 220 words or fewer")
+    .replaceAll("do not apply the 500-word ceiling", "do not apply the 220-word ceiling");
+
+  if (text.includes('test("the prompt limit is 4,000 characters"')) return text;
+  return `${text}\n\ntest("the prompt limit is 4,000 characters", async () => {\n  const [pageSource, workerSource, copySource] = await Promise.all([\n    readFile(new URL("../src/page.js", import.meta.url), "utf8"),\n    readFile(new URL("../src/index.js", import.meta.url), "utf8"),\n    readFile(new URL("../src/copy.js", import.meta.url), "utf8"),\n  ]);\n\n  assert.match(pageSource, /id="message-input"[\\s\\S]*maxlength="4000"/);\n  assert.match(workerSource, /const MAX_MESSAGE_CHARS = 4_000/);\n  assert.match(workerSource, /latestText.length > MAX_MESSAGE_CHARS/);\n  assert.match(copySource, /Please keep your message to 4,000 characters or fewer/);\n  assert.doesNotMatch(workerSource, /MAX_MODEL_OUTPUT_TOKENS/);\n  assert.match(copySource, /Keep ordinary responses to 220 words or fewer/);\n  assert.match(copySource, /do not apply the 220-word ceiling/);\n});\n`;
 });
 
-console.log("Applied the 4,000-character prompt limit and 500-word response policy.");
+console.log("Applied the 4,000-character prompt limit and 220-word response policy.");
