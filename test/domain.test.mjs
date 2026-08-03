@@ -42,6 +42,7 @@ test("stabilize.info is the canonical production domain", async () => {
   assert.match(page, /const canonicalUrl = "https:\/\/stabilize\.info\/"/);
   assert.match(sitemap, /https:\/\/stabilize\.info\//);
   assert.match(sitemap, /https:\/\/stabilize\.info\/about\.html/);
+  assert.match(sitemap, /https:\/\/stabilize\.info\/sustainability\.html/);
   assert.doesNotMatch(sitemap, /reedlokken\.com/);
   assert.match(robots, /Sitemap: https:\/\/stabilize\.info\/sitemap\.xml/);
   assert.match(workflow, /https:\/\/stabilize\.info\/api\/auth/);
@@ -51,6 +52,7 @@ test("stabilize.info is the canonical production domain", async () => {
 test("all public guide pages use stabilize.info canonicals", async () => {
   const pages = await Promise.all([
     repositoryFile("public/about.html"),
+    repositoryFile("public/sustainability.html"),
     repositoryFile("public/how-it-works.html"),
     repositoryFile("public/floor-first.html"),
     repositoryFile("public/safety.html"),
@@ -63,7 +65,7 @@ test("all public guide pages use stabilize.info canonicals", async () => {
   }
 });
 
-test("the About page preserves the project's origin and limits", async () => {
+test("the About page preserves the origin while stating evidence and sustainability limits", async () => {
   const [about, enhancer, howItWorks, floorFirst, safety, privacy] =
     await Promise.all([
       repositoryFile("public/about.html"),
@@ -75,11 +77,12 @@ test("the About page preserves the project's origin and limits", async () => {
     ]);
 
   assert.match(about, /I am a suicide survivor/i);
-  assert.match(about, /next person who finds themselves where I once was/i);
-  assert.match(about, /find meaning in continuing to live/i);
-  assert.match(about, /reducing the risk of foreseeable tragedy/i);
-  assert.match(about, /brings attention to our neglected needs/i);
+  assert.match(about, /next person/i);
+  assert.match(about, /does not, by itself, prove that the\s+product works/i);
+  assert.match(about, /has not been clinically validated/i);
   assert.match(about, /preserve agency/i);
+  assert.match(about, /Impact requires sustainability/i);
+  assert.match(about, /current paid model-choice subscription is an early payment experiment/i);
   assert.match(about, /not emergency care/i);
   assert.match(enhancer, /href=\"\/about\.html\"/);
 
