@@ -1,6 +1,6 @@
 import Foundation
 
-struct ChatRequest: Encodable, Equatable, Sendable {
+struct ChatRequest: Codable, Equatable, Sendable {
   let message: String
   let awaitingSafetyAnswer: Bool
 }
