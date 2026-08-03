@@ -1,0 +1,213 @@
+name: Materialize mobile background
+
+on:
+  push:
+    paths:
+      - ".github/workflows/materialize-mobile-background.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decode and install the generated image
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from __future__ import annotations
+
+          import base64
+          from pathlib import Path
+
+          asset = Path("public/scenes/mobile-golden-alpine-v2.webp")
+          encoded = "".join(asset.read_text(encoding="utf-8").split())
+          raw = base64.b64decode(encoded, validate=True)
+
+          if raw[:4] != b"RIFF" or raw[8:12] != b"WEBP":
+              raise SystemExit("Decoded asset is not a WebP image")
+
+          def webp_dimensions(data: bytes) -> tuple[int, int]:
+              offset = 12
+              while offset + 8 <= len(data):
+                  chunk = data[offset : offset + 4]
+                  size = int.from_bytes(data[offset + 4 : offset + 8], "little")
+                  payload = offset + 8
+                  if chunk == b"VP8X" and payload + 10 <= len(data):
+                      width = 1 + int.from_bytes(data[payload + 4 : payload + 7], "little")
+                      height = 1 + int.from_bytes(data[payload + 7 : payload + 10], "little")
+                      return width, height
+                  if (
+                      chunk == b"VP8 "
+                      and payload + 10 <= len(data)
+                      and data[payload + 3 : payload + 6] == b"\x9d\x01\x2a"
+                  ):
+                      width = int.from_bytes(data[payload + 6 : payload + 8], "little") & 0x3FFF
+                      height = int.from_bytes(data[payload + 8 : payload + 10], "little") & 0x3FFF
+                      return width, height
+                  if chunk == b"VP8L" and payload + 5 <= len(data) and data[payload] == 0x2F:
+                      bits = int.from_bytes(data[payload + 1 : payload + 5], "little")
+                      return 1 + (bits & 0x3FFF), 1 + ((bits >> 14) & 0x3FFF)
+                  offset = payload + size + (size % 2)
+              raise SystemExit("Could not read WebP dimensions")
+
+          dimensions = webp_dimensions(raw)
+          if dimensions != (853, 1844):
+              raise SystemExit(f"Unexpected image dimensions: {dimensions}")
+          if len(raw) < 100_000:
+              raise SystemExit(f"Decoded image is unexpectedly small: {len(raw)} bytes")
+
+          asset.write_bytes(raw)
+
+          css = Path("public/mobile-woodland-loop.css")
+          css.write_text(
+              '''@media (max-width: 980px) and (orientation: portrait) {
+            .photo-backdrop {
+              overflow: hidden;
+              background: #173f31;
+              filter: none;
+              transform: none;
+              animation: none;
+              will-change: auto;
+            }
+
+            .photo-backdrop img {
+              position: absolute;
+              inset: 0;
+              width: 100%;
+              height: 100%;
+              object-fit: cover;
+              object-position: 50% 50%;
+              opacity: 1;
+              filter: none;
+              transform: none !important;
+              animation: none !important;
+              will-change: auto;
+            }
+
+            .photo-backdrop::before,
+            .photo-backdrop::after {
+              display: none !important;
+              content: none !important;
+              animation: none !important;
+            }
+
+            .photo-background {
+              display: none;
+            }
+          }
+          ''',
+              encoding="utf-8",
+          )
+
+          page = Path("src/page.js")
+          page_source = page.read_text(encoding="utf-8")
+          old_asset = "/scenes/mobile-woodland-spring-loop.webp?v=20260802-9"
+          new_asset = "/scenes/mobile-golden-alpine-v2.webp?v=20260803-13"
+          if old_asset not in page_source:
+              raise SystemExit("Expected prior mobile asset reference was not found")
+          page_source = page_source.replace(old_asset, new_asset)
+          page_source = page_source.replace(
+              "mobile-golden-alpine-v2.webp?v=20260803-13 540w",
+              "mobile-golden-alpine-v2.webp?v=20260803-13 853w",
+          )
+          page_source = page_source.replace(
+              "mobile-woodland-loop.css?v=20260802-9",
+              "mobile-woodland-loop.css?v=20260803-13",
+          )
+          page.write_text(page_source, encoding="utf-8")
+
+          test_path = Path("test/mobile-quality.test.mjs")
+          test_source = test_path.read_text(encoding="utf-8")
+          start = test_source.index('test("mobile uses a direct looping woodland WebP')
+          end = test_source.index('test("restored tabs recover')
+          replacement = r'''test("mobile uses one high-resolution static generated WebP", async () => {
+            const [pageSource, mobileQuality, mobileStyles, image] =
+              await Promise.all([
+                readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+                readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
+                readFile(new URL("../public/mobile-woodland-loop.css", import.meta.url), "utf8"),
+                readFile(
+                  new URL(
+                    "../public/scenes/mobile-golden-alpine-v2.webp",
+                    import.meta.url,
+                  ),
+                ),
+              ]);
+
+            const imageInfo = webpInfo(image);
+            assert.deepEqual(
+              { width: imageInfo.width, height: imageInfo.height },
+              { width: 853, height: 1844 },
+            );
+            assert.ok(image.byteLength > 100_000);
+            assert.ok(image.byteLength < 5_000_000);
+            assert.equal(imageInfo.chunks.includes("ANIM"), false);
+
+            assert.match(
+              pageSource,
+              /mobile-golden-alpine-v2\.webp\?v=20260803-13 853w/,
+            );
+            assert.match(
+              pageSource,
+              /rel="preload"[\s\S]*mobile-golden-alpine-v2\.webp\?v=20260803-13/,
+            );
+            assert.match(pageSource, /mobile-woodland-loop\.css\?v=20260803-13/);
+            assert.doesNotMatch(pageSource, /mobile-woodland-spring-loop/);
+
+            assert.match(mobileStyles, /opacity:\s*1/);
+            assert.match(mobileStyles, /object-fit:\s*cover/);
+            assert.match(mobileStyles, /animation:\s*none/);
+            assert.doesNotMatch(mobileStyles, /@keyframes/);
+            assert.doesNotMatch(mobileStyles, /mobile-golden-alpine\.avif/);
+
+            assert.match(mobileQuality, /max-width: 980px/);
+            assert.match(mobileQuality, /orientation: portrait/);
+            assert.doesNotMatch(mobileQuality, /createElement\("video"\)/);
+            assert.doesNotMatch(mobileQuality, /new Blob/);
+          });
+
+          '''
+          test_path.write_text(test_source[:start] + replacement + test_source[end:], encoding="utf-8")
+
+          credit = Path("public/scenes/MOBILE_GOLDEN_ALPINE_CREDIT.md")
+          credit.write_text(
+              "# Mobile golden alpine background\n\n"
+              "Source image: AI-generated for Stabilize in ChatGPT on August 3, 2026, "
+              "from Reed Lokken's direction.\n\n"
+              "This version uses the newly generated 853 × 1844 portrait image as one "
+              "high-resolution static WebP with no animation, duplicate layers, stock "
+              "photography, or visual filters.\n",
+              encoding="utf-8",
+          )
+
+          Path("public/scenes/mobile-golden-alpine-v2.bin").unlink(missing_ok=True)
+          Path(".github/workflows/materialize-mobile-background.yml").unlink()
+
+          print(f"Installed {asset}: {dimensions[0]}x{dimensions[1]}, {len(raw)} bytes")
+          PY
+
+      - name: Validate repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          npm test
+
+      - name: Commit the real image bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Use the new generated mobile background"
+          git push origin HEAD:main
