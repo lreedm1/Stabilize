@@ -9,7 +9,7 @@
   },
   "scripts": {
     "postinstall": "npm run apply:prompt-policy",
-    "apply:prompt-policy": "node scripts/apply-4000-character-policy.mjs && node scripts/align-4000-character-tests.mjs && node scripts/apply-openai-conversations.mjs",
+    "apply:prompt-policy": "node scripts/apply-4000-character-policy.mjs && node scripts/align-4000-character-tests.mjs && node scripts/make-openai-conversations-transformer-idempotent.mjs && node scripts/apply-openai-conversations.mjs",
     "check": "npm run apply:prompt-policy && wrangler types --include-runtime false && wrangler deploy --dry-run",
     "deploy": "npm run apply:prompt-policy && wrangler deploy",
     "dev": "npm run apply:prompt-policy && wrangler dev",
