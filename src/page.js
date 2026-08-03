@@ -123,9 +123,7 @@ export function renderPage(options = {}) {
     <link
       rel="preload"
       as="image"
-      href="/scenes/mobile-sunlit-green-path-v4-2160.webp"
-      imagesrcset="/scenes/mobile-sunlit-green-path-v4-1440.webp 1440w, /scenes/mobile-sunlit-green-path-v4-2160.webp 2160w, /scenes/mobile-sunlit-green-path-v4-2880.webp 2880w"
-      imagesizes="100vw"
+      href="/scenes/mobile-woodland-spring-loop.webp?v=20260802-9"
       media="(max-width: 980px) and (orientation: portrait)"
       type="image/webp"
       fetchpriority="high"
@@ -135,6 +133,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/product.css" />
     <link rel="stylesheet" href="/document-export.css?v=20260802-document-exports-1" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
+    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260802-9" />
   </head>
   <body>
     <canvas
@@ -147,16 +146,11 @@ export function renderPage(options = {}) {
       class="photo-backdrop"
       aria-hidden="true"
     >
-      <!-- Legacy cache keys intentionally not reused: lake-valley-portrait-720.webp 720w; lake-valley-portrait-2160.webp 2160w -->
       <source
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="
-          /scenes/mobile-sunlit-green-path-v4-1440.webp 1440w,
-          /scenes/mobile-sunlit-green-path-v4-2160.webp 2160w,
-          /scenes/mobile-sunlit-green-path-v4-2880.webp 2880w
-        "
+        srcset="/scenes/mobile-woodland-spring-loop.webp?v=20260802-9 540w"
       />
       <img
         id="photo-backdrop-image"
