@@ -2,6 +2,7 @@ const SHA_PATTERN = /^[0-9a-f]{40}$/i;
 const BRANCH_PATTERN = /^agent\/nightly-[0-9A-Za-z-]+$/;
 const ALLOWED_FILES = new Set(["public/product.css", "public/guides.css"]);
 const CATEGORY_KEYS = ["bug", "experience", "idea", "other"];
+const EXPECTED_HEAD_OWNER = "lreedm1";
 
 function validCategories(value) {
   return (
@@ -11,6 +12,10 @@ function validCategories(value) {
     JSON.stringify(Object.keys(value).sort()) === JSON.stringify(CATEGORY_KEYS) &&
     Object.values(value).every((count) => Number.isSafeInteger(count) && count >= 0)
   );
+}
+
+function categoryTotal(value) {
+  return Object.values(value).reduce((total, count) => total + count, 0);
 }
 
 export function createPublishingIntent({
@@ -76,6 +81,7 @@ export function validatePendingReview(value) {
     !Number.isSafeInteger(value.feedbackCount) ||
     value.feedbackCount < 1 ||
     !validCategories(value.categoryCounts) ||
+    categoryTotal(value.categoryCounts) !== value.feedbackCount ||
     !Number.isFinite(Date.parse(value.createdAt))
   ) {
     throw new Error("Pending review state contains an invalid field");
@@ -98,6 +104,8 @@ export function validatePullRequestIdentity(pending, pullRequest) {
   validatePendingReview(pending);
   if (
     !pullRequest ||
+    pullRequest.isCrossRepository !== false ||
+    pullRequest.headRepositoryOwner?.login !== EXPECTED_HEAD_OWNER ||
     pullRequest.baseRefName !== pending.baseRefName ||
     pullRequest.headRefName !== pending.headRefName ||
     pullRequest.headRefOid !== pending.headRefOid

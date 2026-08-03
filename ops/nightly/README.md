@@ -1,10 +1,12 @@
-# Nightly feedback review on macOS
+# Nightly feedback review
 
-This runner reviews new records on `feedback-inbox`, makes at most one low-risk CSS proposal, tests it, and opens a draft pull request. It never merges or deploys.
+GitHub Actions is the default runner. It works while the Mac is off and uses the repository's `OPENAI_API_KEY` secret through OpenAI's protected Codex action. See [the cloud setup](CLOUD.md).
 
-The coding pass never receives raw feedback. A separate read-only pass classifies validated feedback into an enum-only plan; the CSS editor receives only that plan in a fresh clone with no GitHub remote. A second fresh clone applies the gated patch, installs trusted dependencies, runs tests with external network access denied (localhost remains available to Miniflare), checks the exact diff hash again, and only then lets the wrapper push a draft branch.
+The macOS runner remains available as a local fallback. Both paths review new records on `feedback-inbox`, make at most one low-risk CSS proposal, test it, and open only a draft pull request. Neither path merges or deploys production. The cloud path separates model work, test execution, publication, and acknowledgement onto fresh jobs so raw feedback, the OpenAI key, repository tests, and write credentials never share one runner.
 
-## Requirements
+The coding pass never receives raw feedback. A separate read-only pass classifies validated feedback into an enum-only plan; the CSS editor receives only that plan in a fresh clone with no GitHub remote. A second fresh clone applies the gated patch, installs trusted dependencies, runs tests with external network access denied (localhost remains available to Miniflare), checks the exact diff hash again, and only then allows an isolated publication step to handle the exact patch.
+
+## macOS requirements
 
 - macOS with the user logged in
 - a stable checkout outside Desktop, Documents, Downloads, or iCloud, such as `~/Developer/Stabilize`
@@ -88,7 +90,7 @@ Private state lives in `~/Library/Application Support/Stabilize Nightly` with ow
 - at most 120 changed lines and no new, deleted, renamed, ignored, binary, mode, or symlink files
 - blocks CSS imports, URLs, generated content, hiding/overlay rules, animation, transforms, zero dimensions/opacity, `!important`, and secret-like strings
 - trusted verifier runs outside the coding workspace
-- tests run from a new clone with an empty home, no credentials, external network denial, and localhost-only sockets for the Worker test harness
+- tests run from a new clone with an empty home, no credentials, a disposable filesystem-write root, external network denial, and localhost-only sockets for the Worker test harness
 - exact pre/post-test patch hash
 - generic public PR metadata with no raw feedback or model prose
 - draft PR only; no merge, deploy, user contact, secret change, DNS action, or feedback deletion

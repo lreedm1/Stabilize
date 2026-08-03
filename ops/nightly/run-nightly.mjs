@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   renameSync,
@@ -24,6 +25,7 @@ import {
   validatePullRequestIdentity,
 } from "./pending-review.mjs";
 import { resolvePrivateStateDirectory } from "./state-path.mjs";
+import { captureCloudState, createCloudBundle } from "./cloud-bundle.mjs";
 
 const REPOSITORY = "lreedm1/Stabilize";
 const REPOSITORY_URL = "https://github.com/lreedm1/Stabilize.git";
@@ -35,6 +37,12 @@ const MINIMUM_CODEX_VERSION = [0, 138, 0];
 
 let activeRunDirectory = null;
 let preserveRunDirectory = false;
+let codexProxyStopped = false;
+let cloudProposal = null;
+
+function cloudPrepareMode() {
+  return Boolean(process.env.STABILIZE_NIGHTLY_BUNDLE_DIR);
+}
 
 function usage() {
   process.stdout.write("Usage: ops/nightly/run.zsh [--dry-run] [--acknowledge-pending] [--state-dir PATH]\n\n");
@@ -89,9 +97,9 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function safeEnvironment(home = os.homedir()) {
+function safeEnvironment(home = os.homedir(), { includeCodexProxy = false } = {}) {
   const username = os.userInfo().username;
-  return {
+  const environment = {
     HOME: home,
     USER: username,
     LOGNAME: username,
@@ -104,6 +112,16 @@ function safeEnvironment(home = os.homedir()) {
     GIT_TERMINAL_PROMPT: "0",
     GH_PROMPT_DISABLED: "1",
   };
+  if (includeCodexProxy && process.env.STABILIZE_NIGHTLY_CODEX_PROXY === "1") {
+    if (codexProxyStopped) {
+      throw new Error("The cloud Codex proxy has already been stopped");
+    }
+    if (!process.env.CODEX_HOME || !path.isAbsolute(process.env.CODEX_HOME)) {
+      throw new Error("Cloud Codex runs require an absolute CODEX_HOME");
+    }
+    environment.CODEX_HOME = process.env.CODEX_HOME;
+  }
+  return environment;
 }
 
 function saveCommandLogs(basePath, result) {
@@ -214,25 +232,34 @@ function preflight(runLogsDir) {
     throw new Error("Node.js 22 or newer is required");
   }
 
-  const codexVersionResult = command("codex", ["--version"], {
-    label: "Codex availability check",
-  });
-  const versionMatch = codexVersionResult.stdout.match(/(\d+)\.(\d+)\.(\d+)/);
-  if (!versionMatch) throw new Error("Could not determine the Codex CLI version");
-  const codexVersion = versionMatch.slice(1).map(Number);
-  if (!versionAtLeast(codexVersion, MINIMUM_CODEX_VERSION)) {
-    throw new Error("Codex CLI 0.138.0 or newer is required for scoped permission profiles");
+  const skipCodex = process.env.STABILIZE_NIGHTLY_SKIP_CODEX === "1";
+  if (!skipCodex) {
+    const codexVersionResult = command("codex", ["--version"], {
+      label: "Codex availability check",
+    });
+    const versionMatch = codexVersionResult.stdout.match(/(\d+)\.(\d+)\.(\d+)/);
+    if (!versionMatch) throw new Error("Could not determine the Codex CLI version");
+    const codexVersion = versionMatch.slice(1).map(Number);
+    if (!versionAtLeast(codexVersion, MINIMUM_CODEX_VERSION)) {
+      throw new Error("Codex CLI 0.138.0 or newer is required for scoped permission profiles");
+    }
   }
 
   const origin = gitOutput(REPO_ROOT, ["remote", "get-url", "origin"]);
   if (!originIsExpected(origin)) {
     throw new Error(`Refusing to run against unexpected origin: ${origin}`);
   }
-  command("codex", ["login", "status"], {
-    env: safeEnvironment(),
-    label: "Codex authentication check",
-    privateLogBase: path.join(runLogsDir, "codex-auth"),
-  });
+  if (skipCodex) {
+    // Acknowledgement never calls a model and does not require Codex authentication.
+  } else if (process.env.STABILIZE_NIGHTLY_CODEX_PROXY !== "1") {
+    command("codex", ["login", "status"], {
+      env: safeEnvironment(),
+      label: "Codex authentication check",
+      privateLogBase: path.join(runLogsDir, "codex-auth"),
+    });
+  } else {
+    safeEnvironment(os.homedir(), { includeCodexProxy: true });
+  }
   command("gh", ["auth", "status"], {
     label: "GitHub authentication check",
     privateLogBase: path.join(runLogsDir, "github-auth"),
@@ -295,6 +322,32 @@ function currentCheckpoint(checkpointPath) {
 function writeCheckpoint(checkpointPath, sha) {
   if (!/^[0-9a-f]{40}$/i.test(sha)) throw new Error("Refusing invalid checkpoint");
   atomicWrite(checkpointPath, `${sha}\n`);
+  syncCloudState(path.dirname(checkpointPath));
+}
+
+function syncCloudState(stateDir) {
+  const storageRepo = process.env.STABILIZE_NIGHTLY_STATE_REPO;
+  if (!storageRepo) return;
+  if (!path.isAbsolute(storageRepo)) {
+    throw new Error("Cloud state repository path must be absolute");
+  }
+  command(
+    "node",
+    [
+      path.join(OPS_DIR, "cloud-state.mjs"),
+      "sync",
+      "--state-dir",
+      stateDir,
+      "--storage-repo",
+      storageRepo,
+    ],
+    {
+      label: "Durable cloud-state synchronization",
+      privateLogBase: activeRunDirectory
+        ? path.join(activeRunDirectory, "logs", "cloud-state-sync")
+        : null,
+    },
+  );
 }
 
 function ensureFeedbackRepository(feedbackRepo, runLogsDir) {
@@ -380,7 +433,11 @@ function codexPermissionArgs(mode) {
     "--ask-for-approval",
     "never",
     "--ephemeral",
-    "--ignore-user-config",
+  ];
+  if (process.env.STABILIZE_NIGHTLY_CODEX_PROXY !== "1") {
+    args.push("--ignore-user-config");
+  }
+  args.push(
     "--color",
     "never",
     "-c",
@@ -397,7 +454,7 @@ function codexPermissionArgs(mode) {
     "analytics.enabled=false",
     "-c",
     `default_permissions="${profile}"`,
-  ];
+  );
   if (mode === "write") {
     args.push("-c", `permissions.${profile}.extends=":workspace"`);
   }
@@ -408,6 +465,51 @@ function codexPermissionArgs(mode) {
     `permissions.${profile}.network.enabled=false`,
   );
   return args;
+}
+
+function stopCodexProxy(runLogsDir) {
+  if (process.env.STABILIZE_NIGHTLY_CODEX_PROXY !== "1" || codexProxyStopped) return;
+  if (!process.env.CODEX_HOME || !path.isAbsolute(process.env.CODEX_HOME)) {
+    throw new Error("Cloud Codex runs require an absolute CODEX_HOME");
+  }
+  const runId = process.env.GITHUB_RUN_ID || "";
+  if (!/^[1-9][0-9]*$/.test(runId)) {
+    throw new Error("Cloud Codex proxy shutdown requires a valid GITHUB_RUN_ID");
+  }
+  const serverInfoPath = path.join(process.env.CODEX_HOME, `${runId}.json`);
+  const serverInfoStats = lstatSync(serverInfoPath);
+  if (!serverInfoStats.isFile() || serverInfoStats.isSymbolicLink()) {
+    throw new Error("Cloud Codex proxy server info is not a regular file");
+  }
+  const serverInfo = readJson(serverInfoPath);
+  if (
+    !Number.isInteger(serverInfo.port) ||
+    serverInfo.port < 1 ||
+    serverInfo.port > 65535 ||
+    !Number.isInteger(serverInfo.pid) ||
+    serverInfo.pid < 2
+  ) {
+    throw new Error("Cloud Codex proxy server info is invalid");
+  }
+  const curl = "/usr/bin/curl";
+  if (!existsSync(curl)) throw new Error("Cloud Codex proxy shutdown requires curl");
+  command(
+    curl,
+    [
+      "--fail",
+      "--silent",
+      "--show-error",
+      "--max-time",
+      "5",
+      `http://127.0.0.1:${serverInfo.port}/shutdown`,
+    ],
+    {
+      env: safeEnvironment(),
+      label: "Cloud Codex proxy shutdown",
+      privateLogBase: path.join(runLogsDir, "codex-proxy-shutdown"),
+    },
+  );
+  codexProxyStopped = true;
 }
 
 function runAnalysis(analysisDir, runLogsDir) {
@@ -429,7 +531,7 @@ function runAnalysis(analysisDir, runLogsDir) {
     ],
     {
       cwd: analysisDir,
-      env: safeEnvironment(),
+      env: safeEnvironment(os.homedir(), { includeCodexProxy: true }),
       timeout: 30 * 60 * 1000,
       label: "Read-only feedback classification",
       privateLogBase: path.join(runLogsDir, "codex-analysis"),
@@ -485,7 +587,7 @@ function runEdit(editRepo, plan, runDirectory, runLogsDir) {
     ],
     {
       cwd: editRepo,
-      env: safeEnvironment(),
+      env: safeEnvironment(os.homedir(), { includeCodexProxy: true }),
       timeout: 30 * 60 * 1000,
       label: "Bounded CSS edit",
       privateLogBase: path.join(runLogsDir, "codex-edit"),
@@ -502,16 +604,27 @@ function runWithoutNetwork(binary, args, options = {}) {
   }
   const profilePath = path.join(OPS_DIR, "verification.sb");
   if (!existsSync(profilePath)) throw new Error("Trusted verification profile is missing");
-  return command("/usr/bin/sandbox-exec", ["-f", profilePath, binary, ...args], options);
+  if (!options.writableRoot || !path.isAbsolute(options.writableRoot)) {
+    throw new Error("Trusted verification requires an absolute disposable writable root");
+  }
+  const { writableRoot, ...commandOptions } = options;
+  return command(
+    "/usr/bin/sandbox-exec",
+    ["-D", `WRITABLE_ROOT=${writableRoot}`, "-f", profilePath, binary, ...args],
+    commandOptions,
+  );
 }
 
-function verificationEnvironment(runDirectory) {
-  const home = path.join(runDirectory, "verification-home");
-  const cache = path.join(runDirectory, "npm-cache");
+function verificationEnvironment(verificationRoot) {
+  const home = path.join(verificationRoot, "home");
+  const cache = path.join(verificationRoot, "npm-cache");
+  const temporaryDirectory = path.join(verificationRoot, "tmp");
   privateDirectory(home);
   privateDirectory(cache);
+  privateDirectory(temporaryDirectory);
   return {
     ...safeEnvironment(home),
+    TMPDIR: temporaryDirectory,
     NPM_CONFIG_CACHE: cache,
     npm_config_cache: cache,
     NPM_CONFIG_AUDIT: "false",
@@ -519,8 +632,8 @@ function verificationEnvironment(runDirectory) {
   };
 }
 
-function cleanBaseline(verificationRepo, runDirectory, runLogsDir) {
-  const environment = verificationEnvironment(runDirectory);
+function cleanBaseline(verificationRepo, verificationRoot, runLogsDir) {
+  const environment = verificationEnvironment(verificationRoot);
   command("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], {
     cwd: verificationRepo,
     env: environment,
@@ -534,6 +647,7 @@ function cleanBaseline(verificationRepo, runDirectory, runLogsDir) {
     timeout: 10 * 60 * 1000,
     label: "Trusted policy normalization",
     privateLogBase: path.join(runLogsDir, "policy-baseline"),
+    writableRoot: verificationRoot,
   });
   runWithoutNetwork("npm", ["run", "types"], {
     cwd: verificationRepo,
@@ -541,6 +655,7 @@ function cleanBaseline(verificationRepo, runDirectory, runLogsDir) {
     timeout: 10 * 60 * 1000,
     label: "Trusted type normalization",
     privateLogBase: path.join(runLogsDir, "types-baseline"),
+    writableRoot: verificationRoot,
   });
   const baselineFiles = nulList(
     git(verificationRepo, ["diff", "HEAD", "--name-only", "-z", "--"]).stdout,
@@ -555,6 +670,7 @@ function cleanBaseline(verificationRepo, runDirectory, runLogsDir) {
     timeout: 10 * 60 * 1000,
     label: "Trusted policy idempotence check",
     privateLogBase: path.join(runLogsDir, "policy-idempotence"),
+    writableRoot: verificationRoot,
   });
   runWithoutNetwork("npm", ["run", "types"], {
     cwd: verificationRepo,
@@ -562,6 +678,7 @@ function cleanBaseline(verificationRepo, runDirectory, runLogsDir) {
     timeout: 10 * 60 * 1000,
     label: "Trusted type idempotence check",
     privateLogBase: path.join(runLogsDir, "types-idempotence"),
+    writableRoot: verificationRoot,
   });
   const secondBaseline = diffDigest(verificationRepo);
   if (firstBaseline.sha256 !== secondBaseline.sha256) {
@@ -584,12 +701,12 @@ function validateInFreshClone({
   patchPath,
   expectedHead,
   expectedDiffHash,
-  runDirectory,
+  verificationRoot,
   runLogsDir,
 }) {
   const { environment, baselineFiles } = cleanBaseline(
     verificationRepo,
-    runDirectory,
+    verificationRoot,
     runLogsDir,
   );
   command("git", ["-C", verificationRepo, "apply", "--whitespace=error-all", patchPath], {
@@ -612,6 +729,7 @@ function validateInFreshClone({
       timeout,
       label,
       privateLogBase: path.join(runLogsDir, logName),
+      writableRoot: verificationRoot,
     });
   }
   const combinedAfterTests = diffDigest(verificationRepo);
@@ -632,6 +750,32 @@ function validateInFreshClone({
     throw new Error("Final clean proposal does not match the exact gated diff");
   }
   return afterTests;
+}
+
+function prepareFreshPublicationClone({
+  destination,
+  planPath,
+  editResultPath,
+  patchPath,
+  expectedHead,
+  expectedDiffHash,
+  runLogsDir,
+}) {
+  cloneMain(destination, expectedHead, runLogsDir, "fresh publication clone");
+  command("git", ["-C", destination, "apply", "--whitespace=error-all", patchPath], {
+    label: "Publication patch application",
+  });
+  const verified = verifyChange({
+    repo: destination,
+    planPath,
+    resultPath: editResultPath,
+    expectedHead,
+    strictUntracked: true,
+  });
+  if (verified.diffSha256 !== expectedDiffHash) {
+    throw new Error("Fresh publication clone does not match the exact tested diff");
+  }
+  return verified;
 }
 
 function pullRequestBody(pending) {
@@ -676,7 +820,7 @@ function pullRequestView(reference, runLogsDir, allowMissing = false) {
       "--repo",
       REPOSITORY,
       "--json",
-      "number,url,state,isDraft,mergedAt,baseRefName,headRefName,headRefOid",
+      "number,url,state,isDraft,mergedAt,baseRefName,headRefName,headRefOid,isCrossRepository,headRepositoryOwner",
     ],
     {
       allowFailure: allowMissing,
@@ -761,6 +905,7 @@ function createPullRequest({
   });
   // Persist the exact publication identity before the first external write.
   writeJson(pendingPath, intent);
+  syncCloudState(path.dirname(pendingPath));
   git(
     verificationRepo,
     [
@@ -777,6 +922,7 @@ function createPullRequest({
 
   const pullRequest = createDraftFromIntent(intent, pendingPath, runLogsDir);
   writeJson(pendingPath, completePublishingIntent(intent, pullRequest));
+  syncCloudState(path.dirname(pendingPath));
   const report = writeReport(reportsDir, runId, "draft_pr", {
     pullRequest: pullRequest.number,
     url: pullRequest.url,
@@ -799,6 +945,7 @@ function createPrivatePending(pendingPrivatePath, input, source) {
     })),
     createdAt: new Date().toISOString(),
   });
+  syncCloudState(path.dirname(pendingPrivatePath));
 }
 
 function remoteBranchOid(branch, runLogsDir) {
@@ -827,27 +974,43 @@ function pendingPullRequestState(pendingPath, runLogsDir) {
       const remoteOid = remoteBranchOid(pending.headRefName, runLogsDir);
       if (!remoteOid) {
         unlinkSync(pendingPath);
+        syncCloudState(path.dirname(pendingPath));
         return { pending: null, pullRequest: null, retry: true };
       }
       if (remoteOid !== pending.headRefOid) {
         throw new Error("Remote nightly branch does not match the persisted publishing intent");
       }
+      if (cloudPrepareMode()) {
+        return { pending, pullRequest: null, retry: false, recovery: true };
+      }
       pullRequest = createDraftFromIntent(pending, pendingPath, runLogsDir);
     }
     pending = completePublishingIntent(pending, pullRequest);
     writeJson(pendingPath, pending);
+    syncCloudState(path.dirname(pendingPath));
   }
   const pullRequest = pullRequestView(pending.pullRequest, runLogsDir);
   validatePullRequestIdentity(pending, pullRequest);
-  return { pending, pullRequest, retry: false };
+  return { pending, pullRequest, retry: false, recovery: false };
 }
 
 function resolvePendingReview(pendingPath, checkpointPath, runLogsDir) {
   if (!existsSync(pendingPath)) return false;
-  const { pending, pullRequest, retry } = pendingPullRequestState(pendingPath, runLogsDir);
+  const { pending, pullRequest, retry, recovery } = pendingPullRequestState(
+    pendingPath,
+    runLogsDir,
+  );
   if (retry) {
-    process.stdout.write("Recovered an interrupted pre-push run; retrying the feedback batch.\n");
-    return false;
+    process.stdout.write(
+      cloudPrepareMode()
+        ? "Recovered an interrupted pre-push run; persisting the bounded recovery state.\n"
+        : "Recovered an interrupted pre-push run; retrying the feedback batch.\n",
+    );
+    return cloudPrepareMode();
+  }
+  if (recovery) {
+    process.stdout.write("A previous publication needs recovery on the write-only runner.\n");
+    return true;
   }
   if (pullRequest.state === "OPEN") {
     process.stdout.write(`Draft PR #${pending.pullRequest} still awaits human review.\n`);
@@ -856,7 +1019,8 @@ function resolvePendingReview(pendingPath, checkpointPath, runLogsDir) {
   if (pullRequest.mergedAt) {
     writeCheckpoint(checkpointPath, pending.feedbackHead);
     unlinkSync(pendingPath);
-    return false;
+    syncCloudState(path.dirname(pendingPath));
+    return cloudPrepareMode();
   }
   process.stdout.write(
     `PR #${pending.pullRequest} was closed without merge. Run --acknowledge-pending after reviewing that disposition.\n`,
@@ -877,6 +1041,7 @@ function acknowledgePending({
     }
     writeCheckpoint(checkpointPath, pending.feedbackHead);
     unlinkSync(pendingPrivatePath);
+    syncCloudState(path.dirname(pendingPrivatePath));
     process.stdout.write("Acknowledged the protected feedback review checkpoint.\n");
     return;
   }
@@ -890,6 +1055,7 @@ function acknowledgePending({
     }
     writeCheckpoint(checkpointPath, pending.feedbackHead);
     unlinkSync(pendingPath);
+    syncCloudState(path.dirname(pendingPath));
     process.stdout.write("Acknowledged the closed pull request disposition.\n");
     return;
   }
@@ -909,15 +1075,18 @@ function findOpenNightlyPullRequest(runLogsDir) {
       "--limit",
       "100",
       "--json",
-      "number,url,headRefName,isDraft",
+      "number,url,headRefName,isDraft,isCrossRepository,headRepositoryOwner",
     ],
     {
       label: "Open pull request check",
       privateLogBase: path.join(runLogsDir, "open-prs"),
     },
   );
-  return JSON.parse(result.stdout).find((pullRequest) =>
-    String(pullRequest.headRefName || "").startsWith("agent/nightly-"),
+  return JSON.parse(result.stdout).find(
+    (pullRequest) =>
+      pullRequest.isCrossRepository === false &&
+      pullRequest.headRepositoryOwner?.login === "lreedm1" &&
+      String(pullRequest.headRefName || "").startsWith("agent/nightly-"),
   );
 }
 
@@ -956,6 +1125,8 @@ async function main() {
     process.stdout.write("Another nightly review is already running.\n");
     return;
   }
+
+  const cloudInitialState = cloudPrepareMode() ? captureCloudState(stateDir) : null;
 
   let completed = false;
   try {
@@ -1103,6 +1274,8 @@ async function main() {
     const editRepo = path.join(activeRunDirectory, "edit-repository");
     cloneMain(editRepo, mainHead, runLogsDir, "isolated edit clone");
     const editResultPath = runEdit(editRepo, plan, activeRunDirectory, runLogsDir);
+    // Repository code never runs while the API-key-bearing local proxy is live.
+    stopCodexProxy(runLogsDir);
     const gatedEdit = verifyChange({
       repo: editRepo,
       planPath,
@@ -1125,7 +1298,35 @@ async function main() {
     const patchPath = path.join(activeRunDirectory, "gated-change.patch");
     atomicWrite(patchPath, gatedEdit.diffText);
 
-    const verificationRepo = path.join(activeRunDirectory, "verification-repository");
+    if (cloudPrepareMode()) {
+      cloudProposal = {
+        manifest: {
+          mainHead,
+          feedbackHead,
+          diffSha256: gatedEdit.diffSha256,
+          runId,
+          changedFile: gatedEdit.changedFiles[0],
+          feedbackCount: input.count,
+          categoryCounts: input.categoryCounts,
+        },
+        patchPath,
+        planPath,
+        editResultPath,
+      };
+      writeReport(reportsDir, runId, "proposal_prepared", {
+        feedbackHead,
+        feedbackCount: input.count,
+        changedFile: gatedEdit.changedFiles[0],
+        diffSha256: gatedEdit.diffSha256,
+      });
+      process.stdout.write("Prepared a gated proposal for isolated verification.\n");
+      completed = true;
+      return;
+    }
+
+    const verificationRoot = path.join(activeRunDirectory, "verification-sandbox");
+    privateDirectory(verificationRoot);
+    const verificationRepo = path.join(verificationRoot, "repository");
     cloneMain(verificationRepo, mainHead, runLogsDir, "fresh verification clone");
     const verified = validateInFreshClone({
       verificationRepo,
@@ -1134,15 +1335,28 @@ async function main() {
       patchPath,
       expectedHead: mainHead,
       expectedDiffHash: gatedEdit.diffSha256,
-      runDirectory: activeRunDirectory,
+      verificationRoot,
       runLogsDir,
     });
+    const publicationRepo = path.join(activeRunDirectory, "publication-repository");
+    const publicationVerified = prepareFreshPublicationClone({
+      destination: publicationRepo,
+      planPath,
+      editResultPath,
+      patchPath,
+      expectedHead: mainHead,
+      expectedDiffHash: gatedEdit.diffSha256,
+      runLogsDir,
+    });
+    if (JSON.stringify(publicationVerified.changedFiles) !== JSON.stringify(verified.changedFiles)) {
+      throw new Error("Fresh publication clone changed the verified file identity");
+    }
     const branch = `agent/nightly-${runId}`;
     const { pullRequest, report } = createPullRequest({
-      verificationRepo,
+      verificationRepo: publicationRepo,
       branch,
       feedbackInput: input,
-      changedFiles: verified.changedFiles,
+      changedFiles: publicationVerified.changedFiles,
       runId,
       pendingPath,
       reportsDir,
@@ -1164,6 +1378,37 @@ async function main() {
     }
     process.exitCode = 1;
   } finally {
+    if (process.env.STABILIZE_NIGHTLY_CODEX_PROXY === "1" && !codexProxyStopped) {
+      try {
+        stopCodexProxy(runLogsDir);
+      } catch (error) {
+        preserveRunDirectory = Boolean(activeRunDirectory);
+        completed = false;
+        process.exitCode = 1;
+        process.stderr.write(`Failed to stop the protected Codex proxy: ${error.message}\n`);
+      }
+    }
+    if (completed && cloudPrepareMode()) {
+      try {
+        const bundleDir = process.env.STABILIZE_NIGHTLY_BUNDLE_DIR;
+        const stateHead = process.env.STABILIZE_NIGHTLY_STATE_HEAD || "";
+        if (!path.isAbsolute(bundleDir)) {
+          throw new Error("Cloud bundle directory must be absolute");
+        }
+        createCloudBundle({
+          bundleDir,
+          stateDir,
+          stateHead,
+          proposal: cloudProposal,
+          initialState: cloudInitialState,
+        });
+      } catch (error) {
+        preserveRunDirectory = Boolean(activeRunDirectory);
+        completed = false;
+        process.exitCode = 1;
+        process.stderr.write(`Failed to create the bounded cloud bundle: ${error.message}\n`);
+      }
+    }
     if (completed) cleanupRunDirectory();
     releaseLock(lockDir);
   }

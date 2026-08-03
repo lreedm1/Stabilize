@@ -438,6 +438,8 @@ test("publishing intent recovers only the exact pull request identity", () => {
     state: "OPEN",
     isDraft: true,
     mergedAt: null,
+    isCrossRepository: false,
+    headRepositoryOwner: { login: "lreedm1" },
     baseRefName: "main",
     headRefName: intent.headRefName,
     headRefOid: intent.headRefOid,

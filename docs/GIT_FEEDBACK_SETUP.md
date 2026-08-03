@@ -71,7 +71,7 @@ Use this sequence:
 4. Run an isolated read-only Codex classification with root filesystem reads, network, web search, MCP, login shells, and inherited shell variables disabled. Its schema is enum-only and cannot carry raw feedback or free-form model prose forward.
 5. If the enum plan supports one low-risk improvement, give only that plan—not raw feedback—to a separate coding clone with no feedback objects and no GitHub remote. The coding pass may edit exactly one allowlisted CSS file.
 6. Inspect the diff with a trusted verifier outside the coding workspace. Then apply the gated patch to another fresh clone, install trusted dependencies, run `npm test` and `npm run check` without credentials or external network access (localhost remains available to the test harness), and compare the exact pre/post-test diff hash. This final check matters because the repository's policy scripts can rewrite tracked files during validation.
-7. If every gate passes, push a new `agent/nightly-*` branch and open a generic draft pull request without raw feedback or model prose. A person reviews and merges it. Advance only to the captured feedback head after merge; protected feedback and closed-unmerged PRs require explicit human acknowledgment.
+7. Hand only the exact tested CSS patch and one hash-bound state transition to a fresh publication runner with no OpenAI key and no repository test execution. Revalidate the patch against the captured `main` commit and the state transition against the live feedback history and pull-request identity, then push a new same-repository `agent/nightly-*` branch and open a generic draft pull request without raw feedback or model prose. A person reviews and merges it. Advance only to the captured feedback head after merge; protected feedback and closed-unmerged PRs require explicit human acknowledgment.
 
 The first version should enforce these limits:
 
@@ -83,8 +83,8 @@ The first version should enforce these limits:
 
 Take no code action when there is no new valid feedback, evidence is weak or conflicting, another nightly draft is open, a protected area is involved, or any test or diff gate fails. Route sensitive disclosures and security reports to private human review without copying them into a public artifact.
 
-Run a few reviews manually before scheduling them on the Mac. A no-change report is a successful outcome when the evidence or safety case is not strong enough. See [Codex non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode.md) and [Scheduled tasks](https://learn.chatgpt.com/docs/automations.md) for the current execution and scheduling options.
+Run the cloud workflow manually a few times before relying on its schedule. A no-change report is a successful outcome when the evidence or safety case is not strong enough. See [Codex non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode.md) and [Scheduled tasks](https://learn.chatgpt.com/docs/automations.md) for the current execution and scheduling options.
 
 On the first real run, validate the existing feedback tree and record its current head as the trusted baseline without sending historical entries to a model. Only canonical append-only feedback commits after that checkpoint are eligible for automated review.
 
-The implemented macOS runner, safety gates, setup commands, state transitions, and LaunchAgent installer are documented in [`ops/nightly/README.md`](../ops/nightly/README.md).
+The cloud workflow, macOS fallback, safety gates, state transitions, and setup commands are documented in [`ops/nightly/README.md`](../ops/nightly/README.md).
