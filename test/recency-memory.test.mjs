@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 test("remembered risk is timestamped and devalued with age", async () => {
-  const [memorySource, policySource] = await Promise.all([
+  const [memorySource, policySource, clientSource, copySource] = await Promise.all([
     readFile(new URL("../src/session-memory.js", import.meta.url), "utf8"),
     readFile(new URL("../scripts/apply-recency-policy.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/copy.js", import.meta.url), "utf8"),
   ]);
 
   assert.match(memorySource, /SAFETY_ANSWER_MAX_AGE_MS = 2 \* 60 \* 60 \* 1_000/);
@@ -21,4 +23,14 @@ test("remembered risk is timestamped and devalued with age", async () => {
   assert.match(policySource, /A neutral greeting must receive a normal greeting/);
   assert.match(policySource, /after 3 days it is historical background only/);
   assert.match(policySource, /Preserve dates or age labels for safety events and deadlines/);
+
+  assert.match(copySource, /PRESENT-RISK RECENCY:/);
+  assert.match(copySource, /Never ask a safety question solely because memory mentions an earlier crisis/);
+  assert.match(clientSource, /SAFETY_ANSWER_MAX_AGE_MS = 2 \* 60 \* 60 \* 1000/);
+  assert.match(clientSource, /function currentAwaitingSafetyAnswer\(\)/);
+  assert.match(clientSource, /awaitingSafetyAnswer: currentAwaitingSafetyAnswer\(\)/);
+  assert.match(
+    clientSource,
+    /!record\.awaitingSafetyAnswer \|\| age <= SAFETY_ANSWER_MAX_AGE_MS/,
+  );
 });
