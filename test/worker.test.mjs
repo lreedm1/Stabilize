@@ -239,7 +239,7 @@ test("chat endpoint answers a Floor breach in demo mode", async () => {
   assert.match(body.reply, /eat/i);
 });
 
-test("chat endpoint calls OpenAI with store disabled", async () => {
+test("chat endpoint calls OpenAI with store enabled", async () => {
   const originalFetch = globalThis.fetch;
   const originalLog = console.log;
   const logs = [];
@@ -287,7 +287,7 @@ test("chat endpoint calls OpenAI with store disabled", async () => {
       effort: "medium",
       context: "current_turn",
     });
-    assert.equal(providerBody.store, false);
+    assert.equal(providerBody.store, true);
     assert.equal(providerBody.max_output_tokens, 500);
     assert.equal(providerBody.input[0].role, "user");
     assert.equal(providerBody.input[0].content, "Help me plan one next step.");
@@ -544,7 +544,7 @@ test("remembered summary is supplied as untrusted context", async () => {
   }
 });
 
-test("recent turns compact in the background without OpenAI storage", async () => {
+test("recent turns compact in the background with OpenAI storage enabled", async () => {
   const originalFetch = globalThis.fetch;
   const providerBodies = [];
   const tasks = [];
@@ -594,7 +594,7 @@ test("recent turns compact in the background without OpenAI storage", async () =
     );
     assert.deepEqual(context.recent, []);
     assert.equal(providerBodies.length, 2);
-    assert.ok(providerBodies.every((body) => body.store === false));
+    assert.ok(providerBodies.every((body) => body.store === true));
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -22,7 +22,7 @@ export const COPY = {
         "Free AI support for overloaded moments—not emergency care.",
       infoLabel: "Info",
       infoDetails:
-        "Not therapy or diagnosis. Guest chats are not remembered. If you sign in, condensed context is remembered for 30 days and follows the same Google account. This app does not use IP addresses for memory or application logs; infrastructure providers may still process connection metadata. Google handles sign-in; OpenAI processes messages. Adults 18+.",
+        "Not therapy or diagnosis. Guest chats are not remembered by Stabilize between sessions. If you sign in, condensed context is remembered for 30 days and follows the same Google account. This app does not use IP addresses for memory or application logs; infrastructure providers may still process connection metadata. Google handles sign-in. OpenAI processes messages and stores response data for at least 30 days unless organization or project data controls override the request. Adults 18+.",
       inputLabel: "Your message",
       responseLabel: "Latest AI response",
       inputPlaceholder: "What is happening right now?",

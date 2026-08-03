@@ -15,7 +15,7 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - a continuous, token-modulated forested lake valley at dawn generated locally from layered terrain noise
 - a self-hosted Lexend variable font
 - demo mode that works without an API key
-- optional Google sign-in for cross-device memory; guest chats are not stored
+- optional Google sign-in for cross-device memory; guest chats are not written to Stabilize's server-side memory
 - no full transcript database; account memory uses a rolling summary with a bounded recent-message buffer
 - safety and route tests
 - public-safe protocol background documents
@@ -55,7 +55,7 @@ Copy `.dev.vars.example` to `.dev.vars`, place an OpenAI API key in the local fi
 
 ## Enable OpenAI
 
-The default model is `gpt-5.6-sol` through OpenAI's Responses API, with medium reasoning effort, current-turn reasoning context, and `store: false`.
+The default model is `gpt-5.6-sol` through OpenAI's Responses API, with medium reasoning effort, current-turn reasoning context, and `store: true`.
 
 The same deployed OpenAI key also powers low-reasoning memory compaction for signed-in users. Guest requests do not enter the memory or compaction path.
 
@@ -139,7 +139,7 @@ Guest chats create no server-side memory. After Google sign-in, the Worker deriv
 
 The landscape animation tokenizes submitted prompts and displayed replies locally, immediately reduces them to numeric climate and motion signals, and does not add message text to animation storage, requests, or logs. Reduced-motion preferences receive a static landscape.
 
-The application never reads `CF-Connecting-IP`, derives network aliases, or includes account/network identifiers in successful-chat logs. Both reply and summary requests use OpenAI with `store: false`. Google, Cloudflare, OpenAI, and network infrastructure may still process request data and metadata under their applicable terms. See `PRIVACY.md` for the complete implementation-level description and limitations.
+The application never reads `CF-Connecting-IP`, derives network aliases, or includes account/network identifiers in successful-chat logs. Both reply and summary requests use OpenAI with `store: true`, so OpenAI stores the resulting Responses API objects for at least 30 days unless organization or project data controls override the request. Google, Cloudflare, OpenAI, and network infrastructure may also process request data and metadata under their applicable terms. See `PRIVACY.md` for the complete implementation-level description and limitations.
 
 ## License
 

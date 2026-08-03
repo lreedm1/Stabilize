@@ -35,7 +35,7 @@ Cloudflare and other network infrastructure necessarily process connection metad
 
 Google processes the sign-in request and OAuth/OpenID Connect exchange. Stabilize receives the resulting authorization response on its server and does not load third-party Google JavaScript into the chat page.
 
-When AI mode is enabled, the Worker sends the current message, the bounded recent account context, and any rolling summary to OpenAI's Responses API. A second Responses API request may condense account context. Both requests use `store: false`, so Responses objects are not intentionally retained as application state by the API. OpenAI may still retain inputs and outputs in abuse-monitoring logs under the deployment's applicable data controls and terms.
+When AI mode is enabled, the Worker sends the current message, the bounded recent account context, and any rolling summary to OpenAI's Responses API. A second Responses API request may condense account context. Both requests use `store: true`, so OpenAI stores the resulting response data as application state for at least 30 days under its current platform policy. Organization or project data controls, including Zero Data Retention when enabled, may override the request. OpenAI may also retain inputs and outputs in abuse-monitoring logs under the deployment's applicable data controls and terms.
 
 Cloudflare processes the Worker request, signed cookie, Durable Object data, logs, and network metadata under the deployer's account configuration and applicable service terms.
 
