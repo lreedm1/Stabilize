@@ -131,6 +131,10 @@
   gap: 8px;
 }
 
+.menu-account .auth-session form {
+  margin: 0;
+}
+
 .menu-account .auth-state {
   display: block !important;
   color: var(--muted);

@@ -4,12 +4,23 @@ const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 export const AUTH_COOKIE_NAME = "stabilize_auth";
 export const LEGACY_SESSION_COOKIE_NAME = "stabilize_session";
+export const MEMORY_DELETION_COOKIE_NAME = "stabilize_memory_deleted";
 
 const OAUTH_COOKIE_NAME = "stabilize_oauth";
 const AUTH_SESSION_SECONDS = 30 * 24 * 60 * 60;
+// Only cookies actually issued before the v2 rollout remain valid. This
+// bounded bridge expires completely 30 days after the cutoff, so possession
+// of an old AUTH_SECRET cannot mint indefinitely valid v1 sessions.
+const LEGACY_AUTH_SESSION_ISSUED_BEFORE = Math.floor(
+  Date.parse("2026-08-17T00:00:00Z") / 1_000,
+);
 const OAUTH_STATE_SECONDS = 10 * 60;
+const MEMORY_DELETION_FLASH_SECONDS = 5 * 60;
+const LEGACY_OAUTH_STATE_EXPIRES_BEFORE =
+  LEGACY_AUTH_SESSION_ISSUED_BEFORE + OAUTH_STATE_SECONDS;
 const AUTH_SECRET_MIN_CHARS = 32;
 const ACCOUNT_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 const GOOGLE_SUB_PATTERN = /^[A-Za-z0-9_-]{1,255}$/;
 const GOOGLE_CLIENT_ID_PATTERN =
   /^[A-Za-z0-9_-]{6,240}\.apps\.googleusercontent\.com$/;
@@ -142,6 +153,9 @@ function googleConfig(env) {
   const clientId = String(env?.GOOGLE_CLIENT_ID || "").trim();
   const clientSecret = String(env?.GOOGLE_CLIENT_SECRET || "").trim();
   const authSecret = String(env?.AUTH_SECRET || "");
+  // AUTH_SECRET is the stable account-alias key. SESSION_SECRET is required
+  // separately so cookie revocation cannot orphan the account Durable Object.
+  const sessionSecret = String(env?.SESSION_SECRET || "");
   const origin = validateConfiguredOrigin(
     String(env?.PUBLIC_ORIGIN || "").trim(),
   );
@@ -150,12 +164,14 @@ function googleConfig(env) {
     !GOOGLE_CLIENT_ID_PATTERN.test(clientId) ||
     clientSecret.length < 8 ||
     clientSecret.length > 512 ||
-    authSecret.length < AUTH_SECRET_MIN_CHARS
+    authSecret.length < AUTH_SECRET_MIN_CHARS ||
+    sessionSecret.length < AUTH_SECRET_MIN_CHARS ||
+    sessionSecret === authSecret
   ) {
     throw new GoogleAuthConfigurationError();
   }
 
-  return { clientId, clientSecret, authSecret, origin };
+  return { clientId, clientSecret, authSecret, sessionSecret, origin };
 }
 
 export function googleAuthConfigured(env) {
@@ -231,6 +247,69 @@ export function clearLegacySessionCookie(request) {
   return expiredCookie(request, LEGACY_SESSION_COOKIE_NAME);
 }
 
+export function clearMemoryDeletionCookie(request) {
+  return expiredCookie(request, MEMORY_DELETION_COOKIE_NAME);
+}
+
+export async function createMemoryDeletionReceiptCookie(
+  request,
+  authSession,
+  env,
+  nowMs = Date.now(),
+) {
+  const accountKey = String(authSession?.accountKey || "");
+  const continuityToken = String(authSession?.continuityToken || "");
+  if (
+    !ACCOUNT_KEY_PATTERN.test(accountKey) ||
+    !ACCOUNT_KEY_PATTERN.test(continuityToken)
+  ) {
+    throw new GoogleAuthFlowError("InvalidMemoryDeletionReceipt");
+  }
+
+  const { sessionSecret } = googleConfig(env);
+  const issuedAt = Math.floor(nowMs / 1_000);
+  const token = await signToken(
+    {
+      v: 1,
+      a: accountKey,
+      c: continuityToken,
+      iat: issuedAt,
+      exp: issuedAt + MEMORY_DELETION_FLASH_SECONDS,
+    },
+    sessionSecret,
+    "memory-deletion",
+  );
+  return cookieHeader(request, MEMORY_DELETION_COOKIE_NAME, token, {
+    maxAge: MEMORY_DELETION_FLASH_SECONDS,
+    sameSite: "Strict",
+  });
+}
+
+export async function readMemoryDeletionReceipt(
+  request,
+  authSession,
+  env,
+  nowMs = Date.now(),
+) {
+  if (!authSession) return false;
+  const token = readCookie(request, MEMORY_DELETION_COOKIE_NAME);
+  if (!token) return false;
+
+  const { sessionSecret } = googleConfig(env);
+  const payload = await verifyToken(token, sessionSecret, "memory-deletion");
+  const now = Math.floor(nowMs / 1_000);
+  return Boolean(
+    payload?.v === 1 &&
+      payload.a === authSession.accountKey &&
+      payload.c === authSession.continuityToken &&
+      Number.isSafeInteger(payload.iat) &&
+      Number.isSafeInteger(payload.exp) &&
+      payload.iat <= now + 60 &&
+      payload.exp > now &&
+      payload.exp - payload.iat === MEMORY_DELETION_FLASH_SECONDS,
+  );
+}
+
 async function accountKeyForGoogleSubject(subject, authSecret) {
   const sub = String(subject || "");
   if (!GOOGLE_SUB_PATTERN.test(sub)) {
@@ -244,18 +323,46 @@ export async function createAuthSessionTokenForGoogleSubject(
   env,
   nowMs = Date.now(),
 ) {
-  const { authSecret } = googleConfig(env);
+  const { authSecret, sessionSecret } = googleConfig(env);
   const issuedAt = Math.floor(nowMs / 1_000);
   const accountKey = await accountKeyForGoogleSubject(subject, authSecret);
+  return signAuthSession(
+    accountKey,
+    issuedAt,
+    issuedAt + AUTH_SESSION_SECONDS,
+    sessionSecret,
+  );
+}
+
+async function signAuthSession(
+  accountKey,
+  issuedAt,
+  expiresAt,
+  sessionSecret,
+) {
+  if (!ACCOUNT_KEY_PATTERN.test(String(accountKey || ""))) {
+    throw new GoogleAuthFlowError("InvalidAccountKey");
+  }
   return signToken(
     {
-      v: 1,
+      v: 2,
       a: accountKey,
       iat: issuedAt,
-      exp: issuedAt + AUTH_SESSION_SECONDS,
+      exp: expiresAt,
+      s: randomValue(16),
     },
-    authSecret,
+    sessionSecret,
     "auth-session",
+  );
+}
+
+async function continuityTokenForPayload(payload, sessionSecret) {
+  return base64UrlEncode(
+    await hmac(
+      sessionSecret,
+      "continuity-session",
+      `${payload.a}\u0000${payload.iat}\u0000${payload.exp}\u0000${payload.s || ""}`,
+    ),
   );
 }
 
@@ -264,22 +371,120 @@ export async function readAuthSession(request, env, nowMs = Date.now()) {
   const token = readCookie(request, AUTH_COOKIE_NAME);
   if (!token) return null;
 
-  const { authSecret } = googleConfig(env);
-  const payload = await verifyToken(token, authSecret, "auth-session");
+  const { authSecret, sessionSecret } = googleConfig(env);
+  let payload = await verifyToken(token, sessionSecret, "auth-session");
+  if (payload?.v !== 2) {
+    // Accept only v1 cookies that could have been issued before the rollout.
+    // New cookies are always v2 and use the separately rotatable session key.
+    const legacyPayload = await verifyToken(token, authSecret, "auth-session");
+    payload = legacyPayload?.v === 1 ? legacyPayload : null;
+  }
   const now = Math.floor(nowMs / 1_000);
   if (
-    payload?.v !== 1 ||
+    ![1, 2].includes(payload?.v) ||
     !ACCOUNT_KEY_PATTERN.test(String(payload.a || "")) ||
     !Number.isSafeInteger(payload.iat) ||
     !Number.isSafeInteger(payload.exp) ||
     payload.iat > now + 60 ||
     payload.exp <= now ||
-    payload.exp - payload.iat !== AUTH_SESSION_SECONDS
+    payload.exp - payload.iat !== AUTH_SESSION_SECONDS ||
+    (payload.v === 2 &&
+      payload.s !== undefined &&
+      !SESSION_ID_PATTERN.test(String(payload.s || ""))) ||
+    (payload.v === 1 &&
+      (payload.iat >= LEGACY_AUTH_SESSION_ISSUED_BEFORE ||
+        payload.exp >=
+          LEGACY_AUTH_SESSION_ISSUED_BEFORE + AUTH_SESSION_SECONDS))
   ) {
     return null;
   }
 
-  return { accountKey: payload.a };
+  const continuityToken = await continuityTokenForPayload(
+    payload,
+    sessionSecret,
+  );
+  return {
+    accountKey: payload.a,
+    continuityToken,
+    issuedAt: payload.iat,
+    expiresAt: payload.exp,
+    needsRefresh: payload.v === 1,
+  };
+}
+
+async function issueAccountSession(
+  request,
+  env,
+  accountKey,
+  issuedAt,
+  expiresAt,
+  nowMs = Date.now(),
+) {
+  const { sessionSecret } = googleConfig(env);
+  const token = await signAuthSession(
+    accountKey,
+    issuedAt,
+    expiresAt,
+    sessionSecret,
+  );
+  const payload = await verifyToken(token, sessionSecret, "auth-session");
+  const now = Math.floor(nowMs / 1_000);
+  return {
+    session: {
+      accountKey,
+      continuityToken: await continuityTokenForPayload(payload, sessionSecret),
+      issuedAt,
+      expiresAt,
+      needsRefresh: false,
+    },
+    setCookie: cookieHeader(request, AUTH_COOKIE_NAME, token, {
+      maxAge: Math.max(0, expiresAt - now),
+      path: "/",
+      sameSite: "Lax",
+    }),
+  };
+}
+
+export async function refreshLegacyAuthSession(
+  request,
+  env,
+  authSession,
+  nowMs = Date.now(),
+) {
+  if (!authSession?.needsRefresh) return null;
+  return issueAccountSession(
+    request,
+    env,
+    authSession.accountKey,
+    authSession.issuedAt,
+    authSession.expiresAt,
+    nowMs,
+  );
+}
+
+export async function rotateAuthSession(
+  request,
+  env,
+  authSession,
+  nowMs = Date.now(),
+) {
+  const now = Math.floor(nowMs / 1_000);
+  if (
+    !authSession?.accountKey ||
+    !Number.isSafeInteger(authSession.issuedAt) ||
+    !Number.isSafeInteger(authSession.expiresAt) ||
+    authSession.expiresAt <= now
+  ) {
+    throw new GoogleAuthFlowError("InvalidAccountSession");
+  }
+  return issueAccountSession(
+    request,
+    env,
+    authSession.accountKey,
+    authSession.issuedAt,
+    authSession.expiresAt,
+    nowMs,
+  );
 }
 
 export async function beginGoogleSignIn(request, env) {
@@ -298,8 +503,8 @@ export async function beginGoogleSignIn(request, env) {
   );
   const expiresAt = Math.floor(Date.now() / 1_000) + OAUTH_STATE_SECONDS;
   const oauthToken = await signToken(
-    { v: 1, s: state, n: nonce, p: verifier, o: origin, exp: expiresAt },
-    config.authSecret,
+    { v: 2, s: state, n: nonce, p: verifier, o: origin, exp: expiresAt },
+    config.sessionSecret,
     "oauth-state",
   );
 
@@ -393,22 +598,32 @@ export async function completeGoogleSignIn(request, env) {
   try {
     const config = googleConfig(env);
     const oauthToken = readCookie(request, OAUTH_COOKIE_NAME);
-    const oauthState = await verifyToken(
+    let oauthState = await verifyToken(
       oauthToken,
-      config.authSecret,
+      config.sessionSecret,
       "oauth-state",
     );
+    if (oauthState?.v !== 2) {
+      const legacyState = await verifyToken(
+        oauthToken,
+        config.authSecret,
+        "oauth-state",
+      );
+      oauthState = legacyState?.v === 1 ? legacyState : null;
+    }
     const now = Math.floor(Date.now() / 1_000);
     const returnedState = String(url.searchParams.get("state") || "");
     const stateMatches = await timingSafeTextEqual(returnedState, oauthState?.s);
     const originMatches = await timingSafeTextEqual(origin, oauthState?.o);
 
     if (
-      oauthState?.v !== 1 ||
+      ![1, 2].includes(oauthState?.v) ||
       !stateMatches ||
       !originMatches ||
       !Number.isSafeInteger(oauthState.exp) ||
       oauthState.exp <= now ||
+      (oauthState.v === 1 &&
+        oauthState.exp >= LEGACY_OAUTH_STATE_EXPIRES_BEFORE) ||
       !/^[A-Za-z0-9._~-]{43,128}$/u.test(String(oauthState.p || ""))
     ) {
       throw new GoogleAuthFlowError("InvalidGoogleOAuthState");
@@ -478,5 +693,6 @@ export function signOut(request, env) {
   return redirect(`${origin}/`, 303, [
     clearAuthCookie(request),
     clearLegacySessionCookie(request),
+    clearMemoryDeletionCookie(request),
   ]);
 }

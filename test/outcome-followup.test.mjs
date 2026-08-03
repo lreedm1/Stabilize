@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("follow-up actions change with the response and always call the model", async () => {
+test("follow-up actions stay contextual without duplicating signed-in history", async () => {
   const [clientScript, pageSource] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
@@ -22,7 +22,12 @@ test("follow-up actions change with the response and always call the model", asy
     clientScript,
     /void sendMessage\(buildOutcomeActionPrompt\(prompt, previousReply\)\)/,
   );
+  assert.match(
+    clientScript,
+    /if \(continuityState\.mode === "account"\) return request;/,
+  );
+  assert.match(clientScript, /Use this previous answer as context/);
   assert.match(clientScript, /selectOutcomeActionSet\(route, previousReply\)/);
   assert.match(clientScript, /route: record\.route/);
-  assert.match(pageSource, /app\.js\?v=20260802-context-aware-actions-1/);
+  assert.match(pageSource, /app\.js\?v=[^"\s]+/);
 });

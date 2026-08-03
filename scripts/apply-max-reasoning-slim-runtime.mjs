@@ -150,8 +150,10 @@ await transform("src/index.js", (source) => {
   );
 
   const healthAnchor = `            model: demoMode ? null : String(env.OPENAI_MODEL || "gpt-5.6-sol"),
+            aiFeature: demoMode ? null : "conversations",
             memory: Boolean(env.SESSIONS),`;
   const healthReplacement = `            model: demoMode ? null : String(env.OPENAI_MODEL || "gpt-5.6-sol"),
+            aiFeature: demoMode ? null : "conversations",
             reasoningEffort: demoMode
               ? null
               : String(env.OPENAI_REASONING_EFFORT || "max"),

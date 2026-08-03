@@ -150,7 +150,9 @@ test("the latest assistant answer persists within the current tab", async () => 
     readFile(new URL("../public/privacy.html", import.meta.url), "utf8"),
   ]);
 
-  assert.match(clientScript, /LAST_ANSWER_STORAGE_KEY/);
+  assert.match(clientScript, /LAST_ANSWER_STORAGE_PREFIX/);
+  assert.match(clientScript, /LEGACY_LAST_ANSWER_STORAGE_KEY/);
+  assert.match(clientScript, /function continuityStorageKey/);
   assert.match(clientScript, /sessionStorage\.setItem/);
   assert.match(clientScript, /sessionStorage\.getItem/);
   assert.match(clientScript, /sessionStorage\.removeItem/);
@@ -160,10 +162,14 @@ test("the latest assistant answer persists within the current tab", async () => 
   );
   assert.match(clientScript, /restorePersistedAnswer\(\);/);
   assert.match(clientScript, /form\[action="\/auth\/logout"\]/);
+  assert.match(clientScript, /clearAllPersistedAnswers/);
+  assert.match(clientScript, /retireStalePersistedAnswers/);
+  assert.match(clientScript, /new BroadcastChannel\(CONTINUITY_CHANNEL_NAME\)/);
+  assert.match(clientScript, /continuity: continuityState/);
   assert.doesNotMatch(clientScript, /localStorage/);
   assert.match(privacyPage, /latest assistant reply/i);
   assert.match(privacyPage, /current browser tab/i);
-  assert.match(privacyPage, /user's prompt is not included/i);
+  assert.match(privacyPage, /user's prompt is\s+not included/i);
 });
 
 test("ordinary replies offer useful model follow-up actions", async () => {

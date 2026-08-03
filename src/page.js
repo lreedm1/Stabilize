@@ -9,6 +9,8 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+const CONTINUITY_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
 export function renderPage(options = {}) {
   const { page, client } = COPY;
   const copyData = escapeHtml(JSON.stringify(client));
@@ -33,11 +35,26 @@ export function renderPage(options = {}) {
     }),
   );
   const signedIn = options.signedIn === true;
+  const requestedContinuity = options.continuity;
+  const continuity =
+    signedIn &&
+    requestedContinuity?.mode === "account" &&
+    CONTINUITY_TOKEN_PATTERN.test(String(requestedContinuity.token || ""))
+      ? { mode: "account", token: String(requestedContinuity.token) }
+      : { mode: "guest", token: null };
+  const continuityData = escapeHtml(JSON.stringify(continuity));
+  const memoryDeletionData = escapeHtml(
+    JSON.stringify({ confirmed: options.memoryDeletionConfirmed === true }),
+  );
   const googleSignInAvailable = options.googleSignInAvailable === true;
   const notice = String(options.authNotice || "").trim();
   const emergencyBoundary = /not emergency care/i.test(page.chat.supportNote)
     ? "Not emergency care."
     : page.chat.supportNote;
+  const continuitySignal =
+    continuity.mode === "account"
+      ? "Signed-in conversation context can be remembered for up to 30 days."
+      : "Guest chats aren't remembered.";
   const canonicalUrl = "https://stabilize.info/";
   const seoTitle = "Stabilize — Get One Clear Next Step";
   const seoDescription =
@@ -57,10 +74,16 @@ export function renderPage(options = {}) {
     },
   }).replaceAll("<", "\\u003c");
   const authControl = signedIn
-    ? `<form class="auth-session" action="/auth/logout" method="post">
+    ? `<div class="auth-session">
           <span class="auth-state">${escapeHtml(page.auth.signedIn)}</span>
-          <button class="auth-link" type="submit">${escapeHtml(page.auth.signOut)}</button>
-        </form>`
+          <form action="/account/memory/delete" method="post">
+            <input type="hidden" name="continuity" value="${escapeHtml(continuity.token || "")}" />
+            <button class="auth-link memory-delete-link" type="submit">${escapeHtml(page.auth.forgetMemory)}</button>
+          </form>
+          <form action="/auth/logout" method="post">
+            <button class="auth-link" type="submit">${escapeHtml(page.auth.signOut)}</button>
+          </form>
+        </div>`
     : googleSignInAvailable
       ? `<a class="google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>`
       : `<span class="menu-account-note">Chat without an account.</span>`;
@@ -213,7 +236,7 @@ export function renderPage(options = {}) {
               class="landing-meta"
               data-support-note="${escapeHtml(page.chat.supportNote)}"
             >
-              <p class="privacy-signal">Guest chats aren't remembered. ${escapeHtml(emergencyBoundary)}</p>
+              <p class="privacy-signal">${escapeHtml(continuitySignal)} ${escapeHtml(emergencyBoundary)}</p>
               <details class="info-disclosure">
                 <summary>${escapeHtml(page.chat.infoLabel)}</summary>
                 <div class="info-popover">
@@ -243,8 +266,10 @@ export function renderPage(options = {}) {
 
     <template id="client-copy">${copyData}</template>
     <template id="product-copy">${productCopyData}</template>
+    <template id="continuity-state">${continuityData}</template>
+    <template id="memory-deletion-state">${memoryDeletionData}</template>
     <script src="/mobile-quality.js?v=20260802-8"></script>
-    <script type="module" src="/app.js?v=20260803-max-reasoning-slim-runtime-1"></script>
+    <script type="module" src="/app.js?v=20260803-continuity-3"></script>
   </body>
 </html>`;
 }

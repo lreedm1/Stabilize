@@ -4,7 +4,6 @@ import worker, {
   FeedbackInbox,
   SessionMemory,
 } from "./memory-prompt-worker.js";
-import { signOut } from "./auth.js";
 
 export { BillingAccount, FeedbackGate, FeedbackInbox, SessionMemory };
 
@@ -62,13 +61,7 @@ export default {
     }
 
     const canonicalEnv = canonicalEnvironment(env);
-    // Logout only expires cookies in the current browser. Handle it before the
-    // inner same-origin check because iOS and embedded browsers can submit an
-    // opaque Origin header (`Origin: null`).
-    const response =
-      url.pathname === "/auth/logout" && request.method === "POST"
-        ? await signOut(request, canonicalEnv)
-        : await worker.fetch(request, canonicalEnv, ctx);
+    const response = await worker.fetch(request, canonicalEnv, ctx);
 
     return withStrictTransportSecurity(response);
   },

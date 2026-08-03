@@ -8,8 +8,15 @@ const conversationSurface = document.querySelector("#conversation-surface");
 const chatLog = document.querySelector("#chat-log");
 const copyTemplate = document.querySelector("#client-copy");
 const productCopyTemplate = document.querySelector("#product-copy");
+const continuityTemplate = document.querySelector("#continuity-state");
+const memoryDeletionTemplate = document.querySelector(
+  "#memory-deletion-state",
+);
 const exampleStarts = document.querySelectorAll("[data-example-message]");
 const signOutForm = document.querySelector('form[action="/auth/logout"]');
+const deleteMemoryForm = document.querySelector(
+  'form[action="/account/memory/delete"]',
+);
 
 if (!(copyTemplate instanceof HTMLTemplateElement)) {
   throw new Error("Missing client copy data");
@@ -28,9 +35,77 @@ const ROUTES_WITHOUT_OUTCOME_CHECK = new Set([
   "MEDICATION_CHANGE",
   "MEDICATION_ACCESS",
 ]);
-const LAST_ANSWER_STORAGE_KEY = "stabilize:last-answer:v1";
+const LEGACY_LAST_ANSWER_STORAGE_KEY = "stabilize:last-answer:v1";
+const LAST_ANSWER_STORAGE_PREFIX = "stabilize:last-answer:v2:";
 const LAST_ANSWER_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_PERSISTED_REPLY_CHARS = 12_000;
+const CONTINUITY_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const CONTINUITY_CHANNEL_NAME = "stabilize:continuity:v1";
+
+function validContinuity(value) {
+  if (value?.mode === "guest" && value.token === null) {
+    return Object.freeze({ mode: "guest", token: null });
+  }
+
+  const token = String(value?.token || "");
+  if (value?.mode === "account" && CONTINUITY_TOKEN_PATTERN.test(token)) {
+    return Object.freeze({ mode: "account", token });
+  }
+
+  return null;
+}
+
+function renderedContinuity() {
+  if (!(continuityTemplate instanceof HTMLTemplateElement)) {
+    return Object.freeze({ mode: "guest", token: null });
+  }
+
+  try {
+    return (
+      validContinuity(JSON.parse(continuityTemplate.content.textContent)) ||
+      Object.freeze({ mode: "guest", token: null })
+    );
+  } catch {
+    return Object.freeze({ mode: "guest", token: null });
+  }
+}
+
+function sameContinuity(left, right) {
+  return Boolean(
+    left &&
+      right &&
+      left.mode === right.mode &&
+      left.token === right.token,
+  );
+}
+
+function continuityMessage(value) {
+  const typed = value?.type === "state" || value?.type === "memory-deleted";
+  const continuity = validContinuity(typed ? value.continuity : value);
+  if (!continuity) return null;
+
+  return {
+    type: typed ? value.type : "state",
+    continuity,
+  };
+}
+
+const continuityState = renderedContinuity();
+const memoryDeletionConfirmed = (() => {
+  if (
+    continuityState.mode !== "account" ||
+    !(memoryDeletionTemplate instanceof HTMLTemplateElement)
+  ) {
+    return false;
+  }
+  try {
+    return (
+      JSON.parse(memoryDeletionTemplate.content.textContent)?.confirmed === true
+    );
+  } catch {
+    return false;
+  }
+})();
 
 const ROUTE_ACTION_SETS = {
   FLOOR_FOOD: {
@@ -118,11 +193,15 @@ const CONTENT_ACTION_SETS = [
 let awaitingSafetyAnswer = false;
 let pending = false;
 let lastSubmittedText = "";
+let reloadRequested = false;
+let activeRequestController = null;
+let continuityChannel = null;
 
 function buildOutcomeActionPrompt(instruction, previousReply) {
   const request = String(instruction || "").trim();
   const context = String(previousReply || "").trim().slice(0, 3000);
   if (!request) return "";
+  if (continuityState.mode === "account") return request;
   if (!context) return request;
   return `${request}\n\nUse this previous answer as context:\n\n${context}`;
 }
@@ -210,11 +289,49 @@ function showOutput(
   return article;
 }
 
-function clearPersistedAnswer() {
+function continuityStorageKey(state = continuityState) {
+  const partition =
+    state.mode === "account" ? `account:${state.token}` : "guest";
+  return LAST_ANSWER_STORAGE_PREFIX + partition;
+}
+
+function clearPersistedAnswer(state = continuityState) {
   try {
-    sessionStorage.removeItem(LAST_ANSWER_STORAGE_KEY);
+    sessionStorage.removeItem(continuityStorageKey(state));
   } catch {
     // Storage can be unavailable in hardened or private browser contexts.
+  }
+}
+
+function clearAllPersistedAnswers() {
+  try {
+    sessionStorage.removeItem(LEGACY_LAST_ANSWER_STORAGE_KEY);
+    for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+      const key = sessionStorage.key(index);
+      if (key?.startsWith(LAST_ANSWER_STORAGE_PREFIX)) {
+        sessionStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Signing out must continue even when browser storage is unavailable.
+  }
+}
+
+function retireStalePersistedAnswers() {
+  try {
+    const currentKey = continuityStorageKey();
+    sessionStorage.removeItem(LEGACY_LAST_ANSWER_STORAGE_KEY);
+    for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+      const key = sessionStorage.key(index);
+      if (
+        key?.startsWith(LAST_ANSWER_STORAGE_PREFIX) &&
+        key !== currentKey
+      ) {
+        sessionStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Stale-partition cleanup is best effort in hardened browser contexts.
   }
 }
 
@@ -226,7 +343,8 @@ function persistLatestAnswer(reply, route, needsSafetyAnswer) {
     ? String(route)
     : "ORDINARY";
   const record = {
-    v: 1,
+    v: 2,
+    continuity: continuityState,
     reply: cleanReply,
     route: cleanRoute,
     awaitingSafetyAnswer: needsSafetyAnswer === true,
@@ -234,7 +352,10 @@ function persistLatestAnswer(reply, route, needsSafetyAnswer) {
   };
 
   try {
-    sessionStorage.setItem(LAST_ANSWER_STORAGE_KEY, JSON.stringify(record));
+    sessionStorage.setItem(
+      continuityStorageKey(),
+      JSON.stringify(record),
+    );
   } catch {
     // A successful response should remain usable even when storage is blocked.
   }
@@ -242,13 +363,15 @@ function persistLatestAnswer(reply, route, needsSafetyAnswer) {
 
 function readPersistedAnswer() {
   try {
-    const raw = sessionStorage.getItem(LAST_ANSWER_STORAGE_KEY);
+    const raw = sessionStorage.getItem(continuityStorageKey());
     if (!raw) return null;
 
     const record = JSON.parse(raw);
+    const recordContinuity = validContinuity(record?.continuity);
     const age = Date.now() - Number(record?.savedAt);
     const valid =
-      record?.v === 1 &&
+      record?.v === 2 &&
+      sameContinuity(recordContinuity, continuityState) &&
       typeof record.reply === "string" &&
       record.reply.trim().length > 0 &&
       record.reply.length <= MAX_PERSISTED_REPLY_CHARS &&
@@ -293,6 +416,59 @@ function setPending(value) {
   for (const button of exampleStarts) button.disabled = value;
 }
 
+function hideForContinuityReload() {
+  chatLog.replaceChildren();
+  chatLog.hidden = true;
+  chatLog.tabIndex = -1;
+  conversationSurface.hidden = true;
+}
+
+function reloadForContinuityChange({ clearStored = false } = {}) {
+  if (reloadRequested) return;
+  reloadRequested = true;
+  if (clearStored) clearAllPersistedAnswers();
+  activeRequestController?.abort();
+  hideForContinuityReload();
+  window.location.reload();
+}
+
+function startContinuityChannel() {
+  if (typeof BroadcastChannel !== "function") return;
+
+  try {
+    continuityChannel = new BroadcastChannel(CONTINUITY_CHANNEL_NAME);
+    continuityChannel.addEventListener("message", (event) => {
+      const message = continuityMessage(event.data);
+      if (!message) return;
+
+      if (message.type === "memory-deleted") {
+        if (
+          continuityState.mode === "account" &&
+          sameContinuity(message.continuity, continuityState)
+        ) {
+          reloadForContinuityChange({ clearStored: true });
+        }
+        return;
+      }
+
+      const otherContinuity = message.continuity;
+      if (
+        continuityState.mode === "account" &&
+        otherContinuity &&
+        !sameContinuity(otherContinuity, continuityState)
+      ) {
+        reloadForContinuityChange({ clearStored: true });
+      }
+    });
+    continuityChannel.postMessage({
+      type: "state",
+      continuity: continuityState,
+    });
+  } catch {
+    continuityChannel = null;
+  }
+}
+
 function restoreComposeView() {
   chatLog.replaceChildren();
   chatLog.hidden = true;
@@ -322,6 +498,9 @@ async function sendMessage(text) {
   const clean = String(text || "").trim();
   if (!clean || pending) return;
 
+  const requestContinuity = continuityState;
+  const requestController = new AbortController();
+  activeRequestController = requestController;
   lastSubmittedText = clean;
   modulateTerrain(clean);
   input.value = "";
@@ -332,10 +511,20 @@ async function sendMessage(text) {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: clean, awaitingSafetyAnswer }),
+      body: JSON.stringify({
+        message: clean,
+        awaitingSafetyAnswer,
+        continuity: requestContinuity,
+      }),
+      signal: requestController.signal,
     });
 
     const result = await response.json().catch(() => ({}));
+
+    if (response.status === 409 && result.reload === true) {
+      reloadForContinuityChange({ clearStored: true });
+      return;
+    }
 
     if (!response.ok) {
       input.value = clean;
@@ -344,6 +533,12 @@ async function sendMessage(text) {
         requestErrorMessage(result.error, result.reference),
         "error-output",
       );
+      return;
+    }
+
+    const responseContinuity = validContinuity(result.continuity);
+    if (!sameContinuity(responseContinuity, requestContinuity)) {
+      reloadForContinuityChange({ clearStored: true });
       return;
     }
 
@@ -358,12 +553,18 @@ async function sendMessage(text) {
     persistLatestAnswer(reply, route, needsSafetyAnswer);
     lastSubmittedText = "";
   } catch {
+    if (reloadRequested) return;
     input.value = clean;
     lastSubmittedText = "";
     showOutput(requestErrorMessage(copy.unexpectedError), "error-output");
   } finally {
-    setPending(false);
-    input.focus({ preventScroll: true });
+    if (activeRequestController === requestController) {
+      activeRequestController = null;
+    }
+    if (!reloadRequested) {
+      setPending(false);
+      input.focus({ preventScroll: true });
+    }
   }
 }
 
@@ -387,12 +588,46 @@ for (const button of exampleStarts) {
 }
 
 if (signOutForm instanceof HTMLFormElement) {
-  signOutForm.addEventListener("submit", clearPersistedAnswer);
+  signOutForm.addEventListener("submit", clearAllPersistedAnswers);
+}
+if (deleteMemoryForm instanceof HTMLFormElement) {
+  deleteMemoryForm.addEventListener("submit", (event) => {
+    if (!window.confirm(copy.deleteMemoryConfirm)) {
+      event.preventDefault();
+    }
+  });
 }
 
-restorePersistedAnswer();
+retireStalePersistedAnswers();
+if (memoryDeletionConfirmed) {
+  clearAllPersistedAnswers();
+} else {
+  restorePersistedAnswer();
+}
+startContinuityChannel();
+if (memoryDeletionConfirmed) {
+  continuityChannel?.postMessage({
+    type: "memory-deleted",
+    continuity: continuityState,
+  });
+}
+
+window.addEventListener("pagehide", (event) => {
+  if (event.persisted && continuityState.mode === "account") {
+    hideForContinuityReload();
+  }
+});
 
 window.addEventListener("pageshow", (event) => {
+  if (event.persisted && continuityState.mode === "account") {
+    reloadForContinuityChange({ clearStored: true });
+    return;
+  }
+
+  continuityChannel?.postMessage({
+    type: "state",
+    continuity: continuityState,
+  });
   const view = conversationSurface.dataset.view || "compose";
   const outputIsMissing = chatLog.hidden || chatLog.childElementCount === 0;
   const interruptedThinkingView = event.persisted && view === "thinking";

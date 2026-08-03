@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { COPY } from "../src/copy.js";
+import { renderPage } from "../src/page.js";
 
 test("a content-sized output stays above the compact bottom composer", async () => {
   const [clientScript, styles, pageSource] = await Promise.all([
@@ -44,7 +46,10 @@ test("thinking is replaced with the latest Markdown reply", async () => {
   assert.match(clientScript, /function showOutput[\s\S]*chatLog\.replaceChildren\(\)/);
   assert.match(clientScript, /showOutput\(copy\.thinking, "thinking-output", "thinking"\)/);
   assert.match(clientScript, /article\.appendChild\(renderMarkdown\(content\)\)/);
-  assert.match(clientScript, /JSON\.stringify\(\{ message: clean, awaitingSafetyAnswer \}\)/);
+  assert.match(
+    clientScript,
+    /JSON\.stringify\(\{[\s\S]*message: clean,[\s\S]*awaitingSafetyAnswer,[\s\S]*continuity: requestContinuity,/,
+  );
   assert.match(clientScript, /function requestErrorMessage/);
   assert.match(clientScript, /input\.value = clean/);
   assert.match(clientScript, /result\.reference/);
@@ -54,16 +59,130 @@ test("thinking is replaced with the latest Markdown reply", async () => {
   assert.doesNotMatch(clientScript, /innerHTML\s*=/);
 });
 
-test("the site does not expose a remembered-context deletion control", async () => {
+test("chat requests and successful responses stay bound to rendered continuity", async () => {
+  const [clientScript, pageSource] = await Promise.all([
+    readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(pageSource, /<template id="continuity-state">\$\{continuityData\}<\/template>/);
+  assert.match(pageSource, /CONTINUITY_TOKEN_PATTERN/);
+  assert.match(pageSource, /\{ mode: "guest", token: null \}/);
+  assert.match(pageSource, /\{ mode: "account", token: String\(requestedContinuity\.token\) \}/);
+  assert.match(clientScript, /const continuityState = renderedContinuity\(\)/);
+  assert.match(clientScript, /continuity: requestContinuity/);
+  assert.match(
+    clientScript,
+    /response\.status === 409 && result\.reload === true[\s\S]*reloadForContinuityChange\(\{ clearStored: true \}\)/,
+  );
+
+  const sendStart = clientScript.indexOf("async function sendMessage");
+  const sendEnd = clientScript.indexOf('form.addEventListener("submit"', sendStart);
+  const sendSource = clientScript.slice(sendStart, sendEnd);
+  const continuityCheck = sendSource.indexOf(
+    "sameContinuity(responseContinuity, requestContinuity)",
+  );
+  const replyRender = sendSource.indexOf('showOutput(reply, "", "response"');
+  assert.ok(continuityCheck >= 0);
+  assert.ok(replyRender > continuityCheck);
+});
+
+test("browser state is account-partitioned and stale authenticated pages reload", async () => {
+  const clientScript = await readFile(
+    new URL("../public/app.js", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(clientScript, /LAST_ANSWER_STORAGE_PREFIX/);
+  assert.match(clientScript, /function continuityStorageKey/);
+  assert.match(clientScript, /state\.mode === "account" \? `account:\$\{state\.token\}` : "guest"/);
+  assert.match(clientScript, /continuity: continuityState/);
+  assert.match(clientScript, /sameContinuity\(recordContinuity, continuityState\)/);
+  assert.match(clientScript, /key !== currentKey/);
+  assert.match(clientScript, /new BroadcastChannel\(CONTINUITY_CHANNEL_NAME\)/);
+  assert.match(clientScript, /function continuityMessage\(value\)/);
+  assert.match(clientScript, /typed \? value\.continuity : value/);
+  assert.match(clientScript, /type: typed \? value\.type : "state"/);
+  assert.match(
+    clientScript,
+    /postMessage\(\{[\s\S]*type: "state",[\s\S]*continuity: continuityState,[\s\S]*\}\)/,
+  );
+  assert.match(
+    clientScript,
+    /continuityState\.mode === "account" &&[\s\S]*!sameContinuity\(otherContinuity, continuityState\)/,
+  );
+  assert.match(clientScript, /reloadForContinuityChange\(\{ clearStored: true \}\)/);
+  assert.match(
+    clientScript,
+    /window\.addEventListener\("pagehide",[\s\S]*event\.persisted && continuityState\.mode === "account"[\s\S]*hideForContinuityReload\(\)/,
+  );
+  assert.match(
+    clientScript,
+    /window\.addEventListener\("pageshow",[\s\S]*event\.persisted && continuityState\.mode === "account"[\s\S]*reloadForContinuityChange\(\{ clearStored: true \}\)/,
+  );
+});
+
+test("signed-in users can explicitly delete remembered conversation data", async () => {
   const [clientScript, styles, pageSource] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
     readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
   ]);
 
-  assert.doesNotMatch(clientScript, /forgetMemory|\/api\/session/);
-  assert.doesNotMatch(styles, /forget-memory/);
-  assert.doesNotMatch(pageSource, /forget-memory|forgetMemory/);
+  assert.match(clientScript, /form\[action="\/account\/memory\/delete"\]/);
+  assert.match(clientScript, /deleteMemoryForm\.addEventListener\("submit"/);
+  assert.match(clientScript, /window\.confirm\(copy\.deleteMemoryConfirm\)/);
+  assert.match(styles, /auth-session/);
+  assert.match(pageSource, /action="\/account\/memory\/delete" method="post"/);
+  assert.match(pageSource, /page\.auth\.forgetMemory/);
+
+  const token = "a".repeat(43);
+  const signedInPage = renderPage({
+    signedIn: true,
+    continuity: { mode: "account", token },
+    memoryDeletionConfirmed: true,
+  });
+  assert.match(
+    signedInPage,
+    new RegExp(
+      `action="/account/memory/delete" method="post"[\\s\\S]*name="continuity" value="${token}"`,
+    ),
+  );
+  assert.match(
+    signedInPage,
+    /<template id="memory-deletion-state">\{&quot;confirmed&quot;:true\}<\/template>/,
+  );
+  assert.match(clientScript, /memoryDeletionTemplate/);
+  assert.doesNotMatch(
+    clientScript,
+    /location\.search[\s\S]*memory["']?\)\s*===\s*["']deleted/,
+  );
+
+  assert.match(clientScript, /type: "memory-deleted"/);
+  assert.match(
+    clientScript,
+    /message\.type === "memory-deleted"[\s\S]*continuityState\.mode === "account"[\s\S]*sameContinuity\(message\.continuity, continuityState\)[\s\S]*reloadForContinuityChange\(\{ clearStored: true \}\)/,
+  );
+  assert.match(
+    clientScript,
+    /memoryDeletionConfirmed[\s\S]*clearAllPersistedAnswers\(\);[\s\S]*startContinuityChannel\(\);[\s\S]*memoryDeletionConfirmed[\s\S]*postMessage\(\{[\s\S]*type: "memory-deleted",[\s\S]*continuity: continuityState/,
+  );
+  assert.match(COPY.page.auth.memoryDeleted, /Local remembered text was erased/i);
+  assert.match(COPY.page.auth.memoryDeleted, /cleanup will continue/i);
+  assert.match(COPY.page.auth.memorySessionChanged, /Nothing was deleted/i);
+});
+
+test("privacy discloses feedback rate limiting without claiming the alias is public", async () => {
+  const privacyPage = await readFile(
+    new URL("../public/privacy.html", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    privacyPage,
+    /privacy-preserving[\s\S]*account alias is temporarily used in a separate Durable Object to[\s\S]*enforce the feedback rate limit/i,
+  );
+  assert.match(privacyPage, /rate-limit state is not included[\s\S]*public feedback file/i);
 });
 
 test("the terrain background is token-modulated and motion-aware", async () => {

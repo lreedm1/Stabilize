@@ -3,12 +3,18 @@ import {
   AUTH_COOKIE_NAME,
   GoogleAuthConfigurationError,
   LEGACY_SESSION_COOKIE_NAME,
+  MEMORY_DELETION_COOKIE_NAME,
   beginGoogleSignIn,
   clearAuthCookie,
   clearLegacySessionCookie,
+  clearMemoryDeletionCookie,
   completeGoogleSignIn,
+  createMemoryDeletionReceiptCookie,
   googleAuthConfigured,
   readAuthSession,
+  readMemoryDeletionReceipt,
+  refreshLegacyAuthSession,
+  rotateAuthSession,
   signOut,
 } from "./auth.js";
 import { renderPage } from "./page.js";
@@ -20,17 +26,17 @@ export { SessionMemory };
 const MAX_BODY_BYTES = 32_000;
 const MAX_MESSAGE_CHARS = 4_000;
 const MAX_MESSAGES = 12;
-const MAX_SUMMARY_CHARS = 1_600;
-// OpenAI counts visible output, hidden reasoning, and formatting tokens here.
-const MAX_MODEL_OUTPUT_TOKENS = 500;
-const MAX_SUMMARY_OUTPUT_TOKENS = 500;
+const MAX_SUMMARY_CHARS = 1_000;
+const MAX_SUMMARY_OUTPUT_TOKENS = 320;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const OPENAI_CONVERSATIONS_URL = "https://api.openai.com/v1/conversations";
 const OPENAI_REASONING_EFFORTS = new Set([
   "none",
   "low",
   "medium",
   "high",
   "xhigh",
+  "max",
 ]);
 const OPENAI_ACCOUNT_LIMIT_CODES = new Set([
   "credit_balance_exhausted",
@@ -40,6 +46,8 @@ const OPENAI_ACCOUNT_LIMIT_CODES = new Set([
   "project_spend_limit_exceeded",
 ]);
 const PROVIDER_FIELD_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+const CONVERSATION_ID_PATTERN = /^conv_[A-Za-z0-9_-]{1,120}$/;
+const CONTINUITY_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 const FIXED_ROUTE_MEMORY = {
   MEDICAL_EMERGENCY:
@@ -57,10 +65,11 @@ const FIXED_ROUTE_MEMORY = {
 };
 
 class HttpError extends Error {
-  constructor(status, message) {
+  constructor(status, message, details = null) {
     super(message);
     this.name = "HttpError";
     this.status = status;
+    this.details = details;
   }
 }
 
@@ -71,6 +80,7 @@ class OpenAIRequestError extends Error {
     status = 0,
     code = null,
     type = null,
+    param = null,
     providerRequestId = null,
     clientRequestId,
     retryAfterSeconds = null,
@@ -81,6 +91,7 @@ class OpenAIRequestError extends Error {
     this.status = status;
     this.code = code;
     this.type = type;
+    this.param = param;
     this.providerRequestId = providerRequestId;
     this.clientRequestId = clientRequestId;
     this.retryAfterSeconds = retryAfterSeconds;
@@ -219,6 +230,49 @@ async function readBoundedJson(request) {
   }
 }
 
+async function readBoundedForm(request) {
+  const declaredLength = Number(request.headers.get("content-length") || 0);
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+    throw new HttpError(413, COPY.api.bodyTooLarge);
+  }
+
+  const contentType = String(request.headers.get("content-type") || "")
+    .split(";", 1)[0]
+    .trim()
+    .toLowerCase();
+  if (contentType !== "application/x-www-form-urlencoded") {
+    throw new HttpError(400, COPY.api.invalidConversation);
+  }
+
+  if (!request.body) return new URLSearchParams();
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BODY_BYTES) {
+        await reader.cancel(COPY.api.bodyTooLarge);
+        throw new HttpError(413, COPY.api.bodyTooLarge);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new URLSearchParams(new TextDecoder().decode(bytes));
+}
+
 function normalizeMessages(messages) {
   if (!Array.isArray(messages)) return [];
 
@@ -252,13 +306,13 @@ function normalizeMessages(messages) {
 
 function latestUserText(body) {
   const direct = String(body?.message || "").trim();
-  if (direct) return direct.slice(0, MAX_MESSAGE_CHARS);
+  if (direct) return direct;
 
   const rawMessages = Array.isArray(body?.messages) ? body.messages : [];
   const latestUser = [...rawMessages]
     .reverse()
     .find((message) => message?.role === "user");
-  return String(latestUser?.content || "").trim().slice(0, MAX_MESSAGE_CHARS);
+  return String(latestUser?.content || "").trim();
 }
 
 function modelInput(memory, latestText) {
@@ -272,6 +326,23 @@ function modelInput(memory, latestText) {
   messages.push(...memory.recent);
   messages.push({ role: "user", content: latestText });
   return normalizeMessages(messages);
+}
+
+function conversationSeed(memory) {
+  const messages = [];
+  if (memory.summary) {
+    messages.push({
+      role: "user",
+      content: COPY.model.memoryPrefix + "\n" + memory.summary,
+    });
+  }
+  messages.push(...memory.recent);
+  return normalizeMessages(messages).slice(-20);
+}
+
+function cleanOpenAIConversationId(value) {
+  const text = String(value || "").trim();
+  return CONVERSATION_ID_PATTERN.test(text) ? text : null;
 }
 
 function demoReply(route, latestText) {
@@ -305,6 +376,21 @@ function validateModelReply(reply) {
   return text;
 }
 
+function effectiveReasoningEffort(model, requestedEffort) {
+  if (requestedEffort === "max") {
+    if (/^gpt-5\.6(?:-|$)/.test(model)) return "max";
+    if (/^gpt-5\.(?:2|3|4|5)(?:-|$)/.test(model)) return "xhigh";
+    return "high";
+  }
+  if (
+    requestedEffort === "xhigh" &&
+    !/^gpt-5\.(?:2|3|4|5|6)(?:-|$)/.test(model)
+  ) {
+    return "high";
+  }
+  return requestedEffort;
+}
+
 function openAIConfig(env) {
   const apiKey = String(env.OPENAI_API_KEY || "");
   if (!apiKey) {
@@ -314,16 +400,22 @@ function openAIConfig(env) {
   }
 
   const model = String(env.OPENAI_MODEL || "gpt-5.6-sol");
-  const reasoningEffort = String(env.OPENAI_REASONING_EFFORT || "medium");
+  const requestedReasoningEffort = String(
+    env.OPENAI_REASONING_EFFORT || "max",
+  );
   if (
     !/^[A-Za-z0-9._:-]+$/.test(model) ||
-    !OPENAI_REASONING_EFFORTS.has(reasoningEffort)
+    !OPENAI_REASONING_EFFORTS.has(requestedReasoningEffort)
   ) {
     const error = new Error("OpenAI configuration is invalid");
     error.name = "InvalidOpenAIConfiguration";
     throw error;
   }
 
+  const reasoningEffort = effectiveReasoningEffort(
+    model,
+    requestedReasoningEffort,
+  );
   return { apiKey, model, reasoningEffort };
 }
 
@@ -361,11 +453,12 @@ function retryAfterSeconds(value) {
 function providerErrorFields(responseBody) {
   const providerError = responseBody?.error;
   if (!providerError || typeof providerError !== "object") {
-    return { code: null, type: null };
+    return { code: null, type: null, param: null };
   }
   return {
     code: safeProviderField(providerError.code),
     type: safeProviderField(providerError.type),
+    param: safeProviderField(providerError.param),
   };
 }
 
@@ -407,21 +500,28 @@ function publicOpenAIError(error) {
   return { status: 503, message: COPY.api.temporarilyUnavailable };
 }
 
-async function callOpenAI(payload, apiKey, timeoutMs, errorName) {
+async function callOpenAI(
+  url,
+  payload,
+  apiKey,
+  timeoutMs,
+  errorName,
+  method = "POST",
+) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const clientRequestId = crypto.randomUUID();
 
   let response;
   try {
-    response = await fetch(OPENAI_RESPONSES_URL, {
-      method: "POST",
+    response = await fetch(url, {
+      method,
       headers: {
         Authorization: "Bearer " + apiKey,
         "Content-Type": "application/json",
         "X-Client-Request-Id": clientRequestId,
       },
-      body: JSON.stringify(payload),
+      body: payload === undefined ? undefined : JSON.stringify(payload),
       signal: controller.signal,
     });
   } catch {
@@ -446,6 +546,7 @@ async function callOpenAI(payload, apiKey, timeoutMs, errorName) {
       status: response.status,
       code: fields.code,
       type: fields.type,
+      param: fields.param,
       providerRequestId,
       clientRequestId,
       retryAfterSeconds: retryAfterSeconds(response.headers.get("retry-after")),
@@ -453,30 +554,78 @@ async function callOpenAI(payload, apiKey, timeoutMs, errorName) {
   }
 
   return {
+    body: responseBody,
     text: responseText(responseBody),
     providerRequestId,
     clientRequestId,
   };
 }
 
-async function generateReply(messages, route, env, latestText) {
+async function createOpenAIConversation(env) {
+  const { apiKey } = openAIConfig(env);
+  const payload = {
+    metadata: {
+      application: "stabilize",
+      retention: "30_days",
+    },
+  };
+
+  const result = await callOpenAI(
+    OPENAI_CONVERSATIONS_URL,
+    payload,
+    apiKey,
+    25_000,
+    "OpenAIConversationCreateError",
+  );
+  const conversationId = cleanOpenAIConversationId(result.body?.id);
+  if (!conversationId) {
+    throw new OpenAIRequestError({
+      name: "OpenAIConversationInvalidReplyError",
+      failure: "invalid_output",
+      status: 502,
+      providerRequestId: result.providerRequestId,
+      clientRequestId: result.clientRequestId,
+    });
+  }
+  return conversationId;
+}
+
+async function generateReply(
+  messages,
+  route,
+  env,
+  latestText,
+  conversationId = null,
+  seedItems = [],
+) {
   const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
   if (demoMode) return demoReply(route, latestText);
 
   const { apiKey, model, reasoningEffort } = openAIConfig(env);
   const result = await callOpenAI(
+    OPENAI_RESPONSES_URL,
     {
       model,
       reasoning: { effort: reasoningEffort, context: "current_turn" },
+      text: { verbosity: "low" },
       instructions:
         COPY.model.systemPrompt +
         "\n\n" +
         COPY.model.memoryInstruction +
         "\n\n" +
         COPY.model.routeInstruction(route),
-      input: messages,
-      max_output_tokens: MAX_MODEL_OUTPUT_TOKENS,
+      input: conversationId
+        ? [
+            ...normalizeMessages(seedItems).slice(-19),
+            { role: "user", content: latestText },
+          ]
+        : messages,
+      // Conversation items provide continuity and have an explicit item-first
+      // deletion path. Do not also retain a separately addressable Response.
       store: false,
+      ...(conversationId
+        ? { conversation: conversationId, truncation: "auto" }
+        : {}),
     },
     apiKey,
     60_000,
@@ -516,6 +665,7 @@ async function generateSummary(snapshot, env) {
     recent_messages: snapshot.messages,
   });
   const result = await callOpenAI(
+    OPENAI_RESPONSES_URL,
     {
       model,
       reasoning: { effort: "low", context: "current_turn" },
@@ -542,6 +692,7 @@ async function compactSession(stub, env) {
       summary,
       snapshot.summaryVersion,
       snapshot.throughSequence,
+      snapshot.stateEpoch,
     );
   } catch (error) {
     console.error(
@@ -554,9 +705,16 @@ async function compactSession(stub, env) {
 }
 
 async function recordExchange(stub, exchange) {
-  if (!stub || typeof stub.recordExchange !== "function") return null;
+  if (!stub) return null;
+  const write =
+    typeof stub.recordLocalExchange === "function"
+      ? stub.recordLocalExchange.bind(stub)
+      : typeof stub.recordExchange === "function"
+        ? stub.recordExchange.bind(stub)
+        : null;
+  if (!write) return null;
   try {
-    return await stub.recordExchange(exchange);
+    return await write(exchange);
   } catch (error) {
     console.error(
       JSON.stringify({
@@ -581,21 +739,287 @@ async function recordFixedRoute(
   route,
   fixed,
 ) {
-  await recordExchange(stub, {
+  const exchange = {
     user:
       FIXED_ROUTE_MEMORY[route] ||
       "[A deterministic support route triggered a fixed response.]",
     assistant: fixed.reply,
     awaitingSafetyAnswer: fixed.awaitingSafetyAnswer === true,
-  });
+  };
+  if (!stub) return true;
+  try {
+    if (typeof stub.recordFixedExchange === "function") {
+      await stub.recordFixedExchange(exchange);
+    } else {
+      const result = await recordExchange(stub, exchange);
+      if (!result) return false;
+    }
+    return true;
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "session_memory_fixed_write_failed",
+        error: error instanceof Error ? error.name : "UnknownError",
+      }),
+    );
+    return false;
+  }
 }
 
-async function handleChat(request, env, ctx, accountKey) {
+async function quarantineProviderTurnSafely(stub, request) {
+  if (!stub || typeof stub.quarantineProviderTurn !== "function") return false;
+  try {
+    return await stub.quarantineProviderTurn(request);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "provider_turn_quarantine_failed",
+        error: error instanceof Error ? error.name : "UnknownError",
+      }),
+    );
+    return false;
+  }
+}
+
+function continuityForSession(authSession) {
+  const token = String(authSession?.continuityToken || "");
+  return authSession && CONTINUITY_TOKEN_PATTERN.test(token)
+    ? { mode: "account", token }
+    : { mode: "guest", token: null };
+}
+
+function requestedContinuity(body) {
+  if (!Object.prototype.hasOwnProperty.call(body || {}, "continuity")) {
+    // Cached clients from before continuity binding must remain stateless.
+    return { mode: "guest", token: null };
+  }
+
+  const continuity = body?.continuity;
+  if (
+    continuity?.mode === "guest" &&
+    (continuity.token === undefined || continuity.token === null)
+  ) {
+    return { mode: "guest", token: null };
+  }
+  if (
+    continuity?.mode === "account" &&
+    CONTINUITY_TOKEN_PATTERN.test(String(continuity.token || ""))
+  ) {
+    return { mode: "account", token: String(continuity.token) };
+  }
+  throw new HttpError(400, COPY.api.invalidConversation);
+}
+
+function resolveContinuity(body, authSession) {
+  const requested = requestedContinuity(body);
+  const current = continuityForSession(authSession);
+  if (requested.mode === "guest") {
+    return { continuity: requested, accountKey: null };
+  }
+  if (
+    current.mode !== "account" ||
+    requested.token !== current.token ||
+    !authSession?.accountKey
+  ) {
+    throw new HttpError(
+      409,
+      COPY.api.sessionChanged || "Your sign-in changed. Reload and try again.",
+      { reload: true, continuity: current },
+    );
+  }
+  return { continuity: requested, accountKey: authSession.accountKey };
+}
+
+function confirmedConversationMissing(error) {
+  return (
+    error instanceof OpenAIRequestError &&
+    error.status === 404 &&
+    ["conversation_not_found", "not_found"].includes(error.code) &&
+    ["conversation", "conversation_id"].includes(error.param)
+  );
+}
+
+function uncertainProviderOutcome(error) {
+  return (
+    error instanceof OpenAIRequestError &&
+    (["timeout", "connection", "invalid_output"].includes(error.failure) ||
+      error.status === 408 ||
+      error.status >= 500)
+  );
+}
+
+async function purgeUnusedConversation(stub, conversationId) {
+  const cleanId = cleanOpenAIConversationId(conversationId);
+  if (!cleanId || typeof stub?.purgeUnusedOpenAIConversation !== "function") {
+    return false;
+  }
+  try {
+    return await stub.purgeUnusedOpenAIConversation(cleanId);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "openai_conversation_cleanup_queue_failed",
+        error: error instanceof Error ? error.name : "UnknownError",
+      }),
+    );
+    return false;
+  }
+}
+
+async function providerBackedReply(
+  stub,
+  route,
+  env,
+  latestText,
+  clientAwaiting,
+) {
+  for (let recoveryAttempt = 0; recoveryAttempt < 2; recoveryAttempt += 1) {
+    const turn = await stub.beginProviderTurn();
+    if (!turn?.acquired) {
+      throw new HttpError(
+        409,
+        COPY.api.responseInProgress ||
+          "Another response is already in progress. Try again shortly.",
+        { retryAfterSeconds: Number(turn?.retryAfterSeconds) || 1 },
+      );
+    }
+
+    const lease = {
+      leaseToken: turn.leaseToken,
+      epoch: turn.epoch,
+    };
+    const memory = {
+      ...emptyMemoryContext(),
+      ...(turn.context || {}),
+      recent: normalizeMessages(turn.context?.recent),
+    };
+    const currentRoute = classifyInput(latestText, {
+      awaitingSafetyAnswer:
+        clientAwaiting === true || memory.awaitingSafetyAnswer === true,
+    });
+    const currentFixed = fixedReplyForRoute(currentRoute);
+    if (currentFixed) {
+      const recorded = await recordFixedRoute(stub, currentRoute, currentFixed);
+      if (!recorded) {
+        await quarantineProviderTurnSafely(stub, {
+          ...lease,
+          conversationId: cleanOpenAIConversationId(turn.conversationId),
+        });
+      }
+      return { fixed: currentFixed, route: currentRoute };
+    }
+    let conversationId = cleanOpenAIConversationId(turn.conversationId);
+    let candidateId = null;
+    let seedItems = [];
+    let createdForTurn = false;
+    let providerMayHaveAppended = false;
+
+    try {
+      if (!conversationId) {
+        candidateId = await createOpenAIConversation(env);
+        let adoption;
+        try {
+          adoption = await stub.adoptProviderConversation({
+            ...lease,
+            candidateId,
+          });
+        } catch (error) {
+          await purgeUnusedConversation(stub, candidateId);
+          throw error;
+        }
+
+        conversationId = cleanOpenAIConversationId(adoption?.conversationId);
+        if (!adoption?.accepted || !conversationId) {
+          await purgeUnusedConversation(stub, candidateId);
+          throw new HttpError(
+            409,
+            COPY.api.sessionChanged || "Conversation state changed. Try again.",
+            { reload: true },
+          );
+        }
+        if (conversationId !== candidateId) {
+          await purgeUnusedConversation(stub, candidateId);
+        } else {
+          createdForTurn = true;
+          seedItems = conversationSeed(memory);
+        }
+      }
+
+      const messages = modelInput(memory, latestText);
+      const reply = await generateReply(
+        messages,
+        currentRoute || route,
+        env,
+        latestText,
+        conversationId,
+        seedItems,
+      );
+      providerMayHaveAppended = true;
+      const result = await stub.commitProviderTurn({
+        ...lease,
+        conversationId,
+        exchange: {
+          user: latestText,
+          assistant: reply,
+          awaitingSafetyAnswer: false,
+        },
+      });
+      if (!result?.committed) {
+        throw new HttpError(
+          409,
+          COPY.api.sessionChanged || "Conversation state changed. Try again.",
+          { reload: true },
+        );
+      }
+      return { reply, result, memory, route: currentRoute || route };
+    } catch (error) {
+      if (confirmedConversationMissing(error) && conversationId) {
+        if (typeof stub.retireMissingProviderConversation === "function") {
+          await stub.retireMissingProviderConversation({
+            ...lease,
+            conversationId,
+          });
+        } else {
+          await stub.quarantineProviderTurn({
+            ...lease,
+            conversationId,
+            delayMs: 0,
+          });
+        }
+        if (recoveryAttempt === 0) continue;
+        throw error;
+      }
+
+      if (
+        createdForTurn ||
+        providerMayHaveAppended ||
+        uncertainProviderOutcome(error)
+      ) {
+        await quarantineProviderTurnSafely(stub, {
+          ...lease,
+          conversationId,
+        });
+      } else {
+        await stub.releaseProviderTurn(lease);
+      }
+      throw error;
+    }
+  }
+
+  throw new HttpError(503, COPY.api.temporarilyUnavailable);
+}
+
+async function handleChat(request, env, ctx, authSession) {
   const body = await readBoundedJson(request);
   const latestText = latestUserText(body);
   if (!latestText) throw new HttpError(400, COPY.api.messageRequired);
+  if (latestText.length > MAX_MESSAGE_CHARS) {
+    throw new HttpError(400, COPY.api.messageTooLong);
+  }
 
-  const stub = accountMemoryStub(env, accountKey);
+  const resolved = resolveContinuity(body, authSession);
+  const { continuity } = resolved;
+  const stub = accountMemoryStub(env, resolved.accountKey);
   const clientAwaiting = body?.awaitingSafetyAnswer === true;
   let route = classifyInput(latestText, {
     awaitingSafetyAnswer: clientAwaiting,
@@ -603,9 +1027,8 @@ async function handleChat(request, env, ctx, accountKey) {
   let fixed = fixedReplyForRoute(route);
 
   if (fixed) {
-    const task = recordFixedRoute(stub, route, fixed);
-    if (!schedule(ctx, task)) await task;
-    return jsonResponse({ route, ...fixed });
+    await recordFixedRoute(stub, route, fixed);
+    return jsonResponse({ route, ...fixed, continuity });
   }
 
   const memory = await readMemoryContext(stub);
@@ -616,20 +1039,40 @@ async function handleChat(request, env, ctx, accountKey) {
   fixed = fixedReplyForRoute(route);
 
   if (fixed) {
-    const task = recordFixedRoute(stub, route, fixed);
-    if (!schedule(ctx, task)) await task;
-    return jsonResponse({ route, ...fixed });
+    await recordFixedRoute(stub, route, fixed);
+    return jsonResponse({ route, ...fixed, continuity });
   }
 
   const messages = modelInput(memory, latestText);
   if (!messages.length) throw new HttpError(400, COPY.api.invalidConversation);
 
-  const reply = await generateReply(messages, route, env, latestText);
-  const result = await recordExchange(stub, {
-    user: latestText,
-    assistant: reply,
-    awaitingSafetyAnswer: false,
-  });
+  const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
+  let reply;
+  let result;
+  if (!demoMode && stub && typeof stub.beginProviderTurn === "function") {
+    const providerResult = await providerBackedReply(
+      stub,
+      route,
+      env,
+      latestText,
+      clientAwaiting,
+    );
+    if (providerResult.fixed) {
+      return jsonResponse({
+        route: providerResult.route,
+        ...providerResult.fixed,
+        continuity,
+      });
+    }
+    ({ reply, result, route } = providerResult);
+  } else {
+    reply = await generateReply(messages, route, env, latestText);
+    result = await recordExchange(stub, {
+      user: latestText,
+      assistant: reply,
+      awaitingSafetyAnswer: false,
+    });
+  }
 
   if (result?.shouldCompact && stub && ctx) {
     schedule(ctx, compactSession(stub, env));
@@ -640,10 +1083,17 @@ async function handleChat(request, env, ctx, accountKey) {
     reply,
     showEmergency: false,
     awaitingSafetyAnswer: false,
+    continuity,
   });
 }
 
-function authNotice(code) {
+function authNotice(code, memoryCode, signedIn, memoryDeletionConfirmed) {
+  if (signedIn && memoryDeletionConfirmed) {
+    return COPY.page.auth.memoryDeleted;
+  }
+  if (signedIn && memoryCode === "session-changed") {
+    return COPY.page.auth.memorySessionChanged;
+  }
   if (code === "cancelled") return COPY.page.auth.cancelled;
   if (code === "failed") return COPY.page.auth.failed;
   return "";
@@ -676,16 +1126,40 @@ const worker = {
           });
         }
 
-        const authSession = await readAuthSession(request, env);
+        let authSession = await readAuthSession(request, env);
+        const refreshedSession = await refreshLegacyAuthSession(
+          request,
+          env,
+          authSession,
+        );
+        if (refreshedSession) authSession = refreshedSession.session;
+        const memoryDeletionConfirmed = await readMemoryDeletionReceipt(
+          request,
+          authSession,
+          env,
+        );
         const headers = pageHeaders();
         appendRetiredCookieCleanup(headers, request, authSession);
+        if (refreshedSession) {
+          headers.append("Set-Cookie", refreshedSession.setCookie);
+        }
+        if (readCookie(request, MEMORY_DELETION_COOKIE_NAME)) {
+          headers.append("Set-Cookie", clearMemoryDeletionCookie(request));
+        }
         return new Response(
           request.method === "HEAD"
             ? null
             : renderPage({
                 signedIn: Boolean(authSession),
+                continuity: continuityForSession(authSession),
+                memoryDeletionConfirmed,
                 googleSignInAvailable: googleAuthConfigured(env),
-                authNotice: authNotice(url.searchParams.get("auth")),
+                authNotice: authNotice(
+                  url.searchParams.get("auth"),
+                  url.searchParams.get("memory"),
+                  Boolean(authSession),
+                  memoryDeletionConfirmed,
+                ),
               }),
           {
             headers,
@@ -743,12 +1217,23 @@ const worker = {
         if (request.method !== "GET") {
           return jsonResponse({ error: COPY.api.methodNotAllowed }, 405);
         }
-        const authSession = await readAuthSession(request, env);
-        return jsonResponse({
-          signedIn: Boolean(authSession),
-          memory: Boolean(authSession && env.SESSIONS),
-          google: googleAuthConfigured(env),
-        });
+        let authSession = await readAuthSession(request, env);
+        const refreshedSession = await refreshLegacyAuthSession(
+          request,
+          env,
+          authSession,
+        );
+        if (refreshedSession) authSession = refreshedSession.session;
+        return jsonResponse(
+          {
+            signedIn: Boolean(authSession),
+            memory: Boolean(authSession && env.SESSIONS),
+            google: googleAuthConfigured(env),
+            continuity: continuityForSession(authSession),
+          },
+          200,
+          refreshedSession ? { "Set-Cookie": refreshedSession.setCookie } : {},
+        );
       }
 
       if (url.pathname === "/api/health") {
@@ -762,6 +1247,11 @@ const worker = {
             ok: configured,
             mode: demoMode ? "demo" : "openai",
             model: demoMode ? null : String(env.OPENAI_MODEL || "gpt-5.6-sol"),
+            aiFeature: demoMode ? null : "conversations",
+            reasoningEffort: demoMode
+              ? null
+              : String(env.OPENAI_REASONING_EFFORT || "max"),
+            verbosity: demoMode ? null : "low",
             memory: Boolean(env.SESSIONS),
             authentication: googleAuthConfigured(env),
           },
@@ -777,7 +1267,67 @@ const worker = {
           return jsonResponse({ error: COPY.api.crossOriginRequest }, 403);
         }
         const authSession = await readAuthSession(request, env);
-        return await handleChat(request, env, ctx, authSession?.accountKey);
+        return await handleChat(request, env, ctx, authSession);
+      }
+
+      if (url.pathname === "/account/memory/delete") {
+        if (request.method !== "POST") {
+          return new Response(COPY.api.methodNotAllowed, {
+            status: 405,
+            headers: pageHeaders("text/plain; charset=utf-8"),
+          });
+        }
+        if (!sameOriginOrNonBrowser(request)) {
+          return new Response(COPY.api.crossOriginRequest, {
+            status: 403,
+            headers: pageHeaders("text/plain; charset=utf-8"),
+          });
+        }
+        const authSession = await readAuthSession(request, env);
+        if (!authSession) {
+          return new Response(null, {
+            status: 303,
+            headers: pageHeaders("text/plain; charset=utf-8", {
+              Location: "/auth/google",
+            }),
+          });
+        }
+        const form = await readBoundedForm(request);
+        const suppliedContinuity = form.getAll("continuity");
+        if (
+          suppliedContinuity.length !== 1 ||
+          suppliedContinuity[0] !== authSession.continuityToken
+        ) {
+          return new Response(null, {
+            status: 303,
+            headers: pageHeaders("text/plain; charset=utf-8", {
+              Location: "/?memory=session-changed",
+            }),
+          });
+        }
+        const stub = accountMemoryStub(env, authSession.accountKey);
+        if (!stub || typeof stub.eraseMemory !== "function") {
+          return new Response(COPY.api.temporarilyUnavailable, {
+            status: 503,
+            headers: pageHeaders("text/plain; charset=utf-8"),
+          });
+        }
+        await stub.eraseMemory();
+        const rotatedSession = await rotateAuthSession(request, env, authSession);
+        const receiptCookie = await createMemoryDeletionReceiptCookie(
+          request,
+          rotatedSession.session,
+          env,
+        );
+        const headers = pageHeaders("text/plain; charset=utf-8", {
+          Location: "/",
+        });
+        headers.append("Set-Cookie", rotatedSession.setCookie);
+        headers.append("Set-Cookie", receiptCookie);
+        return new Response(null, {
+          status: 303,
+          headers,
+        });
       }
 
       if (url.pathname.startsWith("/api/")) {
@@ -787,7 +1337,10 @@ const worker = {
       return await env.ASSETS.fetch(request);
     } catch (error) {
       if (error instanceof HttpError) {
-        return jsonResponse({ error: error.message }, error.status);
+        return jsonResponse(
+          { error: error.message, ...(error.details || {}) },
+          error.status,
+        );
       }
 
       if (error instanceof OpenAIRequestError) {
@@ -801,6 +1354,7 @@ const worker = {
             status: error.status || null,
             code: error.code,
             type: error.type,
+            param: error.param,
             providerRequestId: error.providerRequestId,
             clientRequestId: error.clientRequestId,
             retryAfterSeconds: error.retryAfterSeconds,

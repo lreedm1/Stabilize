@@ -14,6 +14,8 @@ const TEST_ENV = {
     "1234567890-stabilize-feedback-tests.apps.googleusercontent.com",
   GOOGLE_CLIENT_SECRET: "test-google-client-secret",
   AUTH_SECRET: "test-auth-secret-with-at-least-thirty-two-characters",
+  SESSION_SECRET:
+    "test-session-secret-with-at-least-thirty-two-characters",
   GITHUB_FEEDBACK_TOKEN: "github_pat_1234567890abcdefghijklmnop",
   FEEDBACK_REPOSITORY: "lreedm1/Stabilize",
   FEEDBACK_BRANCH: "feedback-inbox",
