@@ -1,1 +1,0 @@
-Validate removal of document export before merge.
