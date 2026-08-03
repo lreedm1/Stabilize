@@ -5,6 +5,11 @@ import { readFile } from "node:fs/promises";
 function webpInfo(buffer) {
   assert.equal(buffer.subarray(0, 4).toString("ascii"), "RIFF");
   assert.equal(buffer.subarray(8, 12).toString("ascii"), "WEBP");
+  assert.equal(
+    buffer.readUInt32LE(4) + 8,
+    buffer.byteLength,
+    "RIFF length should match the complete file",
+  );
 
   const chunks = [];
   let width;
@@ -15,6 +20,8 @@ function webpInfo(buffer) {
     const type = buffer.subarray(offset, offset + 4).toString("ascii");
     const size = buffer.readUInt32LE(offset + 4);
     const data = offset + 8;
+    const nextOffset = data + size + (size % 2);
+    assert.ok(nextOffset <= buffer.length, `WebP chunk ${type} is complete`);
     chunks.push(type);
 
     if (type === "VP8X" && data + 10 <= buffer.length) {
@@ -39,45 +46,56 @@ function webpInfo(buffer) {
       height ??= 1 + ((bits >>> 14) & 0x3fff);
     }
 
-    offset = data + size + (size % 2);
+    offset = nextOffset;
   }
 
   assert.ok(width && height, "WebP dimensions should be readable");
   return { width, height, chunks };
 }
 
-test("mobile uses one high-resolution static generated WebP", async () => {
-  const [pageSource, mobileQuality, mobileStyles, image] =
+test("mobile uses responsive high-DPI static generated WebPs", async () => {
+  const tiers = [
+    { filename: "mobile-golden-alpine-v3-720.webp", width: 720, height: 1556 },
+    { filename: "mobile-golden-alpine-v3-1080.webp", width: 1080, height: 2334 },
+    { filename: "mobile-golden-alpine-v3-1440.webp", width: 1440, height: 3112 },
+    { filename: "mobile-golden-alpine-v3-2160.webp", width: 2160, height: 4670 },
+  ];
+  const [pageSource, mobileQuality, mobileStyles, ...images] =
     await Promise.all([
       readFile(new URL("../src/page.js", import.meta.url), "utf8"),
       readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
       readFile(new URL("../public/mobile-woodland-loop.css", import.meta.url), "utf8"),
-      readFile(
-        new URL(
-          "../public/scenes/mobile-golden-alpine-v2.webp",
-          import.meta.url,
-        ),
+      ...tiers.map(({ filename }) =>
+        readFile(new URL(`../public/scenes/${filename}`, import.meta.url)),
       ),
     ]);
 
-  const imageInfo = webpInfo(image);
-  assert.deepEqual(
-    { width: imageInfo.width, height: imageInfo.height },
-    { width: 853, height: 1844 },
-  );
-  assert.ok(image.byteLength > 100_000);
-  assert.ok(image.byteLength < 5_000_000);
-  assert.equal(imageInfo.chunks.includes("ANIM"), false);
+  const aspectRatios = images.map((image, index) => {
+    const imageInfo = webpInfo(image);
+    assert.deepEqual(
+      { width: imageInfo.width, height: imageInfo.height },
+      { width: tiers[index].width, height: tiers[index].height },
+    );
+    assert.ok(image.byteLength > 50_000);
+    assert.ok(image.byteLength < 25_000_000);
+    assert.equal(imageInfo.chunks.includes("ANIM"), false);
+    return imageInfo.width / imageInfo.height;
+  });
+  assert.ok(Math.max(...aspectRatios) - Math.min(...aspectRatios) < 0.001);
+  assert.ok(tiers.at(-1).width >= 2160);
 
-  assert.match(
-    pageSource,
-    /mobile-golden-alpine-v2\.webp\?v=20260803-14 853w/,
-  );
-  assert.match(
-    pageSource,
-    /rel="preload"[\s\S]*mobile-golden-alpine-v2\.webp\?v=20260803-14/,
-  );
+  for (const { filename, width } of tiers) {
+    assert.equal(
+      [...pageSource.matchAll(new RegExp(`${filename} ${width}w`, "g"))].length,
+      2,
+      `${filename} should appear in both the preload and picture source sets`,
+    );
+  }
+  assert.match(pageSource, /rel="preload"[\s\S]*imagesrcset=/);
+  assert.match(pageSource, /imagesizes="100vw"/);
+  assert.match(pageSource, /href="\/scenes\/mobile-golden-alpine-v3-1440\.webp"/);
   assert.match(pageSource, /mobile-woodland-loop\.css\?v=20260803-14/);
+  assert.doesNotMatch(pageSource, /mobile-golden-alpine-v2\.webp/);
   assert.doesNotMatch(pageSource, /mobile-woodland-spring-loop/);
 
   assert.match(mobileStyles, /opacity:\s*1/);
