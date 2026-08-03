@@ -1,8 +1,0 @@
-# Local testing only. Never commit real values.
-OPENAI_API_KEY=replace-with-an-openai-api-key
-GOOGLE_CLIENT_ID=replace-with-a-google-web-client-id
-GOOGLE_CLIENT_SECRET=replace-with-a-google-web-client-secret
-# Generate at least 32 random bytes, for example: openssl rand -base64 32
-AUTH_SECRET=replace-with-a-long-random-auth-secret
-# Exact origin only; no path. HTTPS is required outside localhost.
-PUBLIC_ORIGIN=http://localhost:8787

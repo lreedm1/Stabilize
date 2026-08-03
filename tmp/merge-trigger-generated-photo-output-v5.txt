@@ -1,1 +1,0 @@
-Trigger the trusted migration to publish its clean result branch.

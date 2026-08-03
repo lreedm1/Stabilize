@@ -1,7 +1,0 @@
-node_modules/
-.dev.vars
-.env
-.wrangler/
-.nightly/
-.DS_Store
-npm-debug.log*
