@@ -54,7 +54,7 @@ test("the homepage gives a short product promise", async () => {
 
   assert.match(pageSource, /Get unstuck\./);
   assert.match(pageSource, /Get one clear next step/);
-  assert.match(pageSource, /Guest messages aren't saved as server memory/);
+  assert.match(pageSource, /This browser can remember bounded chat context for up to 30 days/);
   assert.doesNotMatch(pageSource, /data-example-message=/);
   assert.doesNotMatch(pageSource, /example-starts/);
   assert.match(pageSource, /href="\/product\.css"/);
@@ -144,43 +144,144 @@ test("the homepage has no predefined prompt buttons", async () => {
   assert.match(clientScript, /form\.addEventListener\("submit"/);
 });
 
-test("only a guest tab persists the latest assistant answer", async () => {
-  const [clientScript, privacyPage] = await Promise.all([
-    readFile(new URL("../public/app.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/privacy.html", import.meta.url), "utf8"),
-  ]);
+test("a token-bound guest browser expires safety replies after 2 hours and ordinary replies after 30 days", async () => {
+  const clientScript = await readFile(
+    new URL("../public/app.js", import.meta.url),
+    "utf8",
+  );
 
-  assert.match(clientScript, /LAST_ANSWER_STORAGE_PREFIX/);
+  assert.match(clientScript, /LAST_ANSWER_STORAGE_PREFIX = "stabilize:last-answer:v3:"/);
+  assert.match(clientScript, /LAST_ANSWER_MAX_AGE_MS = 30 \* 24 \* 60 \* 60 \* 1000/);
+  assert.match(clientScript, /SAFETY_ANSWER_MAX_AGE_MS = 2 \* 60 \* 60 \* 1000/);
   assert.match(clientScript, /LEGACY_LAST_ANSWER_STORAGE_KEY/);
+  assert.match(clientScript, /RETIRED_LAST_ANSWER_STORAGE_PREFIX/);
   assert.match(clientScript, /function continuityStorageKey/);
-  assert.match(clientScript, /sessionStorage\.setItem/);
-  assert.match(clientScript, /sessionStorage\.getItem/);
-  assert.match(clientScript, /sessionStorage\.removeItem/);
+  assert.match(clientScript, /`\$\{state\.mode\}:\$\{state\.token \|\| "legacy"\}`/);
+  assert.match(clientScript, /localStorage\.setItem/);
+  assert.match(clientScript, /localStorage\.getItem/);
+  assert.match(clientScript, /localStorage\.removeItem/);
   assert.match(
     clientScript,
     /persistLatestAnswer\(reply, route, needsSafetyAnswer\)/,
   );
   assert.match(
     clientScript,
-    /function persistLatestAnswer[\s\S]*?if \(continuityState\.mode !== "guest"\) return;/,
+    /function persistLatestAnswer[\s\S]*?continuityState\.mode !== "guest" \|\| continuityState\.token === null/,
   );
   assert.match(
     clientScript,
-    /function readPersistedAnswer[\s\S]*?if \(continuityState\.mode !== "guest"\)/,
+    /function readPersistedAnswer[\s\S]*?continuityState\.mode !== "guest" \|\| continuityState\.token === null/,
   );
+  assert.match(
+    clientScript,
+    /function readPersistedAnswer[\s\S]*persistedAnswerIsCurrent\(record, age\);[\s\S]*if \(!valid\) \{[\s\S]*clearPersistedAnswer\(\);[\s\S]*return null;[\s\S]*return record;/,
+  );
+  assert.match(
+    clientScript,
+    /function restorePersistedAnswer[\s\S]*const record = readPersistedAnswer\(\);[\s\S]*if \(!record\) return false;[\s\S]*showOutput\(record\.reply/,
+  );
+  assert.match(
+    clientScript,
+    /function retireStalePersistedAnswers[\s\S]*!persistedAnswerIsCurrent\(record, age\)[\s\S]*localStorage\.removeItem\(key\)/,
+  );
+  assert.match(clientScript, /function persistedAnswerIsCurrent[\s\S]*age <= LAST_ANSWER_MAX_AGE_MS[\s\S]*!record\.awaitingSafetyAnswer \|\| age <= SAFETY_ANSWER_MAX_AGE_MS/);
+  assert.match(clientScript, /const record = \{[\s\S]*v: 3,[\s\S]*reply: cleanReply,[\s\S]*route: cleanRoute,[\s\S]*awaitingSafetyAnswer:[\s\S]*savedAt: Date\.now\(\)/);
+  assert.match(clientScript, /awaitingSafetyAnswerSince = record\.awaitingSafetyAnswer \? record\.savedAt : null/);
+  assert.match(clientScript, /function currentAwaitingSafetyAnswer\(\)[\s\S]*age > SAFETY_ANSWER_MAX_AGE_MS[\s\S]*awaitingSafetyAnswer = false;[\s\S]*awaitingSafetyAnswerSince = null;/);
+  assert.match(clientScript, /awaitingSafetyAnswerSince = needsSafetyAnswer \? Date\.now\(\) : null/);
+  assert.doesNotMatch(clientScript, /const record = \{[\s\S]{0,240}(?:prompt|user|messages):/);
   assert.match(clientScript, /restorePersistedAnswer\(\);/);
   assert.match(clientScript, /form\[action="\/auth\/logout"\]/);
   assert.match(clientScript, /clearAllPersistedAnswers/);
   assert.match(clientScript, /retireStalePersistedAnswers/);
+  assert.match(
+    clientScript,
+    /retireStalePersistedAnswers\(\);[\s\S]*startContinuityChannel\(\)/,
+  );
   assert.match(clientScript, /new BroadcastChannel\(CONTINUITY_CHANNEL_NAME\)/);
   assert.match(clientScript, /continuity: continuityState/);
-  assert.doesNotMatch(clientScript, /localStorage/);
-  assert.match(privacyPage, /latest assistant reply/i);
-  assert.match(privacyPage, /current browser tab/i);
-  assert.match(privacyPage, /prompt itself is\s+not included/i);
-  assert.match(privacyPage, /Signing in later affects future messages only/i);
-  assert.match(privacyPage, /Signed-in assistant replies are\s+not placed in the browser's 24-hour latest-reply cache/i);
-  assert.match(privacyPage, /OpenAI is used for stateless processing/i);
+  assert.match(clientScript, /sessionStorage\.removeItem/);
+
+  const currentStart = clientScript.indexOf("function persistedAnswerIsCurrent");
+  const currentEnd = clientScript.indexOf("function persistLatestAnswer", currentStart);
+  const currentSource = clientScript.slice(currentStart, currentEnd);
+  const persistedAnswerIsCurrent = Function(
+    "LAST_ANSWER_MAX_AGE_MS",
+    "SAFETY_ANSWER_MAX_AGE_MS",
+    `${currentSource}; return persistedAnswerIsCurrent;`,
+  )(30 * 24 * 60 * 60 * 1000, 2 * 60 * 60 * 1000);
+  assert.equal(
+    persistedAnswerIsCurrent({ awaitingSafetyAnswer: true }, 2 * 60 * 60 * 1000),
+    true,
+  );
+  assert.equal(
+    persistedAnswerIsCurrent(
+      { awaitingSafetyAnswer: true },
+      2 * 60 * 60 * 1000 + 1,
+    ),
+    false,
+  );
+  assert.equal(
+    persistedAnswerIsCurrent(
+      { awaitingSafetyAnswer: false },
+      29 * 24 * 60 * 60 * 1000,
+    ),
+    true,
+  );
+  assert.equal(
+    persistedAnswerIsCurrent(
+      { awaitingSafetyAnswer: false },
+      30 * 24 * 60 * 60 * 1000 + 1,
+    ),
+    false,
+  );
+});
+
+test("the public privacy page describes persistent guest memory without stale tab-only claims", async () => {
+  const privacyPage = await readFile(
+    new URL("../public/privacy.html", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    privacyPage,
+    /without signing in[\s\S]*bounded\s+summary and up to eight recent messages stored by Stabilize on\s+Cloudflare/i,
+  );
+  assert.match(
+    privacyPage,
+    /Remembered text expires 30 days after the last committed\s+exchange/i,
+  );
+  assert.match(
+    privacyPage,
+    /latest assistant reply[\s\S]*written to this browser's local storage/i,
+  );
+  assert.match(
+    privacyPage,
+    /Records older than 30 days[\s\S]*ignored[\s\S]*attempts to remove them on the next successful[\s\S]*load/i,
+  );
+  assert.match(
+    privacyPage,
+    /Browser or profile backups[\s\S]*unavailable JavaScript[\s\S]*unavailable[\s\S]*storage access may retain copies longer/i,
+  );
+  assert.doesNotMatch(
+    privacyPage,
+    /Guest messages do not enter server-side conversation memory|current browser tab|tab[- ](?:only|scoped)|24 hours|(?:may|can) remain[^.]{0,100}(?:for )?up to 30 days/i,
+  );
+});
+
+test("anonymous memory has an explicit production abuse-control launch gate", async () => {
+  const [readme, security] = await Promise.all([
+    readFile(new URL("../README.md", import.meta.url), "utf8"),
+    readFile(new URL("../SECURITY.md", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(
+    readme,
+    /Cloudflare WAF[\s\S]*guest-cookie minting[\s\S]*\/api\/chat[\s\S]*\/guest\/memory\/delete/i,
+  );
+  assert.match(security, /Anonymous-memory launch gate/);
+  assert.match(security, /origin and cookie binding checks prevent browser CSRF/);
+  assert.match(security, /not bot authentication/);
 });
 
 test("ordinary replies offer useful model follow-up actions", async () => {
@@ -198,7 +299,7 @@ test("ordinary replies offer useful model follow-up actions", async () => {
   assert.match(clientScript, /ROUTES_WITHOUT_OUTCOME_CHECK/);
   assert.match(clientScript, /result\.awaitingSafetyAnswer !== true|needsSafetyAnswer/);
   assert.match(clientScript, /buildOutcomeActionPrompt/);
-  assert.doesNotMatch(clientScript, /\/api\/feedback|localStorage/);
+  assert.doesNotMatch(clientScript, /\/api\/feedback/);
   assert.doesNotMatch(clientScript, /innerHTML\s*=/);
   assert.match(productStyles, /\.outcome-check/);
   assert.match(productStyles, /\.outcome-button/);

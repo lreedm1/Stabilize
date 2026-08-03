@@ -17,7 +17,7 @@ const memoryDeletionTemplate = document.querySelector(
 const exampleStarts = document.querySelectorAll("[data-example-message]");
 const signOutForm = document.querySelector('form[action="/auth/logout"]');
 const deleteMemoryForm = document.querySelector(
-  'form[action="/account/memory/delete"]',
+  'form[action$="/memory/delete"]',
 );
 
 if (!(copyTemplate instanceof HTMLTemplateElement)) {
@@ -38,19 +38,28 @@ const ROUTES_WITHOUT_OUTCOME_CHECK = new Set([
   "MEDICATION_ACCESS",
 ]);
 const LEGACY_LAST_ANSWER_STORAGE_KEY = "stabilize:last-answer:v1";
-const LAST_ANSWER_STORAGE_PREFIX = "stabilize:last-answer:v2:";
-const LAST_ANSWER_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const RETIRED_LAST_ANSWER_STORAGE_PREFIX = "stabilize:last-answer:v2:";
+const LAST_ANSWER_STORAGE_PREFIX = "stabilize:last-answer:v3:";
+const DELETION_PENDING_STORAGE_PREFIX =
+  "stabilize:memory-delete-pending:v1:";
+const LAST_ANSWER_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const SAFETY_ANSWER_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 const MAX_PERSISTED_REPLY_CHARS = 12_000;
 const CONTINUITY_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const CONTINUITY_CHANNEL_NAME = "stabilize:continuity:v1";
 const MAX_NOTICE_CHARS = 500;
 
 function validContinuity(value) {
-  if (value?.mode === "guest" && value.token === null) {
-    return Object.freeze({ mode: "guest", token: null });
-  }
-
   const token = String(value?.token || "");
+  if (
+    value?.mode === "guest" &&
+    (value.token === null || CONTINUITY_TOKEN_PATTERN.test(token))
+  ) {
+    return Object.freeze({
+      mode: "guest",
+      token: value.token === null ? null : token,
+    });
+  }
   if (value?.mode === "account" && CONTINUITY_TOKEN_PATTERN.test(token)) {
     return Object.freeze({ mode: "account", token });
   }
@@ -94,19 +103,28 @@ function continuityMessage(value) {
 }
 
 const continuityState = renderedContinuity();
-const memoryDeletionConfirmed = (() => {
+const memoryDeletionConfirmation = (() => {
   if (
-    continuityState.mode !== "account" ||
     !(memoryDeletionTemplate instanceof HTMLTemplateElement)
   ) {
-    return false;
+    return null;
   }
   try {
-    return (
-      JSON.parse(memoryDeletionTemplate.content.textContent)?.confirmed === true
-    );
+    const parsed = JSON.parse(memoryDeletionTemplate.content.textContent);
+    const deletedContinuity = validContinuity(parsed?.deletedContinuity);
+    if (
+      parsed?.confirmed !== true ||
+      !deletedContinuity ||
+      deletedContinuity.token === null
+    ) {
+      return null;
+    }
+    return Object.freeze({
+      confirmed: true,
+      deletedContinuity,
+    });
   } catch {
-    return false;
+    return null;
   }
 })();
 
@@ -194,6 +212,7 @@ const CONTENT_ACTION_SETS = [
 ];
 
 let awaitingSafetyAnswer = false;
+let awaitingSafetyAnswerSince = null;
 let pending = false;
 let lastSubmittedText = "";
 let reloadRequested = false;
@@ -201,14 +220,14 @@ let activeRequestController = null;
 let continuityChannel = null;
 let continuityCheckPromise = null;
 let continuityCheckEpoch = null;
-let accountContinuityVerified = continuityState.mode !== "account";
+let continuityVerified = continuityState.token === null;
 const continuityValidationGate = createContinuityValidationGate();
 
 function buildOutcomeActionPrompt(instruction, previousReply) {
   const request = String(instruction || "").trim();
   const context = String(previousReply || "").trim().slice(0, 3000);
   if (!request) return "";
-  if (continuityState.mode === "account") return request;
+  if (continuityState.token !== null) return request;
   if (!context) return request;
   return `${request}\n\nUse this previous answer as context:\n\n${context}`;
 }
@@ -297,9 +316,41 @@ function showOutput(
 }
 
 function continuityStorageKey(state = continuityState) {
-  const partition =
-    state.mode === "account" ? `account:${state.token}` : "guest";
+  const partition = `${state.mode}:${state.token || "legacy"}`;
   return LAST_ANSWER_STORAGE_PREFIX + partition;
+}
+
+function deletionPendingStorageKey(state = continuityState) {
+  return (
+    DELETION_PENDING_STORAGE_PREFIX +
+    `${state.mode}:${state.token || "legacy"}`
+  );
+}
+
+function markDeletionPending(state = continuityState) {
+  if (state.token === null) return;
+  try {
+    localStorage.setItem(deletionPendingStorageKey(state), String(Date.now()));
+  } catch {
+    // The form submission remains authoritative when storage is unavailable.
+  }
+}
+
+function deletionIsPending(state = continuityState) {
+  try {
+    return localStorage.getItem(deletionPendingStorageKey(state)) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function clearDeletionPending(state) {
+  if (!state || state.token === null) return;
+  try {
+    localStorage.removeItem(deletionPendingStorageKey(state));
+  } catch {
+    // A confirmed receipt remains authoritative when storage is unavailable.
+  }
 }
 
 function showClientNotice(message, kind) {
@@ -321,7 +372,7 @@ function clearClientNotice(kind) {
 
 function clearPersistedAnswer(state = continuityState) {
   try {
-    sessionStorage.removeItem(continuityStorageKey(state));
+    localStorage.removeItem(continuityStorageKey(state));
   } catch {
     // Storage can be unavailable in hardened or private browser contexts.
   }
@@ -329,39 +380,84 @@ function clearPersistedAnswer(state = continuityState) {
 
 function clearAllPersistedAnswers() {
   try {
+    localStorage.removeItem(LEGACY_LAST_ANSWER_STORAGE_KEY);
+    for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+      const key = localStorage.key(index);
+      if (
+        key?.startsWith(LAST_ANSWER_STORAGE_PREFIX) ||
+        key?.startsWith(RETIRED_LAST_ANSWER_STORAGE_PREFIX)
+      ) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Deletion must continue even when browser storage is unavailable.
+  }
+  try {
     sessionStorage.removeItem(LEGACY_LAST_ANSWER_STORAGE_KEY);
     for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
       const key = sessionStorage.key(index);
-      if (key?.startsWith(LAST_ANSWER_STORAGE_PREFIX)) {
+      if (key?.startsWith(RETIRED_LAST_ANSWER_STORAGE_PREFIX)) {
         sessionStorage.removeItem(key);
       }
     }
   } catch {
-    // Signing out must continue even when browser storage is unavailable.
+    // Retiring older tab-only records is best effort.
   }
 }
 
 function retireStalePersistedAnswers() {
   try {
-    const currentKey =
-      continuityState.mode === "guest" ? continuityStorageKey() : null;
     sessionStorage.removeItem(LEGACY_LAST_ANSWER_STORAGE_KEY);
     for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
       const key = sessionStorage.key(index);
-      if (
-        key?.startsWith(LAST_ANSWER_STORAGE_PREFIX) &&
-        key !== currentKey
-      ) {
+      if (key?.startsWith(RETIRED_LAST_ANSWER_STORAGE_PREFIX)) {
         sessionStorage.removeItem(key);
       }
     }
   } catch {
     // Stale-partition cleanup is best effort in hardened browser contexts.
   }
+  try {
+    localStorage.removeItem(LEGACY_LAST_ANSWER_STORAGE_KEY);
+    for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+      const key = localStorage.key(index);
+      if (key?.startsWith(RETIRED_LAST_ANSWER_STORAGE_PREFIX)) {
+        localStorage.removeItem(key);
+        continue;
+      }
+      if (!key?.startsWith(LAST_ANSWER_STORAGE_PREFIX)) continue;
+      try {
+        const record = JSON.parse(localStorage.getItem(key) || "null");
+        const age = Date.now() - Number(record?.savedAt);
+        if (
+          record?.v !== 3 ||
+          !persistedAnswerIsCurrent(record, age)
+        ) {
+          localStorage.removeItem(key);
+        }
+      } catch {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Browser storage may be disabled or unavailable.
+  }
+}
+
+function persistedAnswerIsCurrent(record, age) {
+  return (
+    Number.isFinite(age) &&
+    age >= 0 &&
+    age <= LAST_ANSWER_MAX_AGE_MS &&
+    (!record.awaitingSafetyAnswer || age <= SAFETY_ANSWER_MAX_AGE_MS)
+  );
 }
 
 function persistLatestAnswer(reply, route, needsSafetyAnswer) {
-  if (continuityState.mode !== "guest") return;
+  if (continuityState.mode !== "guest" || continuityState.token === null) {
+    return;
+  }
   const cleanReply = String(reply || "").trim().slice(0, MAX_PERSISTED_REPLY_CHARS);
   if (!cleanReply) return;
 
@@ -369,7 +465,7 @@ function persistLatestAnswer(reply, route, needsSafetyAnswer) {
     ? String(route)
     : "ORDINARY";
   const record = {
-    v: 2,
+    v: 3,
     continuity: continuityState,
     reply: cleanReply,
     route: cleanRoute,
@@ -378,7 +474,7 @@ function persistLatestAnswer(reply, route, needsSafetyAnswer) {
   };
 
   try {
-    sessionStorage.setItem(
+    localStorage.setItem(
       continuityStorageKey(),
       JSON.stringify(record),
     );
@@ -388,28 +484,27 @@ function persistLatestAnswer(reply, route, needsSafetyAnswer) {
 }
 
 function readPersistedAnswer() {
-  if (continuityState.mode !== "guest") {
+  if (continuityState.mode !== "guest" || continuityState.token === null) {
     clearPersistedAnswer();
     return null;
   }
+  if (deletionIsPending()) return null;
   try {
-    const raw = sessionStorage.getItem(continuityStorageKey());
+    const raw = localStorage.getItem(continuityStorageKey());
     if (!raw) return null;
 
     const record = JSON.parse(raw);
     const recordContinuity = validContinuity(record?.continuity);
     const age = Date.now() - Number(record?.savedAt);
     const valid =
-      record?.v === 2 &&
+      record?.v === 3 &&
       sameContinuity(recordContinuity, continuityState) &&
       typeof record.reply === "string" &&
       record.reply.trim().length > 0 &&
       record.reply.length <= MAX_PERSISTED_REPLY_CHARS &&
       /^[A-Z_]{1,64}$/.test(String(record.route || "")) &&
       typeof record.awaitingSafetyAnswer === "boolean" &&
-      Number.isFinite(age) &&
-      age >= 0 &&
-      age <= LAST_ANSWER_MAX_AGE_MS;
+      persistedAnswerIsCurrent(record, age);
 
     if (!valid) {
       clearPersistedAnswer();
@@ -428,6 +523,7 @@ function restorePersistedAnswer() {
   if (!record) return false;
 
   awaitingSafetyAnswer = record.awaitingSafetyAnswer;
+  awaitingSafetyAnswerSince = record.awaitingSafetyAnswer ? record.savedAt : null;
   const offerOutcomeCheck =
     !record.awaitingSafetyAnswer &&
     !ROUTES_WITHOUT_OUTCOME_CHECK.has(record.route);
@@ -453,15 +549,21 @@ function hideForContinuityReload() {
   conversationSurface.hidden = true;
 }
 
-function hideAccountSurface() {
-  if (continuityState.mode !== "account") return;
+function hideContinuitySurface() {
+  if (continuityState.token === null) return;
   continuityValidationGate.invalidate();
-  accountContinuityVerified = false;
+  continuityVerified = false;
   conversationSurface.hidden = true;
 }
 
-function revealAccountSurface() {
-  if (continuityState.mode !== "account" || reloadRequested) return;
+function revealContinuitySurface() {
+  if (
+    continuityState.token === null ||
+    reloadRequested ||
+    deletionIsPending()
+  ) {
+    return;
+  }
   conversationSurface.hidden = false;
 }
 
@@ -474,18 +576,20 @@ function reloadForContinuityChange({ clearStored = false } = {}) {
   window.location.reload();
 }
 
-function scrubForMemoryDeletion() {
-  clearAllPersistedAnswers();
+function scrubForMemoryDeletion(deletedContinuity) {
+  clearPersistedAnswer(deletedContinuity);
+  clearDeletionPending(deletedContinuity);
   activeRequestController?.abort();
   awaitingSafetyAnswer = false;
+  awaitingSafetyAnswerSince = null;
   lastSubmittedText = "";
   input.value = "";
   restoreComposeView();
-  hideAccountSurface();
+  hideContinuitySurface();
 }
 
-async function revalidateAccountContinuity() {
-  if (continuityState.mode !== "account" || reloadRequested) return true;
+async function revalidateContinuity() {
+  if (continuityState.token === null || reloadRequested) return true;
   const validationEpoch = continuityValidationGate.snapshot();
   if (
     continuityCheckPromise &&
@@ -507,21 +611,29 @@ async function revalidateAccountContinuity() {
       const result = await response.json();
       if (!continuityValidationGate.isCurrent(validationEpoch)) return false;
       const currentContinuity = validContinuity(result.continuity);
-      const authoritativeState =
+      const authoritativeState = Boolean(
         (result.signedIn === true && currentContinuity?.mode === "account") ||
-        (result.signedIn === false && currentContinuity?.mode === "guest");
+          (result.signedIn === false && currentContinuity?.mode === "guest"),
+      );
       if (!authoritativeState) throw new Error("Invalid session check");
       if (
-        result.signedIn !== true ||
         !sameContinuity(currentContinuity, continuityState)
       ) {
-        reloadForContinuityChange({ clearStored: true });
+        clearPersistedAnswer();
+        reloadForContinuityChange();
         return false;
       }
 
-      accountContinuityVerified = true;
+      continuityVerified = true;
       clearClientNotice("session-check");
-      revealAccountSurface();
+      if (
+        continuityState.mode === "guest" &&
+        !pending &&
+        (conversationSurface.dataset.view || "compose") === "compose"
+      ) {
+        restorePersistedAnswer();
+      }
+      revealContinuitySurface();
       continuityChannel?.postMessage({
         type: "state",
         continuity: continuityState,
@@ -534,7 +646,7 @@ async function revalidateAccountContinuity() {
       ) {
         return false;
       }
-      hideAccountSurface();
+      hideContinuitySurface();
       showClientNotice(copy.sessionCheckFailed, "session-check");
       return false;
     } finally {
@@ -557,34 +669,24 @@ function startContinuityChannel() {
     continuityChannel = new BroadcastChannel(CONTINUITY_CHANNEL_NAME);
     continuityChannel.addEventListener("message", (event) => {
       const message = continuityMessage(event.data);
-      if (!message || continuityState.mode !== "account") return;
+      if (!message || continuityState.token === null) return;
 
       if (
         message.type === "memory-deleted" &&
         sameContinuity(message.continuity, continuityState)
       ) {
-        scrubForMemoryDeletion();
-        void revalidateAccountContinuity();
+        scrubForMemoryDeletion(message.continuity);
+        void revalidateContinuity();
         return;
       }
 
       const otherContinuity = message.continuity;
       if (sameContinuity(otherContinuity, continuityState)) return;
 
-      // A guest page can intentionally remain guest after another tab signs in.
-      // Its state is not evidence that this authenticated page changed accounts.
-      if (otherContinuity.mode !== "account") return;
-
-      // Account mismatches are hints; the authenticated endpoint is authoritative.
-      hideAccountSurface();
-      void revalidateAccountContinuity();
+      // Cross-tab messages are hints; the cookie-bound endpoint is authoritative.
+      hideContinuitySurface();
+      void revalidateContinuity();
     });
-    if (continuityState.mode === "guest") {
-      continuityChannel.postMessage({
-        type: "state",
-        continuity: continuityState,
-      });
-    }
   } catch {
     continuityChannel = null;
   }
@@ -600,6 +702,7 @@ function restoreComposeView() {
   if (!input.value && lastSubmittedText) {
     input.value = lastSubmittedText;
   }
+  conversationSurface.dataset.view = "compose";
 }
 
 function requestErrorMessage(message, reference = "") {
@@ -615,13 +718,57 @@ function requestErrorMessage(message, reference = "") {
   return parts.filter(Boolean).join("\n\n");
 }
 
+async function resetGuestSession(continuity, grant) {
+  if (
+    continuity?.mode !== "guest" ||
+    !continuity.token ||
+    typeof grant !== "string" ||
+    !grant ||
+    grant.length > 4_096
+  ) {
+    return;
+  }
+  try {
+    await fetch("/guest/session/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ continuity: continuity.token, grant }),
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+  } catch {
+    // Reload still lets the server re-evaluate any cookie changed elsewhere.
+  }
+}
+
+function currentAwaitingSafetyAnswer() {
+  if (!awaitingSafetyAnswer) return false;
+  const age = Date.now() - Number(awaitingSafetyAnswerSince);
+  if (
+    !Number.isFinite(age) ||
+    age < 0 ||
+    age > SAFETY_ANSWER_MAX_AGE_MS
+  ) {
+    awaitingSafetyAnswer = false;
+    awaitingSafetyAnswerSince = null;
+    return false;
+  }
+  return true;
+}
+
 async function sendMessage(text) {
   const clean = String(text || "").trim();
   if (!clean || pending) return;
 
-  if (continuityState.mode === "account" && !accountContinuityVerified) {
-    hideAccountSurface();
-    const verified = await revalidateAccountContinuity();
+  if (deletionIsPending()) {
+    hideForContinuityReload();
+    showClientNotice(copy.deletionPending, "deletion-pending");
+    return;
+  }
+
+  if (continuityState.token !== null && !continuityVerified) {
+    hideContinuitySurface();
+    const verified = await revalidateContinuity();
     if (!verified) return;
   }
 
@@ -640,7 +787,7 @@ async function sendMessage(text) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: clean,
-        awaitingSafetyAnswer,
+        awaitingSafetyAnswer: currentAwaitingSafetyAnswer(),
         continuity: requestContinuity,
       }),
       signal: requestController.signal,
@@ -649,7 +796,14 @@ async function sendMessage(text) {
     const result = await response.json().catch(() => ({}));
 
     if (response.status === 409 && result.reload === true) {
-      reloadForContinuityChange({ clearStored: true });
+      clearPersistedAnswer(requestContinuity);
+      if (result.resetGuest === true) {
+        await resetGuestSession(
+          requestContinuity,
+          result.guestResetGrant,
+        );
+      }
+      reloadForContinuityChange();
       return;
     }
 
@@ -665,7 +819,18 @@ async function sendMessage(text) {
 
     const responseContinuity = validContinuity(result.continuity);
     if (!sameContinuity(responseContinuity, requestContinuity)) {
-      reloadForContinuityChange({ clearStored: true });
+      clearPersistedAnswer(requestContinuity);
+      reloadForContinuityChange();
+      return;
+    }
+
+    if (requestController.signal.aborted) {
+      hideForContinuityReload();
+      return;
+    }
+
+    if (deletionIsPending(requestContinuity)) {
+      hideForContinuityReload();
       return;
     }
 
@@ -677,6 +842,7 @@ async function sendMessage(text) {
     showOutput(reply, "", "response", { offerOutcomeCheck, route });
     modulateTerrain(reply);
     awaitingSafetyAnswer = needsSafetyAnswer;
+    awaitingSafetyAnswerSince = needsSafetyAnswer ? Date.now() : null;
     persistLatestAnswer(reply, route, needsSafetyAnswer);
     lastSubmittedText = "";
   } catch {
@@ -715,49 +881,72 @@ for (const button of exampleStarts) {
 }
 
 if (signOutForm instanceof HTMLFormElement) {
-  signOutForm.addEventListener("submit", clearAllPersistedAnswers);
+  signOutForm.addEventListener("submit", () => clearPersistedAnswer());
 }
 if (deleteMemoryForm instanceof HTMLFormElement) {
   deleteMemoryForm.addEventListener("submit", (event) => {
     if (!window.confirm(copy.deleteMemoryConfirm)) {
       event.preventDefault();
+      return;
     }
+    markDeletionPending();
+    hideForContinuityReload();
   });
 }
 
 retireStalePersistedAnswers();
-if (memoryDeletionConfirmed) {
-  clearAllPersistedAnswers();
-} else if (continuityState.mode === "guest") {
-  restorePersistedAnswer();
+if (memoryDeletionConfirmation) {
+  clearPersistedAnswer(memoryDeletionConfirmation.deletedContinuity);
+  clearDeletionPending(memoryDeletionConfirmation.deletedContinuity);
+}
+if (deletionIsPending()) {
+  hideForContinuityReload();
+  showClientNotice(copy.deletionPending, "deletion-pending");
 }
 startContinuityChannel();
-if (memoryDeletionConfirmed) {
+if (memoryDeletionConfirmation) {
   continuityChannel?.postMessage({
     type: "memory-deleted",
-    continuity: continuityState,
+    continuity: memoryDeletionConfirmation.deletedContinuity,
   });
 }
 
-window.addEventListener("blur", hideAccountSurface);
-
-document.addEventListener("visibilitychange", () => {
-  if (continuityState.mode !== "account") return;
-  if (document.hidden) {
-    hideAccountSurface();
+window.addEventListener("storage", (event) => {
+  if (
+    continuityState.token === null ||
+    event.storageArea !== localStorage ||
+    ![
+      continuityStorageKey(),
+      deletionPendingStorageKey(),
+    ].includes(event.key)
+  ) {
     return;
   }
-  void revalidateAccountContinuity();
+  activeRequestController?.abort();
+  restoreComposeView();
+  hideContinuitySurface();
+  void revalidateContinuity();
+});
+
+window.addEventListener("blur", hideContinuitySurface);
+
+document.addEventListener("visibilitychange", () => {
+  if (continuityState.token === null) return;
+  if (document.hidden) {
+    hideContinuitySurface();
+    return;
+  }
+  void revalidateContinuity();
 });
 
 window.addEventListener("pagehide", () => {
-  hideAccountSurface();
+  hideContinuitySurface();
 });
 
 window.addEventListener("pageshow", (event) => {
-  if (continuityState.mode === "account") {
-    hideAccountSurface();
-    void revalidateAccountContinuity();
+  if (continuityState.token !== null) {
+    hideContinuitySurface();
+    void revalidateContinuity();
     return;
   }
 
@@ -776,18 +965,18 @@ window.addEventListener("pageshow", (event) => {
 });
 
 window.addEventListener("focus", () => {
-  if (continuityState.mode !== "account") return;
-  hideAccountSurface();
-  void revalidateAccountContinuity();
+  if (continuityState.token === null) return;
+  hideContinuitySurface();
+  void revalidateContinuity();
 });
 
 window.addEventListener("online", () => {
-  if (continuityState.mode === "account") {
-    void revalidateAccountContinuity();
+  if (continuityState.token !== null) {
+    void revalidateContinuity();
   }
 });
 
-if (continuityState.mode === "account") {
-  hideAccountSurface();
-  void revalidateAccountContinuity();
+if (continuityState.token !== null) {
+  hideContinuitySurface();
+  void revalidateContinuity();
 }

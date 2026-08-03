@@ -4,10 +4,18 @@ export const SESSION_RETENTION_DAYS = 30;
 
 const SESSION_RETENTION_MS = SESSION_RETENTION_DAYS * 24 * 60 * 60 * 1_000;
 const MODEL_TURN_LEASE_MS = 90 * 1_000;
+const SAFETY_ANSWER_MAX_AGE_MS = 2 * 60 * 60 * 1_000;
 const MAX_RECENT_MESSAGES = 8;
 const MAX_STORED_MESSAGE_CHARS = 4_000;
 const MAX_SUMMARY_CHARS = 1_000;
 const LEASE_TOKEN_PATTERN = /^lease_[A-Za-z0-9_-]{20,128}$/;
+
+class HardDeleteDeadlineExpired extends Error {
+  constructor() {
+    super("Guest session storage deadline expired");
+    this.name = "HardDeleteDeadlineExpired";
+  }
+}
 
 function boundedText(value, limit) {
   return String(value || "").trim().slice(0, limit);
@@ -55,6 +63,62 @@ function emptyContext() {
   };
 }
 
+function validTimestamp(value) {
+  const timestamp = Number(value);
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
+}
+
+function ageDescription(timestamp, now = Date.now()) {
+  const ageMs = Math.max(0, now - timestamp);
+  const minutes = Math.floor(ageMs / 60_000);
+  if (minutes < 1) return "less than a minute old";
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} old`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} old`;
+
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} old`;
+}
+
+function relevanceDescription(timestamp, now = Date.now()) {
+  const ageMs = Math.max(0, now - timestamp);
+  if (ageMs <= 6 * 60 * 60 * 1_000) {
+    return "recent context; consider it, but current-turn evidence still wins";
+  }
+  if (ageMs <= 24 * 60 * 60 * 1_000) {
+    return "same-day background; use only when it helps answer the current message";
+  }
+  if (ageMs <= 3 * 24 * 60 * 60 * 1_000) {
+    return "older context with reduced relevance; do not infer the user's present state from it";
+  }
+  return "historical context only; it is not evidence of present danger or current intent";
+}
+
+function timestampedMemory(content, createdAt, now = Date.now()) {
+  const timestamp = validTimestamp(createdAt);
+  const clean = boundedText(content, MAX_STORED_MESSAGE_CHARS);
+  if (!timestamp) return clean;
+
+  return `[Recorded ${new Date(timestamp).toISOString()}; ${ageDescription(
+    timestamp,
+    now,
+  )}; ${relevanceDescription(timestamp, now)}]\n${clean}`;
+}
+
+function timestampedSummary(summary, updatedAt, now = Date.now()) {
+  const clean = boundedText(summary, MAX_SUMMARY_CHARS);
+  const timestamp = validTimestamp(updatedAt);
+  if (!clean || !timestamp) return clean;
+
+  return `[Historical summary last updated ${new Date(
+    timestamp,
+  ).toISOString()}; ${ageDescription(
+    timestamp,
+    now,
+  )}. Background only: never treat past risk as proof of present risk.]\n${clean}`;
+}
+
 export class SessionMemory extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -87,6 +151,7 @@ export class SessionMemory extends DurableObject {
           lease_expires_at INTEGER,
           last_erased_at INTEGER,
           revoked_through_issued_at_ms INTEGER,
+          hard_delete_at INTEGER,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
         );
@@ -108,6 +173,11 @@ export class SessionMemory extends DurableObject {
       ) {
         this.ctx.storage.sql.exec(
           "ALTER TABLE session_control ADD COLUMN revoked_through_issued_at_ms INTEGER",
+        );
+      }
+      if (!controlColumns.some((column) => column.name === "hard_delete_at")) {
+        this.ctx.storage.sql.exec(
+          "ALTER TABLE session_control ADD COLUMN hard_delete_at INTEGER",
         );
       }
       this.ctx.storage.sql.exec(
@@ -146,7 +216,9 @@ export class SessionMemory extends DurableObject {
       }
 
       this.ctx.storage.transactionSync(() => {
-        this._enforceDeadlinesInTransaction(now);
+        this._enforceDeadlinesInTransaction(now, {
+          enforceHardDelete: false,
+        });
       });
       await this._syncAlarm();
     });
@@ -155,9 +227,9 @@ export class SessionMemory extends DurableObject {
   _controlRow() {
     return this.ctx.storage.sql
       .exec(
-        `SELECT state_epoch, expires_at, lease_token, lease_epoch,
+      `SELECT state_epoch, expires_at, lease_token, lease_epoch,
                 lease_expires_at, last_erased_at,
-                revoked_through_issued_at_ms
+                revoked_through_issued_at_ms, hard_delete_at
          FROM session_control WHERE id = 1`,
       )
       .one();
@@ -181,6 +253,27 @@ export class SessionMemory extends DurableObject {
     );
   }
 
+  _hardDeleteAtForInput(_value) {
+    return null;
+  }
+
+  _setHardDeleteAtInTransaction(value, now) {
+    const hardDeleteAt = this._hardDeleteAtForInput(value);
+    if (hardDeleteAt === null) return;
+    this.ctx.storage.sql.exec(
+      `UPDATE session_control
+       SET hard_delete_at = CASE
+             WHEN hard_delete_at IS NULL OR hard_delete_at > ? THEN ?
+             ELSE hard_delete_at
+           END,
+           updated_at = ?
+       WHERE id = 1`,
+      hardDeleteAt,
+      hardDeleteAt,
+      now,
+    );
+  }
+
   _hasExactLiveLease(control, leaseToken, epoch, now) {
     return (
       cleanLeaseToken(control.lease_token) === leaseToken &&
@@ -190,8 +283,18 @@ export class SessionMemory extends DurableObject {
     );
   }
 
-  _enforceDeadlinesInTransaction(now) {
+  _enforceDeadlinesInTransaction(
+    now,
+    { enforceHardDelete = true } = {},
+  ) {
     const control = this._controlRow();
+    if (
+      enforceHardDelete &&
+      Number(control.hard_delete_at) > 0 &&
+      Number(control.hard_delete_at) <= now
+    ) {
+      throw new HardDeleteDeadlineExpired();
+    }
     const retentionExpired =
       Number(control.expires_at) > 0 && Number(control.expires_at) <= now;
 
@@ -222,7 +325,7 @@ export class SessionMemory extends DurableObject {
     return { retentionExpired: false, leaseExpired: false };
   }
 
-  _readContextFromStorage() {
+  _readContextFromStorage(now = Date.now()) {
     const state = this.ctx.storage.sql
       .exec(
         `SELECT summary, turn_count, awaiting_safety_answer, updated_at
@@ -232,24 +335,31 @@ export class SessionMemory extends DurableObject {
 
     if (!state) return emptyContext();
 
+    const updatedAt = validTimestamp(state.updated_at);
     const recent = this.ctx.storage.sql
       .exec(
-        `SELECT role, content
+        `SELECT role, content, created_at
          FROM recent_messages
          ORDER BY sequence ASC`,
       )
       .toArray()
       .map((message) => ({
         role: message.role,
-        content: boundedText(message.content, MAX_STORED_MESSAGE_CHARS),
+        content: timestampedMemory(message.content, message.created_at, now),
+        createdAt: validTimestamp(message.created_at),
       }));
 
+    const pendingSafetyQuestionIsCurrent =
+      state.awaiting_safety_answer === 1 &&
+      updatedAt !== null &&
+      now - updatedAt <= SAFETY_ANSWER_MAX_AGE_MS;
+
     return {
-      summary: boundedText(state.summary, MAX_SUMMARY_CHARS),
+      summary: timestampedSummary(state.summary, updatedAt, now),
       recent,
-      awaitingSafetyAnswer: state.awaiting_safety_answer === 1,
+      awaitingSafetyAnswer: pendingSafetyQuestionIsCurrent,
       turnCount: Number(state.turn_count) || 0,
-      updatedAt: Number(state.updated_at) || null,
+      updatedAt,
     };
   }
 
@@ -301,7 +411,7 @@ export class SessionMemory extends DurableObject {
     );
 
     return {
-      shouldCompact: recentCount >= 2,
+      shouldCompact: recentCount >= MAX_RECENT_MESSAGES - 2,
       turnCount: Number.isFinite(turnCount) ? turnCount : 0,
     };
   }
@@ -319,6 +429,7 @@ export class SessionMemory extends DurableObject {
     const deadlines = [
       Number(control.expires_at) || 0,
       Number(control.lease_expires_at) || 0,
+      Number(control.hard_delete_at) || 0,
     ].filter((value) => value > 0);
     return deadlines.length ? Math.min(...deadlines) : null;
   }
@@ -337,7 +448,7 @@ export class SessionMemory extends DurableObject {
     const now = Date.now();
     const context = this.ctx.storage.transactionSync(() => {
       this._enforceDeadlinesInTransaction(now);
-      return this._readContextFromStorage();
+      return this._readContextFromStorage(now);
     });
     await this._syncAlarm();
     return context;
@@ -350,12 +461,19 @@ export class SessionMemory extends DurableObject {
     const sessionIssuedAtMs = cleanSessionIssuedAtMs(
       request?.sessionIssuedAtMs,
     );
+    const hardDeleteAt = this._hardDeleteAtForInput(
+      request?.hardDeleteAtMs,
+    );
+    if (hardDeleteAt !== null) {
+      await this._armAtOrBefore(hardDeleteAt);
+    }
     await this._armAtOrBefore(Date.now() + MODEL_TURN_LEASE_MS);
     const now = Date.now();
     const leaseExpiresAt = now + MODEL_TURN_LEASE_MS;
 
     const result = this.ctx.storage.transactionSync(() => {
       this._enforceDeadlinesInTransaction(now);
+      this._setHardDeleteAtInTransaction(request?.hardDeleteAtMs, now);
       const current = this._controlRow();
       if (
         Number(current.revoked_through_issued_at_ms) > 0 &&
@@ -425,7 +543,7 @@ export class SessionMemory extends DurableObject {
         leaseToken,
         epoch,
         leaseExpiresAt,
-        context: this._readContextFromStorage(),
+        context: this._readContextFromStorage(now),
       };
     });
 
@@ -433,19 +551,39 @@ export class SessionMemory extends DurableObject {
     return result;
   }
 
-  async commitModelTurn({ leaseToken, epoch, exchange: exchangeInput } = {}) {
+  async commitModelTurn({
+    leaseToken,
+    epoch,
+    exchange: exchangeInput,
+    sessionIssuedAtMs: sessionIssuedAtMsInput,
+    hardDeleteAtMs,
+  } = {}) {
     const cleanToken = cleanLeaseToken(leaseToken);
     const cleanTurnEpoch = cleanEpoch(epoch);
     if (!cleanToken || cleanTurnEpoch === null) {
       return { committed: false, reason: "stale_turn" };
     }
     const exchange = cleanExchange(exchangeInput);
+    const sessionIssuedAtMs = cleanSessionIssuedAtMs(sessionIssuedAtMsInput);
+    const hardDeleteAt = this._hardDeleteAtForInput(hardDeleteAtMs);
+    if (hardDeleteAt !== null) {
+      await this._armAtOrBefore(hardDeleteAt);
+    }
     await this._armAtOrBefore(Date.now() + SESSION_RETENTION_MS);
     const now = Date.now();
 
     const result = this.ctx.storage.transactionSync(() => {
       this._enforceDeadlinesInTransaction(now);
+      this._setHardDeleteAtInTransaction(hardDeleteAtMs, now);
       const control = this._controlRow();
+      if (
+        Number(control.revoked_through_issued_at_ms) > 0 &&
+        (sessionIssuedAtMs === null ||
+          sessionIssuedAtMs <=
+            Number(control.revoked_through_issued_at_ms))
+      ) {
+        return { committed: false, reason: "session_revoked" };
+      }
       if (
         !this._hasExactLiveLease(
           control,
@@ -520,13 +658,19 @@ export class SessionMemory extends DurableObject {
     exchangeInput,
     requestStartedAt,
     sessionIssuedAtMs,
+    hardDeleteAtMs,
   ) {
     const exchange = cleanExchange(exchangeInput);
+    const hardDeleteAt = this._hardDeleteAtForInput(hardDeleteAtMs);
+    if (hardDeleteAt !== null) {
+      await this._armAtOrBefore(hardDeleteAt);
+    }
     await this._armAtOrBefore(Date.now() + SESSION_RETENTION_MS);
     const now = Date.now();
 
     const result = this.ctx.storage.transactionSync(() => {
       this._enforceDeadlinesInTransaction(now);
+      this._setHardDeleteAtInTransaction(hardDeleteAtMs, now);
       const control = this._controlRow();
       if (
         Number(control.revoked_through_issued_at_ms) > 0 &&
@@ -566,6 +710,7 @@ export class SessionMemory extends DurableObject {
     exchangeInput,
     requestStartedAt = Date.now(),
     sessionIssuedAtMsInput,
+    hardDeleteAtMs,
   ) {
     const startedAt = Number(requestStartedAt);
     if (!Number.isFinite(startedAt)) {
@@ -575,6 +720,7 @@ export class SessionMemory extends DurableObject {
       exchangeInput,
       Math.floor(startedAt),
       cleanSessionIssuedAtMs(sessionIssuedAtMsInput),
+      hardDeleteAtMs,
     );
   }
 
@@ -625,7 +771,7 @@ export class SessionMemory extends DurableObject {
 
       const state = this.ctx.storage.sql
         .exec(
-          `SELECT summary, summary_version
+          `SELECT summary, summary_version, updated_at
            FROM memory_state WHERE id = 1`,
         )
         .toArray()[0];
@@ -633,7 +779,7 @@ export class SessionMemory extends DurableObject {
 
       const messages = this.ctx.storage.sql
         .exec(
-          `SELECT sequence, role, content
+          `SELECT sequence, role, content, created_at
            FROM recent_messages
            ORDER BY sequence ASC`,
         )
@@ -642,16 +788,22 @@ export class SessionMemory extends DurableObject {
           sequence: Number(message.sequence),
           role: message.role,
           content: boundedText(message.content, MAX_STORED_MESSAGE_CHARS),
+          createdAt: validTimestamp(message.created_at),
         }));
 
       if (messages.length < 2) return null;
 
       return {
         summary: boundedText(state.summary, MAX_SUMMARY_CHARS),
+        summaryUpdatedAt: validTimestamp(state.updated_at),
         summaryVersion: Number(state.summary_version) || 0,
         stateEpoch: Number(control.state_epoch) || 0,
         throughSequence: messages.at(-1).sequence,
-        messages: messages.map(({ role, content }) => ({ role, content })),
+        messages: messages.map(({ role, content, createdAt }) => ({
+          role,
+          content,
+          createdAt,
+        })),
       };
     });
     await this._syncAlarm();
@@ -717,13 +869,18 @@ export class SessionMemory extends DurableObject {
     return applied;
   }
 
-  async eraseMemory(sessionIssuedAtMsInput) {
+  async eraseMemory(sessionIssuedAtMsInput, hardDeleteAtMs) {
     const sessionIssuedAtMs = cleanSessionIssuedAtMs(
       sessionIssuedAtMsInput,
     );
+    const prearmedHardDeleteAt = this._hardDeleteAtForInput(hardDeleteAtMs);
+    if (prearmedHardDeleteAt !== null) {
+      await this._armAtOrBefore(prearmedHardDeleteAt);
+    }
     const now = Date.now();
     const result = this.ctx.storage.transactionSync(() => {
       this._enforceDeadlinesInTransaction(now);
+      this._setHardDeleteAtInTransaction(hardDeleteAtMs, now);
       const control = this._controlRow();
       const revokedThrough =
         Number(control.revoked_through_issued_at_ms) || 0;
@@ -804,5 +961,251 @@ export class SessionMemory extends DurableObject {
       this._enforceDeadlinesInTransaction(now);
     });
     await this._syncAlarm();
+  }
+}
+
+export class GuestSessionMemory extends SessionMemory {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.hardDeleted = false;
+  }
+
+  _hardDeleteAtForInput(value) {
+    const timestamp = Number(value);
+    const now = Date.now();
+    return (
+      Number.isSafeInteger(timestamp) &&
+      timestamp > now &&
+      timestamp <= now + 366 * 24 * 60 * 60 * 1_000
+    )
+      ? timestamp
+      : null;
+  }
+
+  _setHardDeleteAtInTransaction(value, now) {
+    const control = this._controlRow();
+    const existing = Number(control.hard_delete_at) || 0;
+    const timestamp = Number(value);
+    if (existing > now && (value === undefined || value === null)) return;
+    if (
+      !Number.isSafeInteger(timestamp) ||
+      timestamp <= now ||
+      timestamp > now + 366 * 24 * 60 * 60 * 1_000
+    ) {
+      throw new HardDeleteDeadlineExpired();
+    }
+    const hardDeleteAt = existing > now
+      ? Math.min(existing, timestamp)
+      : timestamp;
+    this.ctx.storage.sql.exec(
+      `UPDATE session_control
+       SET hard_delete_at = ?, updated_at = ?
+       WHERE id = 1`,
+      hardDeleteAt,
+      now,
+    );
+  }
+
+  async _deleteAllAndMark() {
+    await this.ctx.storage.deleteAll();
+    this.hardDeleted = true;
+  }
+
+  async _deleteIfHardExpired({ requireStoredDeadline = false } = {}) {
+    if (this.hardDeleted) return true;
+    let hardDeleteAt;
+    try {
+      hardDeleteAt = Number(this._controlRow().hard_delete_at) || 0;
+    } catch (error) {
+      if (!/no such table: session_control/i.test(String(error?.message || ""))) {
+        throw error;
+      }
+      await this._deleteAllAndMark();
+      return true;
+    }
+    if (!hardDeleteAt) {
+      if (!requireStoredDeadline) return false;
+      await this._deleteAllAndMark();
+      return true;
+    }
+    if (hardDeleteAt > Date.now()) return false;
+    await this._deleteAllAndMark();
+    return true;
+  }
+
+  _requiredHardDeadlineStatus(value) {
+    const timestamp = Number(value);
+    const now = Date.now();
+    if (Number.isSafeInteger(timestamp) && timestamp <= now) return "expired";
+    if (this._hardDeleteAtForInput(value) !== null) return "valid";
+    return Number(this._controlRow().hard_delete_at) > now
+      ? "valid"
+      : "missing";
+  }
+
+  async _expireNow(fallback) {
+    await this._deleteAllAndMark();
+    return fallback;
+  }
+
+  async _beforeHardExpiry(
+    fallback,
+    operation,
+    { requireStoredDeadline = false } = {},
+  ) {
+    if (await this._deleteIfHardExpired({ requireStoredDeadline })) {
+      return fallback;
+    }
+    try {
+      return await operation();
+    } catch (error) {
+      const storageWasDeleted = /no such table: (?:session_control|memory_state|recent_messages)/i
+        .test(String(error?.message || ""));
+      if (!(error instanceof HardDeleteDeadlineExpired) && !storageWasDeleted) {
+        throw error;
+      }
+      await this._deleteAllAndMark();
+      return fallback;
+    }
+  }
+
+  async _beforeEstablishedGuestState(fallback, operation) {
+    return this._beforeHardExpiry(fallback, operation, {
+      requireStoredDeadline: true,
+    });
+  }
+
+  async readContext() {
+    return this._beforeEstablishedGuestState(emptyContext(), () =>
+      super.readContext(),
+    );
+  }
+
+  async beginModelTurn(request = {}) {
+    const fallback = { acquired: false, reason: "session_expired" };
+    return this._beforeHardExpiry(fallback, async () => {
+      const deadline = this._requiredHardDeadlineStatus(
+        request?.hardDeleteAtMs,
+      );
+      if (deadline === "expired") return this._expireNow(fallback);
+      if (deadline !== "valid") {
+        return this._expireNow({
+          acquired: false,
+          reason: "invalid_storage_deadline",
+        });
+      }
+      return super.beginModelTurn(request);
+    });
+  }
+
+  async commitModelTurn(request = {}) {
+    const fallback = { committed: false, reason: "session_expired" };
+    return this._beforeHardExpiry(fallback, async () => {
+      const deadline = this._requiredHardDeadlineStatus(
+        request?.hardDeleteAtMs,
+      );
+      if (deadline === "expired") return this._expireNow(fallback);
+      if (deadline !== "valid") {
+        return this._expireNow({
+          committed: false,
+          reason: "invalid_storage_deadline",
+        });
+      }
+      return super.commitModelTurn(request);
+    });
+  }
+
+  async releaseModelTurn(request = {}) {
+    return this._beforeEstablishedGuestState(false, () =>
+      super.releaseModelTurn(request),
+    );
+  }
+
+  async recordFixedExchange(
+    exchange,
+    requestStartedAt,
+    sessionIssuedAtMs,
+    hardDeleteAtMs,
+  ) {
+    const fallback = { recorded: false, reason: "session_expired" };
+    return this._beforeHardExpiry(fallback, async () => {
+      const deadline = this._requiredHardDeadlineStatus(hardDeleteAtMs);
+      if (deadline === "expired") return this._expireNow(fallback);
+      if (deadline !== "valid") {
+        return this._expireNow({
+          recorded: false,
+          reason: "invalid_storage_deadline",
+        });
+      }
+      return super.recordFixedExchange(
+        exchange,
+        requestStartedAt,
+        sessionIssuedAtMs,
+        hardDeleteAtMs,
+      );
+    });
+  }
+
+  async recordLocalExchange() {
+    return this._beforeEstablishedGuestState(
+      { recorded: false, reason: "guest_legacy_write_blocked" },
+      () => ({ recorded: false, reason: "guest_legacy_write_blocked" }),
+    );
+  }
+
+  async recordExchange() {
+    return this._beforeEstablishedGuestState(
+      { recorded: false, reason: "guest_legacy_write_blocked" },
+      () => ({ recorded: false, reason: "guest_legacy_write_blocked" }),
+    );
+  }
+
+  async getCompactionSnapshot() {
+    return this._beforeEstablishedGuestState(null, () =>
+      super.getCompactionSnapshot(),
+    );
+  }
+
+  async applySummary(...args) {
+    return this._beforeEstablishedGuestState(false, () =>
+      super.applySummary(...args),
+    );
+  }
+
+  async eraseMemory(sessionIssuedAtMs, hardDeleteAtMs) {
+    const fallback = { erased: false, reason: "session_expired" };
+    return this._beforeHardExpiry(fallback, async () => {
+      const deadline = this._requiredHardDeadlineStatus(hardDeleteAtMs);
+      if (deadline === "expired") return this._expireNow(fallback);
+      if (deadline !== "valid") {
+        return this._expireNow({
+          erased: false,
+          reason: "invalid_storage_deadline",
+        });
+      }
+      return super.eraseMemory(sessionIssuedAtMs, hardDeleteAtMs);
+    });
+  }
+
+  async validateSession(sessionIssuedAtMsInput) {
+    return this._beforeEstablishedGuestState({ allowed: false }, () =>
+      super.validateSession(sessionIssuedAtMsInput),
+    );
+  }
+
+  async getLifecycleStatus() {
+    const fallback = {
+      epoch: 0,
+      hasLease: false,
+      expiresAt: null,
+      leaseExpiresAt: null,
+    };
+    return this._beforeEstablishedGuestState(fallback, () =>
+      super.getLifecycleStatus(),
+    );
+  }
+
+  async alarm() {
+    return this._beforeEstablishedGuestState(undefined, () => super.alarm());
   }
 }

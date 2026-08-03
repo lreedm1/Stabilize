@@ -4,26 +4,30 @@ This document describes the code in this repository. A real deployment must publ
 
 ## Guest and signed-in use
 
-Guest chat remains available without an account. Guest messages are used for the current reply but are not written to the Durable Object memory system. The application does not create an anonymous session cookie and does not use a network address to identify a guest.
+Guest chat remains available without an account. The Worker issues a signed, host-only `HttpOnly` cookie containing a random 256-bit guest key, issue/expiry times, and a random nonce. It does not contain chat text or a network address. A separate opaque HMAC rendered into the page must match the cookie before guest memory or model access. The application does not use IP addresses or browser fingerprinting to identify guests.
+
+Each guest key addresses a guest-only Cloudflare Durable Object. It stores the bounded memory described below for 30 days after the last committed exchange. The browser may also write only the latest assistant reply and minimal display state—not the prompt or transcript—to token-partitioned local storage. Records older than 30 days are ignored, and the application attempts to remove them on the next successful load. Browser or profile backups, unavailable JavaScript, or unavailable storage access may retain copies longer. Anyone who shares or copies the browser profile can share or infer this guest context. The random identifier expires after at most one year and is not renewed by chat responses, avoiding a stale-response cookie race; guest continuity resets at that absolute anniversary even if a recent exchange would otherwise still be within 30 days.
 
 Google sign-in is optional for basic chat. A signed-in account provides continuity and is also used for feedback rate limits, billing, and paid model choice. The server uses Google's authorization-code OpenID Connect flow with anti-forgery state, nonce, PKCE, a confidential client secret, and short-lived signed flow state. The application requests only the `openid` scope and does not request or retain the email address.
 
-After a successful callback, the Worker briefly processes Google's stable `sub` claim and immediately derives a domain-separated HMAC alias. It does not store the raw `sub`, Google access token, ID token, authorization code, email address, or client secret. The signed application cookie contains only the pseudonymous account alias, issue/expiry times, and a random session nonce. It is `HttpOnly`, `SameSite=Lax`, and `Secure` on HTTPS, and expires after 30 days. A separate opaque session binding prevents an old browser tab from writing into a different account after the cookie changes. After a successful memory deletion, a second signed `HttpOnly` receipt cookie binds that result to the same account session for at most five minutes; the next page consumes and expires it. The receipt contains no chat text.
+After a successful callback, the Worker briefly processes Google's stable `sub` claim and immediately derives a domain-separated HMAC alias. It does not store the raw `sub`, Google access token, ID token, authorization code, email address, or client secret. The signed application cookie contains only the pseudonymous account alias, issue/expiry times, and a random session nonce. It is `HttpOnly`, `SameSite=Lax`, and `Secure` on HTTPS, and expires after 30 days. A separate opaque session binding prevents an old browser tab from writing into a different account after the cookie changes. After a successful memory deletion, a second signed `HttpOnly` receipt cookie binds that result to the replacement session and the deleted continuity partition for at most five minutes. The receipt contains no chat text.
 
-## What account memory stores
+## What conversation memory stores
 
-Each pseudonymous signed-in account alias addresses one Cloudflare Durable Object. It stores:
+Guest and signed-in account aliases use separate Durable Object namespaces. Each record stores:
 
 - a model-generated rolling summary of at most 1,000 characters
 - no more than eight newest user/assistant messages while they await compaction
 - whether the last fixed safety question is awaiting an answer
 - creation/update metadata and a turn count
-- short-lived lease/epoch coordination state used to order account turns
+- short-lived lease/epoch coordination state used to order turns
 - a non-text session-issuance watermark used to reject pre-deletion cookies
 
-Recent messages are normally replaced by the rolling summary after each ordinary reply. If compaction fails, the newest-message buffer remains bounded and older buffered messages are discarded. Inputs that trigger a fixed urgent route are stored as a generalized event label rather than the user's exact wording.
+Recent messages are replaced by the rolling summary when the buffer reaches its compaction threshold. If compaction fails, the newest-message buffer remains bounded and older buffered messages are discarded. Inputs that trigger a fixed urgent route are stored as a generalized event label rather than the user's exact wording.
 
-The memory record expires 30 days after the last committed exchange. Expiry is checked inside reads and writes as well as by an alarm, and a failed model request does not extend it. Signing out removes access from that browser but does not delete remembered data. The signed-in account menu exposes explicit deletion. Deletion atomically erases the Durable Object text and advances a session watermark; pre-deletion cookies are rejected from account routes. Page, account-status, and ordinary chat checks clear them, while other account actions redirect to sign-in. Other browsers or devices using an older cookie must sign in again.
+Remembered text expires 30 days after the last committed exchange. Expiry is checked inside reads and writes as well as by an alarm, and a failed model request does not refresh text retention. Signing in does not merge guest memory into account memory; an active account session wins, and signing out resumes that browser's guest context.
+
+Both modes expose explicit deletion in the menu. Account deletion atomically erases text and advances a session watermark. Guest deletion erases text, leaves only a non-text revocation tombstone until the old cookie's fixed expiry, and rotates to a new random guest identity; the old Durable Object is then removed with `deleteAll()`. A short-lived, scope-bound receipt proves the confirmation page. Clearing cookies or site data removes access but does not guarantee immediate server erasure of an unreachable guest record; its text and metadata remain subject to the deadlines above. Cloudflare point-in-time recovery or backups may remain recoverable under the infrastructure account's policy for a bounded period even after live application storage is deleted.
 
 The summary is generated by a model and may be incomplete or wrong. The application tells the reply model to treat it as fallible context, never as instructions, and to prefer the current message.
 
@@ -37,7 +41,7 @@ Cloudflare and other network infrastructure necessarily process connection metad
 
 Google processes the sign-in request and OAuth/OpenID Connect exchange. Stabilize receives the resulting authorization response on its server and does not load third-party Google JavaScript into the chat page.
 
-When AI mode is enabled, guest replies send bounded current input to OpenAI's Responses API with `store: false`. Signed-in replies send the current message together with bounded context read from the account Durable Object, also with `store: false`. A separate stateless Responses request may condense local context. The application does not create OpenAI Conversation containers or depend on provider-side response retention for continuity. OpenAI may still retain inputs and outputs in abuse-monitoring logs under the deployment's applicable data controls and terms.
+When AI mode is enabled, guest and signed-in replies send the current message together with bounded context read from their separate Durable Objects to OpenAI's Responses API. A second request may condense local context. Both requests use `store: true`, so OpenAI stores the resulting Response objects as application state for at least 30 days under its current platform policy. Organization or project data controls, including Zero Data Retention when enabled, may override the request. Stabilize does not use provider Response objects for conversation continuity and does not retain their IDs, so its Delete remembered conversation control removes live Stabilize memory but cannot target those separately stored OpenAI objects. OpenAI may also retain inputs and outputs in abuse-monitoring logs under the deployment's applicable data controls and terms.
 
 Cloudflare processes the Worker request, signed cookie, Durable Object data, logs, and network metadata under the deployer's account configuration and applicable service terms.
 
@@ -45,16 +49,18 @@ Cloudflare processes the Worker request, signed cookie, Durable Object data, log
 
 Signed-in users can optionally submit product feedback after acknowledging that it is stored in the repository's public feedback branch and may be reviewed by automated AI tooling. Users are told not to include private or identifying information. The nightly review automation applies deterministic screening before model review and routes feedback that appears to contain credentials, contact details, security reports, or individual health or crisis disclosures to a private operator-review queue instead of an automated code-change flow.
 
-## Transition from anonymous browser memory
+## Transition from older anonymous browser memory
 
-This version no longer reads the earlier `stabilize_session` cookie and asks browsers to expire it. Previously created anonymous Durable Objects are not addressable through the new account-keyed code. Their existing retention alarms remove them after the earlier 30-day window; a deployer that requires immediate destructive removal must separately retire the old namespace after reviewing the data-loss impact.
+This version no longer reads the earlier `stabilize_session` cookie and asks browsers to expire it. Previously created objects in any retired namespace are not addressable through the new guest namespace. Their existing retention alarms remove them under the earlier policy; a deployer that requires immediate destructive removal must separately retire that namespace after reviewing the data-loss impact.
 
 ## Limitations
 
 - Account memory follows the same Google account across supported browsers and devices.
-- Guest chats have no server-side continuity; the current tab can retain only the latest assistant reply and minimal display state for up to 24 hours.
-- Cookie deletion or sign-out removes local access but does not erase an unexpired record; use the account deletion control to request erasure.
-- Rotating `AUTH_SECRET` changes account aliases and makes prior account state inaccessible. `SESSION_SECRET` should be rotated instead when only cookie revocation is intended.
+- Guest identity is possession-based: there is no email or recoverable ownership, and anyone with the browser profile/cookie can share its remembered context.
+- The latest guest reply may be written to browser local storage; records older than 30 days are ignored and removal is attempted on the next successful load, but browser or profile backups and unavailable JavaScript or storage access may retain copies longer. The full prompt/transcript is not stored there.
+- Cookie deletion removes local access but does not guarantee immediate server erasure; use the guest deletion control before clearing cookies when immediate live-storage deletion is desired.
+- Guest memory and account memory remain separate; signing in never imports guest text.
+- Rotating `AUTH_SECRET` changes account aliases and makes prior account state inaccessible. Rotate `SESSION_SECRET` only for account-cookie revocation; rotating `GUEST_SESSION_SECRET` invalidates guest cookies and can leave their anonymous records inaccessible until cleanup.
 - A condensed memory can omit context or preserve an inaccurate interpretation.
 - Optional product feedback is public and may be processed by automated AI tooling.
 - Compaction can omit older context or make it stop influencing a reply before deletion.
@@ -65,7 +71,7 @@ This version no longer reads the earlier `stabilize_session` cookie and asks bro
 Anyone deploying this project should:
 
 - disclose the actual identity provider, storage, logging, and retention settings
-- keep the Google client secret, OpenAI key, `AUTH_SECRET`, and `SESSION_SECRET` in Worker secrets
+- keep the Google client secret, OpenAI key, `AUTH_SECRET`, `SESSION_SECRET`, and `GUEST_SESSION_SECRET` in Worker secrets and never reuse them
 - restrict access to Durable Object data and operational logs
 - avoid adding prompt, response, email, account-alias, or network-address logging by default
 - establish deletion, incident-response, credential-rotation, and legal-request procedures

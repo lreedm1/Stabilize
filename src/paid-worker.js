@@ -1,4 +1,7 @@
-import originalWorker, { SessionMemory } from "./index.js";
+import originalWorker, {
+  GuestSessionMemory,
+  SessionMemory,
+} from "./index.js";
 import {
   ACCOUNT_STATE_HEADER,
   readAuthorizedAuthSession,
@@ -20,7 +23,7 @@ import {
   usagePeriod,
 } from "./billing.js";
 
-export { SessionMemory, BillingAccount };
+export { GuestSessionMemory, SessionMemory, BillingAccount };
 
 const ACCOUNT_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const MAX_SAFETY_PRECLASSIFY_BYTES = 32_000;
@@ -38,18 +41,18 @@ function latestUserText(body) {
   return "";
 }
 
-async function hasDirectFixedSafetyRoute(request) {
+async function readBoundedChatBody(request) {
   const declaredLength = Number(request.headers.get("content-length") || 0);
   if (
     Number.isFinite(declaredLength) &&
     declaredLength > MAX_SAFETY_PRECLASSIFY_BYTES
   ) {
-    return false;
+    return null;
   }
 
   try {
     const clone = request.clone();
-    if (!clone.body) return false;
+    if (!clone.body) return null;
 
     const reader = clone.body.getReader();
     const chunks = [];
@@ -61,7 +64,7 @@ async function hasDirectFixedSafetyRoute(request) {
         total += value.byteLength;
         if (total > MAX_SAFETY_PRECLASSIFY_BYTES) {
           void reader.cancel().catch(() => {});
-          return false;
+          return null;
         }
         chunks.push(value);
       }
@@ -75,7 +78,16 @@ async function hasDirectFixedSafetyRoute(request) {
       bytes.set(chunk, offset);
       offset += chunk.byteLength;
     }
-    const body = JSON.parse(new TextDecoder().decode(bytes) || "{}");
+    return JSON.parse(new TextDecoder().decode(bytes) || "{}");
+  } catch {
+    return null;
+  }
+}
+
+async function hasDirectFixedSafetyRoute(request) {
+  try {
+    const body = await readBoundedChatBody(request);
+    if (!body) return false;
     const text = latestUserText(body);
     if (!text) return false;
 
@@ -87,6 +99,14 @@ async function hasDirectFixedSafetyRoute(request) {
     // The core worker remains authoritative for malformed or unreadable input.
     return false;
   }
+}
+
+async function hasExactAccountContinuity(request, authSession) {
+  const body = await readBoundedChatBody(request);
+  return Boolean(
+    body?.continuity?.mode === "account" &&
+      body.continuity.token === authSession?.continuityToken,
+  );
 }
 
 function escapeHtml(value) {
@@ -395,6 +415,9 @@ async function paidChatResponse(request, env, ctx) {
   }
   const authSession = await readAuthorizedAuthSession(request, env);
   if (!authSession) return originalWorker.fetch(request, env, ctx);
+  if (!(await hasExactAccountContinuity(request, authSession))) {
+    return originalWorker.fetch(request, env, ctx);
+  }
   const stub = billingStub(env, authSession.accountKey);
   const state = await readBillingState(stub);
   const defaultModel = String(env.OPENAI_MODEL || "gpt-5.6-sol");

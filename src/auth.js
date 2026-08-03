@@ -3,11 +3,13 @@ const GOOGLE_AUTHORIZATION_URL =
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 export const AUTH_COOKIE_NAME = "stabilize_auth";
+export const GUEST_COOKIE_NAME = "__Host-stabilize_guest";
 export const LEGACY_SESSION_COOKIE_NAME = "stabilize_session";
 export const MEMORY_DELETION_COOKIE_NAME = "stabilize_memory_deleted";
 
 const OAUTH_COOKIE_NAME = "stabilize_oauth";
 const AUTH_SESSION_SECONDS = 30 * 24 * 60 * 60;
+const GUEST_SESSION_SECONDS = 365 * 24 * 60 * 60;
 // Only cookies actually issued before the v2 rollout remain valid. This
 // bounded bridge expires completely 30 days after the cutoff, so possession
 // of an old AUTH_SECRET cannot mint indefinitely valid v1 sessions.
@@ -16,6 +18,7 @@ const LEGACY_AUTH_SESSION_ISSUED_BEFORE = Math.floor(
 );
 const OAUTH_STATE_SECONDS = 10 * 60;
 const MEMORY_DELETION_FLASH_SECONDS = 5 * 60;
+const GUEST_RESET_GRANT_SECONDS = 2 * 60;
 const LEGACY_OAUTH_STATE_EXPIRES_BEFORE =
   LEGACY_AUTH_SESSION_ISSUED_BEFORE + OAUTH_STATE_SECONDS;
 const AUTH_SECRET_MIN_CHARS = 32;
@@ -31,6 +34,13 @@ export class GoogleAuthConfigurationError extends Error {
   constructor() {
     super("Google sign-in is not configured");
     this.name = "GoogleAuthConfigurationError";
+  }
+}
+
+export class GuestSessionConfigurationError extends Error {
+  constructor() {
+    super("Guest continuity is not configured");
+    this.name = "GuestSessionConfigurationError";
   }
 }
 
@@ -51,6 +61,19 @@ function readCookie(request, name) {
     }
   }
   return null;
+}
+
+function readSingleCookie(request, name) {
+  const header = request.headers.get("cookie") || "";
+  const matches = [];
+  for (const part of header.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator < 1) continue;
+    if (part.slice(0, separator).trim() === name) {
+      matches.push(part.slice(separator + 1).trim());
+    }
+  }
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function base64UrlEncode(value) {
@@ -155,7 +178,7 @@ function googleConfig(env) {
   const authSecret = String(env?.AUTH_SECRET || "");
   // AUTH_SECRET is the stable account-alias key. SESSION_SECRET is required
   // separately so cookie revocation cannot orphan the account Durable Object.
-  const sessionSecret = String(env?.SESSION_SECRET || "");
+  const sessionSecret = sessionSecretConfig(env).sessionSecret;
   const origin = validateConfiguredOrigin(
     String(env?.PUBLIC_ORIGIN || "").trim(),
   );
@@ -165,13 +188,41 @@ function googleConfig(env) {
     clientSecret.length < 8 ||
     clientSecret.length > 512 ||
     authSecret.length < AUTH_SECRET_MIN_CHARS ||
-    sessionSecret.length < AUTH_SECRET_MIN_CHARS ||
     sessionSecret === authSecret
   ) {
     throw new GoogleAuthConfigurationError();
   }
 
   return { clientId, clientSecret, authSecret, sessionSecret, origin };
+}
+
+function sessionSecretConfig(env) {
+  const sessionSecret = String(env?.SESSION_SECRET || "");
+  if (sessionSecret.length < AUTH_SECRET_MIN_CHARS) {
+    throw new GoogleAuthConfigurationError();
+  }
+  return { sessionSecret };
+}
+
+function guestSessionConfig(env) {
+  const sessionSecret = String(env?.GUEST_SESSION_SECRET || "");
+  if (
+    sessionSecret.length < AUTH_SECRET_MIN_CHARS ||
+    sessionSecret === String(env?.AUTH_SECRET || "") ||
+    sessionSecret === String(env?.SESSION_SECRET || "")
+  ) {
+    throw new GuestSessionConfigurationError();
+  }
+  return { sessionSecret };
+}
+
+export function guestSessionConfigured(env) {
+  try {
+    guestSessionConfig(env);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function googleAuthConfigured(env) {
@@ -210,7 +261,10 @@ function callbackUrl(env) {
 }
 
 function cookieHeader(request, name, value, options = {}) {
-  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
+  const secure =
+    new URL(request.url).protocol === "https:" || name.startsWith("__Host-")
+      ? "; Secure"
+      : "";
   const maxAge = Number(options.maxAge);
   const path = options.path || "/";
   const sameSite = options.sameSite || "Lax";
@@ -243,6 +297,10 @@ export function clearAuthCookie(request) {
   return expiredCookie(request, AUTH_COOKIE_NAME);
 }
 
+export function clearGuestCookie(request) {
+  return expiredCookie(request, GUEST_COOKIE_NAME);
+}
+
 export function clearLegacySessionCookie(request) {
   return expiredCookie(request, LEGACY_SESSION_COOKIE_NAME);
 }
@@ -253,26 +311,39 @@ export function clearMemoryDeletionCookie(request) {
 
 export async function createMemoryDeletionReceiptCookie(
   request,
-  authSession,
+  memorySession,
   env,
   nowMs = Date.now(),
+  deletedContinuityToken = memorySession?.continuityToken,
 ) {
-  const accountKey = String(authSession?.accountKey || "");
-  const continuityToken = String(authSession?.continuityToken || "");
+  const accountKey = String(memorySession?.accountKey || "");
+  const guestKey = String(memorySession?.guestKey || "");
+  const continuityToken = String(memorySession?.continuityToken || "");
+  const deletedContinuity = String(deletedContinuityToken || "");
+  const kind = ACCOUNT_KEY_PATTERN.test(accountKey)
+    ? "account"
+    : ACCOUNT_KEY_PATTERN.test(guestKey)
+      ? "guest"
+      : null;
+  const memoryKey = kind === "account" ? accountKey : guestKey;
   if (
-    !ACCOUNT_KEY_PATTERN.test(accountKey) ||
-    !ACCOUNT_KEY_PATTERN.test(continuityToken)
+    !kind ||
+    !ACCOUNT_KEY_PATTERN.test(continuityToken) ||
+    !ACCOUNT_KEY_PATTERN.test(deletedContinuity)
   ) {
     throw new GoogleAuthFlowError("InvalidMemoryDeletionReceipt");
   }
 
-  const { sessionSecret } = googleConfig(env);
+  const { sessionSecret } =
+    kind === "account" ? sessionSecretConfig(env) : guestSessionConfig(env);
   const issuedAt = Math.floor(nowMs / 1_000);
   const token = await signToken(
     {
-      v: 1,
-      a: accountKey,
+      v: 2,
+      t: kind,
+      k: memoryKey,
       c: continuityToken,
+      d: deletedContinuity,
       iat: issuedAt,
       exp: issuedAt + MEMORY_DELETION_FLASH_SECONDS,
     },
@@ -287,26 +358,215 @@ export async function createMemoryDeletionReceiptCookie(
 
 export async function readMemoryDeletionReceipt(
   request,
-  authSession,
+  memorySession,
   env,
   nowMs = Date.now(),
 ) {
-  if (!authSession) return false;
+  if (!memorySession) return null;
   const token = readCookie(request, MEMORY_DELETION_COOKIE_NAME);
-  if (!token) return false;
+  if (!token) return null;
 
-  const { sessionSecret } = googleConfig(env);
+  const accountKey = String(memorySession?.accountKey || "");
+  const guestKey = String(memorySession?.guestKey || "");
+  const kind = ACCOUNT_KEY_PATTERN.test(accountKey)
+    ? "account"
+    : ACCOUNT_KEY_PATTERN.test(guestKey)
+      ? "guest"
+      : null;
+  const memoryKey = kind === "account" ? accountKey : guestKey;
+  if (!kind) return null;
+  const { sessionSecret } =
+    kind === "account" ? sessionSecretConfig(env) : guestSessionConfig(env);
   const payload = await verifyToken(token, sessionSecret, "memory-deletion");
   const now = Math.floor(nowMs / 1_000);
-  return Boolean(
-    payload?.v === 1 &&
-      payload.a === authSession.accountKey &&
-      payload.c === authSession.continuityToken &&
+  const confirmed = Boolean(
+    payload?.v === 2 &&
+      payload.t === kind &&
+      payload.k === memoryKey &&
+      payload.c === memorySession.continuityToken &&
+      ACCOUNT_KEY_PATTERN.test(String(payload.d || "")) &&
       Number.isSafeInteger(payload.iat) &&
       Number.isSafeInteger(payload.exp) &&
       payload.iat <= now + 60 &&
       payload.exp > now &&
       payload.exp - payload.iat === MEMORY_DELETION_FLASH_SECONDS,
+  );
+  return confirmed
+    ? {
+        confirmed: true,
+        deletedContinuity: {
+          mode: kind,
+          token: payload.d,
+        },
+      }
+    : null;
+}
+
+async function signGuestSession(
+  guestKey,
+  issuedAtMs,
+  expiresAt,
+  sessionSecret,
+) {
+  if (!ACCOUNT_KEY_PATTERN.test(String(guestKey || ""))) {
+    throw new GoogleAuthFlowError("InvalidGuestKey");
+  }
+  const issuedAt = Math.floor(issuedAtMs / 1_000);
+  return signToken(
+    {
+      v: 1,
+      g: guestKey,
+      iat: issuedAt,
+      ims: issuedAtMs,
+      exp: expiresAt,
+      s: randomValue(16),
+    },
+    sessionSecret,
+    "guest-session",
+  );
+}
+
+async function guestContinuityTokenForPayload(payload, sessionSecret) {
+  return base64UrlEncode(
+    await hmac(
+      sessionSecret,
+      "guest-continuity",
+      `${payload.g}\u0000${payload.iat}\u0000${payload.ims}\u0000${payload.exp}\u0000${payload.s}`,
+    ),
+  );
+}
+
+async function issueGuestSession(
+  request,
+  env,
+  guestKey,
+  issuedAtMs,
+  nowMs = Date.now(),
+) {
+  const { sessionSecret } = guestSessionConfig(env);
+  const cleanIssuedAtMs = Math.floor(issuedAtMs);
+  const issuedAt = Math.floor(cleanIssuedAtMs / 1_000);
+  const expiresAt = issuedAt + GUEST_SESSION_SECONDS;
+  const token = await signGuestSession(
+    guestKey,
+    cleanIssuedAtMs,
+    expiresAt,
+    sessionSecret,
+  );
+  const payload = await verifyToken(token, sessionSecret, "guest-session");
+  const now = Math.floor(nowMs / 1_000);
+  return {
+    session: {
+      guestKey,
+      continuityToken: await guestContinuityTokenForPayload(
+        payload,
+        sessionSecret,
+      ),
+      issuedAt,
+      issuedAtMs: cleanIssuedAtMs,
+      expiresAt,
+    },
+    setCookie: cookieHeader(request, GUEST_COOKIE_NAME, token, {
+      maxAge: Math.max(0, expiresAt - now),
+      path: "/",
+      sameSite: "Lax",
+    }),
+  };
+}
+
+export async function createGuestSession(
+  request,
+  env,
+  nowMs = Date.now(),
+) {
+  return issueGuestSession(
+    request,
+    env,
+    randomValue(32),
+    Math.floor(nowMs),
+    nowMs,
+  );
+}
+
+export async function readGuestSession(request, env, nowMs = Date.now()) {
+  if (!guestSessionConfigured(env)) return null;
+  const token = readSingleCookie(request, GUEST_COOKIE_NAME);
+  if (!token) return null;
+
+  const { sessionSecret } = guestSessionConfig(env);
+  const payload = await verifyToken(token, sessionSecret, "guest-session");
+  const now = Math.floor(nowMs / 1_000);
+  const issuedAtMs = Number(payload?.ims);
+  if (
+    payload?.v !== 1 ||
+    !ACCOUNT_KEY_PATTERN.test(String(payload.g || "")) ||
+    !Number.isSafeInteger(payload.iat) ||
+    !Number.isSafeInteger(payload.exp) ||
+    !Number.isSafeInteger(issuedAtMs) ||
+    Math.floor(issuedAtMs / 1_000) !== payload.iat ||
+    issuedAtMs > nowMs + 60_000 ||
+    payload.iat > now + 60 ||
+    payload.exp <= now ||
+    payload.exp - payload.iat !== GUEST_SESSION_SECONDS ||
+    !SESSION_ID_PATTERN.test(String(payload.s || ""))
+  ) {
+    return null;
+  }
+
+  return {
+    guestKey: payload.g,
+    continuityToken: await guestContinuityTokenForPayload(
+      payload,
+      sessionSecret,
+    ),
+    issuedAt: payload.iat,
+    issuedAtMs,
+    expiresAt: payload.exp,
+  };
+}
+
+export async function createGuestResetGrant(
+  guestSession,
+  env,
+  nowMs = Date.now(),
+) {
+  const continuityToken = String(guestSession?.continuityToken || "");
+  if (!ACCOUNT_KEY_PATTERN.test(continuityToken)) {
+    throw new GoogleAuthFlowError("InvalidGuestResetGrant");
+  }
+  const { sessionSecret } = guestSessionConfig(env);
+  const issuedAt = Math.floor(nowMs / 1_000);
+  return signToken(
+    {
+      v: 1,
+      c: continuityToken,
+      iat: issuedAt,
+      exp: issuedAt + GUEST_RESET_GRANT_SECONDS,
+    },
+    sessionSecret,
+    "guest-reset",
+  );
+}
+
+export async function readGuestResetGrant(
+  token,
+  guestSession,
+  env,
+  nowMs = Date.now(),
+) {
+  const continuityToken = String(guestSession?.continuityToken || "");
+  if (!ACCOUNT_KEY_PATTERN.test(continuityToken)) return false;
+  const { sessionSecret } = guestSessionConfig(env);
+  const payload = await verifyToken(token, sessionSecret, "guest-reset");
+  const now = Math.floor(nowMs / 1_000);
+  return Boolean(
+    payload?.v === 1 &&
+      payload.c === continuityToken &&
+      Number.isSafeInteger(payload.iat) &&
+      Number.isSafeInteger(payload.exp) &&
+      payload.iat <= now + 60 &&
+      payload.exp > now &&
+      payload.exp - payload.iat === GUEST_RESET_GRANT_SECONDS,
   );
 }
 

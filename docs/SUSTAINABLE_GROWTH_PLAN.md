@@ -4,7 +4,7 @@
 **Planning horizon:** 12 months, with a three-year direction  
 **Core rule:** grow only when usefulness, safety, reliability, and economics improve together
 
-This plan is a set of testable hypotheses, not a forecast or a promise. Stabilize is currently a founder-led public prototype. It has a free guest experience, optional account memory, and an early subscription mechanism for additional model choice. It does not yet have clinical validation, a repeatable sales process, independent high-stakes review, or a proven route to recurring revenue.
+This plan is a set of testable hypotheses, not a forecast or a promise. Stabilize is currently a founder-led public prototype. It has a free same-browser guest-memory experience, optional cross-device account memory, and an early subscription mechanism for additional model choice. It does not yet have clinical validation, a repeatable sales process, independent high-stakes review, or a proven route to recurring revenue.
 
 ## 1. Executive summary
 

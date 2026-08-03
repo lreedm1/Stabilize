@@ -1,4 +1,8 @@
-import paidWorker, { BillingAccount, SessionMemory } from "./paid-worker.js";
+import paidWorker, {
+  BillingAccount,
+  GuestSessionMemory,
+  SessionMemory,
+} from "./paid-worker.js";
 import {
   ACCOUNT_STATE_HEADER,
   readAuthorizedAuthSession,
@@ -13,7 +17,13 @@ import {
   normalizeFeedback,
 } from "./feedback.js";
 
-export { BillingAccount, FeedbackGate, FeedbackInbox, SessionMemory };
+export {
+  BillingAccount,
+  FeedbackGate,
+  FeedbackInbox,
+  GuestSessionMemory,
+  SessionMemory,
+};
 
 const MAX_FORM_BYTES = 8_192;
 const ACCOUNT_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;

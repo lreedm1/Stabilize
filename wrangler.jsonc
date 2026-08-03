@@ -25,6 +25,7 @@
   "durable_objects": {
     "bindings": [
       { "name": "SESSIONS", "class_name": "SessionMemory" },
+      { "name": "GUEST_SESSIONS", "class_name": "GuestSessionMemory" },
       { "name": "BILLING", "class_name": "BillingAccount" },
       { "name": "FEEDBACK_LIMITS", "class_name": "FeedbackGate" },
       { "name": "FEEDBACK_INBOX", "class_name": "FeedbackInbox" }
@@ -33,7 +34,8 @@
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["SessionMemory"] },
     { "tag": "v2", "new_sqlite_classes": ["BillingAccount"] },
-    { "tag": "v3", "new_sqlite_classes": ["FeedbackGate", "FeedbackInbox"] }
+    { "tag": "v3", "new_sqlite_classes": ["FeedbackGate", "FeedbackInbox"] },
+    { "tag": "v4", "new_sqlite_classes": ["GuestSessionMemory"] }
   ],
   "vars": {
     "DEMO_MODE": "false",
@@ -53,7 +55,8 @@
       "GOOGLE_CLIENT_ID",
       "GOOGLE_CLIENT_SECRET",
       "AUTH_SECRET",
-      "SESSION_SECRET"
+      "SESSION_SECRET",
+      "GUEST_SESSION_SECRET"
     ]
   },
   "observability": {

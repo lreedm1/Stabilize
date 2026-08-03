@@ -1,5 +1,6 @@
 import {
   env,
+  evictDurableObject,
   runDurableObjectAlarm,
   runInDurableObject,
 } from "cloudflare:test";
@@ -63,7 +64,20 @@ async function setControl(stub, assignments) {
   });
 }
 
-test("providerless memory is bounded, account-scoped, and contains no provider tables", async () => {
+async function sqliteTableNames(stub) {
+  return runInDurableObject(stub, (_instance, state) =>
+    state.storage.sql
+      .exec(
+        `SELECT name FROM sqlite_schema
+         WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+         ORDER BY name`,
+      )
+      .toArray()
+      .map((row) => row.name),
+  );
+}
+
+test("local memory is bounded, account-scoped, timestamped, and contains no provider tables", async () => {
   const stub = env.SESSIONS.getByName("providerless-memory-bounds-v1");
 
   assert.deepEqual(await stub.readContext(), EMPTY_CONTEXT);
@@ -75,8 +89,12 @@ test("providerless memory is bounded, account-scoped, and contains no provider t
   const context = await stub.readContext();
   assert.equal(context.turnCount, 5);
   assert.equal(context.recent.length, 8);
-  assert.equal(context.recent[0].content, "User turn 2");
-  assert.equal(context.recent.at(-1).content, "Assistant turn 5");
+  assert.match(context.recent[0].content, /\[Recorded [^\]]+\]\nUser turn 2$/);
+  assert.match(
+    context.recent.at(-1).content,
+    /\[Recorded [^\]]+\]\nAssistant turn 5$/,
+  );
+  assert.ok(context.recent.every((message) => message.createdAt > 0));
   assert.ok((await stub.getLifecycleStatus()).expiresAt > Date.now());
 
   const providerTables = await runInDurableObject(
@@ -233,6 +251,48 @@ test("a deadline crossing alarm I/O is checked with a fresh transaction clock", 
   assert.equal((await stub.getLifecycleStatus()).expiresAt, null);
 });
 
+test("a guest hard deadline crossing commit I/O fails closed and stores no text", async () => {
+  const stub = env.GUEST_SESSIONS.getByName(
+    "guest-hard-deadline-commit-race-v1",
+  );
+  const sessionIssuedAtMs = Date.now();
+  const hardDeleteAtMs = sessionIssuedAtMs + 24 * 60 * 60 * 1_000;
+  const turn = await stub.beginModelTurn({
+    requestStartedAt: sessionIssuedAtMs,
+    sessionIssuedAtMs,
+    hardDeleteAtMs,
+  });
+  assert.equal(turn.acquired, true);
+
+  const result = await runInDurableObject(stub, async (instance, state) => {
+    const originalArm = instance._armAtOrBefore;
+    instance._armAtOrBefore = async function armThenExpire(timestamp) {
+      await originalArm.call(this, timestamp);
+      state.storage.sql.exec(
+        "UPDATE session_control SET hard_delete_at = ? WHERE id = 1",
+        Date.now() - 1,
+      );
+    };
+    try {
+      return await instance.commitModelTurn({
+        leaseToken: turn.leaseToken,
+        epoch: turn.epoch,
+        exchange: exchange(1),
+        sessionIssuedAtMs,
+        hardDeleteAtMs,
+      });
+    } finally {
+      instance._armAtOrBefore = originalArm;
+    }
+  });
+
+  assert.deepEqual(result, {
+    committed: false,
+    reason: "session_expired",
+  });
+  assert.deepEqual(await stub.readContext(), EMPTY_CONTEXT);
+});
+
 test("an expired model lease is poisoned before another turn starts", async () => {
   const stub = env.SESSIONS.getByName("providerless-expired-lease-v1");
   const oldTurn = await stub.beginModelTurn();
@@ -282,9 +342,34 @@ test("a fixed safety exchange atomically wins over an older model turn", async (
 
   const context = await stub.readContext();
   assert.equal(context.turnCount, 1);
-  assert.equal(context.recent[0].content, "User turn 2");
+  assert.match(context.recent[0].content, /User turn 2$/);
   assert.equal(context.awaitingSafetyAnswer, true);
   assert.equal((await stub.getLifecycleStatus()).hasLease, false);
+});
+
+test("a safety question and old risk context lose present-state authority with age", async () => {
+  const stub = env.SESSIONS.getByName("timestamped-safety-recency-v1");
+  await stub.recordLocalExchange(
+    exchange(1, { awaitingSafetyAnswer: true }),
+  );
+
+  const now = Date.now();
+  await runInDurableObject(stub, (_instance, state) => {
+    state.storage.sql.exec(
+      "UPDATE memory_state SET updated_at = ? WHERE id = 1",
+      now - 2 * 60 * 60 * 1_000 - 1,
+    );
+    state.storage.sql.exec(
+      "UPDATE recent_messages SET created_at = ?",
+      now - 4 * 24 * 60 * 60 * 1_000,
+    );
+  });
+
+  const context = await stub.readContext();
+  assert.equal(context.awaitingSafetyAnswer, false);
+  assert.match(context.recent[0].content, /historical context only/);
+  assert.match(context.recent[0].content, /not evidence of present danger/);
+  assert.match(context.recent[0].content, /User turn 1$/);
 });
 
 test("a local/demo exchange invalidates an in-flight model turn", async () => {
@@ -302,7 +387,7 @@ test("a local/demo exchange invalidates an in-flight model turn", async () => {
     }),
     { committed: false, reason: "stale_turn" },
   );
-  assert.equal((await stub.readContext()).recent[0].content, "User turn 2");
+  assert.match((await stub.readContext()).recent[0].content, /User turn 2$/);
 });
 
 test("legacy writes fail closed after the epoch-bound protocol activates", async () => {
@@ -338,6 +423,8 @@ test("compaction is version- and epoch-bound without extending retention", async
   const snapshot = await stub.getCompactionSnapshot();
   assert.equal(snapshot.summaryVersion, 0);
   assert.equal(snapshot.messages.length, 2);
+  assert.ok(snapshot.summaryUpdatedAt > 0);
+  assert.ok(snapshot.messages.every((message) => message.createdAt > 0));
   assert.equal(
     await stub.applySummary(
       "An unbound future boundary must not delete recent memory.",
@@ -357,10 +444,10 @@ test("compaction is version- and epoch-bound without extending retention", async
     true,
   );
   assert.equal((await controlRow(stub)).expiresAt, originalExpiry);
-  assert.equal(
-    (await stub.readContext()).summary,
-    "The user values short, concrete plans.",
-  );
+  const compacted = await stub.readContext();
+  assert.match(compacted.summary, /^\[Historical summary last updated /);
+  assert.match(compacted.summary, /Background only:/);
+  assert.match(compacted.summary, /The user values short, concrete plans\.$/);
   assert.equal(
     await stub.applySummary(
       "A replay must not overwrite the accepted summary.",
@@ -395,7 +482,8 @@ test("eraseMemory clears text and invalidates an exact in-flight lease", async (
   await stub.recordLocalExchange(exchange(1));
   const turn = await stub.beginModelTurn();
 
-  const deletion = await stub.eraseMemory(Date.now());
+  const sessionIssuedAtMs = Date.now();
+  const deletion = await stub.eraseMemory(sessionIssuedAtMs);
   assert.equal(deletion.erased, true);
   assert.ok(Number.isSafeInteger(deletion.erasedAt));
   assert.deepEqual(await stub.readContext(), EMPTY_CONTEXT);
@@ -408,9 +496,408 @@ test("eraseMemory clears text and invalidates an exact in-flight lease", async (
       leaseToken: turn.leaseToken,
       epoch: turn.epoch,
       exchange: exchange(2),
+      sessionIssuedAtMs,
     }),
-    { committed: false, reason: "stale_turn" },
+    { committed: false, reason: "session_revoked" },
   );
+});
+
+test("a first guest model turn pre-arms its hard deadline before alarm sync", async () => {
+  const stub = env.GUEST_SESSIONS.getByName(
+    "guest-begin-prearms-hard-delete-v1",
+  );
+  const sessionIssuedAtMs = Date.now();
+  const hardDeleteAtMs = sessionIssuedAtMs + 30_000;
+
+  const observed = await runInDurableObject(
+    stub,
+    async (instance, state) => {
+      const originalSyncAlarm = instance._syncAlarm;
+      instance._syncAlarm = async () => {
+        throw new Error("injected begin alarm sync failure");
+      };
+      let failure;
+      try {
+        await instance.beginModelTurn({
+          requestStartedAt: sessionIssuedAtMs,
+          sessionIssuedAtMs,
+          hardDeleteAtMs,
+        });
+      } catch (error) {
+        failure = error;
+      } finally {
+        instance._syncAlarm = originalSyncAlarm;
+      }
+
+      const control = state.storage.sql
+        .exec(
+          `SELECT hard_delete_at, lease_token
+           FROM session_control WHERE id = 1`,
+        )
+        .one();
+      return {
+        failureMessage: failure?.message || null,
+        alarm: await state.storage.getAlarm(),
+        hardDeleteAt: Number(control.hard_delete_at) || null,
+        hasLease: Boolean(control.lease_token),
+      };
+    },
+  );
+
+  assert.equal(observed.failureMessage, "injected begin alarm sync failure");
+  assert.ok(observed.alarm !== null);
+  assert.ok(observed.alarm <= hardDeleteAtMs);
+  assert.equal(observed.hardDeleteAt, hardDeleteAtMs);
+  assert.equal(observed.hasLease, true);
+});
+
+test("a first guest model commit pre-arms its hard deadline before alarm sync", async () => {
+  const stub = env.GUEST_SESSIONS.getByName(
+    "guest-commit-prearms-hard-delete-v1",
+  );
+  const sessionIssuedAtMs = Date.now();
+  const initialHardDeleteAtMs = sessionIssuedAtMs + 24 * 60 * 60 * 1_000;
+  const turn = await stub.beginModelTurn({
+    requestStartedAt: sessionIssuedAtMs,
+    sessionIssuedAtMs,
+    hardDeleteAtMs: initialHardDeleteAtMs,
+  });
+  assert.equal(turn.acquired, true);
+
+  const hardDeleteAtMs = Date.now() + 30_000;
+  const observed = await runInDurableObject(
+    stub,
+    async (instance, state) => {
+      state.storage.sql.exec(
+        "UPDATE session_control SET hard_delete_at = NULL WHERE id = 1",
+      );
+      await state.storage.deleteAlarm();
+
+      const originalSyncAlarm = instance._syncAlarm;
+      instance._syncAlarm = async () => {
+        throw new Error("injected commit alarm sync failure");
+      };
+      let failure;
+      try {
+        await instance.commitModelTurn({
+          leaseToken: turn.leaseToken,
+          epoch: turn.epoch,
+          exchange: exchange(1),
+          sessionIssuedAtMs,
+          hardDeleteAtMs,
+        });
+      } catch (error) {
+        failure = error;
+      } finally {
+        instance._syncAlarm = originalSyncAlarm;
+      }
+
+      const control = state.storage.sql
+        .exec(
+          `SELECT hard_delete_at, lease_token
+           FROM session_control WHERE id = 1`,
+        )
+        .one();
+      const memory = state.storage.sql
+        .exec("SELECT turn_count FROM memory_state WHERE id = 1")
+        .one();
+      return {
+        failureMessage: failure?.message || null,
+        alarm: await state.storage.getAlarm(),
+        hardDeleteAt: Number(control.hard_delete_at) || null,
+        hasLease: Boolean(control.lease_token),
+        turnCount: Number(memory.turn_count) || 0,
+      };
+    },
+  );
+
+  assert.equal(observed.failureMessage, "injected commit alarm sync failure");
+  assert.ok(observed.alarm !== null);
+  assert.ok(observed.alarm <= hardDeleteAtMs);
+  assert.equal(observed.hardDeleteAt, hardDeleteAtMs);
+  assert.equal(observed.hasLease, false);
+  assert.equal(observed.turnCount, 1);
+});
+
+test("a first guest fixed exchange pre-arms its hard deadline before alarm sync", async () => {
+  const stub = env.GUEST_SESSIONS.getByName(
+    "guest-fixed-prearms-hard-delete-v1",
+  );
+  const sessionIssuedAtMs = Date.now();
+  const hardDeleteAtMs = sessionIssuedAtMs + 30_000;
+
+  const observed = await runInDurableObject(
+    stub,
+    async (instance, state) => {
+      const originalSyncAlarm = instance._syncAlarm;
+      instance._syncAlarm = async () => {
+        throw new Error("injected fixed alarm sync failure");
+      };
+      let failure;
+      try {
+        await instance.recordFixedExchange(
+          exchange(1, { awaitingSafetyAnswer: true }),
+          sessionIssuedAtMs,
+          sessionIssuedAtMs,
+          hardDeleteAtMs,
+        );
+      } catch (error) {
+        failure = error;
+      } finally {
+        instance._syncAlarm = originalSyncAlarm;
+      }
+
+      const control = state.storage.sql
+        .exec(
+          `SELECT hard_delete_at, lease_token
+           FROM session_control WHERE id = 1`,
+        )
+        .one();
+      const memory = state.storage.sql
+        .exec(
+          `SELECT turn_count, awaiting_safety_answer
+           FROM memory_state WHERE id = 1`,
+        )
+        .one();
+      return {
+        failureMessage: failure?.message || null,
+        alarm: await state.storage.getAlarm(),
+        hardDeleteAt: Number(control.hard_delete_at) || null,
+        hasLease: Boolean(control.lease_token),
+        turnCount: Number(memory.turn_count) || 0,
+        awaitingSafetyAnswer: Boolean(memory.awaiting_safety_answer),
+      };
+    },
+  );
+
+  assert.equal(observed.failureMessage, "injected fixed alarm sync failure");
+  assert.ok(observed.alarm !== null);
+  assert.ok(observed.alarm <= hardDeleteAtMs);
+  assert.equal(observed.hardDeleteAt, hardDeleteAtMs);
+  assert.equal(observed.hasLease, false);
+  assert.equal(observed.turnCount, 1);
+  assert.equal(observed.awaitingSafetyAnswer, true);
+});
+
+test("guest erase pre-arms hard deletion before post-commit alarm sync", async () => {
+  const stub = env.GUEST_SESSIONS.getByName(
+    "guest-erase-prearms-hard-delete-v1",
+  );
+  const sessionIssuedAtMs = Date.now();
+  const hardDeleteAtMs = sessionIssuedAtMs + 365 * 24 * 60 * 60 * 1_000;
+
+  const observed = await runInDurableObject(
+    stub,
+    async (instance, state) => {
+      const originalSyncAlarm = instance._syncAlarm;
+      instance._syncAlarm = async () => {
+        throw new Error("injected post-commit alarm sync failure");
+      };
+      let failure;
+      try {
+        await instance.eraseMemory(sessionIssuedAtMs, hardDeleteAtMs);
+      } catch (error) {
+        failure = error;
+      } finally {
+        instance._syncAlarm = originalSyncAlarm;
+      }
+
+      const control = state.storage.sql
+        .exec(
+          `SELECT last_erased_at, revoked_through_issued_at_ms,
+                  hard_delete_at
+           FROM session_control WHERE id = 1`,
+        )
+        .one();
+      const memoryRows = Number(
+        state.storage.sql
+          .exec("SELECT COUNT(*) AS count FROM memory_state")
+          .one().count,
+      );
+      const recentRows = Number(
+        state.storage.sql
+          .exec("SELECT COUNT(*) AS count FROM recent_messages")
+          .one().count,
+      );
+      return {
+        failureMessage: failure?.message || null,
+        alarm: await state.storage.getAlarm(),
+        lastErasedAt: Number(control.last_erased_at) || null,
+        revokedThrough:
+          Number(control.revoked_through_issued_at_ms) || null,
+        hardDeleteAt: Number(control.hard_delete_at) || null,
+        memoryRows,
+        recentRows,
+      };
+    },
+  );
+
+  assert.equal(
+    observed.failureMessage,
+    "injected post-commit alarm sync failure",
+  );
+  assert.ok(observed.alarm !== null);
+  assert.ok(observed.alarm <= hardDeleteAtMs);
+  assert.ok(observed.lastErasedAt >= sessionIssuedAtMs);
+  assert.ok(observed.revokedThrough >= sessionIssuedAtMs);
+  assert.equal(observed.hardDeleteAt, hardDeleteAtMs);
+  assert.equal(observed.memoryRows, 0);
+  assert.equal(observed.recentRows, 0);
+});
+
+test("a redelivered guest alarm removes constructor state after hard deletion", async () => {
+  const stub = env.GUEST_SESSIONS.getByName(
+    "guest-hard-delete-alarm-redelivery-v1",
+  );
+  const sessionIssuedAtMs = Date.now();
+  const hardDeleteAtMs = sessionIssuedAtMs + 24 * 60 * 60 * 1_000;
+  const turn = await stub.beginModelTurn({
+    requestStartedAt: sessionIssuedAtMs,
+    sessionIssuedAtMs,
+    hardDeleteAtMs,
+  });
+  assert.equal(turn.acquired, true);
+
+  await runInDurableObject(stub, async (_instance, state) => {
+    state.storage.sql.exec(
+      "UPDATE session_control SET hard_delete_at = ? WHERE id = 1",
+      Date.now() - 1,
+    );
+    await state.storage.setAlarm(Date.now() + 60_000);
+  });
+  assert.equal(await runDurableObjectAlarm(stub), true);
+  assert.deepEqual(await sqliteTableNames(stub), []);
+
+  await evictDurableObject(stub);
+  await runInDurableObject(stub, async (_instance, state) => {
+    const control = state.storage.sql
+      .exec("SELECT hard_delete_at FROM session_control WHERE id = 1")
+      .one();
+    assert.equal(control.hard_delete_at, null);
+    await state.storage.setAlarm(Date.now() + 60_000);
+  });
+
+  assert.equal(await runDurableObjectAlarm(stub), true);
+  assert.deepEqual(await sqliteTableNames(stub), []);
+});
+
+test("a delayed guest lease release removes constructor state after deleteAll", async () => {
+  const stub = env.GUEST_SESSIONS.getByName(
+    "guest-release-after-delete-all-v1",
+  );
+  const sessionIssuedAtMs = Date.now();
+  const hardDeleteAtMs = sessionIssuedAtMs + 24 * 60 * 60 * 1_000;
+  const turn = await stub.beginModelTurn({
+    requestStartedAt: sessionIssuedAtMs,
+    sessionIssuedAtMs,
+    hardDeleteAtMs,
+  });
+  assert.equal(turn.acquired, true);
+
+  await runInDurableObject(stub, async (_instance, state) => {
+    await state.storage.deleteAll();
+  });
+  await evictDurableObject(stub);
+
+  assert.equal(
+    await stub.releaseModelTurn({
+      leaseToken: turn.leaseToken,
+      epoch: turn.epoch,
+    }),
+    false,
+  );
+  assert.deepEqual(await sqliteTableNames(stub), []);
+});
+
+test("guest read-only RPCs remove fresh state without a signed deadline", async () => {
+  const cases = [
+    ["read", (stub) => stub.readContext(), EMPTY_CONTEXT],
+    [
+      "release",
+      (stub) =>
+        stub.releaseModelTurn({
+          leaseToken: `lease_${"a".repeat(32)}`,
+          epoch: 1,
+        }),
+      false,
+    ],
+    ["compaction", (stub) => stub.getCompactionSnapshot(), null],
+    [
+      "summary",
+      (stub) => stub.applySummary("Bounded summary", 0, 1, 0),
+      false,
+    ],
+    ["validate", (stub) => stub.validateSession(Date.now()), { allowed: false }],
+    [
+      "status",
+      (stub) => stub.getLifecycleStatus(),
+      {
+        epoch: 0,
+        hasLease: false,
+        expiresAt: null,
+        leaseExpiresAt: null,
+      },
+    ],
+  ];
+
+  for (const [name, invoke, fallback] of cases) {
+    const stub = env.GUEST_SESSIONS.getByName(
+      `guest-missing-deadline-${name}-v1`,
+    );
+    assert.deepEqual(await invoke(stub), fallback);
+    assert.deepEqual(await sqliteTableNames(stub), []);
+  }
+});
+
+test("guest writes without a valid signed deadline leave no constructor state", async () => {
+  const now = Date.now();
+  const tooDistantDeadline = now + 367 * 24 * 60 * 60 * 1_000;
+  const cases = [
+    [
+      "begin",
+      (stub) =>
+        stub.beginModelTurn({
+          requestStartedAt: now,
+          sessionIssuedAtMs: now,
+        }),
+      { acquired: false, reason: "invalid_storage_deadline" },
+    ],
+    [
+      "commit",
+      (stub) =>
+        stub.commitModelTurn({
+          leaseToken: `lease_${"a".repeat(32)}`,
+          epoch: 1,
+          exchange: exchange(1),
+          sessionIssuedAtMs: now,
+        }),
+      { committed: false, reason: "invalid_storage_deadline" },
+    ],
+    [
+      "fixed",
+      (stub) =>
+        stub.recordFixedExchange(
+          exchange(1),
+          now,
+          now,
+          tooDistantDeadline,
+        ),
+      { recorded: false, reason: "invalid_storage_deadline" },
+    ],
+    [
+      "erase",
+      (stub) => stub.eraseMemory(now, "not-a-deadline"),
+      { erased: false, reason: "invalid_storage_deadline" },
+    ],
+  ];
+
+  for (const [name, invoke, fallback] of cases) {
+    const stub = env.GUEST_SESSIONS.getByName(
+      `guest-invalid-deadline-${name}-v1`,
+    );
+    assert.deepEqual(await invoke(stub), fallback);
+    assert.deepEqual(await sqliteTableNames(stub), []);
+  }
 });
 
 test("requests that began before deletion cannot repopulate memory", async () => {
@@ -472,12 +959,13 @@ test("requests that began before deletion cannot repopulate memory", async () =>
       await stub.commitModelTurn({
         leaseToken: fresh.leaseToken,
         epoch: fresh.epoch,
+        sessionIssuedAtMs: freshSessionIssuedAtMs,
         exchange: exchange(3),
       })
     ).committed,
     true,
   );
-  assert.equal((await stub.readContext()).recent[0].content, "User turn 3");
+  assert.match((await stub.readContext()).recent[0].content, /User turn 3$/);
 });
 
 test("concurrent and repeated deletions advance one atomic session boundary", async () => {
@@ -543,7 +1031,7 @@ test("the alarm expires a lease without erasing still-retained memory", async ()
   assert.equal(await runDurableObjectAlarm(stub), true);
   const context = await stub.readContext();
   assert.equal(context.turnCount, 1);
-  assert.equal(context.recent[0].content, "User turn 1");
+  assert.match(context.recent[0].content, /User turn 1$/);
 
   const status = await stub.getLifecycleStatus();
   assert.equal(status.hasLease, false);

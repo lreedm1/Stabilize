@@ -1,18 +1,18 @@
-# Account memory integration
+# Conversation memory integration
 
-Stabilize provides cross-visit continuity only when a browser is bound to a valid signed-in account session. Continuity is stored in one account-scoped Cloudflare Durable Object; OpenAI is used only for stateless generation with `store: false`.
+Stabilize provides same-browser guest continuity and cross-device signed-in continuity. Guest and account records use separate Cloudflare Durable Object namespaces. Reply and compaction requests use the OpenAI Responses API with response storage enabled; they do not use OpenAI Conversations for continuity.
 
 ## Request modes
 
-- **Guest:** sends bounded current input to the Responses API with `store: false`. It creates no server-side conversation memory, even if another tab signs in later. The current tab may cache the latest assistant reply for up to 24 hours; the prompt itself is not placed in that record, although a reply can repeat prompt details.
-- **Signed in:** reads a bounded rolling summary and recent-message buffer from the account Durable Object, sends that context plus the current message to the Responses API with `store: false`, and commits the exchange locally only after a valid reply returns.
-- **Summary compaction:** uses a separate Responses request with `store: false` and applies the result only if its exact state epoch is still current.
+- **Guest:** a signed host-only `HttpOnly` cookie holds a random 256-bit guest key, timing data, and nonce. A separate non-bearer HMAC rendered into the page binds requests to that cookie. The guest Durable Object stores the same bounded context shape as account memory. The latest assistant reply may also be written to token-partitioned browser local storage; the prompt and full transcript are not placed there, although a reply can repeat prompt details. Records older than 30 days are ignored, and the app attempts to remove them on the next successful load. Browser or profile backups, unavailable JavaScript, or unavailable storage access may retain copies longer.
+- **Signed in:** reads a bounded rolling summary and recent-message buffer from the account Durable Object, sends that context plus the current message to the Responses API with `store: true`, and commits the exchange locally only after a valid reply returns.
+- **Summary compaction:** uses a separate Responses request with `store: true` and applies the result only if its exact state epoch is still current.
 
-The browser sends the exact guest/account continuity mode rendered into the page. A missing binding is treated as guest mode. An account request whose opaque session binding no longer matches receives `409` and must reload; it cannot write into a newly signed-in account.
+The browser sends the exact guest/account continuity mode and binding rendered into the page. A cached client with no guest binding remains stateless until reload. Any mismatch receives `409` before model or memory access. A valid account session always wins over a stale guest tab. Guest memory is preserved separately through sign-in and resumes after sign-out; it is never merged into account memory.
 
 ## Concurrency and retention
 
-The Durable Object grants one 90-second model-turn lease per account. A commit succeeds only when its lease token and epoch still match. A newer fixed safety route, explicit deletion, or retention expiry increments the epoch and invalidates any stale completion. The outermost Worker also records request start before billing or other wrappers can wait, so a request that began before deletion cannot be reclassified as a post-deletion write.
+Each Durable Object grants one 90-second model-turn lease. A commit succeeds only when its lease token and epoch still match. A newer fixed safety route, explicit deletion, or retention expiry increments the epoch and invalidates any stale completion. The outermost Worker also records request start before billing or other wrappers can wait, so a request that began before deletion cannot be reclassified as a post-deletion write.
 
 Only a committed exchange refreshes retention. Local text expires 30 days after the last committed exchange, with enforcement inside reads and writes as well as by the Durable Object alarm. Expired context cannot be revived by a delayed model response.
 
@@ -27,18 +27,18 @@ This is not a visible transcript archive. Compaction is model-generated and may 
 
 ## Deletion and account boundaries
 
-The account menu atomically validates the deleting session, erases the Durable Object text, and advances a monotonic session-issuance watermark. Only one of two concurrent deletion requests can advance that watermark. A successful deletion receives the exact next session generation; cookies issued at or before the watermark are rejected by memory, billing, model-choice, feedback, and account-page wrappers and must sign in again. A short-lived signed browser receipt displays confirmation after redirect and is normally consumed and cleared by the next page; it is not a server-side single-use token. A query parameter alone is never treated as proof of deletion.
+The menu validates the exact session binding before deletion. Account deletion erases text and advances a monotonic issuance watermark across account features. Guest deletion erases text, retains only a non-text revocation tombstone until the old one-year cookie horizon, and issues a completely new random guest identity; the tombstone is then removed with `deleteAll()`. Losing, stale, and invalid responses never clear or replace the guest cookie. A short-lived scope-bound signed receipt displays confirmation after redirect and identifies only the continuity partition whose pending-deletion marker may be cleared; a query parameter alone is never proof.
 
-Signing out does not delete remembered account data. Rotating `AUTH_SECRET` changes account aliases and can orphan existing Durable Objects; rotate the separate `SESSION_SECRET` when cookie revocation is the goal.
+Clearing cookies removes browser access but cannot prove immediate erasure of the now-unreachable guest record; its text still expires after 30 days and its metadata is hard-deleted by the cookie horizon. Signing out does not delete account or guest memory. Rotating `AUTH_SECRET` changes account aliases; `SESSION_SECRET` revokes account cookies; `GUEST_SESSION_SECRET` revokes guest cookies and may orphan guest records until cleanup.
 
 ## Provider behavior
 
-All guest, signed-in, and compaction Responses requests set `store: false`. Stabilize does not create OpenAI Conversation containers and does not use `previous_response_id` for persistence. OpenAI and infrastructure providers may still process request content and metadata, including any applicable abuse-monitoring retention under the deployment's terms and data controls.
+All guest, signed-in, and compaction Responses requests set `store: true`. Under current OpenAI platform policy, the resulting Response objects are retained for at least 30 days unless organization or project data controls, including Zero Data Retention, override that behavior; separate abuse-monitoring retention may also apply. Stabilize does not create OpenAI Conversation containers, use `previous_response_id` for continuity, or retain provider response IDs. The in-app Delete control removes live remembered data from Stabilize, but it cannot target those separate OpenAI Response objects; those remain governed by OpenAI project and organization controls.
 
 ## Operator obligations
 
-- Keep `OPENAI_API_KEY`, `AUTH_SECRET`, `SESSION_SECRET`, and Google OAuth secrets in Worker secrets.
-- Keep `AUTH_SECRET` stable; provision `SESSION_SECRET` before deploying this version.
+- Keep `OPENAI_API_KEY`, `AUTH_SECRET`, `SESSION_SECRET`, `GUEST_SESSION_SECRET`, and Google OAuth secrets in Worker secrets; all three identity/session secrets must differ.
+- Keep `AUTH_SECRET` stable; provision both `SESSION_SECRET` and `GUEST_SESSION_SECRET` before deploying this version.
 - Restrict Durable Object and operational-log access.
 - Do not add prompt, reply, account-alias, email, or network-address logging by default.
 - Establish deletion, incident-response, credential-rotation, and legal-request procedures.

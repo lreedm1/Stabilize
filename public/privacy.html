@@ -26,28 +26,34 @@
       <p><strong>Privacy and memory</strong></p>
       <h1>What the current prototype remembers</h1>
       <p class="lede">
-        Guest messages do not enter server-side conversation memory. The
-        current browser tab can temporarily keep the latest assistant reply so
-        it can be restored after a refresh or a visit to another Stabilize
-        page. Signed-in use can retain bounded context for continuity, subject
-        to the limits below.
+        Guest use can retain bounded same-browser context, and signed-in use
+        can retain separate cross-device context. Both modes use the retention,
+        deletion, and provider-processing limits below.
       </p>
 
       <h2>Guest use</h2>
       <p>
-        When you use Stabilize without signing in, the application does not
-        store server-side conversation history for later sessions. To avoid
-        losing the most recent result during ordinary navigation, the latest
-        assistant reply and minimal display state are stored in session storage
-        for the current browser tab for up to 24 hours. The prompt itself is
-        not included in that tab-scoped record, although an assistant reply can
-        reflect information from it. The record expires after 24 hours and is
-        cleared when you sign out; browsers normally discard session storage
-        when a tab closes but may restore it as part of a saved browser
-        session. Your message still travels through Cloudflare infrastructure
-        and, for ordinary AI replies, is processed by OpenAI with
-        <code>store: false</code>. Signing in later affects future messages only;
-        earlier guest messages are not moved into account memory.
+        When you use Stabilize without signing in, a signed host-only cookie
+        with a random identifier connects this browser profile to a bounded
+        summary and up to eight recent messages stored by Stabilize on
+        Cloudflare. Remembered text expires 30 days after the last committed
+        exchange. The latest assistant reply and minimal display state may also
+        be written to this browser's local storage. Records older than 30 days
+        are ignored, and the app attempts to remove them on the next successful
+        load. Browser or profile backups, unavailable JavaScript, or unavailable
+        storage access may retain copies longer. The prompt and full transcript
+        are not placed in that browser record, although a reply can reflect
+        prompt details. Anyone sharing or copying this browser profile can share
+        the guest context.
+      </p>
+      <p>
+        The random identifier can last up to one year and is not based on an IP
+        address or fingerprint. Guest continuity resets at that absolute
+        anniversary. Clearing cookies removes access but may leave
+        an unreachable server record until its retention or cleanup deadline.
+        Use <strong>Delete remembered conversation</strong> in the menu to erase
+        live guest memory directly. Signing in does not move or merge guest
+        memory; signing out resumes this browser's separate guest context.
       </p>
 
       <h2>Signed-in memory</h2>
@@ -57,7 +63,7 @@
         Cloudflare. That remembered text expires 30 days after the last committed
         exchange. You can also delete it from the signed-in account menu;
         signing out alone does not delete it. Signed-in assistant replies are
-        not placed in the browser's 24-hour latest-reply cache. After deletion
+        not placed in the guest browser's latest-reply cache. After deletion
         succeeds, a signed, account-bound receipt cookie confirms the result on
         the next page and is then cleared; it contains no chat text. Cookies
         issued before the deletion are rejected from account features, so
@@ -108,10 +114,13 @@
         optional checkout, subscription billing, and the customer billing
         portal. OpenAI processes messages used to generate replies and condensed
         memory. Guest, summary, and signed-in reply requests use
-        <code>store: false</code>. OpenAI is used for stateless processing, not
-        as Stabilize's account-memory store. OpenAI may separately retain data
-        in abuse-monitoring logs under the deployment's applicable data
-        controls and terms.
+        <code>store: true</code>, so OpenAI stores the resulting Response objects
+        for at least 30 days unless organization or project data controls
+        override the request. Stabilize does not retain those Response IDs, so
+        <strong>Delete remembered conversation</strong> removes live Stabilize
+        memory but cannot target the separately stored OpenAI objects. OpenAI
+        may also retain data in abuse-monitoring logs under the deployment's
+        applicable data controls and terms.
       </p>
 
       <h2>Use caution with sensitive information</h2>

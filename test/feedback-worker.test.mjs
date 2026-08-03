@@ -219,10 +219,9 @@ test("ordinary paid chat still reads billing state and reserves usage", async ()
       },
       body: JSON.stringify({
         message: "Help me choose one small next step.",
-        // The paid wrapper keys billing from the valid login cookie while the
-        // explicit guest binding keeps this regression independent of account
-        // memory implementation details.
-        continuity: { mode: "guest", token: null },
+        // An active account session owns the request boundary; a guest-mode
+        // body is rejected before billing or memory access.
+        continuity: identity.continuity,
       }),
     }),
     testEnv,

@@ -1,19 +1,19 @@
 import { COPY } from "./copy.js";
 import {
-  AUTH_COOKIE_NAME,
   GoogleAuthConfigurationError,
   LEGACY_SESSION_COOKIE_NAME,
-  MEMORY_DELETION_COOKIE_NAME,
   beginGoogleSignIn,
-  clearAuthCookie,
   clearLegacySessionCookie,
-  clearMemoryDeletionCookie,
   completeGoogleSignIn,
+  createGuestSession,
+  createGuestResetGrant,
   createMemoryDeletionReceiptCookie,
   googleAuthConfigured,
+  guestSessionConfigured,
   readAuthSession,
+  readGuestSession,
+  readGuestResetGrant,
   readMemoryDeletionReceipt,
-  refreshLegacyAuthSession,
   rotateAuthSession,
   signOut,
 } from "./auth.js";
@@ -21,12 +21,16 @@ import { captureRequestStartedAt } from "./request-timing.js";
 import {
   ACCOUNT_STATE_HEADER,
   accountSessionAllowed,
+  readAuthorizedAuthSession,
 } from "./account-session.js";
 import { renderPage } from "./page.js";
 import { classifyInput, fixedReplyForRoute } from "./safety.js";
-import { SessionMemory } from "./session-memory.js";
+import {
+  GuestSessionMemory,
+  SessionMemory,
+} from "./session-memory.js";
 
-export { SessionMemory };
+export { GuestSessionMemory, SessionMemory };
 
 const MAX_BODY_BYTES = 32_000;
 const MAX_MESSAGE_CHARS = 4_000;
@@ -161,10 +165,39 @@ function emptyMemoryContext() {
   };
 }
 
+function sessionMemoryStub(env, kind, key) {
+  if (!key || !["google", "guest"].includes(kind)) return null;
+  const binding = kind === "google" ? env?.SESSIONS : env?.GUEST_SESSIONS;
+  if (!binding || typeof binding.getByName !== "function") return null;
+  return binding.getByName(`${kind}:${key}`);
+}
+
 function accountMemoryStub(env, accountKey) {
-  if (!accountKey) return null;
-  if (!env?.SESSIONS || typeof env.SESSIONS.getByName !== "function") return null;
-  return env.SESSIONS.getByName("google:" + accountKey);
+  return sessionMemoryStub(env, "google", accountKey);
+}
+
+function guestMemoryStub(env, guestKey) {
+  return sessionMemoryStub(env, "guest", guestKey);
+}
+
+async function resolveGuestSession(
+  request,
+  env,
+  { createIfMissing = false } = {},
+) {
+  if (
+    !guestSessionConfigured(env) ||
+    !env?.GUEST_SESSIONS ||
+    typeof env.GUEST_SESSIONS.getByName !== "function"
+  ) {
+    return { session: null, setCookie: null };
+  }
+
+  const session = await readGuestSession(request, env);
+  if (!session && createIfMissing) {
+    return createGuestSession(request, env);
+  }
+  return { session, setCookie: null };
 }
 
 async function readMemoryContext(stub) {
@@ -193,6 +226,13 @@ async function readMemoryContext(stub) {
 }
 
 async function readBoundedJson(request) {
+  const contentType = String(request.headers.get("content-type") || "")
+    .split(";", 1)[0]
+    .trim()
+    .toLowerCase();
+  if (contentType !== "application/json") {
+    throw new HttpError(400, COPY.api.invalidJson);
+  }
   const declaredLength = Number(request.headers.get("content-length") || 0);
   if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
     throw new HttpError(413, COPY.api.bodyTooLarge);
@@ -316,6 +356,15 @@ function latestUserText(body) {
     .reverse()
     .find((message) => message?.role === "user");
   return String(latestUser?.content || "").trim();
+}
+
+function validatedLatestUserText(body) {
+  const latestText = latestUserText(body);
+  if (!latestText) throw new HttpError(400, COPY.api.messageRequired);
+  if (latestText.length > MAX_MESSAGE_CHARS) {
+    throw new HttpError(400, COPY.api.messageTooLong);
+  }
+  return latestText;
 }
 
 function modelInput(memory, latestText) {
@@ -547,6 +596,18 @@ async function callOpenAI(
   };
 }
 
+function isNeutralGreeting(value) {
+  return /^(?:hi|hello|hey|hiya|good morning|good afternoon|good evening)[!.? ]*$/i.test(
+    String(value || "").trim(),
+  );
+}
+
+function isUnsolicitedSafetyCheck(value) {
+  return /(?:hurt yourself|kill yourself|safe right now|immediate danger|next few hours)/i.test(
+    String(value || ""),
+  );
+}
+
 async function generateReply(
   messages,
   route,
@@ -570,9 +631,7 @@ async function generateReply(
         "\n\n" +
         COPY.model.routeInstruction(route),
       input: messages,
-      // Account continuity is held only in the bounded Durable Object record.
-      // OpenAI processes this request without retaining a retrievable Response.
-      store: false,
+      store: true,
     },
     apiKey,
     60_000,
@@ -588,6 +647,13 @@ async function generateReply(
       providerRequestId: result.providerRequestId,
       clientRequestId: result.clientRequestId,
     });
+  }
+  if (
+    route === "ORDINARY" &&
+    isNeutralGreeting(latestText) &&
+    isUnsolicitedSafetyCheck(reply)
+  ) {
+    return "Hi. What’s happening right now?";
   }
   return reply;
 }
@@ -619,7 +685,7 @@ async function generateSummary(snapshot, env) {
       instructions: COPY.model.summaryPrompt,
       input: [{ role: "user", content: input }],
       max_output_tokens: MAX_SUMMARY_OUTPUT_TOKENS,
-      store: false,
+      store: true,
     },
     apiKey,
     25_000,
@@ -687,6 +753,7 @@ async function recordFixedRoute(
   fixed,
   requestStartedAt,
   sessionIssuedAtMs,
+  hardDeleteAtMs,
 ) {
   const exchange = {
     user:
@@ -702,6 +769,7 @@ async function recordFixedRoute(
         exchange,
         requestStartedAt,
         sessionIssuedAtMs,
+        hardDeleteAtMs,
       );
       if (!result?.recorded) return false;
     } else {
@@ -720,10 +788,14 @@ async function recordFixedRoute(
   }
 }
 
-function continuityForSession(authSession) {
-  const token = String(authSession?.continuityToken || "");
-  return authSession && CONTINUITY_TOKEN_PATTERN.test(token)
-    ? { mode: "account", token }
+function continuityForSessions(authSession, guestSession) {
+  const accountToken = String(authSession?.continuityToken || "");
+  if (authSession && CONTINUITY_TOKEN_PATTERN.test(accountToken)) {
+    return { mode: "account", token: accountToken };
+  }
+  const guestToken = String(guestSession?.continuityToken || "");
+  return guestSession && CONTINUITY_TOKEN_PATTERN.test(guestToken)
+    ? { mode: "guest", token: guestToken }
     : { mode: "guest", token: null };
 }
 
@@ -736,9 +808,17 @@ function requestedContinuity(body) {
   const continuity = body?.continuity;
   if (
     continuity?.mode === "guest" &&
-    (continuity.token === undefined || continuity.token === null)
+    (continuity.token === undefined ||
+      continuity.token === null ||
+      CONTINUITY_TOKEN_PATTERN.test(String(continuity.token || "")))
   ) {
-    return { mode: "guest", token: null };
+    return {
+      mode: "guest",
+      token:
+        continuity.token === undefined || continuity.token === null
+          ? null
+          : String(continuity.token),
+    };
   }
   if (
     continuity?.mode === "account" &&
@@ -749,11 +829,45 @@ function requestedContinuity(body) {
   throw new HttpError(400, COPY.api.invalidConversation);
 }
 
-function resolveContinuity(body, authSession) {
+function resolveContinuity(body, authSession, guestSession) {
   const requested = requestedContinuity(body);
-  const current = continuityForSession(authSession);
+  const current = continuityForSessions(authSession, guestSession);
   if (requested.mode === "guest") {
-    return { continuity: requested, accountKey: null };
+    if (authSession?.accountKey) {
+      throw new HttpError(
+        409,
+        COPY.api.sessionChanged || "Your conversation changed. Reload and try again.",
+        { reload: true, continuity: current },
+      );
+    }
+    if (requested.token === null) {
+      // Cached clients from before anonymous continuity remain stateless until
+      // they reload and receive a server-bound guest session.
+      return {
+        continuity: requested,
+        memoryKind: null,
+        memoryKey: null,
+        sessionIssuedAtMs: null,
+        hardDeleteAtMs: null,
+      };
+    }
+    if (
+      !guestSession?.guestKey ||
+      requested.token !== guestSession.continuityToken
+    ) {
+      throw new HttpError(
+        409,
+        COPY.api.sessionChanged || "Your conversation changed. Reload and try again.",
+        { reload: true, continuity: current },
+      );
+    }
+    return {
+      continuity: requested,
+      memoryKind: "guest",
+      memoryKey: guestSession.guestKey,
+      sessionIssuedAtMs: guestSession.issuedAtMs,
+      hardDeleteAtMs: guestSession.expiresAt * 1_000,
+    };
   }
   if (
     current.mode !== "account" ||
@@ -766,7 +880,13 @@ function resolveContinuity(body, authSession) {
       { reload: true, continuity: current },
     );
   }
-  return { continuity: requested, accountKey: authSession.accountKey };
+  return {
+    continuity: requested,
+    memoryKind: "google",
+    memoryKey: authSession.accountKey,
+    sessionIssuedAtMs: authSession.issuedAtMs,
+    hardDeleteAtMs: null,
+  };
 }
 
 async function modelBackedReply(
@@ -778,17 +898,38 @@ async function modelBackedReply(
   ctx,
   requestStartedAt,
   sessionIssuedAtMs,
+  memoryKind,
+  hardDeleteAtMs,
+  guestResetSession,
 ) {
   const turn = await stub.beginModelTurn({
     requestStartedAt,
     sessionIssuedAtMs,
+    hardDeleteAtMs,
   });
   if (!turn?.acquired) {
-    if (["memory_deleted", "session_revoked"].includes(turn?.reason)) {
+    if (
+      [
+        "memory_deleted",
+        "session_revoked",
+        "session_expired",
+        "invalid_storage_deadline",
+      ].includes(turn?.reason)
+    ) {
+      const details = {
+        reload: true,
+      };
+      if (memoryKind === "guest" && guestResetSession) {
+        details.resetGuest = true;
+        details.guestResetGrant = await createGuestResetGrant(
+          guestResetSession,
+          env,
+        );
+      }
       throw new HttpError(
         409,
-        COPY.api.sessionChanged || "Your sign-in changed. Reload and try again.",
-        { reload: true, clearAuth: turn.reason === "session_revoked" },
+        COPY.api.sessionChanged || "Your conversation changed. Reload and try again.",
+        details,
       );
     }
     throw new HttpError(
@@ -820,6 +961,7 @@ async function modelBackedReply(
       currentFixed,
       requestStartedAt,
       sessionIssuedAtMs,
+      hardDeleteAtMs,
     );
     if (!schedule(ctx, task)) void task;
     return { fixed: currentFixed, route: currentRoute };
@@ -835,6 +977,8 @@ async function modelBackedReply(
     );
     const result = await stub.commitModelTurn({
       ...lease,
+      sessionIssuedAtMs,
+      hardDeleteAtMs,
       exchange: {
         user: latestText,
         assistant: reply,
@@ -842,10 +986,24 @@ async function modelBackedReply(
       },
     });
     if (!result?.committed) {
+      const terminalGuestFailure = [
+        "memory_deleted",
+        "session_revoked",
+        "session_expired",
+        "invalid_storage_deadline",
+      ].includes(result?.reason);
+      const details = { reload: true };
+      if (memoryKind === "guest" && terminalGuestFailure && guestResetSession) {
+        details.resetGuest = true;
+        details.guestResetGrant = await createGuestResetGrant(
+          guestResetSession,
+          env,
+        );
+      }
       throw new HttpError(
         409,
         COPY.api.sessionChanged || "Conversation state changed. Try again.",
-        { reload: true },
+        details,
       );
     }
     return { reply, result, memory, route: currentRoute || route };
@@ -864,19 +1022,64 @@ async function modelBackedReply(
   }
 }
 
-async function handleChat(request, env, ctx, authSession) {
-  const requestStartedAt = captureRequestStartedAt(request);
-  const body = await readBoundedJson(request);
-  const latestText = latestUserText(body);
-  if (!latestText) throw new HttpError(400, COPY.api.messageRequired);
-  if (latestText.length > MAX_MESSAGE_CHARS) {
-    throw new HttpError(400, COPY.api.messageTooLong);
+async function recordDirectFixedRoute(
+  request,
+  body,
+  route,
+  fixed,
+  env,
+  requestStartedAt,
+) {
+  try {
+    const authSession = await readAuthorizedAuthSession(request, env);
+    const guestSession = await readGuestSession(request, env);
+    const resolved = resolveContinuity(body, authSession, guestSession);
+    const stub = sessionMemoryStub(
+      env,
+      resolved.memoryKind,
+      resolved.memoryKey,
+    );
+    return await recordFixedRoute(
+      stub,
+      route,
+      fixed,
+      requestStartedAt,
+      resolved.sessionIssuedAtMs,
+      resolved.hardDeleteAtMs,
+    );
+  } catch (error) {
+    if (!(error instanceof HttpError)) {
+      console.error(
+        JSON.stringify({
+          event: "fixed_route_session_validation_failed",
+          error: error instanceof Error ? error.name : "UnknownError",
+        }),
+      );
+    }
+    return false;
   }
+}
 
-  const resolved = resolveContinuity(body, authSession);
+async function handleChat(
+  request,
+  env,
+  ctx,
+  authSession,
+  guestSession,
+  parsedBody = null,
+) {
+  const requestStartedAt = captureRequestStartedAt(request);
+  const body = parsedBody || (await readBoundedJson(request));
+  const latestText = validatedLatestUserText(body);
+
+  const resolved = resolveContinuity(body, authSession, guestSession);
   const { continuity } = resolved;
-  const stub = accountMemoryStub(env, resolved.accountKey);
-  const sessionIssuedAtMs = authSession?.issuedAtMs;
+  const stub = sessionMemoryStub(
+    env,
+    resolved.memoryKind,
+    resolved.memoryKey,
+  );
+  const sessionIssuedAtMs = resolved.sessionIssuedAtMs;
   const clientAwaiting = body?.awaitingSafetyAnswer === true;
   let route = classifyInput(latestText, {
     awaitingSafetyAnswer: clientAwaiting,
@@ -890,6 +1093,7 @@ async function handleChat(request, env, ctx, authSession) {
       fixed,
       requestStartedAt,
       sessionIssuedAtMs,
+      resolved.hardDeleteAtMs,
     );
     if (!schedule(ctx, task)) void task;
     return jsonResponse({ route, ...fixed, continuity });
@@ -907,6 +1111,9 @@ async function handleChat(request, env, ctx, authSession) {
       ctx,
       requestStartedAt,
       sessionIssuedAtMs,
+      resolved.memoryKind,
+      resolved.hardDeleteAtMs,
+      resolved.memoryKind === "guest" ? guestSession : null,
     );
     if (modelResult.fixed) {
       return jsonResponse({
@@ -930,6 +1137,7 @@ async function handleChat(request, env, ctx, authSession) {
         fixed,
         requestStartedAt,
         sessionIssuedAtMs,
+        resolved.hardDeleteAtMs,
       );
       if (!schedule(ctx, task)) void task;
       return jsonResponse({ route, ...fixed, continuity });
@@ -960,11 +1168,11 @@ async function handleChat(request, env, ctx, authSession) {
   });
 }
 
-function authNotice(code, memoryCode, signedIn, memoryDeletionConfirmed) {
-  if (signedIn && memoryDeletionConfirmed) {
+function authNotice(code, memoryCode, signedIn, memoryDeletionConfirmation) {
+  if (memoryDeletionConfirmation?.confirmed === true) {
     return COPY.page.auth.memoryDeleted;
   }
-  if (signedIn && memoryCode === "session-changed") {
+  if (memoryCode === "session-changed") {
     return COPY.page.auth.memorySessionChanged;
   }
   if (code === "cancelled") return COPY.page.auth.cancelled;
@@ -972,23 +1180,37 @@ function authNotice(code, memoryCode, signedIn, memoryDeletionConfirmed) {
   return "";
 }
 
-function appendRetiredCookieCleanup(headers, request, authSession) {
+function appendRetiredCookieCleanup(
+  headers,
+  request,
+) {
   if (readCookie(request, LEGACY_SESSION_COOKIE_NAME)) {
     headers.append("Set-Cookie", clearLegacySessionCookie(request));
-  }
-  if (!authSession && readCookie(request, AUTH_COOKIE_NAME)) {
-    headers.append("Set-Cookie", clearAuthCookie(request));
   }
 }
 
 function sameOriginOrNonBrowser(request) {
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite && !["same-origin", "none"].includes(fetchSite)) {
+    return false;
+  }
   const origin = request.headers.get("origin");
   return !origin || origin === new URL(request.url).origin;
+}
+
+function sameOriginBrowserRequest(request) {
+  const origin = request.headers.get("origin");
+  const fetchSite = request.headers.get("sec-fetch-site");
+  return (
+    origin === new URL(request.url).origin &&
+    (!fetchSite || fetchSite === "same-origin")
+  );
 }
 
 const worker = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const requestStartedAt = captureRequestStartedAt(request);
 
     try {
       if (url.pathname === "/" || url.pathname === "/index.html") {
@@ -999,23 +1221,18 @@ const worker = {
           });
         }
 
-        let authSession = await readAuthSession(request, env);
-        let refreshedSession = await refreshLegacyAuthSession(
+        // Legacy cookies keep their fixed sunset. Passive GET responses must
+        // never mint a randomized replacement that could arrive after a newer
+        // login or deletion rotation and overwrite that winning cookie.
+        const authSession = await readAuthorizedAuthSession(request, env);
+        const guestResolution = await resolveGuestSession(request, env, {
+          createIfMissing: !authSession,
+        });
+        const guestSession = guestResolution.session;
+        const memorySession = authSession || guestSession;
+        const memoryDeletionConfirmation = await readMemoryDeletionReceipt(
           request,
-          env,
-          authSession,
-        );
-        if (refreshedSession) authSession = refreshedSession.session;
-        if (
-          authSession &&
-          !(await accountSessionAllowed(env, authSession))
-        ) {
-          authSession = null;
-          refreshedSession = null;
-        }
-        const memoryDeletionConfirmed = await readMemoryDeletionReceipt(
-          request,
-          authSession,
+          memorySession,
           env,
         );
         const headers = pageHeaders();
@@ -1023,26 +1240,23 @@ const worker = {
           ACCOUNT_STATE_HEADER,
           authSession ? "account" : "guest",
         );
-        appendRetiredCookieCleanup(headers, request, authSession);
-        if (refreshedSession) {
-          headers.append("Set-Cookie", refreshedSession.setCookie);
-        }
-        if (readCookie(request, MEMORY_DELETION_COOKIE_NAME)) {
-          headers.append("Set-Cookie", clearMemoryDeletionCookie(request));
+        appendRetiredCookieCleanup(headers, request);
+        if (guestResolution.setCookie) {
+          headers.append("Set-Cookie", guestResolution.setCookie);
         }
         return new Response(
           request.method === "HEAD"
             ? null
             : renderPage({
                 signedIn: Boolean(authSession),
-                continuity: continuityForSession(authSession),
-                memoryDeletionConfirmed,
+                continuity: continuityForSessions(authSession, guestSession),
+                memoryDeletionConfirmation,
                 googleSignInAvailable: googleAuthConfigured(env),
                 authNotice: authNotice(
                   url.searchParams.get("auth"),
                   url.searchParams.get("memory"),
                   Boolean(authSession),
-                  memoryDeletionConfirmed,
+                  memoryDeletionConfirmation,
                 ),
               }),
           {
@@ -1101,32 +1315,35 @@ const worker = {
         if (request.method !== "GET") {
           return jsonResponse({ error: COPY.api.methodNotAllowed }, 405);
         }
-        let authSession = await readAuthSession(request, env);
-        let refreshedSession = await refreshLegacyAuthSession(
-          request,
-          env,
+        // Status checks are read-only for the same response-order reason as
+        // the root page: cookie changes belong to explicit user actions.
+        const authSession = await readAuthorizedAuthSession(request, env);
+        const guestResolution = await resolveGuestSession(request, env, {
+          createIfMissing: false,
+        });
+        const guestSession = guestResolution.session;
+        const selectedContinuity = continuityForSessions(
           authSession,
+          guestSession,
         );
-        if (refreshedSession) authSession = refreshedSession.session;
-        let authCookie = refreshedSession?.setCookie || null;
-        if (
-          authSession &&
-          !(await accountSessionAllowed(env, authSession))
-        ) {
-          authSession = null;
-          refreshedSession = null;
-          authCookie = clearAuthCookie(request);
-        }
-        return jsonResponse(
+        const response = jsonResponse(
           {
             signedIn: Boolean(authSession),
-            memory: Boolean(authSession && env.SESSIONS),
+            memory: Boolean(
+              selectedContinuity.token &&
+                (selectedContinuity.mode === "account"
+                  ? env.SESSIONS
+                  : env.GUEST_SESSIONS),
+            ),
             google: googleAuthConfigured(env),
-            continuity: continuityForSession(authSession),
+            continuity: selectedContinuity,
           },
           200,
-          authCookie ? { "Set-Cookie": authCookie } : {},
         );
+        if (guestResolution.setCookie) {
+          response.headers.append("Set-Cookie", guestResolution.setCookie);
+        }
+        return response;
       }
 
       if (url.pathname === "/api/health") {
@@ -1134,7 +1351,16 @@ const worker = {
           return jsonResponse({ error: COPY.api.methodNotAllowed }, 405);
         }
         const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
-        const configured = demoMode || Boolean(String(env.OPENAI_API_KEY || ""));
+        const modelConfigured =
+          demoMode || Boolean(String(env.OPENAI_API_KEY || ""));
+        const memoryConfigured = Boolean(
+          env?.SESSIONS &&
+            typeof env.SESSIONS.getByName === "function" &&
+            env?.GUEST_SESSIONS &&
+            typeof env.GUEST_SESSIONS.getByName === "function" &&
+            guestSessionConfigured(env),
+        );
+        const configured = modelConfigured && memoryConfigured;
         return jsonResponse(
           {
             ok: configured,
@@ -1145,7 +1371,7 @@ const worker = {
               ? null
               : String(env.OPENAI_REASONING_EFFORT || "max"),
             verbosity: demoMode ? null : "low",
-            memory: Boolean(env.SESSIONS),
+            memory: memoryConfigured,
             authentication: googleAuthConfigured(env),
           },
           configured ? 200 : 503,
@@ -1159,8 +1385,47 @@ const worker = {
         if (!sameOriginOrNonBrowser(request)) {
           return jsonResponse({ error: COPY.api.crossOriginRequest }, 403);
         }
-        const authSession = await readAuthSession(request, env);
-        return await handleChat(request, env, ctx, authSession);
+        const cryptographicAuthSession = await readAuthSession(request, env);
+        if (!cryptographicAuthSession && !sameOriginBrowserRequest(request)) {
+          return jsonResponse({ error: COPY.api.crossOriginRequest }, 403);
+        }
+        const body = await readBoundedJson(request);
+        const latestText = validatedLatestUserText(body);
+        const directRoute = classifyInput(latestText, {
+          awaitingSafetyAnswer: body?.awaitingSafetyAnswer === true,
+        });
+        const directFixed = fixedReplyForRoute(directRoute);
+        if (directFixed) {
+          const continuity = requestedContinuity(body);
+          const task = recordDirectFixedRoute(
+            request,
+            body,
+            directRoute,
+            directFixed,
+            env,
+            requestStartedAt,
+          );
+          if (!schedule(ctx, task)) void task;
+          return jsonResponse({
+            route: directRoute,
+            ...directFixed,
+            continuity,
+          });
+        }
+        const authSession =
+          cryptographicAuthSession &&
+          (await accountSessionAllowed(env, cryptographicAuthSession))
+            ? cryptographicAuthSession
+            : null;
+        const guestSession = await readGuestSession(request, env);
+        return await handleChat(
+          request,
+          env,
+          ctx,
+          authSession,
+          guestSession,
+          body,
+        );
       }
 
       if (url.pathname === "/account/memory/delete") {
@@ -1191,7 +1456,6 @@ const worker = {
             status: 303,
             headers: pageHeaders("text/plain; charset=utf-8", {
               Location: "/?memory=session-changed",
-              "Set-Cookie": clearAuthCookie(request),
             }),
           });
         }
@@ -1220,7 +1484,6 @@ const worker = {
             status: 303,
             headers: pageHeaders("text/plain; charset=utf-8", {
               Location: "/?memory=session-changed",
-              "Set-Cookie": clearAuthCookie(request),
             }),
           });
         }
@@ -1243,11 +1506,126 @@ const worker = {
           request,
           rotatedSession.session,
           env,
+          Date.now(),
+          authSession.continuityToken,
         );
         const headers = pageHeaders("text/plain; charset=utf-8", {
           Location: "/",
         });
         headers.append("Set-Cookie", rotatedSession.setCookie);
+        headers.append("Set-Cookie", receiptCookie);
+        return new Response(null, {
+          status: 303,
+          headers,
+        });
+      }
+
+      if (url.pathname === "/guest/session/reset") {
+        if (request.method !== "POST") {
+          return jsonResponse({ error: COPY.api.methodNotAllowed }, 405);
+        }
+        if (!sameOriginBrowserRequest(request)) {
+          return jsonResponse({ error: COPY.api.crossOriginRequest }, 403);
+        }
+        if (await readAuthorizedAuthSession(request, env)) {
+          return new Response(null, { status: 204, headers: apiHeaders() });
+        }
+        const guestSession = await readGuestSession(request, env);
+        const form = await readBoundedForm(request);
+        const suppliedContinuity = form.getAll("continuity");
+        const suppliedGrant = form.getAll("grant");
+        if (
+          !guestSession ||
+          suppliedContinuity.length !== 1 ||
+          suppliedContinuity[0] !== guestSession.continuityToken ||
+          suppliedGrant.length !== 1 ||
+          !(await readGuestResetGrant(
+            suppliedGrant[0],
+            guestSession,
+            env,
+          ))
+        ) {
+          return new Response(null, { status: 204, headers: apiHeaders() });
+        }
+        const replacement = await createGuestSession(request, env);
+        return new Response(null, {
+          status: 204,
+          headers: apiHeaders({ "Set-Cookie": replacement.setCookie }),
+        });
+      }
+
+      if (url.pathname === "/guest/memory/delete") {
+        if (request.method !== "POST") {
+          return new Response(COPY.api.methodNotAllowed, {
+            status: 405,
+            headers: pageHeaders("text/plain; charset=utf-8"),
+          });
+        }
+        if (!sameOriginBrowserRequest(request)) {
+          return new Response(COPY.api.crossOriginRequest, {
+            status: 403,
+            headers: pageHeaders("text/plain; charset=utf-8"),
+          });
+        }
+        if (await readAuthorizedAuthSession(request, env)) {
+          return new Response(null, {
+            status: 303,
+            headers: pageHeaders("text/plain; charset=utf-8", {
+              Location: "/?memory=session-changed",
+            }),
+          });
+        }
+        const guestSession = await readGuestSession(request, env);
+        if (!guestSession) {
+          return new Response(null, {
+            status: 303,
+            headers: pageHeaders("text/plain; charset=utf-8", {
+              Location: "/?memory=session-changed",
+            }),
+          });
+        }
+        const stub = guestMemoryStub(env, guestSession.guestKey);
+        const form = await readBoundedForm(request);
+        const suppliedContinuity = form.getAll("continuity");
+        if (
+          suppliedContinuity.length !== 1 ||
+          suppliedContinuity[0] !== guestSession.continuityToken
+        ) {
+          return new Response(null, {
+            status: 303,
+            headers: pageHeaders("text/plain; charset=utf-8", {
+              Location: "/?memory=session-changed",
+            }),
+          });
+        }
+        if (!stub || typeof stub.eraseMemory !== "function") {
+          return new Response(COPY.api.temporarilyUnavailable, {
+            status: 503,
+            headers: pageHeaders("text/plain; charset=utf-8"),
+          });
+        }
+        const deletion = await stub.eraseMemory(
+          guestSession.issuedAtMs,
+          guestSession.expiresAt * 1_000,
+        );
+        const deletionConfirmed =
+          deletion?.erased === true ||
+          ["session_revoked", "session_expired"].includes(deletion?.reason);
+        if (!deletionConfirmed) {
+          throw new Error("InvalidGuestMemoryDeletionResult");
+        }
+        const replacement = await createGuestSession(request, env);
+        const receiptCookie = await createMemoryDeletionReceiptCookie(
+          request,
+          replacement.session,
+          env,
+          Date.now(),
+          guestSession.continuityToken,
+        );
+        const headers = pageHeaders("text/plain; charset=utf-8", {
+          Location: "/",
+        });
+        headers.append("Set-Cookie", replacement.setCookie);
         headers.append("Set-Cookie", receiptCookie);
         return new Response(null, {
           status: 303,
@@ -1263,12 +1641,10 @@ const worker = {
     } catch (error) {
       if (error instanceof HttpError) {
         const details = { ...(error.details || {}) };
-        const clearAuth = details.clearAuth === true;
         delete details.clearAuth;
         return jsonResponse(
           { error: error.message, ...details },
           error.status,
-          clearAuth ? { "Set-Cookie": clearAuthCookie(request) } : {},
         );
       }
 

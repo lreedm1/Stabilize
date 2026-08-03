@@ -5,7 +5,7 @@ import { COPY } from "../src/copy.js";
 import { renderPage } from "../src/page.js";
 import { createContinuityValidationGate } from "../public/continuity-guard.js";
 
-test("only a validation started after the latest hide can reveal account UI", () => {
+test("only a validation started after the latest hide can reveal continuity UI", () => {
   const gate = createContinuityValidationGate();
   const firstCheck = gate.snapshot();
 
@@ -60,7 +60,7 @@ test("thinking is replaced with the latest Markdown reply", async () => {
   assert.match(clientScript, /article\.appendChild\(renderMarkdown\(content\)\)/);
   assert.match(
     clientScript,
-    /JSON\.stringify\(\{[\s\S]*message: clean,[\s\S]*awaitingSafetyAnswer,[\s\S]*continuity: requestContinuity,/,
+    /JSON\.stringify\(\{[\s\S]*message: clean,[\s\S]*awaitingSafetyAnswer: currentAwaitingSafetyAnswer\(\),[\s\S]*continuity: requestContinuity,/,
   );
   assert.match(clientScript, /function requestErrorMessage/);
   assert.match(clientScript, /input\.value = clean/);
@@ -80,12 +80,43 @@ test("chat requests and successful responses stay bound to rendered continuity",
   assert.match(pageSource, /<template id="continuity-state">\$\{continuityData\}<\/template>/);
   assert.match(pageSource, /CONTINUITY_TOKEN_PATTERN/);
   assert.match(pageSource, /\{ mode: "guest", token: null \}/);
+  assert.match(pageSource, /requestedContinuity\?\.mode === "guest"/);
+  assert.match(pageSource, /\{ mode: "guest", token: String\(requestedContinuity\.token\) \}/);
   assert.match(pageSource, /\{ mode: "account", token: String\(requestedContinuity\.token\) \}/);
   assert.match(clientScript, /const continuityState = renderedContinuity\(\)/);
   assert.match(clientScript, /continuity: requestContinuity/);
   assert.match(
     clientScript,
-    /response\.status === 409 && result\.reload === true[\s\S]*reloadForContinuityChange\(\{ clearStored: true \}\)/,
+    /response\.status === 409 && result\.reload === true[\s\S]*clearPersistedAnswer\(requestContinuity\)[\s\S]*reloadForContinuityChange\(\)/,
+  );
+  assert.match(
+    clientScript,
+    /async function resetGuestSession\(continuity, grant\)[\s\S]*continuity\?\.mode !== "guest"[\s\S]*!continuity\.token[\s\S]*typeof grant !== "string"[\s\S]*!grant[\s\S]*grant\.length > 4_096/,
+  );
+  assert.match(
+    clientScript,
+    /fetch\("\/guest\/session\/reset", \{[\s\S]*method: "POST"[\s\S]*Content-Type": "application\/x-www-form-urlencoded"[\s\S]*new URLSearchParams\(\{ continuity: continuity\.token, grant \}\)[\s\S]*credentials: "same-origin"[\s\S]*cache: "no-store"/,
+  );
+  assert.match(
+    clientScript,
+    /response\.status === 409 && result\.reload === true[\s\S]*result\.resetGuest === true[\s\S]*resetGuestSession\([\s\S]*requestContinuity,[\s\S]*result\.guestResetGrant,[\s\S]*\)[\s\S]*reloadForContinuityChange\(\)/,
+  );
+  assert.equal(
+    (clientScript.match(/resetGuestSession\(/g) || []).length,
+    2,
+    "guest reset must be defined once and called only from the terminal 409 path",
+  );
+
+  const guestToken = "g".repeat(43);
+  const guestPage = renderPage({
+    signedIn: false,
+    continuity: { mode: "guest", token: guestToken },
+  });
+  assert.match(
+    guestPage,
+    new RegExp(
+      `id="continuity-state">\\{&quot;mode&quot;:&quot;guest&quot;,&quot;token&quot;:&quot;${guestToken}&quot;\\}<\\/template>`,
+    ),
   );
 
   const sendStart = clientScript.indexOf("async function sendMessage");
@@ -99,7 +130,77 @@ test("chat requests and successful responses stay bound to rendered continuity",
   assert.ok(replyRender > continuityCheck);
 });
 
-test("account pages hide and revalidate before showing stale content", async () => {
+test("a newer same-token tab update permanently suppresses a deferred successful response", async () => {
+  const clientScript = await readFile(
+    new URL("../public/app.js", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    clientScript,
+    /window\.addEventListener\("storage"[\s\S]*continuityStorageKey\(\),[\s\S]*deletionPendingStorageKey\(\),[\s\S]*\.includes\(event\.key\)[\s\S]*activeRequestController\?\.abort\(\)[\s\S]*hideContinuitySurface\(\)/,
+  );
+
+  const pendingStart = clientScript.indexOf("function deletionIsPending");
+  const pendingEnd = clientScript.indexOf("function showClientNotice", pendingStart);
+  const pendingSource = clientScript.slice(pendingStart, pendingEnd);
+  const deletionIsPending = Function(
+    "localStorage",
+    "deletionPendingStorageKey",
+    `${pendingSource}; return deletionIsPending;`,
+  )(
+    {
+      getItem() {
+        return String(Date.now() - 31 * 24 * 60 * 60 * 1000);
+      },
+    },
+    () => "stabilize:memory-delete-pending:v1:guest:test",
+  );
+  assert.equal(
+    deletionIsPending({ mode: "guest", token: "g".repeat(43) }),
+    true,
+    "a marker older than 24 hours must still suppress cached and in-flight replies",
+  );
+  assert.doesNotMatch(
+    pendingSource,
+    /Date\.now|const age|savedAt|MAX_AGE|24 \* 60/,
+  );
+
+  const sendStart = clientScript.indexOf("async function sendMessage");
+  const sendEnd = clientScript.indexOf('form.addEventListener("submit"', sendStart);
+  const sendSource = clientScript.slice(sendStart, sendEnd);
+  const continuityCheck = sendSource.indexOf(
+    "sameContinuity(responseContinuity, requestContinuity)",
+  );
+  const deletionCheck = sendSource.indexOf(
+    "deletionIsPending(requestContinuity)",
+  );
+  const abortedCheck = sendSource.indexOf(
+    "requestController.signal.aborted",
+    continuityCheck,
+  );
+  const replyRender = sendSource.indexOf('showOutput(reply, "", "response"');
+  const replyPersist = sendSource.indexOf(
+    "persistLatestAnswer(reply, route, needsSafetyAnswer)",
+  );
+
+  assert.ok(continuityCheck >= 0);
+  assert.ok(abortedCheck > continuityCheck);
+  assert.ok(deletionCheck > continuityCheck);
+  assert.ok(deletionCheck > abortedCheck);
+  assert.ok(replyRender > deletionCheck);
+  assert.ok(replyPersist > replyRender);
+  assert.match(
+    sendSource,
+    /if \(requestController\.signal\.aborted\) \{[\s\S]*hideForContinuityReload\(\);[\s\S]*return;[\s\S]*if \(deletionIsPending/,
+  );
+  assert.match(
+    sendSource,
+    /if \(deletionIsPending\(requestContinuity\)\) \{[\s\S]*hideForContinuityReload\(\);[\s\S]*return;[\s\S]*const reply/,
+  );
+});
+
+test("token-bound guest and account pages hide and revalidate before showing stale content", async () => {
   const [clientScript, pageSource] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
@@ -107,8 +208,8 @@ test("account pages hide and revalidate before showing stale content", async () 
 
   assert.match(clientScript, /LAST_ANSWER_STORAGE_PREFIX/);
   assert.match(clientScript, /function continuityStorageKey/);
-  assert.match(clientScript, /state\.mode === "account" \? `account:\$\{state\.token\}` : "guest"/);
-  assert.match(clientScript, /async function revalidateAccountContinuity/);
+  assert.match(clientScript, /`\$\{state\.mode\}:\$\{state\.token \|\| "legacy"\}`/);
+  assert.match(clientScript, /async function revalidateContinuity/);
   assert.match(clientScript, /continuityValidationGate\.invalidate\(\)/);
   assert.match(
     clientScript,
@@ -123,59 +224,95 @@ test("account pages hide and revalidate before showing stale content", async () 
   assert.match(clientScript, /credentials: "same-origin"/);
   assert.match(
     clientScript,
-    /result\.signedIn !== true \|\|[\s\S]*!sameContinuity\(currentContinuity, continuityState\)[\s\S]*reloadForContinuityChange\(\{ clearStored: true \}\)/,
+    /result\.signedIn === true && currentContinuity\?\.mode === "account"[\s\S]*result\.signedIn === false && currentContinuity\?\.mode === "guest"/,
+  );
+  assert.match(
+    clientScript,
+    /!sameContinuity\(currentContinuity, continuityState\)[\s\S]*clearPersistedAnswer\(\);[\s\S]*reloadForContinuityChange\(\)/,
   );
   assert.match(clientScript, /showClientNotice\(copy\.sessionCheckFailed, "session-check"\)/);
   assert.match(pageSource, /id="client-notice"[\s\S]*role="status"/);
-  assert.match(clientScript, /window\.addEventListener\("blur", hideAccountSurface\)/);
+  assert.match(clientScript, /window\.addEventListener\("blur", hideContinuitySurface\)/);
   assert.match(clientScript, /document\.addEventListener\("visibilitychange"/);
   assert.match(
     clientScript,
-    /window\.addEventListener\("pagehide", \(\) => \{[\s\S]*?hideAccountSurface\(\);[\s\S]*?\}\);/,
+    /window\.addEventListener\("pagehide", \(\) => \{[\s\S]*?hideContinuitySurface\(\);[\s\S]*?\}\);/,
   );
   assert.match(
     clientScript,
-    /window\.addEventListener\("pageshow", \(event\) => \{[\s\S]*?continuityState\.mode === "account"[\s\S]*?hideAccountSurface\(\);[\s\S]*?revalidateAccountContinuity\(\);/,
+    /window\.addEventListener\("pageshow", \(event\) => \{[\s\S]*?continuityState\.token !== null[\s\S]*?hideContinuitySurface\(\);[\s\S]*?revalidateContinuity\(\);/,
   );
   assert.match(clientScript, /window\.addEventListener\("focus"/);
   assert.match(clientScript, /new BroadcastChannel\(CONTINUITY_CHANNEL_NAME\)/);
   assert.match(
     clientScript,
-    /if \(!message \|\| continuityState\.mode !== "account"\) return/,
+    /if \(!message \|\| continuityState\.token === null\) return/,
   );
   assert.match(
     clientScript,
-    /sameContinuity\(otherContinuity, continuityState\)[\s\S]*hideAccountSurface\(\);[\s\S]*revalidateAccountContinuity\(\)/,
+    /sameContinuity\(otherContinuity, continuityState\)[\s\S]*hideContinuitySurface\(\);[\s\S]*revalidateContinuity\(\)/,
   );
-  assert.doesNotMatch(
+  assert.match(
     clientScript,
-    /otherContinuity[\s\S]{0,220}reloadForContinuityChange/,
-  );
-  assert.doesNotMatch(
-    clientScript,
-    /event\.persisted && continuityState\.mode === "account"[\s\S]{0,160}reloadForContinuityChange/,
+    /window\.addEventListener\("storage"[\s\S]*event\.storageArea !== localStorage[\s\S]*continuityStorageKey\(\),[\s\S]*deletionPendingStorageKey\(\),[\s\S]*\.includes\(event\.key\)[\s\S]*hideContinuitySurface\(\);[\s\S]*revalidateContinuity\(\)/,
   );
 });
 
-test("signed-in users can explicitly delete remembered conversation data", async () => {
+test("guests and signed-in users can explicitly delete remembered conversation data", async () => {
   const [clientScript, styles, pageSource] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
     readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
   ]);
 
-  assert.match(clientScript, /form\[action="\/account\/memory\/delete"\]/);
+  assert.match(clientScript, /form\[action\$="\/memory\/delete"\]/);
   assert.match(clientScript, /deleteMemoryForm\.addEventListener\("submit"/);
   assert.match(clientScript, /window\.confirm\(copy\.deleteMemoryConfirm\)/);
+  assert.match(
+    clientScript,
+    /DELETION_PENDING_STORAGE_PREFIX =\s*"stabilize:memory-delete-pending:v1:"/,
+  );
+  assert.doesNotMatch(clientScript, /DELETION_PENDING_MAX_AGE_MS/);
+  assert.match(
+    clientScript,
+    /async function sendMessage[\s\S]*if \(deletionIsPending\(\)\) \{[\s\S]*hideForContinuityReload\(\);[\s\S]*showClientNotice\(copy\.deletionPending[\s\S]*return;[\s\S]*fetch\("\/api\/chat"/,
+  );
+  assert.match(
+    clientScript,
+    /function revealContinuitySurface[\s\S]*deletionIsPending\(\)[\s\S]*return;[\s\S]*conversationSurface\.hidden = false/,
+  );
+  assert.match(
+    clientScript,
+    /function deletionPendingStorageKey[\s\S]*DELETION_PENDING_STORAGE_PREFIX[\s\S]*`\$\{state\.mode\}:\$\{state\.token \|\| "legacy"\}`/,
+  );
+  assert.match(
+    clientScript,
+    /function markDeletionPending[\s\S]*localStorage\.setItem\(deletionPendingStorageKey\(state\), String\(Date\.now\(\)\)\)/,
+  );
+  assert.match(
+    clientScript,
+    /function readPersistedAnswer[\s\S]*if \(deletionIsPending\(\)\) return null;/,
+  );
+  assert.match(
+    clientScript,
+    /function deletionIsPending[\s\S]*localStorage\.getItem\(deletionPendingStorageKey\(state\)\) !== null/,
+  );
+  assert.match(
+    clientScript,
+    /deleteMemoryForm\.addEventListener\("submit"[\s\S]*window\.confirm[\s\S]*event\.preventDefault\(\);[\s\S]*return;[\s\S]*markDeletionPending\(\);[\s\S]*hideForContinuityReload\(\);/,
+  );
   assert.match(styles, /auth-session/);
-  assert.match(pageSource, /action="\/account\/memory\/delete" method="post"/);
+  assert.match(pageSource, /continuity\.mode === "account" \? "account" : "guest"/);
   assert.match(pageSource, /page\.auth\.forgetMemory/);
 
   const token = "a".repeat(43);
   const signedInPage = renderPage({
     signedIn: true,
     continuity: { mode: "account", token },
-    memoryDeletionConfirmed: true,
+    memoryDeletionConfirmation: {
+      confirmed: true,
+      deletedContinuity: { mode: "account", token },
+    },
   });
   assert.match(
     signedInPage,
@@ -183,9 +320,28 @@ test("signed-in users can explicitly delete remembered conversation data", async
       `action="/account/memory/delete" method="post"[\\s\\S]*name="continuity" value="${token}"`,
     ),
   );
+  const replacementGuestToken = "g".repeat(43);
+  const deletedGuestToken = "d".repeat(43);
+  const guestPage = renderPage({
+    signedIn: false,
+    googleSignInAvailable: true,
+    continuity: { mode: "guest", token: replacementGuestToken },
+    memoryDeletionConfirmation: {
+      confirmed: true,
+      deletedContinuity: { mode: "guest", token: deletedGuestToken },
+    },
+  });
   assert.match(
-    signedInPage,
-    /<template id="memory-deletion-state">\{&quot;confirmed&quot;:true\}<\/template>/,
+    guestPage,
+    new RegExp(
+      `action="/guest/memory/delete" method="post"[\\s\\S]*name="continuity" value="${replacementGuestToken}"`,
+    ),
+  );
+  assert.match(
+    guestPage,
+    new RegExp(
+      `<template id="memory-deletion-state">\\{&quot;confirmed&quot;:true,&quot;deletedContinuity&quot;:\\{&quot;mode&quot;:&quot;guest&quot;,&quot;token&quot;:&quot;${deletedGuestToken}&quot;\\}\\}<\\/template>`,
+    ),
   );
   assert.match(clientScript, /memoryDeletionTemplate/);
   assert.doesNotMatch(
@@ -196,21 +352,142 @@ test("signed-in users can explicitly delete remembered conversation data", async
   assert.match(clientScript, /type: "memory-deleted"/);
   assert.match(
     clientScript,
-    /function scrubForMemoryDeletion\(\)[\s\S]*?clearAllPersistedAnswers\(\);[\s\S]*?activeRequestController\?\.abort\(\);[\s\S]*?awaitingSafetyAnswer = false;[\s\S]*?restoreComposeView\(\);[\s\S]*?hideAccountSurface\(\)/,
+    /function scrubForMemoryDeletion\(deletedContinuity\)[\s\S]*?clearPersistedAnswer\(deletedContinuity\);[\s\S]*?clearDeletionPending\(deletedContinuity\);[\s\S]*?activeRequestController\?\.abort\(\);[\s\S]*?awaitingSafetyAnswer = false;[\s\S]*?awaitingSafetyAnswerSince = null;[\s\S]*?restoreComposeView\(\);[\s\S]*?hideContinuitySurface\(\)/,
   );
   assert.match(
     clientScript,
-    /message\.type === "memory-deleted"[\s\S]*?sameContinuity\(message\.continuity, continuityState\)[\s\S]*?scrubForMemoryDeletion\(\);[\s\S]*?revalidateAccountContinuity\(\)/,
+    /message\.type === "memory-deleted"[\s\S]*?sameContinuity\(message\.continuity, continuityState\)[\s\S]*?scrubForMemoryDeletion\(message\.continuity\);[\s\S]*?revalidateContinuity\(\)/,
   );
   assert.match(
     clientScript,
-    /memoryDeletionConfirmed[\s\S]*clearAllPersistedAnswers\(\);[\s\S]*startContinuityChannel\(\);[\s\S]*memoryDeletionConfirmed[\s\S]*postMessage\(\{[\s\S]*type: "memory-deleted",[\s\S]*continuity: continuityState/,
+    /memoryDeletionConfirmation[\s\S]*clearPersistedAnswer\(memoryDeletionConfirmation\.deletedContinuity\);[\s\S]*clearDeletionPending\(memoryDeletionConfirmation\.deletedContinuity\);[\s\S]*startContinuityChannel\(\);[\s\S]*memoryDeletionConfirmation[\s\S]*postMessage\(\{[\s\S]*type: "memory-deleted",[\s\S]*continuity: memoryDeletionConfirmation\.deletedContinuity/,
+  );
+  assert.match(
+    clientScript,
+    /function clearDeletionPending\(state\)[\s\S]*localStorage\.removeItem\(deletionPendingStorageKey\(state\)\)/,
+  );
+  const clearAllStart = clientScript.indexOf("function clearAllPersistedAnswers");
+  const clearAllEnd = clientScript.indexOf(
+    "function retireStalePersistedAnswers",
+    clearAllStart,
+  );
+  const clearAllSource = clientScript.slice(clearAllStart, clearAllEnd);
+  assert.doesNotMatch(clearAllSource, /DELETION_PENDING_STORAGE_PREFIX/);
+
+  const entries = new Map([
+    ["stabilize:last-answer:v3:guest:answer", "answer"],
+    ["stabilize:memory-delete-pending:v1:guest:old", "guest pending"],
+    ["stabilize:memory-delete-pending:v1:account:other", "account pending"],
+  ]);
+  const storage = {
+    get length() {
+      return entries.size;
+    },
+    key(index) {
+      return [...entries.keys()][index] ?? null;
+    },
+    removeItem(key) {
+      entries.delete(key);
+    },
+  };
+  const clearAllPersistedAnswers = Function(
+    "localStorage",
+    "sessionStorage",
+    "LEGACY_LAST_ANSWER_STORAGE_KEY",
+    "LAST_ANSWER_STORAGE_PREFIX",
+    "RETIRED_LAST_ANSWER_STORAGE_PREFIX",
+    `${clearAllSource}; return clearAllPersistedAnswers;`,
+  )(
+    storage,
+    storage,
+    "stabilize:last-answer:v1",
+    "stabilize:last-answer:v3:",
+    "stabilize:last-answer:v2:",
+  );
+  clearAllPersistedAnswers();
+  assert.equal(entries.has("stabilize:last-answer:v3:guest:answer"), false);
+  assert.equal(
+    entries.has("stabilize:memory-delete-pending:v1:guest:old"),
+    true,
+  );
+  assert.equal(
+    entries.has("stabilize:memory-delete-pending:v1:account:other"),
+    true,
+  );
+  const clearPendingStart = clientScript.indexOf("function clearDeletionPending");
+  const clearPendingEnd = clientScript.indexOf(
+    "function showClientNotice",
+    clearPendingStart,
+  );
+  const clearPendingSource = clientScript.slice(
+    clearPendingStart,
+    clearPendingEnd,
+  );
+  const clearDeletionPending = Function(
+    "localStorage",
+    "deletionPendingStorageKey",
+    `${clearPendingSource}; return clearDeletionPending;`,
+  )(
+    storage,
+    (state) =>
+      `stabilize:memory-delete-pending:v1:${state.mode}:${state.token}`,
+  );
+  clearDeletionPending({ mode: "guest", token: "old" });
+  assert.equal(
+    entries.has("stabilize:memory-delete-pending:v1:guest:old"),
+    false,
+  );
+  assert.equal(
+    entries.has("stabilize:memory-delete-pending:v1:account:other"),
+    true,
+    "a receipt must not clear another continuity's pending deletion",
+  );
+
+  const answerEntries = new Map([
+    ["stabilize:last-answer:v3:guest:deleted", "old guest answer"],
+    ["stabilize:last-answer:v3:guest:replacement", "new guest answer"],
+    ["stabilize:last-answer:v3:account:deleted", "old account answer"],
+  ]);
+  const answerStorage = {
+    removeItem(key) {
+      answerEntries.delete(key);
+    },
+  };
+  const clearAnswerStart = clientScript.indexOf("function clearPersistedAnswer");
+  const clearAnswerEnd = clientScript.indexOf(
+    "function clearAllPersistedAnswers",
+    clearAnswerStart,
+  );
+  const clearAnswerSource = clientScript.slice(clearAnswerStart, clearAnswerEnd);
+  const clearPersistedAnswer = Function(
+    "localStorage",
+    "continuityStorageKey",
+    `${clearAnswerSource}; return clearPersistedAnswer;`,
+  )(
+    answerStorage,
+    (state) => `stabilize:last-answer:v3:${state.mode}:${state.token}`,
+  );
+  clearPersistedAnswer({ mode: "account", token: "deleted" });
+  assert.equal(
+    answerEntries.has("stabilize:last-answer:v3:guest:deleted"),
+    true,
+    "account deletion must preserve the separate guest answer",
+  );
+  clearPersistedAnswer({ mode: "guest", token: "deleted" });
+  clearPersistedAnswer({ mode: "guest", token: "deleted" });
+  assert.equal(
+    answerEntries.has("stabilize:last-answer:v3:guest:replacement"),
+    true,
+    "a repeated old receipt must preserve the replacement guest answer",
   );
   assert.match(COPY.page.auth.memoryDeleted, /deleted from Stabilize/i);
   assert.match(COPY.page.auth.memorySessionChanged, /Nothing was deleted/i);
-  assert.match(COPY.page.chat.infoDetails, /Guest messages are not saved as server conversation memory/i);
-  assert.match(COPY.page.chat.infoDetails, /Signing in applies only to future messages/i);
-  assert.match(COPY.page.chat.infoDetails, /OpenAI processes each reply with storage disabled/i);
+  assert.match(COPY.page.chat.infoDetails, /For guests, Stabilize stores a bounded summary/i);
+  assert.match(COPY.page.chat.infoDetails, /signing in does not merge guest context/i);
+  assert.match(
+    COPY.page.chat.infoDetails,
+    /OpenAI processes replies with response storage enabled for at least 30 days/i,
+  );
 });
 
 test("privacy discloses feedback rate limiting without claiming the alias is public", async () => {
@@ -377,10 +654,13 @@ test("privacy detail stays behind a compact Info disclosure", async () => {
   assert.match(pageSource, /page\.chat\.supportNote/);
   assert.match(pageSource, /page\.chat\.infoDetails/);
   assert.match(copySource, /supportNote:[\s\S]*not emergency care/i);
-  assert.match(copySource, /infoDetails:[\s\S]*remember bounded context for 30 days/i);
   assert.match(
     copySource,
-    /infoDetails:[\s\S]*does not use IP addresses for memory or application logs/i,
+    /infoDetails:[\s\S]*For guests, Stabilize stores a bounded summary[\s\S]*30 days after the last exchange/i,
+  );
+  assert.match(
+    copySource,
+    /infoDetails:[\s\S]*random browser cookie rather than an IP address or fingerprint/i,
   );
   assert.match(styles, /\.info-popover\s*{[\s\S]*position:\s*absolute;/);
 });

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("starter prompt buttons call the model with a cache-busted client", async () => {
+test("prompt submission uses a cache-busted client", async () => {
   const [pageSource, clientSource] = await Promise.all([
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
@@ -10,7 +10,7 @@ test("starter prompt buttons call the model with a cache-busted client", async (
 
   assert.match(
     pageSource,
-    /src="\/app\.js\?v=20260803-continuity-4"/,
+    /src="\/app\.js\?v=20260803-continuity-7"/,
   );
   assert.match(
     clientSource,
@@ -22,37 +22,24 @@ test("starter prompt buttons call the model with a cache-busted client", async (
   );
 });
 
-test("signed-out users get a one-time memory reminder on their second send", async () => {
-  const [wrapperSource, reminderSource, routerSource] = await Promise.all([
+test("signed-out users are not interrupted by a sign-in reminder", async () => {
+  const [wrapperSource, routerSource, pageSource] = await Promise.all([
     readFile(new URL("../src/memory-prompt-worker.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/guest-memory-prompt.js", import.meta.url), "utf8"),
     readFile(new URL("../src/domain-router.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
   ]);
 
   assert.match(routerSource, /from "\.\/memory-prompt-worker\.js"/);
-  assert.match(wrapperSource, /readAuthorizedAuthSession\(request, env\)/);
-  assert.match(
-    wrapperSource,
-    /if \(!authSession && googleAuthConfigured\(env\)\) \{/,
+  assert.doesNotMatch(wrapperSource, /guest-memory-prompt|Remember future messages\?|Sign in for future messages/);
+  assert.doesNotMatch(pageSource, /guest-memory-prompt|Remember future messages\?|Sign in for future messages/);
+  await assert.rejects(
+    readFile(new URL("../public/guest-memory-prompt.js", import.meta.url), "utf8"),
+    (error) => error?.code === "ENOENT",
   );
-  assert.match(wrapperSource, /Remember future messages\?/);
-  assert.match(
-    wrapperSource,
-    /Sign in before your next message to remember future context between visits/,
+  await assert.rejects(
+    readFile(new URL("../public/guest-memory-prompt.css", import.meta.url), "utf8"),
+    (error) => error?.code === "ENOENT",
   );
-  assert.match(
-    wrapperSource,
-    /Messages already sent as a guest will not be added to account memory/,
-  );
-  assert.match(wrapperSource, /Sign in for future messages/);
-  assert.match(wrapperSource, /href="\/auth\/google"/);
-  assert.match(wrapperSource, /aria-modal="false"/);
-
-  assert.match(reminderSource, /form\.addEventListener\("submit"/);
-  assert.match(reminderSource, /const count = readSessionNumber\(MESSAGE_COUNT_KEY\) \+ 1/);
-  assert.match(reminderSource, /if \(count === 2\) showPrompt\(\)/);
-  assert.match(reminderSource, /sessionStorage\.setItem/);
-  assert.match(reminderSource, /PROMPT_SHOWN_KEY/);
 });
 
 

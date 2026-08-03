@@ -2,14 +2,19 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 import {
   AUTH_COOKIE_NAME,
+  GUEST_COOKIE_NAME,
   GoogleAuthConfigurationError,
   MEMORY_DELETION_COOKIE_NAME,
   beginGoogleSignIn,
   completeGoogleSignIn,
   createAuthSessionTokenForGoogleSubject,
+  createGuestSession,
+  createGuestResetGrant,
   createMemoryDeletionReceiptCookie,
   googleAuthConfigured,
   readAuthSession,
+  readGuestResetGrant,
+  readGuestSession,
   readMemoryDeletionReceipt,
   refreshLegacyAuthSession,
   rotateAuthSession,
@@ -25,6 +30,8 @@ function createEnv(overrides = {}) {
     GOOGLE_CLIENT_SECRET: "test-google-client-secret",
     AUTH_SECRET: "test-auth-secret-with-at-least-thirty-two-characters",
     SESSION_SECRET: "test-session-secret-with-at-least-thirty-two-characters",
+    GUEST_SESSION_SECRET:
+      "test-guest-session-secret-with-at-least-thirty-two-characters",
     PUBLIC_ORIGIN: "https://stabilize.test",
     ...overrides,
   };
@@ -468,6 +475,199 @@ test("rotating an account session preserves identity and changes continuity", as
   assert.match(rotated.setCookie, /SameSite=Lax/);
 });
 
+test("guest sessions use an opaque signed host cookie and a separate public binding", async () => {
+  const env = createEnv();
+  const now = Date.parse("2026-08-03T20:00:00Z");
+  const issued = await createGuestSession(
+    new Request("https://stabilize.test/"),
+    env,
+    now,
+  );
+  const guestCookie = cookiePair(issued.setCookie, GUEST_COOKIE_NAME);
+  const restored = await readGuestSession(
+    new Request("https://stabilize.test/", {
+      headers: { Cookie: guestCookie },
+    }),
+    env,
+    now + 1_000,
+  );
+
+  assert.match(issued.setCookie, /^__Host-stabilize_guest=/);
+  assert.match(issued.setCookie, /Path=\//);
+  assert.match(issued.setCookie, /HttpOnly/);
+  assert.match(issued.setCookie, /SameSite=Lax/);
+  assert.match(issued.setCookie, /Secure/);
+  assert.match(issued.setCookie, /Max-Age=31536000/);
+  assert.ok(issued.session);
+  assert.match(issued.session.guestKey, /^[A-Za-z0-9_-]{43}$/);
+  assert.match(issued.session.continuityToken, /^[A-Za-z0-9_-]{43}$/);
+  assert.notEqual(
+    issued.session.continuityToken,
+    issued.session.guestKey,
+  );
+  assert.deepEqual(restored, issued.session);
+});
+
+test("guest sessions are isolated and fail closed on tampering, expiry, key rotation, and duplicate cookies", async () => {
+  const env = createEnv();
+  const now = Date.parse("2026-08-03T20:00:00Z");
+  const [first, second] = await Promise.all([
+    createGuestSession(new Request("https://stabilize.test/"), env, now),
+    createGuestSession(new Request("https://stabilize.test/"), env, now),
+  ]);
+  const firstCookie = cookiePair(first.setCookie, GUEST_COOKIE_NAME);
+  const secondCookie = cookiePair(second.setCookie, GUEST_COOKIE_NAME);
+  const firstValue = firstCookie.slice(firstCookie.indexOf("=") + 1);
+  const tamperedValue = `${firstValue.slice(0, -1)}${
+    firstValue.endsWith("A") ? "B" : "A"
+  }`;
+  const read = (cookie, testEnv = env, at = now + 1_000) =>
+    readGuestSession(
+      new Request("https://stabilize.test/", {
+        headers: { Cookie: cookie },
+      }),
+      testEnv,
+      at,
+    );
+
+  assert.notEqual(first.session.guestKey, second.session.guestKey);
+  assert.notEqual(
+    first.session.continuityToken,
+    second.session.continuityToken,
+  );
+  assert.equal(
+    await read(`${GUEST_COOKIE_NAME}=${tamperedValue}`),
+    null,
+  );
+  assert.equal(
+    await read(
+      firstCookie,
+      createEnv({
+        GUEST_SESSION_SECRET:
+          "rotated-guest-session-secret-with-at-least-thirty-two-characters",
+      }),
+    ),
+    null,
+  );
+  assert.equal(
+    await read(
+      `${firstCookie}; ${GUEST_COOKIE_NAME}=${firstValue}`,
+    ),
+    null,
+  );
+  assert.equal(
+    await read(firstCookie, env, now + 365 * 24 * 60 * 60 * 1_000),
+    null,
+  );
+  assert.ok(await read(secondCookie));
+});
+
+test("guest reset grants are short-lived, tamper-resistant, and continuity-bound", async () => {
+  const env = createEnv();
+  const now = Date.parse("2026-08-03T20:00:00Z");
+  const [guest, otherGuest] = await Promise.all([
+    createGuestSession(new Request("https://stabilize.test/"), env, now),
+    createGuestSession(new Request("https://stabilize.test/"), env, now),
+  ]);
+  const grant = await createGuestResetGrant(guest.session, env, now);
+  const tampered = `${grant.slice(0, -1)}${
+    grant.endsWith("A") ? "B" : "A"
+  }`;
+
+  assert.ok(grant.length > 40 && grant.length < 4_096);
+  assert.equal(
+    await readGuestResetGrant(grant, guest.session, env, now),
+    true,
+  );
+  assert.equal(
+    await readGuestResetGrant(grant, otherGuest.session, env, now),
+    false,
+  );
+  assert.equal(
+    await readGuestResetGrant(tampered, guest.session, env, now),
+    false,
+  );
+  assert.equal(
+    await readGuestResetGrant(
+      grant,
+      guest.session,
+      createEnv({
+        GUEST_SESSION_SECRET:
+          "rotated-guest-session-secret-with-at-least-thirty-two-characters",
+      }),
+      now,
+    ),
+    false,
+  );
+  assert.equal(
+    await readGuestResetGrant(
+      grant,
+      guest.session,
+      env,
+      now + 2 * 60 * 1_000,
+    ),
+    false,
+  );
+});
+
+test("memory-deletion receipts can be bound to a replacement guest session", async () => {
+  const env = createEnv();
+  const now = Date.parse("2026-08-03T20:00:00Z");
+  const [deletedGuest, replacementGuest, otherGuest] = await Promise.all([
+    createGuestSession(new Request("https://stabilize.test/"), env, now),
+    createGuestSession(new Request("https://stabilize.test/"), env, now),
+    createGuestSession(new Request("https://stabilize.test/"), env, now),
+  ]);
+  const replacementCookie = cookiePair(
+    replacementGuest.setCookie,
+    GUEST_COOKIE_NAME,
+  );
+  const receipt = await createMemoryDeletionReceiptCookie(
+    new Request("https://stabilize.test/guest/memory/delete"),
+    replacementGuest.session,
+    env,
+    now,
+    deletedGuest.session.continuityToken,
+  );
+  const receiptCookie = cookiePair(receipt, MEMORY_DELETION_COOKIE_NAME);
+  const request = new Request("https://stabilize.test/", {
+    headers: { Cookie: `${replacementCookie}; ${receiptCookie}` },
+  });
+
+  assert.deepEqual(
+    await readMemoryDeletionReceipt(
+      request,
+      replacementGuest.session,
+      env,
+      now,
+    ),
+    {
+      confirmed: true,
+      deletedContinuity: {
+        mode: "guest",
+        token: deletedGuest.session.continuityToken,
+      },
+    },
+  );
+  assert.equal(
+    await readMemoryDeletionReceipt(request, otherGuest.session, env, now),
+    null,
+  );
+  assert.equal(
+    await readMemoryDeletionReceipt(request, deletedGuest.session, env, now),
+    null,
+  );
+  assert.equal(
+    await readMemoryDeletionReceipt(
+      request,
+      replacementGuest.session,
+      env,
+      now + 5 * 60 * 1_000,
+    ),
+    null,
+  );
+});
+
 test("memory-deletion receipts are short-lived and account-bound", async () => {
   const env = createEnv();
   const now = Date.parse("2026-08-03T20:00:00Z");
@@ -484,15 +684,26 @@ test("memory-deletion receipts are short-lived and account-bound", async () => {
     env,
     now,
   );
+  const replacement = await rotateAuthSession(
+    new Request("https://stabilize.test/account/memory/delete"),
+    env,
+    authSession,
+    now + 1,
+  );
   const setCookie = await createMemoryDeletionReceiptCookie(
     new Request("https://stabilize.test/account/memory/delete"),
-    authSession,
+    replacement.session,
     env,
-    now,
+    now + 1,
+    authSession.continuityToken,
   );
   const receiptCookie = cookiePair(setCookie, MEMORY_DELETION_COOKIE_NAME);
+  const replacementCookie = cookiePair(
+    replacement.setCookie,
+    AUTH_COOKIE_NAME,
+  );
   const receiptRequest = new Request("https://stabilize.test/", {
-    headers: { Cookie: `${authCookie}; ${receiptCookie}` },
+    headers: { Cookie: `${replacementCookie}; ${receiptCookie}` },
   });
   const otherToken = await createAuthSessionTokenForGoogleSubject(
     "different-deletion-account",
@@ -507,22 +718,37 @@ test("memory-deletion receipts are short-lived and account-bound", async () => {
     now,
   );
 
-  assert.equal(
-    await readMemoryDeletionReceipt(receiptRequest, authSession, env, now),
-    true,
+  assert.deepEqual(
+    await readMemoryDeletionReceipt(
+      receiptRequest,
+      replacement.session,
+      env,
+      now + 1,
+    ),
+    {
+      confirmed: true,
+      deletedContinuity: {
+        mode: "account",
+        token: authSession.continuityToken,
+      },
+    },
   );
   assert.equal(
     await readMemoryDeletionReceipt(receiptRequest, otherSession, env, now),
-    false,
+    null,
+  );
+  assert.equal(
+    await readMemoryDeletionReceipt(receiptRequest, authSession, env, now),
+    null,
   );
   assert.equal(
     await readMemoryDeletionReceipt(
       receiptRequest,
-      authSession,
+      replacement.session,
       env,
       now + 5 * 60 * 1_000,
     ),
-    false,
+    null,
   );
   assert.match(setCookie, /HttpOnly/);
   assert.match(setCookie, /SameSite=Strict/);

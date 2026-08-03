@@ -104,7 +104,7 @@ await transform("src/page.js", (source) => {
   );
   text = text.replace(
     /\/app\.js\?v=[^"\s]+/,
-    "/app.js?v=20260803-continuity-4",
+    "/app.js?v=20260803-continuity-7",
   );
   return text;
 });

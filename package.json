@@ -2,14 +2,14 @@
   "name": "stabilize",
   "version": "0.1.0",
   "private": true,
-  "description": "A floor-first AI support website with privacy-bounded account memory on Cloudflare Workers.",
+  "description": "A floor-first AI support website with privacy-bounded guest and account memory on Cloudflare Workers.",
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
     "postinstall": "npm run apply:prompt-policy",
-    "apply:prompt-policy": "node scripts/apply-4000-character-policy.mjs && node scripts/align-4000-character-tests.mjs && node scripts/apply-max-reasoning-slim-runtime.mjs && node scripts/align-max-reasoning-tests.mjs",
+    "apply:prompt-policy": "node scripts/apply-4000-character-policy.mjs && node scripts/align-4000-character-tests.mjs && node scripts/apply-max-reasoning-slim-runtime.mjs && node scripts/align-max-reasoning-tests.mjs && node scripts/apply-recency-policy.mjs",
     "check": "npm run apply:prompt-policy && wrangler types --include-runtime false && wrangler deploy --dry-run",
     "deploy": "npm run apply:prompt-policy && wrangler deploy",
     "dev": "npm run apply:prompt-policy && wrangler dev",
@@ -17,7 +17,7 @@
     "nightly:install": "ops/nightly/install-launch-agent.zsh",
     "nightly:uninstall": "ops/nightly/uninstall-launch-agent.zsh",
     "test": "npm run apply:prompt-policy && npm run test:node && npm run test:worker",
-    "test:node": "node --test test/safety.test.mjs test/markdown.test.mjs test/terrain.test.mjs test/ui.test.mjs test/product.test.mjs test/mobile-quality.test.mjs test/domain.test.mjs test/billing.test.mjs test/feedback.test.mjs test/prompt-submit.test.mjs test/outcome-followup.test.mjs test/no-document-export.test.mjs test/sustainability.test.mjs test/nightly-review.test.mjs test/nightly-cloud-state.test.mjs test/nightly-cloud-bundle.test.mjs test/nightly-cloud-workflow.test.mjs",
+    "test:node": "node --test test/safety.test.mjs test/markdown.test.mjs test/terrain.test.mjs test/ui.test.mjs test/product.test.mjs test/mobile-quality.test.mjs test/domain.test.mjs test/billing.test.mjs test/feedback.test.mjs test/prompt-submit.test.mjs test/prompt-policy-idempotency.test.mjs test/outcome-followup.test.mjs test/recency-memory.test.mjs test/no-document-export.test.mjs test/sustainability.test.mjs test/nightly-review.test.mjs test/nightly-cloud-state.test.mjs test/nightly-cloud-bundle.test.mjs test/nightly-cloud-workflow.test.mjs",
     "test:worker": "vitest run --config vitest.config.js test/worker.test.mjs test/session-memory.test.mjs test/billing-account.test.mjs test/feedback-gate.test.mjs test/feedback-worker.test.mjs test/auth.test.mjs",
     "types": "wrangler types --include-runtime false"
   },

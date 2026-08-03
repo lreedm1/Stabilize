@@ -41,10 +41,35 @@ export function renderPage(options = {}) {
     requestedContinuity?.mode === "account" &&
     CONTINUITY_TOKEN_PATTERN.test(String(requestedContinuity.token || ""))
       ? { mode: "account", token: String(requestedContinuity.token) }
-      : { mode: "guest", token: null };
+      : !signedIn &&
+          requestedContinuity?.mode === "guest" &&
+          CONTINUITY_TOKEN_PATTERN.test(
+            String(requestedContinuity.token || ""),
+          )
+        ? { mode: "guest", token: String(requestedContinuity.token) }
+        : { mode: "guest", token: null };
   const continuityData = escapeHtml(JSON.stringify(continuity));
+  const requestedMemoryDeletionConfirmation =
+    options.memoryDeletionConfirmation;
+  const requestedDeletedContinuity =
+    requestedMemoryDeletionConfirmation?.deletedContinuity;
+  const memoryDeletionConfirmation =
+    requestedMemoryDeletionConfirmation?.confirmed === true &&
+    (requestedDeletedContinuity?.mode === "guest" ||
+      requestedDeletedContinuity?.mode === "account") &&
+    CONTINUITY_TOKEN_PATTERN.test(
+      String(requestedDeletedContinuity?.token || ""),
+    )
+      ? {
+          confirmed: true,
+          deletedContinuity: {
+            mode: requestedDeletedContinuity.mode,
+            token: String(requestedDeletedContinuity.token),
+          },
+        }
+      : null;
   const memoryDeletionData = escapeHtml(
-    JSON.stringify({ confirmed: options.memoryDeletionConfirmed === true }),
+    JSON.stringify(memoryDeletionConfirmation),
   );
   const googleSignInAvailable = options.googleSignInAvailable === true;
   const notice = String(options.authNotice || "").trim();
@@ -54,7 +79,9 @@ export function renderPage(options = {}) {
   const continuitySignal =
     continuity.mode === "account"
       ? "Signed-in context can be remembered by Stabilize for up to 30 days."
-      : "Guest messages aren't saved as server memory; this tab keeps the latest reply for up to 24 hours.";
+      : continuity.token
+        ? "This browser can remember bounded chat context for up to 30 days. Delete it anytime from the menu."
+        : "This chat cannot remember context after the current request.";
   const canonicalUrl = "https://stabilize.info/";
   const seoTitle = "Stabilize — Get One Clear Next Step";
   const seoDescription =
@@ -73,20 +100,29 @@ export function renderPage(options = {}) {
       name: "Reed Lokken",
     },
   }).replaceAll("<", "\\u003c");
+  const memoryDeleteForm = continuity.token
+    ? `<form action="/${continuity.mode === "account" ? "account" : "guest"}/memory/delete" method="post">
+          <input type="hidden" name="continuity" value="${escapeHtml(continuity.token)}" />
+          <button class="auth-link memory-delete-link" type="submit">${escapeHtml(page.auth.forgetMemory)}</button>
+        </form>`
+    : "";
   const authControl = signedIn
     ? `<div class="auth-session">
           <span class="auth-state">${escapeHtml(page.auth.signedIn)}</span>
-          <form action="/account/memory/delete" method="post">
-            <input type="hidden" name="continuity" value="${escapeHtml(continuity.token || "")}" />
-            <button class="auth-link memory-delete-link" type="submit">${escapeHtml(page.auth.forgetMemory)}</button>
-          </form>
+          ${memoryDeleteForm}
           <form action="/auth/logout" method="post">
             <button class="auth-link" type="submit">${escapeHtml(page.auth.signOut)}</button>
           </form>
         </div>`
     : googleSignInAvailable
-      ? `<a class="google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>`
-      : `<span class="menu-account-note">Chat without an account.</span>`;
+      ? `<div class="auth-session guest-session">
+          <a class="google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>
+          ${memoryDeleteForm}
+        </div>`
+      : `<div class="auth-session guest-session">
+          <span class="menu-account-note">This browser remembers chat context.</span>
+          ${memoryDeleteForm}
+        </div>`;
   const headerAuthControl = signedIn
     ? `<span class="header-auth-state">${escapeHtml(page.auth.signedIn)}</span>`
     : googleSignInAvailable
@@ -275,7 +311,7 @@ export function renderPage(options = {}) {
     <template id="continuity-state">${continuityData}</template>
     <template id="memory-deletion-state">${memoryDeletionData}</template>
     <script src="/mobile-quality.js?v=20260802-8"></script>
-    <script type="module" src="/app.js?v=20260803-continuity-4"></script>
+    <script type="module" src="/app.js?v=20260803-continuity-7"></script>
   </body>
 </html>`;
 }

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("follow-up actions stay contextual without duplicating signed-in history", async () => {
+test("follow-up actions stay contextual without duplicating token-bound history", async () => {
   const [clientScript, pageSource] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
@@ -23,6 +23,10 @@ test("follow-up actions stay contextual without duplicating signed-in history", 
     /void sendMessage\(buildOutcomeActionPrompt\(prompt, previousReply\)\)/,
   );
   assert.match(
+    clientScript,
+    /if \(continuityState\.token !== null\) return request;/,
+  );
+  assert.doesNotMatch(
     clientScript,
     /if \(continuityState\.mode === "account"\) return request;/,
   );
