@@ -188,6 +188,8 @@ export function renderPage(options = {}) {
             </summary>
             <div class="menu-panel">
               <nav class="menu-links" aria-label="Site pages">
+                <a href="/about.html">About</a>
+                <a href="/sustainability.html">Sustainability</a>
                 <a href="/how-it-works.html">How it works</a>
                 <a href="/floor-first.html">Floor-first approach</a>
                 <a href="/safety.html">Safety and limits</a>
