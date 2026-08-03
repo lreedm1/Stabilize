@@ -10,7 +10,7 @@ The workflow separates credentials and executable code across fresh runners:
 4. A fresh publication job has the write-capable GitHub token but no OpenAI key. It never runs repository tests. It revalidates the exact tested patch against the captured `main` commit, persists a crash-recovery intent, pushes a same-repository branch, and opens only a draft PR.
 5. The acknowledgement job is separate again and never receives the OpenAI key.
 
-The raw OpenAI key is passed only to the pinned `openai/codex-action`; Codex host processes receive only its localhost proxy configuration through `CODEX_HOME`. GitHub credentials are excluded from Codex tool environments, and the proxy is shut down before dependency installation, tests, or broader repository execution. The fresh verification job receives neither the OpenAI key nor GitHub credentials.
+The OpenAI key is passed only to the pinned `openai/codex-action`. Trusted orchestration starts the proxy and provides `CODEX_HOME` to the two Codex processes, but the model tool subprocesses do not inherit GitHub credentials. The proxy is shut down before any application build or test code runs. The separate verification job starts with an empty environment and receives neither GitHub nor OpenAI credentials.
 
 ## Durable state
 

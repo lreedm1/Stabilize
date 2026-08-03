@@ -13,7 +13,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import { sanitizePrivateReview, validateCheckpoint } from "./cloud-state.mjs";
+import {
+  sanitizePrivateReview,
+  validateCheckpoint,
+  validateStoredPrivateReview,
+} from "./cloud-state.mjs";
 import { validatePendingReview } from "./pending-review.mjs";
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/i;
@@ -27,6 +31,18 @@ const STATE_FILES = [
   "pending-private-review.json",
 ];
 const PROPOSAL_FILES = ["change.patch", "plan.json", "edit-result.json"];
+const ROOT_FILE_LIMITS = new Map([
+  ["manifest.json", 16 * 1024],
+  ["change.patch", 256 * 1024],
+  ["plan.json", 8 * 1024],
+  ["edit-result.json", 8 * 1024],
+]);
+const STATE_FILE_LIMITS = new Map([
+  ["feedback-checkpoint", 128],
+  ["pending-review.json", 8 * 1024],
+  ["pending-private-review.json", 1024],
+]);
+const LOCAL_PRIVATE_REVIEW_LIMIT = 64 * 1024;
 const TRANSITION_KINDS = new Set([
   "noop",
   "proposal",
@@ -103,13 +119,16 @@ function regularFileExists(filePath, label) {
   return true;
 }
 
-function readText(filePath, label) {
+function readText(filePath, label, maximumBytes) {
   if (!regularFileExists(filePath, label)) throw new Error(`${label} is missing`);
+  if (!Number.isSafeInteger(maximumBytes) || lstatSync(filePath).size > maximumBytes) {
+    throw new Error(`${label} exceeds its bounded size`);
+  }
   return readFileSync(filePath, "utf8");
 }
 
-function readJson(filePath, label) {
-  return JSON.parse(readText(filePath, label));
+function readJson(filePath, label, maximumBytes) {
+  return JSON.parse(readText(filePath, label, maximumBytes));
 }
 
 function writeSecure(filePath, value) {
@@ -245,27 +264,34 @@ export function validateStateTransition(value) {
   };
 }
 
-function validatedStateFromDirectory(stateDirectory) {
+function validatedStateFromDirectory(stateDirectory, { allowPrivateDetails = false } = {}) {
   assertDirectory(stateDirectory, "Bundle state directory");
   const state = {};
   const checkpointPath = path.join(stateDirectory, "feedback-checkpoint");
   if (regularFileExists(checkpointPath, "Bundled feedback checkpoint")) {
     state["feedback-checkpoint"] = `${validateCheckpoint(
-      readText(checkpointPath, "Bundled feedback checkpoint"),
+      readText(checkpointPath, "Bundled feedback checkpoint", 128),
     )}\n`;
   }
   const pendingPath = path.join(stateDirectory, "pending-review.json");
   if (regularFileExists(pendingPath, "Bundled pending review")) {
     state["pending-review.json"] = `${JSON.stringify(
-      validatePendingReview(readJson(pendingPath, "Bundled pending review")),
+      validatePendingReview(readJson(pendingPath, "Bundled pending review", 8 * 1024)),
       null,
       2,
     )}\n`;
   }
   const privatePath = path.join(stateDirectory, "pending-private-review.json");
   if (regularFileExists(privatePath, "Bundled private-review marker")) {
+    const privateReview = readJson(
+      privatePath,
+      "Bundled private-review marker",
+      allowPrivateDetails ? LOCAL_PRIVATE_REVIEW_LIMIT : 1024,
+    );
     state["pending-private-review.json"] = `${JSON.stringify(
-      sanitizePrivateReview(readJson(privatePath, "Bundled private-review marker")),
+      allowPrivateDetails
+        ? sanitizePrivateReview(privateReview)
+        : validateStoredPrivateReview(privateReview),
       null,
       2,
     )}\n`;
@@ -299,6 +325,10 @@ function stateValue(state, filename) {
   return Object.prototype.hasOwnProperty.call(state, filename) ? state[filename] : null;
 }
 
+function stateValuesEqual(left, right, filenames = STATE_FILES) {
+  return filenames.every((filename) => stateValue(left, filename) === stateValue(right, filename));
+}
+
 function pendingFromState(state) {
   const value = stateValue(state, "pending-review.json");
   return value === null ? null : validatePendingReview(JSON.parse(value));
@@ -306,7 +336,7 @@ function pendingFromState(state) {
 
 function privateFromState(state) {
   const value = stateValue(state, "pending-private-review.json");
-  return value === null ? null : sanitizePrivateReview(JSON.parse(value));
+  return value === null ? null : validateStoredPrivateReview(JSON.parse(value));
 }
 
 function checkpointFromState(state) {
@@ -438,6 +468,8 @@ function assertExactBundlePaths(bundleDir, manifest) {
       }
     } else if (!entry.isFile() || entry.isSymbolicLink()) {
       throw new Error(`Cloud review bundle path is not a regular file: ${entry.name}`);
+    } else if (lstatSync(path.join(bundleDir, entry.name)).size > ROOT_FILE_LIMITS.get(entry.name)) {
+      throw new Error(`Cloud review bundle path exceeds its bounded size: ${entry.name}`);
     }
   }
   for (const required of allowedRoot) {
@@ -449,6 +481,12 @@ function assertExactBundlePaths(bundleDir, manifest) {
   for (const entry of stateEntries) {
     if (!STATE_FILES.includes(entry.name) || !entry.isFile() || entry.isSymbolicLink()) {
       throw new Error(`Cloud review bundle contains an invalid state path: ${entry.name}`);
+    }
+    if (
+      lstatSync(path.join(bundleDir, "state", entry.name)).size >
+      STATE_FILE_LIMITS.get(entry.name)
+    ) {
+      throw new Error(`Cloud review state path exceeds its bounded size: ${entry.name}`);
     }
   }
 }
@@ -468,12 +506,9 @@ export function createCloudBundle({
   assertDirectory(stateDir, "Private state directory");
   assertDirectory(bundleDir, "Cloud bundle directory", { create: true, exclusive: true });
   const bundleStateDirectory = path.join(bundleDir, "state");
-  assertDirectory(bundleStateDirectory, "Cloud bundle state directory", {
-    create: true,
-    exclusive: true,
-  });
+  assertDirectory(bundleStateDirectory, "Cloud bundle state directory", { create: true, exclusive: true });
 
-  const sourceState = validatedStateFromDirectory(stateDir);
+  const sourceState = validatedStateFromDirectory(stateDir, { allowPrivateDetails: true });
   if (proposal && (sourceState["pending-review.json"] || sourceState["pending-private-review.json"])) {
     throw new Error("Cloud proposal cannot be created while another review is pending");
   }
@@ -484,18 +519,20 @@ export function createCloudBundle({
   let normalizedProposal = null;
   if (proposal) {
     normalizedProposal = validateProposal(proposal.manifest);
-    const plan = validateCloudPlan(readJson(proposal.planPath, "Cloud proposal plan"));
+    const plan = validateCloudPlan(
+      readJson(proposal.planPath, "Cloud proposal plan", 8 * 1024),
+    );
     if (plan.targetFile !== normalizedProposal.changedFile) {
       throw new Error("Cloud proposal plan does not match its manifest");
     }
     writeSecure(
       path.join(bundleDir, "change.patch"),
-      readText(proposal.patchPath, "Cloud proposal patch"),
+      readText(proposal.patchPath, "Cloud proposal patch", 256 * 1024),
     );
     writeJson(path.join(bundleDir, "plan.json"), plan);
     writeSecure(
       path.join(bundleDir, "edit-result.json"),
-      readText(proposal.editResultPath, "Cloud proposal edit result"),
+      readText(proposal.editResultPath, "Cloud proposal edit result", 8 * 1024),
     );
   }
 
@@ -526,7 +563,11 @@ export function loadCloudBundle(bundleDir) {
   if (!path.isAbsolute(bundleDir)) throw new Error("Cloud bundle path must be absolute");
   assertDirectory(bundleDir, "Cloud bundle directory");
   const manifest = validateBundleManifest(
-    readJson(path.join(bundleDir, "manifest.json"), "Cloud bundle manifest"),
+    readJson(
+      path.join(bundleDir, "manifest.json"),
+      "Cloud bundle manifest",
+      16 * 1024,
+    ),
   );
   assertExactBundlePaths(bundleDir, manifest);
   const state = validatedStateFromDirectory(path.join(bundleDir, "state"));
@@ -537,7 +578,9 @@ export function loadCloudBundle(bundleDir) {
   });
   const result = { manifest, state, proposal: null };
   if (manifest.kind === "proposal") {
-    const plan = validateCloudPlan(readJson(path.join(bundleDir, "plan.json"), "Cloud plan"));
+    const plan = validateCloudPlan(
+      readJson(path.join(bundleDir, "plan.json"), "Cloud plan", 8 * 1024),
+    );
     if (plan.targetFile !== manifest.proposal.changedFile) {
       throw new Error("Bundled plan does not match the proposal manifest");
     }

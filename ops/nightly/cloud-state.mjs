@@ -26,6 +26,14 @@ const STATE_FILES = [
 ];
 const STATE_PATHS = STATE_FILES.map((filename) => `.nightly-state/${filename}`);
 const README_PATH = ".nightly-state/README.md";
+export const CLOUD_STATE_README = "# Stabilize nightly state\n\nThis branch is machine-managed. Its HEAD tree is intentionally limited to this README and the three validated state files documented in `ops/nightly/CLOUD.md` on `main`.\n";
+const STORED_PATH_LIMITS = new Map([
+  [README_PATH, Buffer.byteLength(CLOUD_STATE_README)],
+  [".nightly-state/feedback-checkpoint", 128],
+  [".nightly-state/pending-review.json", 8192],
+  [".nightly-state/pending-private-review.json", 1024],
+]);
+const LOCAL_PRIVATE_REVIEW_LIMIT = 64 * 1024;
 const ALLOWED_TREE_PATHS = new Set([README_PATH, ...STATE_PATHS]);
 const ALLOWED_STATE_PATHS = new Set(STATE_PATHS);
 
@@ -65,13 +73,17 @@ function regularFileExists(filePath, label) {
   return true;
 }
 
-function readText(filePath, label) {
+function readText(filePath, label, maximumBytes) {
   if (!regularFileExists(filePath, label)) throw new Error(`${label} is missing`);
+  const size = lstatSync(filePath).size;
+  if (!Number.isSafeInteger(maximumBytes) || size > maximumBytes) {
+    throw new Error(`${label} exceeds its bounded size`);
+  }
   return readFileSync(filePath, "utf8");
 }
 
-function readJson(filePath, label) {
-  return JSON.parse(readText(filePath, label));
+function readJson(filePath, label, maximumBytes) {
+  return JSON.parse(readText(filePath, label, maximumBytes));
 }
 
 function writeSecure(filePath, value) {
@@ -151,12 +163,25 @@ export function sanitizePrivateReview(value) {
   };
 }
 
+export function validateStoredPrivateReview(value) {
+  const expectedKeys = ["createdAt", "feedbackHead", "schemaVersion", "source"].sort();
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(expectedKeys)
+  ) {
+    throw new Error("Stored protected-review state does not match the exact durable shape");
+  }
+  return sanitizePrivateReview(value);
+}
+
 function assertStateTree(storageRepo) {
   assertDirectory(storageRepo, "Cloud-state checkout");
   if (git(storageRepo, ["rev-parse", "--is-inside-work-tree"], { quiet: true }) !== "true") {
     throw new Error("Cloud-state checkout is not a Git worktree");
   }
-  const entries = git(storageRepo, ["ls-tree", "-r", "-z", "HEAD"], {
+  const entries = git(storageRepo, ["ls-tree", "-r", "-l", "-z", "HEAD"], {
     quiet: true,
     raw: true,
   })
@@ -164,11 +189,22 @@ function assertStateTree(storageRepo) {
     .filter(Boolean);
   const seen = new Set();
   for (const entry of entries) {
-    const match = entry.match(/^([0-9]{6}) ([a-z]+) ([0-9a-f]{40,64})\t([\s\S]+)$/);
+    const match = entry.match(
+      /^([0-9]{6}) ([a-z]+) ([0-9a-f]{40,64})\s+([0-9]+)\t([\s\S]+)$/,
+    );
     if (!match) throw new Error("Cloud-state branch contains an invalid tree entry");
-    const [, mode, type, , filePath] = match;
+    const [, mode, type, , sizeText, filePath] = match;
     if (mode !== "100644" || type !== "blob" || !ALLOWED_TREE_PATHS.has(filePath)) {
       throw new Error(`Cloud-state branch contains an out-of-scope path or mode: ${filePath}`);
+    }
+    const size = Number(sizeText);
+    const maximumSize = STORED_PATH_LIMITS.get(filePath);
+    if (
+      !Number.isSafeInteger(size) ||
+      size > maximumSize ||
+      (filePath === README_PATH && size !== maximumSize)
+    ) {
+      throw new Error(`Cloud-state branch contains an out-of-bounds blob: ${filePath}`);
     }
     seen.add(filePath);
   }
@@ -183,7 +219,20 @@ function validateStorageDirectory(storageRepo) {
   assertDirectory(storageDirectory, "Cloud-state storage directory");
   for (const filePath of [README_PATH, ...STATE_PATHS]) {
     const absolutePath = path.join(storageRepo, filePath);
-    if (statOrNull(absolutePath)) regularFileExists(absolutePath, `Cloud-state path ${filePath}`);
+    if (statOrNull(absolutePath)) {
+      regularFileExists(absolutePath, `Cloud-state path ${filePath}`);
+      if (lstatSync(absolutePath).size > STORED_PATH_LIMITS.get(filePath)) {
+        throw new Error(`Cloud-state path exceeds its bounded size: ${filePath}`);
+      }
+    }
+  }
+  const readme = readText(
+    path.join(storageRepo, README_PATH),
+    "Cloud-state README",
+    STORED_PATH_LIMITS.get(README_PATH),
+  );
+  if (readme !== CLOUD_STATE_README) {
+    throw new Error("Cloud-state branch has an unexpected fixed README placeholder");
   }
   assertOnePendingMarker(storageDirectory, "Cloud-state storage");
   return storageDirectory;
@@ -201,7 +250,7 @@ export function restoreCloudState({ stateDir, storageRepo }) {
   if (regularFileExists(checkpointPath, "Stored feedback checkpoint")) {
     writeSecure(
       path.join(stateDir, "feedback-checkpoint"),
-      `${validateCheckpoint(readText(checkpointPath, "Stored feedback checkpoint"))}\n`,
+      `${validateCheckpoint(readText(checkpointPath, "Stored feedback checkpoint", 128))}\n`,
     );
   }
 
@@ -209,7 +258,7 @@ export function restoreCloudState({ stateDir, storageRepo }) {
   if (regularFileExists(pendingPath, "Stored pending review")) {
     writeJson(
       path.join(stateDir, "pending-review.json"),
-      validatePendingReview(readJson(pendingPath, "Stored pending review")),
+      validatePendingReview(readJson(pendingPath, "Stored pending review", 8192)),
     );
   }
 
@@ -217,7 +266,9 @@ export function restoreCloudState({ stateDir, storageRepo }) {
   if (regularFileExists(privatePath, "Stored private-review marker")) {
     writeJson(
       path.join(stateDir, "pending-private-review.json"),
-      sanitizePrivateReview(readJson(privatePath, "Stored private-review marker")),
+      validateStoredPrivateReview(
+        readJson(privatePath, "Stored private-review marker", 1024),
+      ),
     );
   }
 }
@@ -230,7 +281,7 @@ export function snapshotCloudState({ stateDir, storageRepo }) {
   if (regularFileExists(checkpointPath, "Private feedback checkpoint")) {
     writeSecure(
       path.join(storageDirectory, "feedback-checkpoint"),
-      `${validateCheckpoint(readText(checkpointPath, "Private feedback checkpoint"))}\n`,
+      `${validateCheckpoint(readText(checkpointPath, "Private feedback checkpoint", 128))}\n`,
     );
   } else {
     removeIfPresent(
@@ -243,7 +294,7 @@ export function snapshotCloudState({ stateDir, storageRepo }) {
   if (regularFileExists(pendingPath, "Private pending review")) {
     writeJson(
       path.join(storageDirectory, "pending-review.json"),
-      validatePendingReview(readJson(pendingPath, "Private pending review")),
+      validatePendingReview(readJson(pendingPath, "Private pending review", 8192)),
     );
   } else {
     removeIfPresent(path.join(storageDirectory, "pending-review.json"), "Stored pending review");
@@ -253,7 +304,9 @@ export function snapshotCloudState({ stateDir, storageRepo }) {
   if (regularFileExists(privatePath, "Private protected-review marker")) {
     writeJson(
       path.join(storageDirectory, "pending-private-review.json"),
-      sanitizePrivateReview(readJson(privatePath, "Private protected-review marker")),
+      sanitizePrivateReview(
+        readJson(privatePath, "Private protected-review marker", LOCAL_PRIVATE_REVIEW_LIMIT),
+      ),
     );
   } else {
     removeIfPresent(

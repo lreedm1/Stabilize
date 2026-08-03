@@ -11,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import {
+  CLOUD_STATE_README,
   restoreCloudState,
   sanitizePrivateReview,
   snapshotCloudState,
@@ -30,7 +31,7 @@ function initializeStateRepository(root) {
   mkdirSync(path.join(storageRepo, ".nightly-state"));
   writeFileSync(
     path.join(storageRepo, ".nightly-state", "README.md"),
-    "Bounded test state.\n",
+    CLOUD_STATE_README,
   );
   execFileSync("git", ["-C", storageRepo, "add", ".nightly-state/README.md"]);
   execFileSync("git", ["-C", storageRepo, "commit", "-m", "Initialize state"]);
@@ -161,5 +162,58 @@ test("durable state rejects simultaneous public and private pending markers", ()
   assert.throws(
     () => restoreCloudState({ stateDir: path.join(root, "restored"), storageRepo }),
     /two simultaneous pending markers/,
+  );
+});
+
+test("durable state requires the exact fixed README", () => {
+  const root = temporaryDirectory("stabilize-cloud-readme-");
+  const storageRepo = initializeStateRepository(root);
+  writeFileSync(path.join(storageRepo, ".nightly-state", "README.md"), "tampered\n");
+  execFileSync("git", ["-C", storageRepo, "add", ".nightly-state/README.md"]);
+  execFileSync("git", ["-C", storageRepo, "commit", "-m", "Tamper placeholder"]);
+  assert.throws(
+    () => restoreCloudState({ stateDir: path.join(root, "restored"), storageRepo }),
+    /out-of-bounds blob|unexpected fixed README/,
+  );
+});
+
+test("durable state rejects oversized blobs before parsing", () => {
+  const root = temporaryDirectory("stabilize-cloud-oversized-");
+  const storageRepo = initializeStateRepository(root);
+  writeFileSync(
+    path.join(storageRepo, ".nightly-state", "pending-review.json"),
+    "x".repeat(8193),
+  );
+  execFileSync("git", ["-C", storageRepo, "add", ".nightly-state/pending-review.json"]);
+  execFileSync("git", ["-C", storageRepo, "commit", "-m", "Add oversized state"]);
+  assert.throws(
+    () => restoreCloudState({ stateDir: path.join(root, "restored"), storageRepo }),
+    /out-of-bounds blob/,
+  );
+});
+
+test("durable private markers reject local-only identifiers", () => {
+  const root = temporaryDirectory("stabilize-cloud-private-shape-");
+  const storageRepo = initializeStateRepository(root);
+  writeFileSync(
+    path.join(storageRepo, ".nightly-state", "pending-private-review.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      feedbackHead: "a".repeat(40),
+      source: "deterministic_filter",
+      createdAt: "2026-08-03T12:00:00.000Z",
+      items: [{ id: "must-not-persist" }],
+    }),
+  );
+  execFileSync("git", [
+    "-C",
+    storageRepo,
+    "add",
+    ".nightly-state/pending-private-review.json",
+  ]);
+  execFileSync("git", ["-C", storageRepo, "commit", "-m", "Add private identifiers"]);
+  assert.throws(
+    () => restoreCloudState({ stateDir: path.join(root, "restored"), storageRepo }),
+    /exact durable shape/,
   );
 });

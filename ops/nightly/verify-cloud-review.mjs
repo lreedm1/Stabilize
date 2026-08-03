@@ -4,6 +4,7 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  realpathSync,
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -78,9 +79,10 @@ function runSandboxed(binary, args, verificationRoot, options = {}) {
     throw new Error("Cloud verification requires macOS sandbox-exec");
   }
   const profilePath = path.join(OPS_DIR, "verification.sb");
+  const canonicalVerificationRoot = realpathSync(verificationRoot);
   return command(
     "/usr/bin/sandbox-exec",
-    ["-D", `WRITABLE_ROOT=${verificationRoot}`, "-f", profilePath, binary, ...args],
+    ["-D", `WRITABLE_ROOT=${canonicalVerificationRoot}`, "-f", profilePath, binary, ...args],
     options,
   );
 }
@@ -180,10 +182,7 @@ function verifyProposal({ candidateDir, bundle, verificationRoot }) {
     ],
     { label: "Verified patch application" },
   );
-  const combinedCandidate = diffDigest(verificationRepo);
-  if (baselineFiles.length) {
-    git(verificationRepo, ["restore", "--source=HEAD", "--", ...baselineFiles]);
-  }
+  const beforeTests = diffDigest(verificationRepo);
   const gated = verifyChange({
     repo: verificationRepo,
     planPath: path.join(candidateDir, "plan.json"),
@@ -199,21 +198,6 @@ function verifyProposal({ candidateDir, bundle, verificationRoot }) {
     throw new Error("Candidate patch does not match its bounded manifest");
   }
 
-  for (const [label, args] of [
-    ["Trusted policy baseline restoration", ["run", "apply:prompt-policy"]],
-    ["Trusted type baseline restoration", ["run", "types"]],
-  ]) {
-    runSandboxed("npm", args, verificationRoot, {
-      cwd: verificationRepo,
-      env: environment,
-      timeout: 10 * 60 * 1000,
-      label,
-    });
-  }
-  if (diffDigest(verificationRepo).sha256 !== combinedCandidate.sha256) {
-    throw new Error("Trusted normalization baseline changed after applying the proposal");
-  }
-
   for (const [label, args, timeout] of [
     ["Tests", ["test"], 25 * 60 * 1000],
     ["Cloudflare dry run", ["run", "check"], 20 * 60 * 1000],
@@ -225,7 +209,7 @@ function verifyProposal({ candidateDir, bundle, verificationRoot }) {
       label,
     });
   }
-  if (diffDigest(verificationRepo).sha256 !== combinedCandidate.sha256) {
+  if (diffDigest(verificationRepo).sha256 !== beforeTests.sha256) {
     throw new Error("Validation changed the exact generated baseline or proposed diff");
   }
   if (baselineFiles.length) {

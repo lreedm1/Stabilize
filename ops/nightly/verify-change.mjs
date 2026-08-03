@@ -70,11 +70,26 @@ const DANGEROUS_ADDITION_PATTERNS = [
 ];
 
 function git(repo, args, options = {}) {
-  return execFileSync("git", ["-C", repo, ...args], {
+  const environment = {
+    HOME: "/var/empty",
+    PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+    LANG: process.env.LANG || "en_US.UTF-8",
+    LC_ALL: process.env.LC_ALL || "en_US.UTF-8",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_OPTIONAL_LOCKS: "0",
+  };
+  return execFileSync(
+    "git",
+    ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-C", repo, ...args],
+    {
     encoding: options.encoding ?? "utf8",
+    env: environment,
     maxBuffer: options.maxBuffer ?? 4 * 1024 * 1024,
     stdio: ["ignore", "pipe", "pipe"],
-  });
+    },
+  );
 }
 
 function nulList(buffer) {

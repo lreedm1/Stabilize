@@ -263,8 +263,8 @@ case "$viewer_permission" in
 esac
 run_clean "$node_bin" --check "$runner_js" >/dev/null ||
   die "The nightly JavaScript runner has a syntax error."
-run_clean /usr/bin/sandbox-exec -f "$sandbox_profile" /usr/bin/true ||
-  die "The localhost-only verification sandbox is unsupported on this Mac."
+run_clean "$installer_dir/test-verification-sandbox.zsh" ||
+  die "The write-confined, localhost-only verification sandbox is unsupported on this Mac."
 /bin/launchctl print "$domain" >/dev/null 2>&1 ||
   die "No active GUI launchd domain exists for this user. Log in locally before installing."
 

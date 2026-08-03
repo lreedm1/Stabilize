@@ -6,6 +6,7 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   unlinkSync,
@@ -13,7 +14,7 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   validateAnalysisPlan,
   verifyChange,
@@ -80,6 +81,15 @@ function parseArgs(argv) {
 function privateDirectory(directory) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   chmodSync(directory, 0o700);
+}
+
+function lstatOrNull(filePath) {
+  try {
+    return lstatSync(filePath);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 function atomicWrite(filePath, value, mode = 0o600) {
@@ -426,13 +436,14 @@ function collectFeedback(feedbackRepo, checkpoint, feedbackHead, analysisDir, ru
   return { inputPath, input: readJson(inputPath) };
 }
 
-function codexPermissionArgs(mode) {
+export function codexPermissionArgs(mode) {
   const profile = mode === "read" ? "nightly_read" : "nightly_edit";
   const access = mode === "read" ? "read" : "write";
   const args = [
-    "--ask-for-approval",
-    "never",
     "--ephemeral",
+    "--strict-config",
+    "-c",
+    'approval_policy="never"',
   ];
   if (process.env.STABILIZE_NIGHTLY_CODEX_PROXY !== "1") {
     args.push("--ignore-user-config");
@@ -460,37 +471,51 @@ function codexPermissionArgs(mode) {
   }
   args.push(
     "-c",
-    `permissions.${profile}.filesystem={":root"="deny",":minimal"="read",":workspace_roots"={"."="${access}"}}`,
+    `permissions.${profile}.filesystem={":root"="deny",":minimal"="read",":tmpdir"="deny",":slash_tmp"="deny",":workspace_roots"={"."="${access}"}}`,
     "-c",
     `permissions.${profile}.network.enabled=false`,
   );
   return args;
 }
 
-function stopCodexProxy(runLogsDir) {
-  if (process.env.STABILIZE_NIGHTLY_CODEX_PROXY !== "1" || codexProxyStopped) return;
-  if (!process.env.CODEX_HOME || !path.isAbsolute(process.env.CODEX_HOME)) {
+export function validateCodexProxyServerInfo(value) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(["pid", "port"]) ||
+    !Number.isInteger(value.port) ||
+    value.port < 1 ||
+    value.port > 65535 ||
+    !Number.isInteger(value.pid) ||
+    value.pid < 2
+  ) {
+    throw new Error("Cloud Codex proxy server info is invalid");
+  }
+  return { port: value.port, pid: value.pid };
+}
+
+export function readCodexProxyServerInfo({ codexHome, runId }) {
+  if (!codexHome || !path.isAbsolute(codexHome)) {
     throw new Error("Cloud Codex runs require an absolute CODEX_HOME");
   }
-  const runId = process.env.GITHUB_RUN_ID || "";
   if (!/^[1-9][0-9]*$/.test(runId)) {
     throw new Error("Cloud Codex proxy shutdown requires a valid GITHUB_RUN_ID");
   }
-  const serverInfoPath = path.join(process.env.CODEX_HOME, `${runId}.json`);
+  const serverInfoPath = path.join(codexHome, `${runId}.json`);
   const serverInfoStats = lstatSync(serverInfoPath);
   if (!serverInfoStats.isFile() || serverInfoStats.isSymbolicLink()) {
     throw new Error("Cloud Codex proxy server info is not a regular file");
   }
-  const serverInfo = readJson(serverInfoPath);
-  if (
-    !Number.isInteger(serverInfo.port) ||
-    serverInfo.port < 1 ||
-    serverInfo.port > 65535 ||
-    !Number.isInteger(serverInfo.pid) ||
-    serverInfo.pid < 2
-  ) {
-    throw new Error("Cloud Codex proxy server info is invalid");
-  }
+  return validateCodexProxyServerInfo(readJson(serverInfoPath));
+}
+
+function stopCodexProxy(runLogsDir) {
+  if (process.env.STABILIZE_NIGHTLY_CODEX_PROXY !== "1" || codexProxyStopped) return;
+  const serverInfo = readCodexProxyServerInfo({
+    codexHome: process.env.CODEX_HOME,
+    runId: process.env.GITHUB_RUN_ID || "",
+  });
   const curl = "/usr/bin/curl";
   if (!existsSync(curl)) throw new Error("Cloud Codex proxy shutdown requires curl");
   command(
@@ -567,32 +592,72 @@ function cloneMain(destination, expectedHead, runLogsDir, label) {
   }
 }
 
+export function detachEditGitMetadata({ editRepo, runDirectory }) {
+  const metadataPath = path.join(editRepo, ".git");
+  const detachedPath = path.join(runDirectory, "trusted-edit-git-metadata");
+  const metadataStats = lstatOrNull(metadataPath);
+  if (!metadataStats?.isDirectory() || metadataStats.isSymbolicLink()) {
+    throw new Error("The isolated edit clone has invalid Git metadata");
+  }
+  if (lstatOrNull(detachedPath)) {
+    throw new Error("The trusted detached Git metadata path already exists");
+  }
+  renameSync(metadataPath, detachedPath);
+  return { metadataPath, detachedPath };
+}
+
+function restoreEditGitMetadata({ metadataPath, detachedPath }) {
+  if (lstatOrNull(metadataPath)) {
+    throw new Error("The coding pass created forbidden Git metadata");
+  }
+  const detachedStats = lstatOrNull(detachedPath);
+  if (!detachedStats?.isDirectory() || detachedStats.isSymbolicLink()) {
+    throw new Error("Trusted detached Git metadata is missing or invalid");
+  }
+  renameSync(detachedPath, metadataPath);
+}
+
 function runEdit(editRepo, plan, runDirectory, runLogsDir) {
   git(editRepo, ["remote", "remove", "origin"]);
+  const detachedMetadata = detachEditGitMetadata({ editRepo, runDirectory });
   const resultPath = path.join(runDirectory, "edit-result.json");
   const basePrompt = readFileSync(path.join(OPS_DIR, "edit.prompt.md"), "utf8");
   const prompt = `${basePrompt}\n\nTrusted enum-only plan:\n${JSON.stringify(plan)}\n`;
-  command(
-    "codex",
-    [
-      "exec",
-      "-C",
-      editRepo,
-      ...codexPermissionArgs("write"),
-      "--output-schema",
-      path.join(OPS_DIR, "edit.schema.json"),
-      "-o",
-      resultPath,
-      prompt,
-    ],
-    {
-      cwd: editRepo,
-      env: safeEnvironment(os.homedir(), { includeCodexProxy: true }),
-      timeout: 30 * 60 * 1000,
-      label: "Bounded CSS edit",
-      privateLogBase: path.join(runLogsDir, "codex-edit"),
-    },
-  );
+  let metadataRestored = false;
+  try {
+    command(
+      "codex",
+      [
+        "exec",
+        "-C",
+        editRepo,
+        "--skip-git-repo-check",
+        ...codexPermissionArgs("write"),
+        "--output-schema",
+        path.join(OPS_DIR, "edit.schema.json"),
+        "-o",
+        resultPath,
+        prompt,
+      ],
+      {
+        cwd: editRepo,
+        env: safeEnvironment(os.homedir(), { includeCodexProxy: true }),
+        timeout: 30 * 60 * 1000,
+        label: "Bounded CSS edit",
+        privateLogBase: path.join(runLogsDir, "codex-edit"),
+      },
+    );
+    restoreEditGitMetadata(detachedMetadata);
+    metadataRestored = true;
+  } finally {
+    if (
+      !metadataRestored &&
+      !lstatOrNull(detachedMetadata.metadataPath) &&
+      lstatOrNull(detachedMetadata.detachedPath)
+    ) {
+      renameSync(detachedMetadata.detachedPath, detachedMetadata.metadataPath);
+    }
+  }
   if (!existsSync(resultPath)) throw new Error("Codex did not create an edit result");
   chmodSync(resultPath, 0o600);
   return resultPath;
@@ -608,9 +673,10 @@ function runWithoutNetwork(binary, args, options = {}) {
     throw new Error("Trusted verification requires an absolute disposable writable root");
   }
   const { writableRoot, ...commandOptions } = options;
+  const canonicalWritableRoot = realpathSync(writableRoot);
   return command(
     "/usr/bin/sandbox-exec",
-    ["-D", `WRITABLE_ROOT=${writableRoot}`, "-f", profilePath, binary, ...args],
+    ["-D", `WRITABLE_ROOT=${canonicalWritableRoot}`, "-f", profilePath, binary, ...args],
     commandOptions,
   );
 }
@@ -968,7 +1034,6 @@ function remoteBranchOid(branch, runLogsDir) {
 
 function pendingPullRequestState(pendingPath, runLogsDir) {
   let pending = validatePendingReview(readJson(pendingPath));
-  let publicationCompleted = false;
   if (pending.phase === "publishing") {
     let pullRequest = pullRequestView(pending.headRefName, runLogsDir, true);
     if (!pullRequest) {
@@ -989,28 +1054,18 @@ function pendingPullRequestState(pendingPath, runLogsDir) {
     pending = completePublishingIntent(pending, pullRequest);
     writeJson(pendingPath, pending);
     syncCloudState(path.dirname(pendingPath));
-    publicationCompleted = true;
   }
   const pullRequest = pullRequestView(pending.pullRequest, runLogsDir);
   validatePullRequestIdentity(pending, pullRequest);
-  return {
-    pending,
-    pullRequest,
-    retry: false,
-    recovery: false,
-    publicationCompleted,
-  };
+  return { pending, pullRequest, retry: false, recovery: false };
 }
 
 function resolvePendingReview(pendingPath, checkpointPath, runLogsDir) {
   if (!existsSync(pendingPath)) return false;
-  const {
-    pending,
-    pullRequest,
-    retry,
-    recovery,
-    publicationCompleted,
-  } = pendingPullRequestState(pendingPath, runLogsDir);
+  const { pending, pullRequest, retry, recovery } = pendingPullRequestState(
+    pendingPath,
+    runLogsDir,
+  );
   if (retry) {
     process.stdout.write(
       cloudPrepareMode()
@@ -1021,10 +1076,6 @@ function resolvePendingReview(pendingPath, checkpointPath, runLogsDir) {
   }
   if (recovery) {
     process.stdout.write("A previous publication needs recovery on the write-only runner.\n");
-    return true;
-  }
-  if (publicationCompleted && cloudPrepareMode()) {
-    process.stdout.write("Persisting the recovered pull request identity before its disposition.\n");
     return true;
   }
   if (pullRequest.state === "OPEN") {
@@ -1429,4 +1480,6 @@ async function main() {
   }
 }
 
-await main();
+if (import.meta.url === pathToFileURL(process.argv[1] || "").href) {
+  await main();
+}

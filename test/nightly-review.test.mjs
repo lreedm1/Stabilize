@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
   chmodSync,
+  lstatSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -30,6 +31,12 @@ import {
   createPublishingIntent,
   validatePullRequestIdentity,
 } from "../ops/nightly/pending-review.mjs";
+import {
+  codexPermissionArgs,
+  detachEditGitMetadata,
+  readCodexProxyServerInfo,
+  validateCodexProxyServerInfo,
+} from "../ops/nightly/run-nightly.mjs";
 import { resolvePrivateStateDirectory } from "../ops/nightly/state-path.mjs";
 
 const temporaryDirectories = [];
@@ -452,6 +459,95 @@ test("publishing intent recovers only the exact pull request identity", () => {
     () => validatePullRequestIdentity(review, { ...pullRequest, headRefOid: "c".repeat(40) }),
     /does not match the persisted publishing intent/,
   );
+  assert.throws(
+    () => validatePullRequestIdentity(review, { ...pullRequest, isCrossRepository: true }),
+    /does not match the persisted publishing intent/,
+  );
+  assert.throws(
+    () =>
+      validatePullRequestIdentity(review, {
+        ...pullRequest,
+        headRepositoryOwner: { login: "attacker" },
+      }),
+    /does not match the persisted publishing intent/,
+  );
+});
+
+test("Codex proxy shutdown accepts the pinned port-and-pid server-info contract", () => {
+  assert.deepEqual(
+    validateCodexProxyServerInfo({ port: 43123, pid: 44 }),
+    { port: 43123, pid: 44 },
+  );
+  for (const value of [
+    {},
+    { port: 0, pid: 44 },
+    { port: 65536, pid: 44 },
+    { port: 2.5, pid: 44 },
+    { port: "43123", pid: 44 },
+    { port: 43123 },
+    { port: 43123, pid: 1 },
+  ]) {
+    assert.throws(() => validateCodexProxyServerInfo(value), /server info is invalid/);
+  }
+
+  const root = temporaryDirectory("stabilize-proxy-info-");
+  const codexHome = path.join(root, "codex-home");
+  mkdirSync(codexHome);
+  writeFileSync(path.join(codexHome, "12345.json"), '{"port":43123,"pid":44}\n');
+  assert.deepEqual(
+    readCodexProxyServerInfo({ codexHome, runId: "12345" }),
+    { port: 43123, pid: 44 },
+  );
+  symlinkSync(
+    path.join(codexHome, "12345.json"),
+    path.join(codexHome, "67890.json"),
+  );
+  assert.throws(
+    () => readCodexProxyServerInfo({ codexHome, runId: "67890" }),
+    /not a regular file/,
+  );
+});
+
+test("Codex edit permissions deny both platform temporary roots", () => {
+  const args = codexPermissionArgs("write");
+  assert.ok(args.includes('approval_policy="never"'));
+  assert.ok(!args.includes("--ask-for-approval"));
+  assert.ok(args.includes("--strict-config"));
+  const filesystemPolicy = args.find((value) => value.includes("permissions.nightly_edit.filesystem"));
+  assert.match(filesystemPolicy, /":tmpdir"="deny"/);
+  assert.match(filesystemPolicy, /":slash_tmp"="deny"/);
+  assert.match(filesystemPolicy, /":workspace_roots"=\{"\."="write"\}/);
+  assert.ok(args.includes("permissions.nightly_edit.network.enabled=false"));
+});
+
+test("the coding workspace is detached from trusted Git metadata", () => {
+  const { root, repo } = createCssRepo();
+  const detached = detachEditGitMetadata({ editRepo: repo, runDirectory: root });
+  assert.equal(lstatSync(detached.detachedPath).isDirectory(), true);
+  assert.throws(() => lstatSync(detached.metadataPath), /ENOENT/);
+});
+
+test("trusted diff gates disable executable Git fsmonitor configuration", () => {
+  const { root, repo, head } = createCssRepo();
+  const markerPath = path.join(root, "fsmonitor-executed");
+  const monitorPath = path.join(root, "fsmonitor.sh");
+  writeFileSync(
+    monitorPath,
+    `#!/bin/sh\nprintf '%s' "$GH_TOKEN" > "${markerPath}"\nexit 0\n`,
+  );
+  chmodSync(monitorPath, 0o755);
+  git(repo, ["config", "core.fsmonitor", monitorPath]);
+  const { planPath, resultPath } = planAndResult(root);
+  writeFileSync(path.join(repo, "public", "product.css"), ".card {\n  padding: 14px;\n}\n");
+  const previousToken = process.env.GH_TOKEN;
+  process.env.GH_TOKEN = "must-not-reach-git-extensions";
+  try {
+    verifyChange({ repo, planPath, resultPath, expectedHead: head });
+  } finally {
+    if (previousToken === undefined) delete process.env.GH_TOKEN;
+    else process.env.GH_TOKEN = previousToken;
+  }
+  assert.throws(() => lstatSync(markerPath), /ENOENT/);
 });
 
 test("state directory validation rejects broad, linked, and repository paths", () => {

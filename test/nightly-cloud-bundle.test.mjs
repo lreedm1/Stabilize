@@ -10,11 +10,14 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import {
+  assertStateTransition,
   captureCloudState,
+  cloudStateDigest,
   createCloudBundle,
   inferStateTransition,
   loadCloudBundle,
 } from "../ops/nightly/cloud-bundle.mjs";
+import { verifyCloudReview } from "../ops/nightly/verify-cloud-review.mjs";
 import {
   createPublishingIntent,
   validatePullRequestIdentity,
@@ -88,6 +91,33 @@ test("two simultaneous pending markers are rejected", () => {
       }),
     /two simultaneous pending markers/,
   );
+});
+
+test("bundle parsing rejects private identifiers after the sanitization boundary", () => {
+  const root = temporaryDirectory("stabilize-bundle-private-shape-");
+  const stateDir = stateDirectory(root);
+  writeFileSync(
+    path.join(stateDir, "pending-private-review.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      feedbackHead: "e".repeat(40),
+      source: "deterministic_filter",
+      createdAt: "2026-08-03T07:17:00.000Z",
+      items: [{ id: "local-only", filePath: "feedback/private.json" }],
+    }),
+  );
+  const bundleDir = path.join(root, "bundle");
+  createCloudBundle({
+    bundleDir,
+    stateDir,
+    stateHead: "f".repeat(40),
+    initialState: {},
+  });
+  const privatePath = path.join(bundleDir, "state", "pending-private-review.json");
+  const privateMarker = JSON.parse(readFileSync(privatePath, "utf8"));
+  privateMarker.items = [{ id: "must-be-rejected" }];
+  writeFileSync(privatePath, JSON.stringify(privateMarker));
+  assert.throws(() => loadCloudBundle(bundleDir), /exact durable shape/);
 });
 
 test("proposal bundle carries only the tested patch contract", () => {
@@ -272,17 +302,71 @@ test("publication recovery transitions cannot be combined with another state act
   );
   assert.throws(
     () => inferStateTransition({
-      initialState: publishingState,
-      finalState: { "feedback-checkpoint": `${intent.feedbackHead}\n` },
-    }),
-    /not an allowed atomic transition/,
-  );
-  assert.throws(
-    () => inferStateTransition({
       initialState: reviewState,
       finalState: { "feedback-checkpoint": `${"f".repeat(40)}\n` },
       proposal: true,
     }),
     /cannot also change durable review state/,
   );
+});
+
+test("state digests are canonical and bind the live starting state", () => {
+  const first = {
+    "pending-private-review.json": '{"schemaVersion":1}\n',
+    "feedback-checkpoint": `${"a".repeat(40)}\n`,
+  };
+  const second = {
+    "feedback-checkpoint": `${"a".repeat(40)}\n`,
+    "pending-private-review.json": '{"schemaVersion":1}\n',
+  };
+  assert.equal(cloudStateDigest(first), cloudStateDigest(second));
+  assert.throws(() => cloudStateDigest({ unexpected: "value" }), /invalid entry/);
+  assert.throws(() => cloudStateDigest({ "feedback-checkpoint": 3 }), /invalid entry/);
+
+  const root = temporaryDirectory("stabilize-bundle-from-digest-");
+  const stateDir = stateDirectory(root);
+  writeFileSync(path.join(stateDir, "feedback-checkpoint"), `${"1".repeat(40)}\n`);
+  const initialState = captureCloudState(stateDir);
+  writeFileSync(path.join(stateDir, "feedback-checkpoint"), `${"2".repeat(40)}\n`);
+  const bundleDir = path.join(root, "bundle");
+  createCloudBundle({ bundleDir, stateDir, stateHead: "3".repeat(40), initialState });
+  const manifestPath = path.join(bundleDir, "manifest.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  manifest.transition.fromSha256 = "4".repeat(64);
+  writeFileSync(manifestPath, JSON.stringify(manifest));
+  const tampered = loadCloudBundle(bundleDir);
+  assert.throws(
+    () => assertStateTransition({
+      transition: tampered.manifest.transition,
+      initialState,
+      finalState: tampered.state,
+    }),
+    /does not match the bounded state snapshots/,
+  );
+});
+
+test("state-only verification preserves the exact transition without macOS execution", () => {
+  const root = temporaryDirectory("stabilize-state-roundtrip-");
+  const stateDir = stateDirectory(root);
+  writeFileSync(path.join(stateDir, "feedback-checkpoint"), `${"5".repeat(40)}\n`);
+  const initialState = captureCloudState(stateDir);
+  writeFileSync(path.join(stateDir, "feedback-checkpoint"), `${"6".repeat(40)}\n`);
+  const candidateDir = path.join(root, "candidate");
+  createCloudBundle({
+    bundleDir: candidateDir,
+    stateDir,
+    stateHead: "7".repeat(40),
+    initialState,
+  });
+  const original = loadCloudBundle(candidateDir);
+  const verifiedDir = path.join(root, "verified");
+  verifyCloudReview({
+    candidateDir,
+    verifiedDir,
+    workDir: path.join(root, "work"),
+  });
+  const verified = loadCloudBundle(verifiedDir);
+  assert.deepEqual(verified.state, original.state);
+  assert.deepEqual(verified.manifest.transition, original.manifest.transition);
+  assert.equal(verified.manifest.stateHead, original.manifest.stateHead);
 });

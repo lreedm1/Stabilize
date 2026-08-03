@@ -233,10 +233,7 @@ function validateTransitionEvidence({ bundle, initialState, workDir }) {
       return;
     }
     case "abandon_publication":
-      if (
-        remoteBranchOid(beforePending.headRefName) ||
-        pullRequestView(beforePending.headRefName, true)
-      ) {
+      if (remoteBranchOid(beforePending.headRefName) || pullRequestView(beforePending.headRefName, true)) {
         throw new Error("Cannot abandon a publication while its branch or pull request exists");
       }
       return;
