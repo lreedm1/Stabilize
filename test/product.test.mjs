@@ -57,7 +57,7 @@ test("the homepage gives a short product promise", async () => {
   assert.match(pageSource, /Guest chats aren't remembered/);
   assert.match(pageSource, /data-example-message=/);
   assert.match(pageSource, /href="\/product\.css"/);
-  assert.match(pageSource, /href="\/photo-tuning\.css"/);
+  assert.match(pageSource, /href="\/photo-tuning\.css\?v=20260802-8"/);
   assert.doesNotMatch(pageSource, /how-it-works-strip/);
   assert.doesNotMatch(pageSource, /Not a therapist or companion bot/);
   assert.match(
