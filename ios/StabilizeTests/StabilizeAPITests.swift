@@ -46,4 +46,39 @@ final class StabilizeAPITests: XCTestCase {
     XCTAssertTrue(response.awaitingSafetyAnswer)
     XCTAssertFalse(response.showEmergency)
   }
+
+  func testPreviewSafetyReviewFlowReachesEmergencyState() async throws {
+    let api = PreviewStabilizeAPI()
+
+    let safetyQuestion = try await api.send(
+      message: "Review safety check",
+      awaitingSafetyAnswer: false
+    )
+
+    XCTAssertEqual(safetyQuestion.route, "SAFETY_UNCLEAR")
+    XCTAssertTrue(safetyQuestion.awaitingSafetyAnswer)
+    XCTAssertFalse(safetyQuestion.showEmergency)
+
+    let urgentResponse = try await api.send(
+      message: "Unsure",
+      awaitingSafetyAnswer: safetyQuestion.awaitingSafetyAnswer
+    )
+
+    XCTAssertEqual(urgentResponse.route, "IMMEDIATE_DANGER")
+    XCTAssertFalse(urgentResponse.awaitingSafetyAnswer)
+    XCTAssertTrue(urgentResponse.showEmergency)
+  }
+
+  func testPreviewNoAnswerClearsSafetyStateWithoutEmergencyActions() async throws {
+    let api = PreviewStabilizeAPI()
+
+    let response = try await api.send(
+      message: "No",
+      awaitingSafetyAnswer: true
+    )
+
+    XCTAssertEqual(response.route, "SUPPORT")
+    XCTAssertFalse(response.awaitingSafetyAnswer)
+    XCTAssertFalse(response.showEmergency)
+  }
 }
