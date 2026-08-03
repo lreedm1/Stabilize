@@ -39,6 +39,10 @@ When AI mode is enabled, the Worker sends the current message, the bounded recen
 
 Cloudflare processes the Worker request, signed cookie, Durable Object data, logs, and network metadata under the deployer's account configuration and applicable service terms.
 
+## Feedback processing
+
+Signed-in users can optionally submit product feedback after acknowledging that it is stored in the repository's public feedback branch and may be reviewed by automated AI tooling. Users are told not to include private or identifying information. The nightly review automation applies deterministic screening before model review and routes feedback that appears to contain credentials, contact details, security reports, or individual health or crisis disclosures to a private operator-review queue instead of an automated code-change flow.
+
 ## Transition from anonymous browser memory
 
 This version no longer reads the earlier `stabilize_session` cookie and asks browsers to expire it. Previously created anonymous Durable Objects are not addressable through the new account-keyed code. Their existing retention alarms remove them after the earlier 30-day window; a deployer that requires immediate destructive removal must separately retire the old namespace after reviewing the data-loss impact.
@@ -50,6 +54,7 @@ This version no longer reads the earlier `stabilize_session` cookie and asks bro
 - Cookie deletion or sign-out removes local access but does not erase an unexpired server record.
 - Rotating `AUTH_SECRET` invalidates all sign-in cookies and changes account aliases, making prior memory inaccessible.
 - A condensed memory can omit context or preserve an inaccurate interpretation.
+- Optional product feedback is public and may be processed by automated AI tooling.
 - This prototype is not confidential clinical care and makes no HIPAA or equivalent compliance claim.
 
 ## Operator obligations

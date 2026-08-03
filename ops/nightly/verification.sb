@@ -1,0 +1,19 @@
+(version 1)
+
+(allow default)
+
+; Repository code may write only inside a disposable verification root.
+(deny file-write*)
+(allow file-write*
+  (subpath (param "WRITABLE_ROOT"))
+  (literal "/dev/null"))
+
+; Test subprocesses may inspect only processes inside this sandbox.
+(deny process-info*)
+(allow process-info* (target same-sandbox))
+
+; Worker tests may use localhost, but no external network is available.
+(deny network*)
+(allow network-bind (local ip "localhost:*"))
+(allow network-inbound (local ip "localhost:*"))
+(allow network-outbound (remote ip "localhost:*"))

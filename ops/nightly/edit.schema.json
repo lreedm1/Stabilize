@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["outcome", "targetFile", "changeKind"],
+  "properties": {
+    "outcome": {
+      "type": "string",
+      "enum": ["implemented", "unable"]
+    },
+    "targetFile": {
+      "type": "string",
+      "enum": ["none", "public/product.css", "public/guides.css"]
+    },
+    "changeKind": {
+      "type": "string",
+      "enum": ["none", "font_size", "line_height", "spacing", "color_contrast", "focus_outline"]
+    }
+  }
+}
