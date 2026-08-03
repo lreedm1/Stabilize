@@ -46,8 +46,14 @@ function webpInfo(buffer) {
   return { width, height, chunks };
 }
 
-test("mobile uses a direct looping woodland WebP with a still fallback", async () => {
-  const [pageSource, mobileQuality, loopStyles, loop, still] =
+function assertAvif(buffer) {
+  assert.equal(buffer.subarray(4, 8).toString("ascii"), "ftyp");
+  assert.equal(buffer.subarray(8, 12).toString("ascii"), "avif");
+  assert.ok(buffer.includes(Buffer.from("ispe")), "AVIF should expose image dimensions");
+}
+
+test("mobile uses the golden alpine AVIF with a bounded woodland source", async () => {
+  const [pageSource, mobileQuality, mobileStyles, loop, goldenAlpine] =
     await Promise.all([
       readFile(new URL("../src/page.js", import.meta.url), "utf8"),
       readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
@@ -59,31 +65,23 @@ test("mobile uses a direct looping woodland WebP with a still fallback", async (
         ),
       ),
       readFile(
-        new URL(
-          "../public/scenes/mobile-woodland-spring-still.webp",
-          import.meta.url,
-        ),
+        new URL("../public/scenes/mobile-golden-alpine.avif", import.meta.url),
       ),
     ]);
 
   const loopInfo = webpInfo(loop);
-  const stillInfo = webpInfo(still);
+  assertAvif(goldenAlpine);
 
   assert.deepEqual(
     { width: loopInfo.width, height: loopInfo.height },
     { width: 540, height: 960 },
   );
-  assert.deepEqual(
-    { width: stillInfo.width, height: stillInfo.height },
-    { width: 540, height: 960 },
-  );
   assert.ok(loop.byteLength > 300_000);
   assert.ok(loop.byteLength < 5_000_000);
-  assert.ok(still.byteLength > 50_000);
-  assert.ok(still.byteLength < loop.byteLength);
   assert.ok(loopInfo.chunks.includes("ANIM"));
   assert.ok(loopInfo.chunks.filter((chunk) => chunk === "ANMF").length >= 8);
-  assert.equal(stillInfo.chunks.includes("ANIM"), false);
+  assert.ok(goldenAlpine.byteLength > 10_000);
+  assert.ok(goldenAlpine.byteLength < 1_000_000);
 
   assert.match(
     pageSource,
@@ -97,12 +95,13 @@ test("mobile uses a direct looping woodland WebP with a still fallback", async (
   assert.doesNotMatch(pageSource, /mobile-sunlit-green-path-v4/);
 
   assert.match(
-    loopStyles,
-    /mobile-woodland-spring-still\.webp\?v=20260802-9/,
+    mobileStyles,
+    /mobile-golden-alpine\.avif\?v=20260803-12/,
   );
-  assert.match(loopStyles, /animation:\s*none\s*!important/);
-  assert.match(loopStyles, /transform:\s*none\s*!important/);
-  assert.doesNotMatch(loopStyles, /@keyframes/);
+  assert.match(mobileStyles, /opacity:\s*0/);
+  assert.match(mobileStyles, /animation:\s*none\s*!important/);
+  assert.match(mobileStyles, /transform:\s*none\s*!important/);
+  assert.doesNotMatch(mobileStyles, /@keyframes/);
 
   assert.match(mobileQuality, /max-width: 980px/);
   assert.match(mobileQuality, /orientation: portrait/);
