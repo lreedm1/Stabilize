@@ -1,0 +1,299 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A20000000000000000000101 /* StabilizeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* StabilizeApp.swift */; };
+		A20000000000000000000102 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* AppConfiguration.swift */; };
+		A20000000000000000000103 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* ChatMessage.swift */; };
+		A20000000000000000000104 /* StabilizeAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* StabilizeAPIClient.swift */; };
+		A20000000000000000000105 /* ChatSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* ChatSession.swift */; };
+		A20000000000000000000106 /* AdaptiveSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* AdaptiveSurface.swift */; };
+		A20000000000000000000107 /* NatureBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* NatureBackground.swift */; };
+		A20000000000000000000108 /* MessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* MessageBubble.swift */; };
+		A20000000000000000000109 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* ConversationView.swift */; };
+		A2000000000000000000010A /* ComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* ComposerView.swift */; };
+		A2000000000000000000010B /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* ChatView.swift */; };
+		A2000000000000000000010C /* InfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* InfoView.swift */; };
+		A2000000000000000000010D /* EmergencyHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* EmergencyHelpView.swift */; };
+		A1000000000000000000000B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000A /* Assets.xcassets */; };
+		A30000000000000000000002 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000001 /* PrivacyInfo.xcprivacy */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A20000000000000000000001 /* StabilizeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StabilizeApp.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
+		A20000000000000000000004 /* StabilizeAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StabilizeAPIClient.swift; sourceTree = "<group>"; };
+		A20000000000000000000005 /* ChatSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSession.swift; sourceTree = "<group>"; };
+		A20000000000000000000006 /* AdaptiveSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveSurface.swift; sourceTree = "<group>"; };
+		A20000000000000000000007 /* NatureBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NatureBackground.swift; sourceTree = "<group>"; };
+		A20000000000000000000008 /* MessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubble.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
+		A2000000000000000000000A /* ComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerView.swift; sourceTree = "<group>"; };
+		A2000000000000000000000B /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		A2000000000000000000000C /* InfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfoView.swift; sourceTree = "<group>"; };
+		A2000000000000000000000D /* EmergencyHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmergencyHelpView.swift; sourceTree = "<group>"; };
+		A1000000000000000000000A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A30000000000000000000001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		A10000000000000000000006 /* Stabilize.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Stabilize.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000000000000000000008 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A10000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000003 /* Stabilize */,
+				A10000000000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A10000000000000000000003 /* Stabilize */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000001 /* StabilizeApp.swift */,
+				A20000000000000000000002 /* AppConfiguration.swift */,
+				A20000000000000000000003 /* ChatMessage.swift */,
+				A20000000000000000000004 /* StabilizeAPIClient.swift */,
+				A20000000000000000000005 /* ChatSession.swift */,
+				A20000000000000000000006 /* AdaptiveSurface.swift */,
+				A20000000000000000000007 /* NatureBackground.swift */,
+				A20000000000000000000008 /* MessageBubble.swift */,
+				A20000000000000000000009 /* ConversationView.swift */,
+				A2000000000000000000000A /* ComposerView.swift */,
+				A2000000000000000000000B /* ChatView.swift */,
+				A2000000000000000000000C /* InfoView.swift */,
+				A2000000000000000000000D /* EmergencyHelpView.swift */,
+				A1000000000000000000000A /* Assets.xcassets */,
+				A30000000000000000000001 /* PrivacyInfo.xcprivacy */,
+			);
+			path = Stabilize;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000006 /* Stabilize.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000000000000000000005 /* Stabilize */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1000000000000000000000D /* Build configuration list for PBXNativeTarget "Stabilize" */;
+			buildPhases = (
+				A10000000000000000000007 /* Sources */,
+				A10000000000000000000008 /* Frameworks */,
+				A10000000000000000000009 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Stabilize;
+			productName = Stabilize;
+			productReference = A10000000000000000000006 /* Stabilize.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A10000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					A10000000000000000000005 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+				};
+			};
+			buildConfigurationList = A1000000000000000000000C /* Build configuration list for PBXProject "Stabilize" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A10000000000000000000002;
+			productRefGroup = A10000000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A10000000000000000000005 /* Stabilize */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000000000000000000000B /* Assets.xcassets in Resources */,
+				A30000000000000000000002 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A20000000000000000000101 /* StabilizeApp.swift in Sources */,
+				A20000000000000000000102 /* AppConfiguration.swift in Sources */,
+				A20000000000000000000103 /* ChatMessage.swift in Sources */,
+				A20000000000000000000104 /* StabilizeAPIClient.swift in Sources */,
+				A20000000000000000000105 /* ChatSession.swift in Sources */,
+				A20000000000000000000106 /* AdaptiveSurface.swift in Sources */,
+				A20000000000000000000107 /* NatureBackground.swift in Sources */,
+				A20000000000000000000108 /* MessageBubble.swift in Sources */,
+				A20000000000000000000109 /* ConversationView.swift in Sources */,
+				A2000000000000000000010A /* ComposerView.swift in Sources */,
+				A2000000000000000000010B /* ChatView.swift in Sources */,
+				A2000000000000000000010C /* InfoView.swift in Sources */,
+				A2000000000000000000010D /* EmergencyHelpView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A1000000000000000000000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A1000000000000000000000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A10000000000000000000010 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Stabilize;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = info.stabilize.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A10000000000000000000011 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Stabilize;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = info.stabilize.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A1000000000000000000000C /* Build configuration list for PBXProject "Stabilize" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000000000000000000000E /* Debug */,
+				A1000000000000000000000F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1000000000000000000000D /* Build configuration list for PBXNativeTarget "Stabilize" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000010 /* Debug */,
+				A10000000000000000000011 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A10000000000000000000001 /* Project object */;
+}
