@@ -33,6 +33,71 @@ if (!copyAfter.includes("PRESENT-RISK RECENCY:")) {
 
 if (copyAfter !== copyBefore) await writeFile(copyPath, copyAfter);
 
+const workerPath = "src/index.js";
+const workerBefore = await readFile(workerPath, "utf8");
+let workerAfter = workerBefore;
+
+if (!workerAfter.includes("function isNeutralGreeting(")) {
+  const generationAnchor = "async function generateReply(messages, route, env, latestText) {";
+  if (!workerAfter.includes(generationAnchor)) {
+    throw new Error("Recency policy could not find the reply-generation anchor");
+  }
+  workerAfter = workerAfter.replace(
+    generationAnchor,
+    `function isNeutralGreeting(value) {
+  return /^(?:hi|hello|hey|hiya|good morning|good afternoon|good evening)[!.? ]*$/i.test(
+    String(value || "").trim(),
+  );
+}
+
+function isUnsolicitedSafetyCheck(value) {
+  return /(?:hurt yourself|kill yourself|safe right now|immediate danger|next few hours)/i.test(
+    String(value || ""),
+  );
+}
+
+${generationAnchor}`,
+  );
+}
+
+if (!workerAfter.includes("Hi. What’s happening right now?")) {
+  const returnAnchor = `  if (!reply) {
+    throw new OpenAIRequestError({
+      name: "OpenAIInvalidReplyError",
+      failure: "invalid_output",
+      status: 502,
+      providerRequestId: result.providerRequestId,
+      clientRequestId: result.clientRequestId,
+    });
+  }
+  return reply;
+}`;
+  const guardedReturn = `  if (!reply) {
+    throw new OpenAIRequestError({
+      name: "OpenAIInvalidReplyError",
+      failure: "invalid_output",
+      status: 502,
+      providerRequestId: result.providerRequestId,
+      clientRequestId: result.clientRequestId,
+    });
+  }
+  if (
+    route === "ORDINARY" &&
+    isNeutralGreeting(latestText) &&
+    isUnsolicitedSafetyCheck(reply)
+  ) {
+    return "Hi. What’s happening right now?";
+  }
+  return reply;
+}`;
+  if (!workerAfter.includes(returnAnchor)) {
+    throw new Error("Recency policy could not find the validated reply return");
+  }
+  workerAfter = workerAfter.replace(returnAnchor, guardedReturn);
+}
+
+if (workerAfter !== workerBefore) await writeFile(workerPath, workerAfter);
+
 const clientPath = "public/app.js";
 const clientBefore = await readFile(clientPath, "utf8");
 let clientAfter = clientBefore;
