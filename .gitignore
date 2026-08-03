@@ -4,3 +4,4 @@ node_modules/
 .wrangler/
 .DS_Store
 npm-debug.log*
+public/scenes/mobile-golden-alpine-v2.webp
