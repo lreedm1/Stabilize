@@ -2,7 +2,7 @@ Stabilize is a native SwiftUI guest client for https://stabilize.info/api/chat. 
 
 The app is not therapy, diagnosis, emergency care, or a medical device. It provides short AI-generated practical support. The backend first applies deterministic routing for selected urgent safety, medical, unsafe-shelter, and medication-change/access inputs. When an urgent response is returned, the app displays native Call 988, Text 988, and Call 911 actions. These actions are for the United States.
 
-For a deterministic review flow, launch with the argument --ui-testing. Any ordinary message returns a fixed non-urgent sample response. After a response that requests a safety answer, a message containing “yes” or “unsure” returns the fixed urgent sample. This mode does not call the production AI.
+The submitted app uses the live production backend by default. Any ordinary check-in can be used to review the normal response flow. The app also includes a deterministic --ui-testing launch mode for automated pre-submission screenshots and regression tests; it does not call production AI. In that mode, an ordinary message returns a fixed non-urgent response. Enter “Review safety check” to receive the fixed safety question, then enter “Unsure” to display the fixed urgent response and native 988/911 actions. Entering “No” instead returns a fixed non-emergency support response.
 
 Guest app chats do not create server-side conversation memory. The native app does not intentionally persist prompts or replies. The app transmits user-entered text to the Stabilize Cloudflare Worker; ordinary replies are processed by OpenAI. Privacy and safety links are available from the in-app information screen.
 
