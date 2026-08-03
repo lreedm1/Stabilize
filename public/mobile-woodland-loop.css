@@ -1,9 +1,7 @@
 @media (max-width: 980px) and (orientation: portrait) {
   .photo-backdrop {
     overflow: hidden;
-    background:
-      url("/scenes/mobile-golden-alpine.avif?v=20260803-12")
-      50% 50% / cover no-repeat;
+    background: #173f31;
     filter: none;
     transform: none;
     animation: none;
@@ -17,7 +15,7 @@
     height: 100%;
     object-fit: cover;
     object-position: 50% 50%;
-    opacity: 0;
+    opacity: 1;
     filter: none;
     transform: none !important;
     animation: none !important;

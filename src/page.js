@@ -123,7 +123,7 @@ export function renderPage(options = {}) {
     <link
       rel="preload"
       as="image"
-      href="/scenes/mobile-woodland-spring-loop.webp?v=20260802-9"
+      href="/scenes/mobile-golden-alpine-v2.webp?v=20260803-14"
       media="(max-width: 980px) and (orientation: portrait)"
       type="image/webp"
       fetchpriority="high"
@@ -132,7 +132,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/seo.css" />
     <link rel="stylesheet" href="/product.css" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
-    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260802-9" />
+    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260803-14" />
   </head>
   <body>
     <canvas
@@ -150,7 +150,7 @@ export function renderPage(options = {}) {
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="/scenes/mobile-woodland-spring-loop.webp?v=20260802-9 540w"
+        srcset="/scenes/mobile-golden-alpine-v2.webp?v=20260803-14 853w"
       />
       <img
         id="photo-backdrop-image"

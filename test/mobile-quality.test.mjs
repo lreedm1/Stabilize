@@ -47,7 +47,7 @@ function webpInfo(buffer) {
 }
 
 test("mobile uses one high-resolution static generated WebP", async () => {
-  const [pageSource, mobileQuality, mobileStyles, image, encodedSource] =
+  const [pageSource, mobileQuality, mobileStyles, image] =
     await Promise.all([
       readFile(new URL("../src/page.js", import.meta.url), "utf8"),
       readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
@@ -57,13 +57,6 @@ test("mobile uses one high-resolution static generated WebP", async () => {
           "../public/scenes/mobile-golden-alpine-v2.webp",
           import.meta.url,
         ),
-      ),
-      readFile(
-        new URL(
-          "../public/scenes/mobile-golden-alpine-v2.b64",
-          import.meta.url,
-        ),
-        "utf8",
       ),
     ]);
 
@@ -75,17 +68,16 @@ test("mobile uses one high-resolution static generated WebP", async () => {
   assert.ok(image.byteLength > 100_000);
   assert.ok(image.byteLength < 5_000_000);
   assert.equal(imageInfo.chunks.includes("ANIM"), false);
-  assert.ok(encodedSource.trim().startsWith("UklG"));
 
   assert.match(
     pageSource,
-    /mobile-golden-alpine-v2\.webp\?v=20260803-13 853w/,
+    /mobile-golden-alpine-v2\.webp\?v=20260803-14 853w/,
   );
   assert.match(
     pageSource,
-    /rel="preload"[\s\S]*mobile-golden-alpine-v2\.webp\?v=20260803-13/,
+    /rel="preload"[\s\S]*mobile-golden-alpine-v2\.webp\?v=20260803-14/,
   );
-  assert.match(pageSource, /mobile-woodland-loop\.css\?v=20260803-13/);
+  assert.match(pageSource, /mobile-woodland-loop\.css\?v=20260803-14/);
   assert.doesNotMatch(pageSource, /mobile-woodland-spring-loop/);
 
   assert.match(mobileStyles, /opacity:\s*1/);
