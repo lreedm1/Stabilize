@@ -28,7 +28,7 @@ async function signedCookie() {
   return `${AUTH_COOKIE_NAME}=${token}`;
 }
 
-test("signed-in users see the feedback form and public-storage warning", async () => {
+test("signed-in users see the public-storage and automated-review warning", async () => {
   const response = await worker.fetch(
     new Request("https://stabilize.info/", {
       headers: { Cookie: await signedCookie() },
@@ -41,6 +41,7 @@ test("signed-in users see the feedback form and public-storage warning", async (
   assert.equal(response.status, 200);
   assert.match(html, /action="\/api\/feedback"/);
   assert.match(html, /saved in a public GitHub repository/i);
+  assert.match(html, /reviewed by automated AI tooling/i);
   assert.match(html, /name="public_ack"[\s\S]*required/);
   assert.doesNotMatch(html, /feedback-test-user/);
 });

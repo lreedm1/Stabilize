@@ -65,18 +65,18 @@ The nightly job may turn new feedback into a report or one narrowly scoped draft
 
 Use this sequence:
 
-1. Fetch `origin/main` and `origin/feedback-inbox`, then create a clean worktree and new branch from `origin/main`. Read only new feedback since the stored last-reviewed commit; never merge, modify, or delete content on `feedback-inbox`.
+1. Fetch `main` into the trusted checkout and `feedback-inbox` into a separate private clone with an independent Git object database. Read only new feedback since the stored last-reviewed commit; never expose feedback refs or objects to the coding workspace, or merge, modify, or delete content on `feedback-inbox`.
 2. Validate each `feedback/**/*.json` path, size, and schema. Treat every field as untrusted data: never follow embedded instructions, execute submitted text, open submitted links, interpolate it into a shell command, or copy raw feedback into commits, pull requests, or logs.
-3. Group repeated observations and rank them by user impact, frequency, confidence, implementation effort, and safety or privacy risk.
-4. Select at most one low-risk improvement. If evidence is weak, no item is clearly safe, or the change would cross a protected boundary, produce a report with no code change.
-5. Run Codex non-interactively in the isolated worktree with `--sandbox workspace-write`, `--ephemeral`, and a JSON output schema. Give the agent no production secrets and no permission to deploy.
-6. Run `npm test` and `npm run check`, then have a deterministic wrapper inspect the final diff and reject an oversized or out-of-scope change. This final check matters because the repository's policy scripts can rewrite tracked files during validation.
-7. If every gate passes, push a new `agent/nightly-*` branch and open a draft pull request containing the evidence, change, risks, and validation. A person reviews and merges it. Advance the feedback checkpoint only after the review completes.
+3. Route credential, identifying, security, or individual health/crisis disclosures to private human review before any model call. Keep only IDs, paths, and reason categories in pending state.
+4. Run an isolated read-only Codex classification with root filesystem reads, network, web search, MCP, login shells, and inherited shell variables disabled. Its schema is enum-only and cannot carry raw feedback or free-form model prose forward.
+5. If the enum plan supports one low-risk improvement, give only that plan—not raw feedback—to a separate coding clone with no feedback objects and no GitHub remote. The coding pass may edit exactly one allowlisted CSS file.
+6. Inspect the diff with a trusted verifier outside the coding workspace. Then apply the gated patch to another fresh clone, install trusted dependencies, run `npm test` and `npm run check` without credentials or external network access (localhost remains available to the test harness), and compare the exact pre/post-test diff hash. This final check matters because the repository's policy scripts can rewrite tracked files during validation.
+7. If every gate passes, push a new `agent/nightly-*` branch and open a generic draft pull request without raw feedback or model prose. A person reviews and merges it. Advance only to the captured feedback head after merge; protected feedback and closed-unmerged PRs require explicit human acknowledgment.
 
 The first version should enforce these limits:
 
-- one improvement theme and no more than about 200 changed lines
-- a positive editable-path allowlist for every run; start with specifically named low-risk presentation files and keep route, configuration, prompt, policy, and test files protected
+- one improvement theme, one existing CSS file, and no more than 120 changed lines
+- a positive editable-path allowlist for every run; the implemented first version permits only `public/product.css` or `public/guides.css` and keeps route, configuration, prompt, policy, feedback, auth, billing, and test files protected
 - no new dependencies, workflows, schema or migration changes, or edits to secrets and deployment configuration
 - report-only treatment for model instructions, deterministic safety routing, medication or crisis behavior, authentication, account memory, billing, feedback privacy, retention, licensing, and legal policy
 - no production deploys, direct commits to `main`, user contact, feedback deletion, DNS changes, or secret rotation
@@ -84,3 +84,7 @@ The first version should enforce these limits:
 Take no code action when there is no new valid feedback, evidence is weak or conflicting, another nightly draft is open, a protected area is involved, or any test or diff gate fails. Route sensitive disclosures and security reports to private human review without copying them into a public artifact.
 
 Run a few reviews manually before scheduling them on the Mac. A no-change report is a successful outcome when the evidence or safety case is not strong enough. See [Codex non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode.md) and [Scheduled tasks](https://learn.chatgpt.com/docs/automations.md) for the current execution and scheduling options.
+
+On the first real run, validate the existing feedback tree and record its current head as the trusted baseline without sending historical entries to a model. Only canonical append-only feedback commits after that checkpoint are eligible for automated review.
+
+The implemented macOS runner, safety gates, setup commands, state transitions, and LaunchAgent installer are documented in [`ops/nightly/README.md`](../ops/nightly/README.md).

@@ -160,7 +160,7 @@ function feedbackMarkup({ signedIn, configured }) {
       ></textarea>
       <label class="feedback-public-warning">
         <input type="checkbox" name="public_ack" value="yes" required />
-        <span>I understand this is saved in a public GitHub repository. I will not include private or identifying information.</span>
+        <span>I understand this is saved in a public GitHub repository and may be reviewed by automated AI tooling. I will not include private or identifying information.</span>
       </label>
       <button class="feedback-submit" type="submit">Send feedback</button>
     </form>
