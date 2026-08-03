@@ -1,8 +1,8 @@
-# Stabilize 1.0 App Store metadata
+# Stabilize: Smaller Next Step 1.0 App Store metadata
 
 ## App information
 
-- Name: `Stabilize`
+- Name: `Stabilize: Smaller Next Step`
 - Subtitle: `A smaller next step`
 - Primary category: `Health & Fitness`
 - Secondary category: `Lifestyle`
