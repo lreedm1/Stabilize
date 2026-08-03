@@ -14,7 +14,7 @@
     "deploy": "npm run apply:prompt-policy && wrangler deploy",
     "dev": "npm run apply:prompt-policy && wrangler dev",
     "test": "npm run apply:prompt-policy && npm run test:node && npm run test:worker",
-    "test:node": "node --test test/safety.test.mjs test/markdown.test.mjs test/terrain.test.mjs test/ui.test.mjs test/product.test.mjs test/mobile-quality.test.mjs test/domain.test.mjs test/billing.test.mjs test/feedback.test.mjs test/prompt-submit.test.mjs test/outcome-followup.test.mjs test/document-export.test.mjs",
+    "test:node": "node --test test/safety.test.mjs test/markdown.test.mjs test/terrain.test.mjs test/ui.test.mjs test/product.test.mjs test/mobile-quality.test.mjs test/domain.test.mjs test/billing.test.mjs test/feedback.test.mjs test/prompt-submit.test.mjs test/outcome-followup.test.mjs test/no-document-export.test.mjs",
     "test:worker": "vitest run --config vitest.config.js test/worker.test.mjs test/session-memory.test.mjs test/billing-account.test.mjs test/feedback-gate.test.mjs test/feedback-worker.test.mjs test/auth.test.mjs",
     "types": "wrangler types --include-runtime false"
   },
