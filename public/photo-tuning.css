@@ -48,6 +48,40 @@ body::before {
   }
 }
 
+@keyframes golden-water-flow {
+  0% {
+    opacity: 0.16;
+    transform: translate3d(-0.18%, -0.12%, 0) scale(1.004);
+  }
+
+  45% {
+    opacity: 0.23;
+    transform: translate3d(0.16%, 0.13%, 0) scale(1.007);
+  }
+
+  100% {
+    opacity: 0.18;
+    transform: translate3d(0.28%, -0.06%, 0) scale(1.005);
+  }
+}
+
+@keyframes golden-foliage-breeze {
+  0% {
+    opacity: 0.1;
+    transform: translate3d(-0.22%, 0, 0) scale(1.002);
+  }
+
+  52% {
+    opacity: 0.17;
+    transform: translate3d(0.2%, -0.08%, 0) scale(1.005);
+  }
+
+  100% {
+    opacity: 0.12;
+    transform: translate3d(-0.08%, 0.12%, 0) scale(1.003);
+  }
+}
+
 @media (max-width: 980px) and (orientation: portrait) {
   .photo-backdrop {
     isolation: isolate;
