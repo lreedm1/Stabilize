@@ -75,7 +75,7 @@ test("the About page preserves the project's origin and limits", async () => {
     ]);
 
   assert.match(about, /I am a suicide survivor/i);
-  assert.match(about, /next person who found themselves where I once was/i);
+  assert.match(about, /next person who finds themselves where I once was/i);
   assert.match(about, /find meaning in continuing to live/i);
   assert.match(about, /reducing the risk of foreseeable tragedy/i);
   assert.match(about, /brings attention to our neglected needs/i);
