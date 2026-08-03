@@ -8,7 +8,10 @@ test("starter prompt buttons call the model with a cache-busted client", async (
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
   ]);
 
-  assert.match(pageSource, /src="\/app\.js\?v=[^"]+"/);
+  assert.match(
+    pageSource,
+    /src="\/app\.js\?v=20260803-continuity-4"/,
+  );
   assert.match(
     clientSource,
     /button\.addEventListener\("click", \(\) => \{[\s\S]*?void sendMessage\(button\.dataset\.exampleMessage \|\| ""\);[\s\S]*?\}\);/,
@@ -27,12 +30,21 @@ test("signed-out users get a one-time memory reminder on their second send", asy
   ]);
 
   assert.match(routerSource, /from "\.\/memory-prompt-worker\.js"/);
-  assert.match(wrapperSource, /readAuthSession\(request, env\)/);
+  assert.match(wrapperSource, /readAuthorizedAuthSession\(request, env\)/);
   assert.match(
     wrapperSource,
     /if \(!authSession && googleAuthConfigured\(env\)\) \{/,
   );
-  assert.match(wrapperSource, /Stabilize only remembers chat context between visits when you sign in/);
+  assert.match(wrapperSource, /Remember future messages\?/);
+  assert.match(
+    wrapperSource,
+    /Sign in before your next message to remember future context between visits/,
+  );
+  assert.match(
+    wrapperSource,
+    /Messages already sent as a guest will not be added to account memory/,
+  );
+  assert.match(wrapperSource, /Sign in for future messages/);
   assert.match(wrapperSource, /href="\/auth\/google"/);
   assert.match(wrapperSource, /aria-modal="false"/);
 
@@ -41,4 +53,21 @@ test("signed-out users get a one-time memory reminder on their second send", asy
   assert.match(reminderSource, /if \(count === 2\) showPrompt\(\)/);
   assert.match(reminderSource, /sessionStorage\.setItem/);
   assert.match(reminderSource, /PROMPT_SHOWN_KEY/);
+});
+
+
+test("the prompt limit is 4,000 characters", async () => {
+  const [pageSource, workerSource, copySource] = await Promise.all([
+    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/index.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/copy.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(pageSource, /id="message-input"[\s\S]*maxlength="4000"/);
+  assert.match(workerSource, /const MAX_MESSAGE_CHARS = 4_000/);
+  assert.match(workerSource, /latestText.length > MAX_MESSAGE_CHARS/);
+  assert.match(copySource, /Please keep your message to 4,000 characters or fewer/);
+  assert.doesNotMatch(workerSource, /MAX_MODEL_OUTPUT_TOKENS/);
+  assert.match(copySource, /Keep ordinary responses to 220 words or fewer/);
+  assert.match(copySource, /For requested document-ready content, use the length needed/);
 });

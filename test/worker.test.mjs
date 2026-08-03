@@ -4,6 +4,7 @@ import worker from "../src/index.js";
 import { COPY } from "../src/copy.js";
 import {
   AUTH_COOKIE_NAME,
+  MEMORY_DELETION_COOKIE_NAME,
   createAuthSessionTokenForGoogleSubject,
   readAuthSession,
 } from "../src/auth.js";
@@ -11,6 +12,9 @@ import {
 const GOOGLE_CLIENT_ID =
   "1234567890-stabilize-tests.apps.googleusercontent.com";
 const AUTH_SECRET = "test-auth-secret-with-at-least-thirty-two-characters";
+const SESSION_SECRET =
+  "test-session-secret-with-at-least-thirty-two-characters";
+const GUEST_CONTINUITY = { mode: "guest", token: null };
 
 function freshState() {
   return {
@@ -21,11 +25,63 @@ function freshState() {
     turnCount: 0,
     updatedAt: null,
     nextSequence: 1,
+    epoch: 0,
+    nextLease: 1,
+    modelLease: null,
+    fixedExchanges: [],
+    failFixedWrites: false,
+    hangFixedWrites: false,
+    erased: false,
+    lastErasedAt: null,
+    revokedThroughIssuedAtMs: null,
   };
 }
 
 function createSessionNamespace() {
   const states = new Map();
+
+  function contextFor(state) {
+    return {
+      summary: state.summary,
+      recent: state.recent.map(({ role, content }) => ({ role, content })),
+      awaitingSafetyAnswer: state.awaitingSafetyAnswer,
+      turnCount: state.turnCount,
+      updatedAt: state.updatedAt,
+    };
+  }
+
+  function appendExchange(state, exchange) {
+    state.recent.push(
+      {
+        sequence: state.nextSequence,
+        role: "user",
+        content: exchange.user,
+      },
+      {
+        sequence: state.nextSequence + 1,
+        role: "assistant",
+        content: exchange.assistant,
+      },
+    );
+    state.nextSequence += 2;
+    state.recent = state.recent.slice(-8);
+    state.awaitingSafetyAnswer = exchange.awaitingSafetyAnswer === true;
+    state.turnCount += 1;
+    state.updatedAt = Date.now();
+    return {
+      shouldCompact: state.recent.length >= 2,
+      turnCount: state.turnCount,
+    };
+  }
+
+  function leaseMatches(state, value) {
+    return Boolean(
+      state.modelLease &&
+        value?.leaseToken === state.modelLease.leaseToken &&
+        value?.epoch === state.modelLease.epoch &&
+        value.epoch === state.epoch,
+    );
+  }
 
   return {
     states,
@@ -35,38 +91,161 @@ function createSessionNamespace() {
       return {
         async readContext() {
           const state = states.get(name) || freshState();
-          return {
-            summary: state.summary,
-            recent: state.recent.map(({ role, content }) => ({ role, content })),
-            awaitingSafetyAnswer: state.awaitingSafetyAnswer,
-            turnCount: state.turnCount,
-            updatedAt: state.updatedAt,
-          };
+          return contextFor(state);
         },
         async recordExchange(exchange) {
           const state = states.get(name) || freshState();
-          state.recent.push(
-            {
-              sequence: state.nextSequence,
-              role: "user",
-              content: exchange.user,
-            },
-            {
-              sequence: state.nextSequence + 1,
-              role: "assistant",
-              content: exchange.assistant,
-            },
-          );
-          state.nextSequence += 2;
-          state.recent = state.recent.slice(-8);
-          state.awaitingSafetyAnswer =
-            exchange.awaitingSafetyAnswer === true;
-          state.turnCount += 1;
-          state.updatedAt = Date.now();
+          if (state.modelLease || state.epoch !== 0) {
+            return { recorded: false, reason: "legacy_write_blocked" };
+          }
+          const result = appendExchange(state, exchange);
+          states.set(name, state);
+          return { recorded: true, ...result };
+        },
+        async recordLocalExchange(exchange, sessionIssuedAtMs) {
+          const state = states.get(name) || freshState();
+          if (
+            state.revokedThroughIssuedAtMs !== null &&
+            (!Number.isSafeInteger(Number(sessionIssuedAtMs)) ||
+              Number(sessionIssuedAtMs) <=
+                state.revokedThroughIssuedAtMs)
+          ) {
+            return { recorded: false, reason: "session_revoked" };
+          }
+          state.modelLease = null;
+          state.epoch += 1;
+          const result = appendExchange(state, exchange);
+          states.set(name, state);
+          return { recorded: true, stateEpoch: state.epoch, ...result };
+        },
+        async beginModelTurn(request = {}) {
+          const state = states.get(name) || freshState();
+          if (
+            state.lastErasedAt !== null &&
+            (!Number.isSafeInteger(Number(request.sessionIssuedAtMs)) ||
+              Number(request.sessionIssuedAtMs) <=
+                state.revokedThroughIssuedAtMs)
+          ) {
+            return {
+              acquired: false,
+              retryAfterSeconds: 0,
+              reason: "session_revoked",
+            };
+          }
+          if (
+            state.lastErasedAt !== null &&
+            Number(request.requestStartedAt) <= state.lastErasedAt
+          ) {
+            return {
+              acquired: false,
+              retryAfterSeconds: 0,
+              reason: "memory_deleted",
+            };
+          }
+          if (state.modelLease) {
+            return { acquired: false, retryAfterSeconds: 1 };
+          }
+          const leaseToken = `lease_${String(state.nextLease).padStart(24, "0")}`;
+          state.nextLease += 1;
+          state.epoch += 1;
+          state.modelLease = { leaseToken, epoch: state.epoch };
           states.set(name, state);
           return {
-            shouldCompact: state.recent.length >= 2,
-            turnCount: state.turnCount,
+            acquired: true,
+            leaseToken,
+            epoch: state.epoch,
+            context: contextFor(state),
+          };
+        },
+        async commitModelTurn(value) {
+          const state = states.get(name) || freshState();
+          if (!leaseMatches(state, value)) {
+            return { committed: false };
+          }
+          const result = appendExchange(state, value.exchange);
+          state.modelLease = null;
+          states.set(name, state);
+          return { committed: true, stateEpoch: state.epoch, ...result };
+        },
+        async releaseModelTurn(value) {
+          const state = states.get(name) || freshState();
+          if (!leaseMatches(state, value)) return false;
+          state.modelLease = null;
+          states.set(name, state);
+          return true;
+        },
+        async recordFixedExchange(
+          exchange,
+          requestStartedAt,
+          sessionIssuedAtMs,
+        ) {
+          const state = states.get(name) || freshState();
+          if (state.failFixedWrites) throw new Error("fixed write unavailable");
+          if (state.hangFixedWrites) return new Promise(() => {});
+          if (
+            state.revokedThroughIssuedAtMs !== null &&
+            (!Number.isSafeInteger(Number(sessionIssuedAtMs)) ||
+              Number(sessionIssuedAtMs) <=
+                state.revokedThroughIssuedAtMs)
+          ) {
+            return { recorded: false, reason: "session_revoked" };
+          }
+          if (
+            state.lastErasedAt !== null &&
+            Number(requestStartedAt) <= state.lastErasedAt
+          ) {
+            return { recorded: false, reason: "memory_deleted" };
+          }
+          state.modelLease = null;
+          state.epoch += 1;
+          state.fixedExchanges.push(exchange);
+          const result = appendExchange(state, exchange);
+          states.set(name, state);
+          return { recorded: true, stateEpoch: state.epoch, ...result };
+        },
+        async eraseMemory(sessionIssuedAtMs) {
+          const state = states.get(name) || freshState();
+          const cleanIssuedAtMs = Number(sessionIssuedAtMs);
+          const revokedThrough = state.revokedThroughIssuedAtMs || 0;
+          if (
+            !Number.isSafeInteger(cleanIssuedAtMs) ||
+            cleanIssuedAtMs <= revokedThrough
+          ) {
+            return { erased: false, reason: "session_revoked" };
+          }
+          const erasedAt = Date.now();
+          const nextBoundary = Math.max(
+            revokedThrough,
+            erasedAt,
+            cleanIssuedAtMs,
+          );
+          state.summary = "";
+          state.summaryVersion = 0;
+          state.recent = [];
+          state.awaitingSafetyAnswer = false;
+          state.turnCount = 0;
+          state.updatedAt = null;
+          state.nextSequence = 1;
+          state.modelLease = null;
+          state.epoch += 1;
+          state.erased = true;
+          state.lastErasedAt = erasedAt;
+          state.revokedThroughIssuedAtMs = nextBoundary;
+          states.set(name, state);
+          return {
+            erased: true,
+            erasedAt,
+            nextSessionIssuedAtMs: nextBoundary + 1,
+          };
+        },
+        async validateSession(sessionIssuedAtMs) {
+          const state = states.get(name) || freshState();
+          return {
+            allowed:
+              state.revokedThroughIssuedAtMs === null ||
+              (Number.isSafeInteger(Number(sessionIssuedAtMs)) &&
+                Number(sessionIssuedAtMs) >
+                  state.revokedThroughIssuedAtMs),
           };
         },
         async getCompactionSnapshot() {
@@ -75,6 +254,7 @@ function createSessionNamespace() {
           return {
             summary: state.summary,
             summaryVersion: state.summaryVersion,
+            stateEpoch: state.epoch,
             throughSequence: state.recent.at(-1).sequence,
             messages: state.recent.map(({ role, content }) => ({
               role,
@@ -82,9 +262,19 @@ function createSessionNamespace() {
             })),
           };
         },
-        async applySummary(summary, expectedVersion, throughSequence) {
+        async applySummary(
+          summary,
+          expectedVersion,
+          throughSequence,
+          expectedEpoch,
+        ) {
           const state = states.get(name) || freshState();
-          if (state.summaryVersion !== expectedVersion) return false;
+          if (
+            state.summaryVersion !== expectedVersion ||
+            state.epoch !== expectedEpoch
+          ) {
+            return false;
+          }
           state.summary = summary;
           state.summaryVersion += 1;
           state.recent = state.recent.filter(
@@ -106,10 +296,11 @@ function createEnv(overrides = {}) {
     SESSIONS: createSessionNamespace(),
     DEMO_MODE: "true",
     OPENAI_MODEL: "gpt-5.6-sol",
-    OPENAI_REASONING_EFFORT: "medium",
+    OPENAI_REASONING_EFFORT: "max",
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: "test-google-client-secret",
     AUTH_SECRET,
+    SESSION_SECRET,
     PUBLIC_ORIGIN: "https://stabilize.test",
     ...overrides,
   };
@@ -123,7 +314,12 @@ async function authenticatedIdentity(env, subject) {
     env,
   );
   assert.ok(session);
-  return { cookie, objectName: `google:${session.accountKey}` };
+  return {
+    cookie,
+    session,
+    objectName: `google:${session.accountKey}`,
+    continuity: { mode: "account", token: session.continuityToken },
+  };
 }
 
 function responseWithText(text) {
@@ -155,6 +351,14 @@ function responseWithError(status, error, headers = {}) {
   );
 }
 
+function responseCookie(setCookie, name) {
+  const match = String(setCookie || "").match(
+    new RegExp(`(?:^|,\\s*)${name}=([^;,\\s]*)`),
+  );
+  assert.ok(match, `Missing ${name} cookie`);
+  return `${name}=${match[1]}`;
+}
+
 test("health endpoint reports demo mode and session memory", async () => {
   const response = await worker.fetch(
     new Request("https://stabilize.test/api/health"),
@@ -166,8 +370,11 @@ test("health endpoint reports demo mode and session memory", async () => {
     ok: true,
     mode: "demo",
     model: null,
+    aiFeature: null,
     memory: true,
     authentication: true,
+    reasoningEffort: null,
+    verbosity: null,
   });
 });
 
@@ -182,8 +389,11 @@ test("health endpoint reports whether OpenAI is configured", async () => {
     ok: true,
     mode: "openai",
     model: "gpt-5.6-sol",
+    aiFeature: "responses",
     memory: true,
     authentication: true,
+    reasoningEffort: "max",
+    verbosity: "low",
   });
 
   const missingKeyResponse = await worker.fetch(
@@ -196,8 +406,11 @@ test("health endpoint reports whether OpenAI is configured", async () => {
     ok: false,
     mode: "openai",
     model: "gpt-5.6-sol",
+    aiFeature: "responses",
     memory: true,
     authentication: true,
+    reasoningEffort: "max",
+    verbosity: "low",
   });
 });
 
@@ -284,17 +497,21 @@ test("chat endpoint calls OpenAI with store disabled", async () => {
     const providerBody = JSON.parse(providerRequest.init.body);
     assert.equal(providerBody.model, "gpt-5.6-sol");
     assert.deepEqual(providerBody.reasoning, {
-      effort: "medium",
+      effort: "max",
       context: "current_turn",
     });
+    assert.deepEqual(providerBody.text, { verbosity: "low" });
     assert.equal(providerBody.store, false);
-    assert.equal(providerBody.max_output_tokens, 500);
+    assert.equal("max_output_tokens" in providerBody, false);
     assert.equal(providerBody.input[0].role, "user");
     assert.equal(providerBody.input[0].content, "Help me plan one next step.");
     assert.match(providerBody.instructions, /route ORDINARY/i);
     assert.match(providerBody.instructions, /Floor supports; answer leads/i);
     assert.match(providerBody.instructions, /current evidence wins/i);
     assert.match(providerBody.instructions, /Systems > willpower/i);
+    assert.ok(COPY.model.systemPrompt.length < 3_200);
+    assert.match(providerBody.instructions, /220 words or fewer/i);
+    assert.match(providerBody.instructions, /document-ready content/i);
     assert.match(providerBody.instructions, /PRIOR CONTEXT MEMORY/i);
 
     const logged = logs.join("\n");
@@ -306,6 +523,66 @@ test("chat endpoint calls OpenAI with store disabled", async () => {
   } finally {
     globalThis.fetch = originalFetch;
     console.log = originalLog;
+  }
+});
+
+test("chat rejects messages over 4,000 characters", async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalled = false;
+  globalThis.fetch = async () => {
+    providerCalled = true;
+    return responseWithText("This should not be called.");
+  };
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "a".repeat(4001) }),
+      }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+    );
+
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error, COPY.api.messageTooLong);
+    assert.equal(providerCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("max effort safely falls back for older model choices", async () => {
+  const originalFetch = globalThis.fetch;
+  let providerBody;
+  globalThis.fetch = async (_input, init) => {
+    providerBody = JSON.parse(init.body);
+    return responseWithText("Use the smallest useful step.");
+  };
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Help me choose a next step." }),
+      }),
+      createEnv({
+        DEMO_MODE: "false",
+        OPENAI_API_KEY: "test-openai-key",
+        OPENAI_MODEL: "gpt-5.1",
+        OPENAI_REASONING_EFFORT: "max",
+      }),
+    );
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(providerBody.reasoning, {
+      effort: "high",
+      context: "current_turn",
+    });
+    assert.deepEqual(providerBody.text, { verbosity: "low" });
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });
 
@@ -490,9 +767,9 @@ test("provider connection failures return a safe reference", async () => {
   }
 });
 
-test("remembered summary is supplied as untrusted context", async () => {
+test("signed-in chats use bounded account memory with stateless OpenAI requests", async () => {
   const originalFetch = globalThis.fetch;
-  let providerBody;
+  const providerRequests = [];
   const memory = createSessionNamespace();
   const env = createEnv({
     SESSIONS: memory,
@@ -507,47 +784,86 @@ test("remembered summary is supplied as untrusted context", async () => {
     assistant: "I will keep the next step small.",
     awaitingSafetyAnswer: false,
   });
-  const snapshot = await stub.getCompactionSnapshot();
-  await stub.applySummary(
-    "The user prefers short plans.",
-    snapshot.summaryVersion,
-    snapshot.throughSequence,
-  );
+  memory.states.get(identity.objectName).summary =
+    "The user prefers short plans.";
 
-  globalThis.fetch = async (_input, init) => {
-    providerBody = JSON.parse(init.body);
-    return responseWithText("Take one five-minute step.");
+  globalThis.fetch = async (input, init) => {
+    const request = {
+      url: String(input),
+      body: JSON.parse(init.body),
+    };
+    providerRequests.push(request);
+    return responseWithText(
+      providerRequests.length === 1
+        ? "Take one five-minute step."
+        : "Open the document and write one line.",
+    );
   };
 
   try {
-    const response = await worker.fetch(
+    const firstResponse = await worker.fetch(
       new Request("https://stabilize.test/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Cookie: identity.cookie,
         },
-        body: JSON.stringify({ message: "What should I do next?" }),
+        body: JSON.stringify({
+          message: "What should I do next?",
+          continuity: identity.continuity,
+        }),
+      }),
+      env,
+    );
+    const secondResponse = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: identity.cookie,
+        },
+        body: JSON.stringify({
+          message: "Make that even smaller.",
+          continuity: identity.continuity,
+        }),
       }),
       env,
     );
 
-    assert.equal(response.status, 200);
-    assert.match(providerBody.input[0].content, /PRIOR CONTEXT MEMORY/);
-    assert.match(providerBody.input[0].content, /prefers short plans/);
-    assert.match(
-      providerBody.input.at(-1).content,
-      /What should I do next\?$/,
+    assert.equal(firstResponse.status, 200);
+    assert.equal(secondResponse.status, 200);
+    assert.deepEqual((await firstResponse.json()).continuity, identity.continuity);
+    assert.deepEqual((await secondResponse.json()).continuity, identity.continuity);
+
+    assert.equal(providerRequests.length, 2);
+    assert.ok(
+      providerRequests.every(({ url }) => url.endsWith("/v1/responses")),
     );
+    for (const { body } of providerRequests) {
+      assert.equal(body.store, false);
+      assert.equal("conversation" in body, false);
+      assert.equal("previous_response_id" in body, false);
+      assert.ok(Array.isArray(body.input));
+    }
+    assert.match(
+      providerRequests[0].body.input[0].content,
+      /PRIOR CONTEXT MEMORY[\s\S]*prefers short plans[\s\S]*I prefer short plans/i,
+    );
+    assert.ok(
+      providerRequests[1].body.input.some(
+        (item) => item.content === "Take one five-minute step.",
+      ),
+    );
+    assert.equal(memory.states.get(identity.objectName).modelLease, null);
+    assert.equal(memory.states.get(identity.objectName).turnCount, 3);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test("recent turns compact in the background without OpenAI storage", async () => {
+test("a failed stateless provider call releases the account turn lease", async () => {
   const originalFetch = globalThis.fetch;
-  const providerBodies = [];
-  const tasks = [];
+  const originalError = console.error;
   const memory = createSessionNamespace();
   const env = createEnv({
     SESSIONS: memory,
@@ -555,48 +871,59 @@ test("recent turns compact in the background without OpenAI storage", async () =
     OPENAI_API_KEY: "test-openai-key",
   });
   const identity = await authenticatedIdentity(env, "google-user-two");
+  let calls = 0;
 
-  globalThis.fetch = async (_input, init) => {
-    const body = JSON.parse(init.body);
-    providerBodies.push(body);
-    if (body.instructions === COPY.model.summaryPrompt) {
-      return responseWithText("The user wants a small next step for a current task.");
+  console.error = () => {};
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 1) {
+      return responseWithError(503, {
+        code: "service_unavailable",
+        type: "server_error",
+        message: "provider detail",
+      });
     }
-    return responseWithText("Write down the first five-minute action.");
+    return responseWithText("Start with two quiet minutes.");
   };
 
   try {
-    const response = await worker.fetch(
+    const first = await worker.fetch(
       new Request("https://stabilize.test/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "CF-Connecting-IP": "198.51.100.9",
           Cookie: identity.cookie,
         },
-        body: JSON.stringify({ message: "Help me start this task." }),
+        body: JSON.stringify({
+          message: "Help me restart.",
+          continuity: identity.continuity,
+        }),
       }),
       env,
-      {
-        waitUntil(promise) {
-          tasks.push(promise);
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(first.status, 503);
+    assert.equal(memory.states.get(identity.objectName).modelLease, null);
+
+    const second = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: identity.cookie,
         },
-      },
+        body: JSON.stringify({
+          message: "Help me restart.",
+          continuity: identity.continuity,
+        }),
+      }),
+      env,
     );
-
-    assert.equal(response.status, 200);
-    await Promise.all(tasks);
-
-    const context = await memory.getByName(identity.objectName).readContext();
-    assert.equal(
-      context.summary,
-      "The user wants a small next step for a current task.",
-    );
-    assert.deepEqual(context.recent, []);
-    assert.equal(providerBodies.length, 2);
-    assert.ok(providerBodies.every((body) => body.store === false));
+    assert.equal(second.status, 200);
+    assert.equal((await second.json()).reply, "Start with two quiet minutes.");
   } finally {
     globalThis.fetch = originalFetch;
+    console.error = originalError;
   }
 });
 
@@ -640,7 +967,7 @@ test("chat endpoint rejects oversized declared bodies", async () => {
 
 test("cross-origin chat and logout posts are rejected", async () => {
   const env = createEnv();
-  const [chatResponse, logoutResponse] = await Promise.all([
+  const [chatResponse, logoutResponse, deletionResponse] = await Promise.all([
     worker.fetch(
       new Request("https://stabilize.test/api/chat", {
         method: "POST",
@@ -659,6 +986,13 @@ test("cross-origin chat and logout posts are rejected", async () => {
       }),
       env,
     ),
+    worker.fetch(
+      new Request("https://stabilize.test/account/memory/delete", {
+        method: "POST",
+        headers: { Origin: "https://untrusted.example" },
+      }),
+      env,
+    ),
   ]);
 
   assert.equal(chatResponse.status, 403);
@@ -666,32 +1000,261 @@ test("cross-origin chat and logout posts are rejected", async () => {
   assert.equal(logoutResponse.status, 403);
   assert.equal(await logoutResponse.text(), COPY.api.crossOriginRequest);
   assert.equal(logoutResponse.headers.get("set-cookie"), null);
+  assert.equal(deletionResponse.status, 403);
+  assert.equal(await deletionResponse.text(), COPY.api.crossOriginRequest);
 });
 
-test("the public API does not expose account-memory deletion", async () => {
+test("account-memory deletion erases local state and rotates the session", async () => {
   const memory = createSessionNamespace();
   const env = createEnv({ SESSIONS: memory });
-  const identity = await authenticatedIdentity(env, "google-user-three");
+  const identity = await authenticatedIdentity(env, "memory-deletion-user");
   await memory.getByName(identity.objectName).recordExchange({
     user: "Remember this.",
     assistant: "Okay.",
     awaitingSafetyAnswer: false,
   });
-
   const response = await worker.fetch(
-    new Request("https://stabilize.test/api/memory", {
-      method: "DELETE",
-      headers: { Cookie: identity.cookie },
+    new Request("https://stabilize.test/account/memory/delete", {
+      method: "POST",
+      headers: {
+        Cookie: identity.cookie,
+        Origin: "https://stabilize.test",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        continuity: identity.continuity.token,
+      }),
     }),
     env,
   );
 
-  assert.equal(response.status, 404);
-  assert.equal((await response.json()).error, COPY.api.notFound);
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("location"), "/");
+  const receiptCookie = responseCookie(
+    response.headers.get("set-cookie"),
+    MEMORY_DELETION_COOKIE_NAME,
+  );
+  const rotatedAuthCookie = responseCookie(
+    response.headers.get("set-cookie"),
+    AUTH_COOKIE_NAME,
+  );
+  const rotatedAuthSession = await readAuthSession(
+    new Request("https://stabilize.test/", {
+      headers: { Cookie: rotatedAuthCookie },
+    }),
+    env,
+  );
+  assert.deepEqual(
+    await memory.getByName(identity.objectName).readContext(),
+    {
+      summary: "",
+      recent: [],
+      awaitingSafetyAnswer: false,
+      turnCount: 0,
+      updatedAt: null,
+    },
+  );
+  assert.equal(memory.states.get(identity.objectName).erased, true);
+  assert.equal(rotatedAuthSession.accountKey, identity.session.accountKey);
+  assert.notEqual(
+    rotatedAuthSession.continuityToken,
+    identity.continuity.token,
+  );
+
+  const revokedChatResponse = await worker.fetch(
+    new Request("https://stabilize.test/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: identity.cookie,
+      },
+      body: JSON.stringify({
+        message: "Do not recreate the deleted memory.",
+        continuity: identity.continuity,
+      }),
+    }),
+    env,
+  );
+  assert.equal(revokedChatResponse.status, 409);
+  assert.equal((await revokedChatResponse.json()).reload, true);
+  assert.match(
+    revokedChatResponse.headers.get("set-cookie"),
+    /stabilize_auth=;[\s\S]*Max-Age=0/,
+  );
+  assert.deepEqual(
+    await memory.getByName(identity.objectName).readContext(),
+    {
+      summary: "",
+      recent: [],
+      awaitingSafetyAnswer: false,
+      turnCount: 0,
+      updatedAt: null,
+    },
+  );
+
+  const revokedAuthResponse = await worker.fetch(
+    new Request("https://stabilize.test/api/auth", {
+      headers: { Cookie: identity.cookie },
+    }),
+    env,
+  );
+  assert.deepEqual(await revokedAuthResponse.json(), {
+    signedIn: false,
+    memory: false,
+    google: true,
+    continuity: GUEST_CONTINUITY,
+  });
+  assert.match(
+    revokedAuthResponse.headers.get("set-cookie"),
+    /stabilize_auth=;[\s\S]*Max-Age=0/,
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 2));
+  const currentSafetyResponse = await worker.fetch(
+    new Request("https://stabilize.test/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: rotatedAuthCookie,
+      },
+      body: JSON.stringify({
+        message: "I might hurt myself.",
+        continuity: {
+          mode: "account",
+          token: rotatedAuthSession.continuityToken,
+        },
+      }),
+    }),
+    env,
+  );
+  assert.equal(currentSafetyResponse.status, 200);
+  assert.equal((await currentSafetyResponse.json()).route, "SAFETY_UNCLEAR");
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(
-    (await memory.getByName(identity.objectName).readContext()).turnCount,
+    memory.states.get(identity.objectName).awaitingSafetyAnswer,
+    true,
+  );
+
+  const revokedContextProbe = await worker.fetch(
+    new Request("https://stabilize.test/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: identity.cookie,
+      },
+      body: JSON.stringify({
+        message: "no",
+        continuity: identity.continuity,
+      }),
+    }),
+    env,
+  );
+  assert.equal(revokedContextProbe.status, 409);
+  assert.equal(
+    memory.states.get(identity.objectName).awaitingSafetyAnswer,
+    true,
+  );
+
+  const confirmedPageResponse = await worker.fetch(
+    new Request("https://stabilize.test/", {
+      headers: { Cookie: `${rotatedAuthCookie}; ${receiptCookie}` },
+    }),
+    env,
+  );
+  const confirmedPage = await confirmedPageResponse.text();
+  assert.match(confirmedPage, /memory-deletion-state/);
+  assert.match(confirmedPage, /&quot;confirmed&quot;:true/);
+  assert.ok(confirmedPage.includes(COPY.page.auth.memoryDeleted));
+  assert.match(
+    confirmedPageResponse.headers.get("set-cookie"),
+    /stabilize_memory_deleted=;[\s\S]*Max-Age=0/,
+  );
+
+  const forgedQueryResponse = await worker.fetch(
+    new Request("https://stabilize.test/?memory=deleted", {
+      headers: { Cookie: identity.cookie },
+    }),
+    env,
+  );
+  const forgedQueryPage = await forgedQueryResponse.text();
+  assert.match(forgedQueryPage, /&quot;confirmed&quot;:false/);
+  assert.equal(forgedQueryPage.includes(COPY.page.auth.memoryDeleted), false);
+
+  const unauthenticatedResponse = await worker.fetch(
+    new Request("https://stabilize.test/account/memory/delete", {
+      method: "POST",
+    }),
+    env,
+  );
+  assert.equal(unauthenticatedResponse.status, 303);
+  assert.equal(unauthenticatedResponse.headers.get("location"), "/auth/google");
+});
+
+test("account-memory deletion is bound to the rendered account session", async () => {
+  const memory = createSessionNamespace();
+  const env = createEnv({ SESSIONS: memory });
+  const accountA = await authenticatedIdentity(env, "deletion-account-a");
+  const accountB = await authenticatedIdentity(env, "deletion-account-b");
+  await memory.getByName(accountA.objectName).recordExchange({
+    user: "Account A memory",
+    assistant: "A retained reply",
+    awaitingSafetyAnswer: false,
+  });
+  await memory.getByName(accountB.objectName).recordExchange({
+    user: "Account B memory",
+    assistant: "B retained reply",
+    awaitingSafetyAnswer: false,
+  });
+
+  const response = await worker.fetch(
+    new Request("https://stabilize.test/account/memory/delete", {
+      method: "POST",
+      headers: {
+        Cookie: accountB.cookie,
+        Origin: "https://stabilize.test",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        continuity: accountA.continuity.token,
+      }),
+    }),
+    env,
+  );
+
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("location"), "/?memory=session-changed");
+  assert.equal(memory.states.get(accountA.objectName).erased, false);
+  assert.equal(memory.states.get(accountB.objectName).erased, false);
+  assert.equal(
+    (await memory.getByName(accountA.objectName).readContext()).turnCount,
     1,
   );
+  assert.equal(
+    (await memory.getByName(accountB.objectName).readContext()).turnCount,
+    1,
+  );
+});
+
+test("account-memory deletion fails closed without the memory binding", async () => {
+  const env = createEnv({ SESSIONS: undefined });
+  const identity = await authenticatedIdentity(env, "deletion-no-binding");
+  const response = await worker.fetch(
+    new Request("https://stabilize.test/account/memory/delete", {
+      method: "POST",
+      headers: {
+        Cookie: identity.cookie,
+        Origin: "https://stabilize.test",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        continuity: identity.continuity.token,
+      }),
+    }),
+    env,
+  );
+
+  assert.equal(response.status, 503);
+  assert.equal(await response.text(), COPY.api.temporarilyUnavailable);
 });
 
 test("root page renders the simplified chat without audio or a danger shortcut", async () => {
@@ -735,6 +1298,10 @@ test("root page renders the simplified chat without audio or a danger shortcut",
   assert.ok(html.includes(COPY.page.chat.responseLabel));
   assert.match(html, /rel="preload"[\s\S]*lexend-latin-wght-normal\.woff2/);
   assert.ok(html.includes('id="client-copy"'));
+  assert.match(
+    html,
+    /id="continuity-state">\{&quot;mode&quot;:&quot;guest&quot;,&quot;token&quot;:null\}<\/template>/,
+  );
   assert.doesNotMatch(html, /id="reset-button"|Start over/);
   assert.doesNotMatch(html, /id="status-line"/);
   assert.doesNotMatch(html, /quick-actions|data-prompt/);
@@ -769,6 +1336,11 @@ test("root page renders the simplified chat without audio or a danger shortcut",
   assert.equal(clientCopy.memoryCleared, undefined);
   assert.equal(clientCopy.dangerReply, undefined);
   assert.equal(clientCopy.soundOn, undefined);
+  assert.equal(clientCopy.sessionChanged, COPY.client.sessionChanged);
+  assert.equal(
+    clientCopy.deleteMemoryConfirm,
+    COPY.client.deleteMemoryConfirm,
+  );
 });
 
 test("guest chats remain available and create no server-side memory", async () => {
@@ -785,9 +1357,199 @@ test("guest chats remain available and create no server-side memory", async () =
     createEnv({ SESSIONS: memory }),
   );
 
+  const body = await response.json();
   assert.equal(response.status, 200);
+  assert.deepEqual(body.continuity, GUEST_CONTINUITY);
   assert.equal(memory.states.size, 0);
   assert.equal(response.headers.get("set-cookie"), null);
+});
+
+test("an old guest tab stays stateless after a cookie signs in", async () => {
+  const originalFetch = globalThis.fetch;
+  let providerBody;
+  const memory = createSessionNamespace();
+  const env = createEnv({
+    SESSIONS: memory,
+    DEMO_MODE: "false",
+    OPENAI_API_KEY: "test-openai-key",
+  });
+  const identity = await authenticatedIdentity(env, "newly-signed-in-user");
+
+  globalThis.fetch = async (input, init) => {
+    assert.equal(String(input), "https://api.openai.com/v1/responses");
+    providerBody = JSON.parse(init.body);
+    return responseWithText("Choose one task and open its first page.");
+  };
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: identity.cookie,
+        },
+        body: JSON.stringify({
+          message: "Help me start one task.",
+          continuity: GUEST_CONTINUITY,
+        }),
+      }),
+      env,
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body.continuity, GUEST_CONTINUITY);
+    assert.equal(providerBody.store, false);
+    assert.equal(providerBody.conversation, undefined);
+    assert.equal(memory.states.size, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("an account continuity mismatch returns 409 without writing", async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalled = false;
+  const memory = createSessionNamespace();
+  const env = createEnv({ SESSIONS: memory });
+  const identity = await authenticatedIdentity(env, "account-a-user");
+  globalThis.fetch = async () => {
+    providerCalled = true;
+    return responseWithText("This must not be used.");
+  };
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: identity.cookie,
+        },
+        body: JSON.stringify({
+          message: "Do not cross account boundaries.",
+          continuity: { mode: "account", token: "A".repeat(43) },
+        }),
+      }),
+      env,
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 409);
+    assert.equal(body.reload, true);
+    assert.deepEqual(body.continuity, identity.continuity);
+    assert.equal(memory.states.size, 0);
+    assert.equal(providerCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a signed-in fixed safety route stores only a generalized event", async () => {
+  const memory = createSessionNamespace();
+  const env = createEnv({ SESSIONS: memory });
+  const identity = await authenticatedIdentity(env, "safety-route-user");
+  memory.getByName(identity.objectName);
+  const response = await worker.fetch(
+    new Request("https://stabilize.test/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: identity.cookie,
+      },
+      body: JSON.stringify({
+        message: "I am going to kill myself tonight",
+        continuity: identity.continuity,
+      }),
+    }),
+    env,
+  );
+  const body = await response.json();
+  const state = memory.states.get(identity.objectName);
+
+  assert.equal(response.status, 200);
+  assert.equal(body.route, "IMMEDIATE_DANGER");
+  assert.deepEqual(body.continuity, identity.continuity);
+  assert.equal(state.fixedExchanges.length, 1);
+  assert.doesNotMatch(state.fixedExchanges[0].user, /kill myself/i);
+  assert.equal(state.turnCount, 1);
+});
+
+test("a fixed safety reply does not wait for a hanging memory write", async () => {
+  const memory = createSessionNamespace();
+  const env = createEnv({ SESSIONS: memory });
+  const identity = await authenticatedIdentity(env, "safety-storage-hang");
+  memory.getByName(identity.objectName);
+  memory.states.get(identity.objectName).hangFixedWrites = true;
+
+  let timeout;
+  try {
+    const response = await Promise.race([
+      worker.fetch(
+        new Request("https://stabilize.test/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: identity.cookie,
+          },
+          body: JSON.stringify({
+            message: "I am going to kill myself tonight",
+            continuity: identity.continuity,
+          }),
+        }),
+        env,
+        { waitUntil() {} },
+      ),
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("Safety response waited for memory")),
+          500,
+        );
+      }),
+    ]);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.route, "IMMEDIATE_DANGER");
+    assert.equal(body.showEmergency, true);
+  } finally {
+    clearTimeout(timeout);
+  }
+});
+
+test("a fixed safety reply remains available when account memory fails", async () => {
+  const originalError = console.error;
+  const memory = createSessionNamespace();
+  const env = createEnv({ SESSIONS: memory });
+  const identity = await authenticatedIdentity(env, "safety-storage-failure");
+  memory.getByName(identity.objectName);
+  memory.states.get(identity.objectName).failFixedWrites = true;
+  console.error = () => {};
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: identity.cookie,
+        },
+        body: JSON.stringify({
+          message: "I am going to kill myself tonight",
+          continuity: identity.continuity,
+        }),
+      }),
+      env,
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.route, "IMMEDIATE_DANGER");
+    assert.equal(body.showEmergency, true);
+    assert.match(body.reply, /safe person|staffed place/i);
+  } finally {
+    console.error = originalError;
+  }
 });
 
 test("signed-in chats use account memory and ignore the connecting IP", async () => {
@@ -803,7 +1565,10 @@ test("signed-in chats use account memory and ignore the connecting IP", async ()
         "CF-Connecting-IP": "192.0.2.55",
         Cookie: identity.cookie,
       },
-      body: JSON.stringify({ message: "I have not eaten all day" }),
+      body: JSON.stringify({
+        message: "I have not eaten all day",
+        continuity: identity.continuity,
+      }),
     }),
     env,
   );
@@ -832,10 +1597,14 @@ test("auth status and the root page reflect a valid Google session", async () =>
     signedIn: true,
     memory: true,
     google: true,
+    continuity: identity.continuity,
   });
   assert.ok(html.includes(COPY.page.auth.signedIn));
   assert.ok(html.includes(COPY.page.auth.signOut));
   assert.match(html, /action="\/auth\/logout" method="post"/);
+  assert.match(html, /action="\/account\/memory\/delete" method="post"/);
+  assert.ok(html.includes(COPY.page.auth.forgetMemory));
+  assert.ok(html.includes(identity.continuity.token));
   assert.doesNotMatch(html, /href="\/auth\/google"/);
 });
 

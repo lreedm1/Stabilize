@@ -1,6 +1,9 @@
 import originalWorker, { SessionMemory } from "./index.js";
-import { readAuthSession } from "./auth.js";
-import { fixedReplyForRoute } from "./safety.js";
+import {
+  ACCOUNT_STATE_HEADER,
+  readAuthorizedAuthSession,
+} from "./account-session.js";
+import { classifyInput, fixedReplyForRoute } from "./safety.js";
 import { BillingAccount } from "./billing-account.js";
 import {
   BillingConfigurationError,
@@ -20,6 +23,71 @@ import {
 export { SessionMemory, BillingAccount };
 
 const ACCOUNT_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const MAX_SAFETY_PRECLASSIFY_BYTES = 32_000;
+
+function latestUserText(body) {
+  const direct = String(body?.message || "").trim();
+  if (direct) return direct;
+
+  const messages = Array.isArray(body?.messages) ? body.messages : [];
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "user") {
+      return String(messages[index]?.content || "").trim();
+    }
+  }
+  return "";
+}
+
+async function hasDirectFixedSafetyRoute(request) {
+  const declaredLength = Number(request.headers.get("content-length") || 0);
+  if (
+    Number.isFinite(declaredLength) &&
+    declaredLength > MAX_SAFETY_PRECLASSIFY_BYTES
+  ) {
+    return false;
+  }
+
+  try {
+    const clone = request.clone();
+    if (!clone.body) return false;
+
+    const reader = clone.body.getReader();
+    const chunks = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > MAX_SAFETY_PRECLASSIFY_BYTES) {
+          void reader.cancel().catch(() => {});
+          return false;
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    const body = JSON.parse(new TextDecoder().decode(bytes) || "{}");
+    const text = latestUserText(body);
+    if (!text) return false;
+
+    const route = classifyInput(text, {
+      awaitingSafetyAnswer: body?.awaitingSafetyAnswer === true,
+    });
+    return Boolean(fixedReplyForRoute(route));
+  } catch {
+    // The core worker remains authoritative for malformed or unreadable input.
+    return false;
+  }
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -236,7 +304,11 @@ async function injectBillingPage(response, request, env, authSession, state, rec
 }
 
 async function rootResponse(request, env, ctx) {
-  const authSession = await readAuthSession(request, env);
+  const response = await originalWorker.fetch(request, env, ctx);
+  const authSession =
+    response.headers.get(ACCOUNT_STATE_HEADER) === "account"
+      ? await readAuthorizedAuthSession(request, env)
+      : null;
   const stub = billingStub(env, authSession?.accountKey);
   let state = await readBillingState(stub);
   let reconciled = false;
@@ -266,14 +338,13 @@ async function rootResponse(request, env, ctx) {
     }
   }
 
-  const response = await originalWorker.fetch(request, env, ctx);
   return injectBillingPage(response, request, env, authSession, state, reconciled);
 }
 
 async function checkoutResponse(request, env) {
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405);
   if (!sameOriginOrNonBrowser(request)) return jsonResponse({ error: "Cross-origin request rejected." }, 403);
-  const authSession = await readAuthSession(request, env);
+  const authSession = await readAuthorizedAuthSession(request, env);
   if (!authSession) return redirect("/auth/google", 303);
   const stub = billingStub(env, authSession.accountKey);
   const state = await readBillingState(stub);
@@ -286,7 +357,7 @@ async function checkoutResponse(request, env) {
 async function portalResponse(request, env) {
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405);
   if (!sameOriginOrNonBrowser(request)) return jsonResponse({ error: "Cross-origin request rejected." }, 403);
-  const authSession = await readAuthSession(request, env);
+  const authSession = await readAuthorizedAuthSession(request, env);
   if (!authSession) return redirect("/auth/google", 303);
   const state = await readBillingState(billingStub(env, authSession.accountKey));
   return redirect(await createPortalSession(env, state), 303);
@@ -295,7 +366,7 @@ async function portalResponse(request, env) {
 async function modelChoiceResponse(request, env) {
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405);
   if (!sameOriginOrNonBrowser(request)) return jsonResponse({ error: "Cross-origin request rejected." }, 403);
-  const authSession = await readAuthSession(request, env);
+  const authSession = await readAuthorizedAuthSession(request, env);
   if (!authSession) return redirect("/auth/google", 303);
   const form = await request.formData();
   const model = String(form.get("model") || "").trim();
@@ -319,7 +390,10 @@ async function webhookResponse(request, env) {
 
 async function paidChatResponse(request, env, ctx) {
   if (request.method !== "POST") return originalWorker.fetch(request, env, ctx);
-  const authSession = await readAuthSession(request, env);
+  if (await hasDirectFixedSafetyRoute(request)) {
+    return originalWorker.fetch(request, env, ctx);
+  }
+  const authSession = await readAuthorizedAuthSession(request, env);
   if (!authSession) return originalWorker.fetch(request, env, ctx);
   const stub = billingStub(env, authSession.accountKey);
   const state = await readBillingState(stub);

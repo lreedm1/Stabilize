@@ -37,8 +37,8 @@ test("stabilize.info is the canonical production domain", async () => {
   assert.match(router, /max-age=31536000; includeSubDomains/);
   assert.match(router, /return withStrictTransportSecurity\(response\)/);
   assert.match(router, /property === "PUBLIC_ORIGIN"/);
-  assert.match(router, /url\.pathname === "\/auth\/logout"/);
-  assert.match(router, /await signOut\(request, canonicalEnv\)/);
+  assert.match(router, /await worker\.fetch\(request, canonicalEnv, ctx\)/);
+  assert.doesNotMatch(router, /from "\.\/auth\.js"|await signOut\(/);
   assert.match(page, /const canonicalUrl = "https:\/\/stabilize\.info\/"/);
   assert.match(sitemap, /https:\/\/stabilize\.info\//);
   assert.match(sitemap, /https:\/\/stabilize\.info\/about\.html/);

@@ -4,7 +4,11 @@ import worker, {
   FeedbackInbox,
   SessionMemory,
 } from "./feedback-worker.js";
-import { googleAuthConfigured, readAuthSession } from "./auth.js";
+import { googleAuthConfigured } from "./auth.js";
+import {
+  ACCOUNT_STATE_HEADER,
+  readAuthorizedAuthSession,
+} from "./account-session.js";
 
 export { BillingAccount, FeedbackGate, FeedbackInbox, SessionMemory };
 
@@ -27,12 +31,12 @@ const PROMPT_MARKUP = `<aside
     type="button"
     aria-label="Keep chatting as a guest"
   >×</button>
-  <h2 id="guest-memory-prompt-title">Remember this conversation?</h2>
+  <h2 id="guest-memory-prompt-title">Remember future messages?</h2>
   <p id="guest-memory-prompt-description">
-    Stabilize only remembers chat context between visits when you sign in. You can keep chatting as a guest, but this conversation will not carry over.
+    Sign in before your next message to remember future context between visits. Messages already sent as a guest will not be added to account memory.
   </p>
   <div class="guest-memory-prompt-actions">
-    <a class="guest-memory-prompt-sign-in" href="/auth/google">Sign in to remember</a>
+    <a class="guest-memory-prompt-sign-in" href="/auth/google">Sign in for future messages</a>
     <button id="guest-memory-prompt-dismiss" type="button">Keep chatting as a guest</button>
   </div>
 </aside>`;
@@ -51,7 +55,11 @@ async function enhanceHomePage(response, request, env) {
     );
   }
 
-  const authSession = await readAuthSession(request, env);
+  const renderedAsAccount =
+    response.headers.get(ACCOUNT_STATE_HEADER) === "account";
+  const authSession = renderedAsAccount
+    ? await readAuthorizedAuthSession(request, env)
+    : null;
   if (!authSession && googleAuthConfigured(env)) {
     if (!html.includes('href="/guest-memory-prompt.css')) {
       html = html.replace(

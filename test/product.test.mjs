@@ -54,7 +54,7 @@ test("the homepage gives a short product promise", async () => {
 
   assert.match(pageSource, /Get unstuck\./);
   assert.match(pageSource, /Get one clear next step/);
-  assert.match(pageSource, /Guest chats aren't remembered/);
+  assert.match(pageSource, /Guest messages aren't saved as server memory/);
   assert.doesNotMatch(pageSource, /data-example-message=/);
   assert.doesNotMatch(pageSource, /example-starts/);
   assert.match(pageSource, /href="\/product\.css"/);
@@ -144,13 +144,15 @@ test("the homepage has no predefined prompt buttons", async () => {
   assert.match(clientScript, /form\.addEventListener\("submit"/);
 });
 
-test("the latest assistant answer persists within the current tab", async () => {
+test("only a guest tab persists the latest assistant answer", async () => {
   const [clientScript, privacyPage] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
     readFile(new URL("../public/privacy.html", import.meta.url), "utf8"),
   ]);
 
-  assert.match(clientScript, /LAST_ANSWER_STORAGE_KEY/);
+  assert.match(clientScript, /LAST_ANSWER_STORAGE_PREFIX/);
+  assert.match(clientScript, /LEGACY_LAST_ANSWER_STORAGE_KEY/);
+  assert.match(clientScript, /function continuityStorageKey/);
   assert.match(clientScript, /sessionStorage\.setItem/);
   assert.match(clientScript, /sessionStorage\.getItem/);
   assert.match(clientScript, /sessionStorage\.removeItem/);
@@ -158,12 +160,27 @@ test("the latest assistant answer persists within the current tab", async () => 
     clientScript,
     /persistLatestAnswer\(reply, route, needsSafetyAnswer\)/,
   );
+  assert.match(
+    clientScript,
+    /function persistLatestAnswer[\s\S]*?if \(continuityState\.mode !== "guest"\) return;/,
+  );
+  assert.match(
+    clientScript,
+    /function readPersistedAnswer[\s\S]*?if \(continuityState\.mode !== "guest"\)/,
+  );
   assert.match(clientScript, /restorePersistedAnswer\(\);/);
   assert.match(clientScript, /form\[action="\/auth\/logout"\]/);
+  assert.match(clientScript, /clearAllPersistedAnswers/);
+  assert.match(clientScript, /retireStalePersistedAnswers/);
+  assert.match(clientScript, /new BroadcastChannel\(CONTINUITY_CHANNEL_NAME\)/);
+  assert.match(clientScript, /continuity: continuityState/);
   assert.doesNotMatch(clientScript, /localStorage/);
   assert.match(privacyPage, /latest assistant reply/i);
   assert.match(privacyPage, /current browser tab/i);
-  assert.match(privacyPage, /user's prompt is not included/i);
+  assert.match(privacyPage, /prompt itself is\s+not included/i);
+  assert.match(privacyPage, /Signing in later affects future messages only/i);
+  assert.match(privacyPage, /Signed-in assistant replies are\s+not placed in the browser's 24-hour latest-reply cache/i);
+  assert.match(privacyPage, /OpenAI is used for stateless processing/i);
 });
 
 test("ordinary replies offer useful model follow-up actions", async () => {

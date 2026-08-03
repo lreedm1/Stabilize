@@ -9,18 +9,18 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - a Cloudflare Worker API
 - Worker-rendered HTML with static CSS and browser JavaScript
 - deterministic routes for immediate danger, possible overdose, unsafe shelter, and medication-change requests
-- OpenAI's Responses API for ordinary AI replies
+- OpenAI's Responses API for stateless reply generation
 - safe, local Markdown rendering for assistant replies
 - a fixed bottom text composer beneath one panel for the intro, thinking, and latest reply
 - a continuous, token-modulated forested lake valley at dawn generated locally from layered terrain noise
 - a self-hosted Lexend variable font
 - demo mode that works without an API key
-- optional Google sign-in for cross-device memory; guest chats are not stored
-- no full transcript database; account memory uses a rolling summary with a bounded recent-message buffer
+- optional Google sign-in for cross-device memory, feedback, and paid model choice; guest chats are not stored
+- no visible transcript archive; signed-in continuity uses a bounded Cloudflare Durable Object summary/recent buffer
 - safety and route tests
 - public-safe protocol background documents
 
-The language model is not the only safety layer. Urgent phrases are routed to fixed responses before model generation, and ordinary model calls use a 500-token generation budget plus a small final validation check. OpenAI counts hidden reasoning and formatting tokens inside that budget. Assistant Markdown is rendered locally with DOM nodes; raw HTML remains text and executable link schemes are rejected. These defenses are intentionally conservative, but they are not comprehensive and require independent review before a high-stakes public launch.
+The language model is not the only safety layer. Urgent phrases are routed to fixed responses before model generation, and ordinary model replies receive a small final validation check. Assistant Markdown is rendered locally with DOM nodes; raw HTML remains text and executable link schemes are rejected. These defenses are intentionally conservative, but they are not comprehensive and require independent review before a high-stakes public launch.
 
 ## Project map
 
@@ -43,7 +43,7 @@ All editable product language is in `src/copy.js`: the intro blurb, labels, butt
 
 ## Run locally
 
-Requirements: Node.js 20 or newer.
+Requirements: Node.js 22 or newer.
 
 ```bash
 npm install
@@ -55,11 +55,11 @@ Copy `.dev.vars.example` to `.dev.vars`, place an OpenAI API key in the local fi
 
 ## Enable OpenAI
 
-The default model is `gpt-5.6-sol` through OpenAI's Responses API, with medium reasoning effort, current-turn reasoning context, and `store: false`.
+The default model is `gpt-5.6-sol` through OpenAI's Responses API, with maximum supported reasoning effort and current-turn reasoning context. Guest, signed-in reply, and memory-compaction requests use `store: false`. Signed-in continuity is reconstructed from the account's bounded Durable Object context on each turn; the application does not create OpenAI Conversation containers.
 
 The same deployed OpenAI key also powers low-reasoning memory compaction for signed-in users. Guest requests do not enter the memory or compaction path.
 
-1. Use a project-scoped OpenAI API key with appropriate usage limits.
+1. Use a project-scoped OpenAI API key with appropriate usage limits and Responses API permission.
 2. For local development, copy `.dev.vars.example` to `.dev.vars` and place the key there.
 3. For a Cloudflare deployment, store the same key as a Worker runtime secret:
 
@@ -76,11 +76,11 @@ npm run deploy
 
 Never place the key in browser code, GitHub, `wrangler.jsonc`, or a Cloudflare plain-text variable. The browser calls the Worker, and only the Worker reads the secret at runtime. Rotate a key immediately if it is exposed, and set project-level spend limits before public use.
 
-To change the model without editing application code, update `OPENAI_MODEL` in `wrangler.jsonc`, rerun the tests, and validate the new model's behavior. `OPENAI_REASONING_EFFORT` accepts `none`, `low`, `medium`, `high`, or `xhigh` when the selected model supports that setting.
+To change the model without editing application code, update `OPENAI_MODEL` in `wrangler.jsonc`, rerun the tests, and validate the new model's behavior. `OPENAI_REASONING_EFFORT` accepts `none`, `low`, `medium`, `high`, `xhigh`, or `max`; the Worker reduces unsupported high settings for older models.
 
 ## Enable Google sign-in
 
-Google sign-in is optional for chatting and required only for remembered context. Guests receive the same current-turn chat and deterministic safety routing without a server-side session.
+Google sign-in is optional for basic chatting. It is required for remembered context, feedback submission, billing, and paid model choice. Guests receive the same current-turn chat and deterministic safety routing without a server-side session.
 
 1. In Google Cloud, configure the OAuth consent screen and create an OAuth client with application type **Web application**.
 2. Add each exact production callback as an authorized redirect URI, for example:
@@ -98,14 +98,16 @@ npx wrangler secret put GOOGLE_CLIENT_SECRET
 npx wrangler secret put PUBLIC_ORIGIN
 ```
 
-4. Generate a separate long random signing secret and store it once:
+4. Generate separate long random secrets for stable account aliases and rotatable session signing:
 
 ```bash
 openssl rand -base64 32
 npx wrangler secret put AUTH_SECRET
+openssl rand -base64 32
+npx wrangler secret put SESSION_SECRET
 ```
 
-Do not reuse the OpenAI key or Google client secret as `AUTH_SECRET`. Rotating `AUTH_SECRET` signs everyone out and changes the one-way account aliases, so existing remembered context becomes inaccessible.
+Do not reuse the OpenAI key or Google client secret for either value. Both secrets are required. Keep `AUTH_SECRET` stable because rotating it changes one-way account aliases and makes prior account state inaccessible. Rotate `SESSION_SECRET` when you need to revoke sign-in cookies without changing those aliases. Legacy cookies signed with `AUTH_SECRET` have a fixed rollout cutoff and sunset after their original 30-day lifetime.
 
 Set `PUBLIC_ORIGIN` to the exact canonical origin, such as `https://your-domain.example`, with no path. A trailing slash is harmless and normalized. It is not sensitive, but this project declares it with the required deployment values so every release uses the same callback origin. Requests that begin sign-in on another Worker hostname are redirected to the canonical origin. The authorized Google callback must match it exactly.
 
@@ -135,11 +137,11 @@ See `SECURITY.md`, `PRIVACY.md`, and `RESPONSIBLE_USE.md`.
 
 ## Privacy behavior
 
-Guest chats create no server-side memory. After Google sign-in, the Worker derives a one-way alias from Google's stable account identifier and uses that alias to address one Durable Object. The signed `HttpOnly` cookie contains the alias and expiry—not an email, Google token, raw Google identifier, network address, or conversation. The object retains a rolling summary plus at most eight newest messages awaiting compaction and deletes the record 30 days after the last stored exchange.
+Guest chats create no server-side conversation memory and use `store: false`; the current tab can keep only the latest assistant reply for up to 24 hours. After Google sign-in, the Worker derives a one-way alias from Google's stable account identifier and uses it to address one Durable Object. The signed `HttpOnly` cookie contains the alias, issue/expiry times, and a random session nonce—not an email, Google token, raw Google identifier, network address, or conversation. Signed-in continuity uses a bounded local summary/recent buffer. That text expires 30 days after the last committed exchange, and users can delete it from the account menu. Deletion also advances an account-session watermark so pre-deletion cookies cannot recreate or access the erased memory.
 
 The landscape animation tokenizes submitted prompts and displayed replies locally, immediately reduces them to numeric climate and motion signals, and does not add message text to animation storage, requests, or logs. Reduced-motion preferences receive a static landscape.
 
-The application never reads `CF-Connecting-IP`, derives network aliases, or includes account/network identifiers in successful-chat logs. Both reply and summary requests use OpenAI with `store: false`. Google, Cloudflare, OpenAI, and network infrastructure may still process request data and metadata under their applicable terms. See `PRIVACY.md` for the complete implementation-level description and limitations.
+The application never reads `CF-Connecting-IP`, derives network aliases, or includes account/network identifiers in successful-chat logs. Summary requests, guest replies, and signed-in replies use OpenAI with `store: false`; the application does not create provider-side Conversation containers for continuity. Google, Cloudflare, OpenAI, and network infrastructure may still process request data and metadata under their applicable terms. See `PRIVACY.md` and `docs/ACCOUNT_MEMORY.md` for the complete implementation-level description and limitations.
 
 ## License
 

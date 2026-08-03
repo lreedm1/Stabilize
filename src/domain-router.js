@@ -4,7 +4,8 @@ import worker, {
   FeedbackInbox,
   SessionMemory,
 } from "./memory-prompt-worker.js";
-import { signOut } from "./auth.js";
+import { captureRequestStartedAt } from "./request-timing.js";
+import { ACCOUNT_STATE_HEADER } from "./account-session.js";
 
 export { BillingAccount, FeedbackGate, FeedbackInbox, SessionMemory };
 
@@ -36,6 +37,7 @@ function redirectToCanonical(request) {
 
 function withStrictTransportSecurity(response) {
   const headers = new Headers(response.headers);
+  headers.delete(ACCOUNT_STATE_HEADER);
   headers.set("Strict-Transport-Security", HSTS_VALUE);
   return new Response(response.body, {
     status: response.status,
@@ -55,6 +57,7 @@ function canonicalEnvironment(env) {
 
 export default {
   async fetch(request, env, ctx) {
+    captureRequestStartedAt(request);
     const url = new URL(request.url);
     const hostname = url.hostname.toLowerCase();
     if (url.protocol !== "https:" || REDIRECT_HOSTS.has(hostname)) {
@@ -62,13 +65,7 @@ export default {
     }
 
     const canonicalEnv = canonicalEnvironment(env);
-    // Logout only expires cookies in the current browser. Handle it before the
-    // inner same-origin check because iOS and embedded browsers can submit an
-    // opaque Origin header (`Origin: null`).
-    const response =
-      url.pathname === "/auth/logout" && request.method === "POST"
-        ? await signOut(request, canonicalEnv)
-        : await worker.fetch(request, canonicalEnv, ctx);
+    const response = await worker.fetch(request, canonicalEnv, ctx);
 
     return withStrictTransportSecurity(response);
   },

@@ -1,5 +1,8 @@
 import paidWorker, { BillingAccount, SessionMemory } from "./paid-worker.js";
-import { readAuthSession } from "./auth.js";
+import {
+  ACCOUNT_STATE_HEADER,
+  readAuthorizedAuthSession,
+} from "./account-session.js";
 import { FeedbackGate } from "./feedback-gate.js";
 import { FeedbackInbox } from "./feedback-inbox.js";
 import {
@@ -219,8 +222,11 @@ async function injectFeedbackPage(response, request, env, authSession) {
 }
 
 async function rootResponse(request, env, ctx) {
-  const authSession = await readAuthSession(request, env);
   const response = await paidWorker.fetch(request, env, ctx);
+  const authSession =
+    response.headers.get(ACCOUNT_STATE_HEADER) === "account"
+      ? await readAuthorizedAuthSession(request, env)
+      : null;
   return injectFeedbackPage(response, request, env, authSession);
 }
 
@@ -235,7 +241,7 @@ async function feedbackResponse(request, env) {
     throw new FeedbackConfigurationError();
   }
 
-  const authSession = await readAuthSession(request, env);
+  const authSession = await readAuthorizedAuthSession(request, env);
   if (!authSession) return redirect("/auth/google");
 
   const form = await readBoundedForm(request);

@@ -3,11 +3,16 @@ import assert from "node:assert/strict";
 import {
   AUTH_COOKIE_NAME,
   GoogleAuthConfigurationError,
+  MEMORY_DELETION_COOKIE_NAME,
   beginGoogleSignIn,
   completeGoogleSignIn,
   createAuthSessionTokenForGoogleSubject,
+  createMemoryDeletionReceiptCookie,
   googleAuthConfigured,
   readAuthSession,
+  readMemoryDeletionReceipt,
+  refreshLegacyAuthSession,
+  rotateAuthSession,
   signOut,
 } from "../src/auth.js";
 
@@ -19,6 +24,7 @@ function createEnv(overrides = {}) {
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: "test-google-client-secret",
     AUTH_SECRET: "test-auth-secret-with-at-least-thirty-two-characters",
+    SESSION_SECRET: "test-session-secret-with-at-least-thirty-two-characters",
     PUBLIC_ORIGIN: "https://stabilize.test",
     ...overrides,
   };
@@ -44,6 +50,32 @@ function encodeJwtPart(value) {
 
 function fakeIdToken(payload) {
   return `${encodeJwtPart({ alg: "RS256", typ: "JWT" })}.${encodeJwtPart(payload)}.signature`;
+}
+
+function base64UrlBytes(bytes) {
+  let binary = "";
+  for (const byte of new Uint8Array(bytes)) binary += String.fromCharCode(byte);
+  return btoa(binary)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/u, "");
+}
+
+async function legacyAuthToken(payload, secret) {
+  const encoded = encodeJwtPart(payload);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(`stabilize:auth-session:v1\u0000${encoded}`),
+  );
+  return `${encoded}.${base64UrlBytes(signature)}`;
 }
 
 test("Google sign-in starts with state, nonce, PKCE, and a protected cookie", async () => {
@@ -158,6 +190,7 @@ test("the callback exchanges the code and creates an account session", async () 
     assert.match(setCookie, /stabilize_session=;/);
     assert.ok(session);
     assert.match(session.accountKey, /^[A-Za-z0-9_-]{43}$/);
+    assert.match(session.continuityToken, /^[A-Za-z0-9_-]{43}$/);
     assert.doesNotMatch(setCookie, /google-account-123|transient-access-token/);
   } finally {
     globalThis.fetch = originalFetch;
@@ -288,6 +321,212 @@ test("Google subjects resolve to stable, isolated memory identities", async () =
   assert.ok(other);
   assert.equal(first.accountKey, second.accountKey);
   assert.notEqual(first.accountKey, other.accountKey);
+  assert.notEqual(first.continuityToken, second.continuityToken);
+});
+
+test("session-key rotation revokes cookies without changing account identity", async () => {
+  const before = createEnv({
+    SESSION_SECRET: "before-rotation-session-secret-with-thirty-two-characters",
+  });
+  const after = createEnv({
+    SESSION_SECRET: "after-rotation-session-secret-with-thirty-two-characters",
+  });
+  const subject = "stable-across-cookie-key-rotation";
+  const beforeToken = await createAuthSessionTokenForGoogleSubject(subject, before);
+  const afterToken = await createAuthSessionTokenForGoogleSubject(subject, after);
+  const cookieRequest = (token) =>
+    new Request("https://stabilize.test/", {
+      headers: { Cookie: `${AUTH_COOKIE_NAME}=${token}` },
+    });
+
+  const beforeSession = await readAuthSession(cookieRequest(beforeToken), before);
+  const afterSession = await readAuthSession(cookieRequest(afterToken), after);
+
+  assert.equal(await readAuthSession(cookieRequest(beforeToken), after), null);
+  assert.equal(beforeSession.accountKey, afterSession.accountKey);
+  assert.notEqual(beforeSession.continuityToken, afterSession.continuityToken);
+  assert.equal(googleAuthConfigured(createEnv({ SESSION_SECRET: "" })), false);
+  assert.equal(
+    googleAuthConfigured(
+      createEnv({
+        SESSION_SECRET:
+          "test-auth-secret-with-at-least-thirty-two-characters",
+      }),
+    ),
+    false,
+  );
+});
+
+test("legacy v1 auth cookies have a fixed issuance cutoff and sunset", async () => {
+  const env = createEnv();
+  const sessionSeconds = 30 * 24 * 60 * 60;
+  const cutoff = Math.floor(Date.parse("2026-08-04T00:00:00Z") / 1_000);
+  const cookieRequest = (token) =>
+    new Request("https://stabilize.test/", {
+      headers: { Cookie: `${AUTH_COOKIE_NAME}=${token}` },
+    });
+
+  const issuedBefore = cutoff - 60;
+  const accepted = await legacyAuthToken(
+    {
+      v: 1,
+      a: "A".repeat(43),
+      iat: issuedBefore,
+      exp: issuedBefore + sessionSeconds,
+    },
+    env.AUTH_SECRET,
+  );
+  const issuedAtCutoff = cutoff;
+  const rejectedAtCutoff = await legacyAuthToken(
+    {
+      v: 1,
+      a: "B".repeat(43),
+      iat: issuedAtCutoff,
+      exp: issuedAtCutoff + sessionSeconds,
+    },
+    env.AUTH_SECRET,
+  );
+
+  assert.ok(
+    await readAuthSession(
+      cookieRequest(accepted),
+      env,
+      (issuedBefore + 1) * 1_000,
+    ),
+  );
+  assert.equal(
+    await readAuthSession(
+      cookieRequest(rejectedAtCutoff),
+      env,
+      (issuedAtCutoff + 1) * 1_000,
+    ),
+    null,
+  );
+
+  const acceptedSession = await readAuthSession(
+    cookieRequest(accepted),
+    env,
+    (issuedBefore + 1) * 1_000,
+  );
+  assert.equal(acceptedSession.needsRefresh, true);
+  assert.equal(
+    await readAuthSession(
+      cookieRequest(accepted),
+      env,
+      (issuedBefore + sessionSeconds) * 1_000,
+    ),
+    null,
+  );
+
+  const refreshed = await refreshLegacyAuthSession(
+    cookieRequest(accepted),
+    env,
+    acceptedSession,
+    (issuedBefore + 1) * 1_000,
+  );
+  const refreshedCookie = cookiePair(refreshed.setCookie, AUTH_COOKIE_NAME);
+  const refreshedSession = await readAuthSession(
+    cookieRequest(refreshedCookie.split("=")[1]),
+    env,
+    (issuedBefore + 2) * 1_000,
+  );
+  assert.equal(refreshedSession.accountKey, acceptedSession.accountKey);
+  assert.notEqual(
+    refreshedSession.continuityToken,
+    acceptedSession.continuityToken,
+  );
+  assert.equal(refreshedSession.expiresAt, acceptedSession.expiresAt);
+  assert.equal(refreshedSession.needsRefresh, false);
+});
+
+test("rotating an account session preserves identity and changes continuity", async () => {
+  const env = createEnv();
+  const now = Date.parse("2026-08-03T20:00:00Z");
+  const token = await createAuthSessionTokenForGoogleSubject(
+    "rotation-account",
+    env,
+    now,
+  );
+  const request = new Request("https://stabilize.test/", {
+    headers: { Cookie: `${AUTH_COOKIE_NAME}=${token}` },
+  });
+  const original = await readAuthSession(request, env, now);
+  const rotated = await rotateAuthSession(request, env, original, now + 1_000);
+  const rotatedCookie = cookiePair(rotated.setCookie, AUTH_COOKIE_NAME);
+  const replacement = await readAuthSession(
+    new Request("https://stabilize.test/", {
+      headers: { Cookie: rotatedCookie },
+    }),
+    env,
+    now + 1_000,
+  );
+
+  assert.equal(replacement.accountKey, original.accountKey);
+  assert.notEqual(replacement.continuityToken, original.continuityToken);
+  assert.equal(replacement.needsRefresh, false);
+  assert.match(rotated.setCookie, /HttpOnly/);
+  assert.match(rotated.setCookie, /SameSite=Lax/);
+});
+
+test("memory-deletion receipts are short-lived and account-bound", async () => {
+  const env = createEnv();
+  const now = Date.parse("2026-08-03T20:00:00Z");
+  const token = await createAuthSessionTokenForGoogleSubject(
+    "deletion-receipt-account",
+    env,
+    now,
+  );
+  const authCookie = `${AUTH_COOKIE_NAME}=${token}`;
+  const authSession = await readAuthSession(
+    new Request("https://stabilize.test/", {
+      headers: { Cookie: authCookie },
+    }),
+    env,
+    now,
+  );
+  const setCookie = await createMemoryDeletionReceiptCookie(
+    new Request("https://stabilize.test/account/memory/delete"),
+    authSession,
+    env,
+    now,
+  );
+  const receiptCookie = cookiePair(setCookie, MEMORY_DELETION_COOKIE_NAME);
+  const receiptRequest = new Request("https://stabilize.test/", {
+    headers: { Cookie: `${authCookie}; ${receiptCookie}` },
+  });
+  const otherToken = await createAuthSessionTokenForGoogleSubject(
+    "different-deletion-account",
+    env,
+    now,
+  );
+  const otherSession = await readAuthSession(
+    new Request("https://stabilize.test/", {
+      headers: { Cookie: `${AUTH_COOKIE_NAME}=${otherToken}` },
+    }),
+    env,
+    now,
+  );
+
+  assert.equal(
+    await readMemoryDeletionReceipt(receiptRequest, authSession, env, now),
+    true,
+  );
+  assert.equal(
+    await readMemoryDeletionReceipt(receiptRequest, otherSession, env, now),
+    false,
+  );
+  assert.equal(
+    await readMemoryDeletionReceipt(
+      receiptRequest,
+      authSession,
+      env,
+      now + 5 * 60 * 1_000,
+    ),
+    false,
+  );
+  assert.match(setCookie, /HttpOnly/);
+  assert.match(setCookie, /SameSite=Strict/);
+  assert.match(setCookie, /Max-Age=300/);
 });
 
 test("tampered sessions are rejected and sign-out clears both cookie formats", async () => {

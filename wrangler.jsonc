@@ -52,7 +52,8 @@
       "OPENAI_API_KEY",
       "GOOGLE_CLIENT_ID",
       "GOOGLE_CLIENT_SECRET",
-      "AUTH_SECRET"
+      "AUTH_SECRET",
+      "SESSION_SECRET"
     ]
   },
   "observability": {
