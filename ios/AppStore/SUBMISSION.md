@@ -26,10 +26,12 @@
 6. Complete App Privacy answers to match `privacy.html` and the implementation. User-entered text is transmitted for app functionality, is not used for tracking, and is not linked to an in-app identity in version 1.
 7. Answer export compliance: the app uses only Apple's standard HTTPS networking and declares `ITSAppUsesNonExemptEncryption = NO`.
 8. Choose Lifestyle as the primary category. Avoid medical-device, therapy, diagnosis, or suicide-prevention outcome claims.
-9. Capture at least one real iPhone screenshot. Recommended: three portrait screenshots at an accepted 6.9-inch size, showing:
+9. Capture at least one accepted iPhone screenshot. Recommended: three portrait screenshots at an accepted 6.9-inch size, showing:
    - the starter screen;
    - a normal floor-first reply;
-   - an urgent response with 988/911 actions (using the deterministic `--ui-testing` app mode, not a real person's data).
+   - an urgent response with 988/911 actions.
+
+   For deterministic screenshot data, launch with `--ui-testing`. Enter `Review safety check`, send it, then enter `Unsure` to reach the urgent screen without using a real person's information.
 10. In Xcode, select the developer team, archive with Xcode 26+, upload to App Store Connect, and test through TestFlight.
 11. Keep `https://stabilize.info`, `privacy.html`, `safety.html`, `support.html`, and the API live during App Review.
 12. Paste the prepared review notes and submit manually only after an on-device safety and accessibility check.
