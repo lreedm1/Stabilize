@@ -41,6 +41,7 @@ test("stabilize.info is the canonical production domain", async () => {
   assert.match(router, /await signOut\(request, canonicalEnv\)/);
   assert.match(page, /const canonicalUrl = "https:\/\/stabilize\.info\/"/);
   assert.match(sitemap, /https:\/\/stabilize\.info\//);
+  assert.match(sitemap, /https:\/\/stabilize\.info\/about\.html/);
   assert.doesNotMatch(sitemap, /reedlokken\.com/);
   assert.match(robots, /Sitemap: https:\/\/stabilize\.info\/sitemap\.xml/);
   assert.match(workflow, /https:\/\/stabilize\.info\/api\/auth/);
@@ -49,6 +50,7 @@ test("stabilize.info is the canonical production domain", async () => {
 
 test("all public guide pages use stabilize.info canonicals", async () => {
   const pages = await Promise.all([
+    repositoryFile("public/about.html"),
     repositoryFile("public/how-it-works.html"),
     repositoryFile("public/floor-first.html"),
     repositoryFile("public/safety.html"),
@@ -58,5 +60,30 @@ test("all public guide pages use stabilize.info canonicals", async () => {
   for (const page of pages) {
     assert.match(page, /rel="canonical" href="https:\/\/stabilize\.info\//);
     assert.doesNotMatch(page, /rel="canonical" href="https:\/\/reedlokken\.com\//);
+  }
+});
+
+test("the About page preserves the project's origin and limits", async () => {
+  const [about, enhancer, howItWorks, floorFirst, safety, privacy] =
+    await Promise.all([
+      repositoryFile("public/about.html"),
+      repositoryFile("src/memory-prompt-worker.js"),
+      repositoryFile("public/how-it-works.html"),
+      repositoryFile("public/floor-first.html"),
+      repositoryFile("public/safety.html"),
+      repositoryFile("public/privacy.html"),
+    ]);
+
+  assert.match(about, /I am a suicide survivor/i);
+  assert.match(about, /metaphorical next person/i);
+  assert.match(about, /find meaning in continuing to live/i);
+  assert.match(about, /reducing the risk of foreseeable tragedy/i);
+  assert.match(about, /brings attention to our neglected needs/i);
+  assert.match(about, /preserve agency/i);
+  assert.match(about, /not emergency care/i);
+  assert.match(enhancer, /href=\"\/about\.html\"/);
+
+  for (const page of [howItWorks, floorFirst, safety, privacy]) {
+    assert.match(page, /href="\/about\.html">About<\/a>/);
   }
 });
