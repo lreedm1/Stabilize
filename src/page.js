@@ -146,6 +146,7 @@ export function renderPage(options = {}) {
       class="photo-backdrop"
       aria-hidden="true"
     >
+      <!-- Retired responsive references: lake-valley-portrait-720.webp 720w; lake-valley-portrait-2160.webp 2160w -->
       <source
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
