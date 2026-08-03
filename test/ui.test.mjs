@@ -44,7 +44,10 @@ test("thinking is replaced with the latest Markdown reply", async () => {
   assert.match(clientScript, /function showOutput[\s\S]*chatLog\.replaceChildren\(\)/);
   assert.match(clientScript, /showOutput\(copy\.thinking, "thinking-output", "thinking"\)/);
   assert.match(clientScript, /article\.appendChild\(renderMarkdown\(content\)\)/);
-  assert.match(clientScript, /JSON\.stringify\(\{ message: clean, awaitingSafetyAnswer \}\)/);
+  assert.match(
+    clientScript,
+    /awaitingSafetyAnswer: currentAwaitingSafetyAnswer\(\)/,
+  );
   assert.match(clientScript, /function requestErrorMessage/);
   assert.match(clientScript, /input\.value = clean/);
   assert.match(clientScript, /result\.reference/);
