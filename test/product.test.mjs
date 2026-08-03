@@ -55,7 +55,8 @@ test("the homepage gives a short product promise", async () => {
   assert.match(pageSource, /Get unstuck\./);
   assert.match(pageSource, /Get one clear next step/);
   assert.match(pageSource, /Guest chats aren't remembered/);
-  assert.match(pageSource, /data-example-message=/);
+  assert.doesNotMatch(pageSource, /data-example-message=/);
+  assert.doesNotMatch(pageSource, /example-starts/);
   assert.match(pageSource, /href="\/product\.css"/);
   assert.match(pageSource, /href="\/photo-tuning\.css\?v=20260802-8"/);
   assert.doesNotMatch(pageSource, /how-it-works-strip/);
@@ -64,7 +65,6 @@ test("the homepage gives a short product promise", async () => {
     productStyles,
     /\.product-intro\s*{[\s\S]*max-height:\s*100%;[\s\S]*overflow-y:\s*auto;/,
   );
-  assert.match(productStyles, /\.example-start/);
   assert.match(
     seoStyles,
     /\.seo-intro\s*{[\s\S]*background:\s*rgba\(255,\s*252,\s*242,\s*0\.54\)/,
@@ -131,21 +131,17 @@ test("photos preserve screen proportion and use a calm mobile treatment", async 
   assert.match(tuningStyles, /rgba\(5, 55, 29, 0\.1\)/);
 });
 
-test("example starts submit their prompt immediately", async () => {
-  const clientScript = await readFile(
-    new URL("../public/app.js", import.meta.url),
-    "utf8",
-  );
+test("the homepage has no predefined prompt buttons", async () => {
+  const [pageSource, clientScript] = await Promise.all([
+    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+  ]);
 
-  assert.match(clientScript, /querySelectorAll\("\[data-example-message\]"\)/);
-  assert.match(
-    clientScript,
-    /void sendMessage\(button\.dataset\.exampleMessage \|\| ""\)/,
-  );
-  assert.doesNotMatch(
-    clientScript,
-    /input\.value = button\.dataset\.exampleMessage/,
-  );
+  assert.doesNotMatch(pageSource, /data-example-message=/);
+  assert.doesNotMatch(pageSource, /class="example-start"/);
+  assert.match(pageSource, /id="message-input"/);
+  assert.match(pageSource, /id="send-button"/);
+  assert.match(clientScript, /form\.addEventListener\("submit"/);
 });
 
 test("the latest assistant answer persists within the current tab", async () => {
