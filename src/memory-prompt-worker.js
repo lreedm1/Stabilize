@@ -10,6 +10,7 @@ export { BillingAccount, FeedbackGate, FeedbackInbox, SessionMemory };
 
 const MOBILE_QUALITY_LEGACY = "/mobile-quality.js?v=20260802-6";
 const MOBILE_QUALITY_CURRENT = "/mobile-quality.js?v=20260802-7";
+const ABOUT_LINK = '<a href="/about.html">About</a>';
 
 const PROMPT_MARKUP = `<aside
   id="guest-memory-prompt"
@@ -43,6 +44,12 @@ async function enhanceHomePage(response, request, env) {
 
   let html = await response.text();
   html = html.replace(MOBILE_QUALITY_LEGACY, MOBILE_QUALITY_CURRENT);
+  if (!html.includes('href="/about.html"')) {
+    html = html.replace(
+      '<a href="/how-it-works.html">How it works</a>',
+      `${ABOUT_LINK}\n                <a href="/how-it-works.html">How it works</a>`,
+    );
+  }
 
   const authSession = await readAuthSession(request, env);
   if (!authSession && googleAuthConfigured(env)) {
