@@ -12,19 +12,29 @@ const imageUrl = new URL(
   import.meta.url,
 );
 
-function webpDimensions(buffer) {
+function assertWebpSignature(buffer) {
   if (
+    buffer.byteLength < 12 ||
     buffer.subarray(0, 4).toString("ascii") !== "RIFF" ||
     buffer.subarray(8, 12).toString("ascii") !== "WEBP"
   ) {
     throw new Error("Decoded mobile background is not a WebP image");
   }
+}
+
+function webpDimensions(buffer) {
+  assertWebpSignature(buffer);
 
   let offset = 12;
   while (offset + 8 <= buffer.length) {
     const type = buffer.subarray(offset, offset + 4).toString("ascii");
     const size = buffer.readUInt32LE(offset + 4);
     const data = offset + 8;
+    const nextOffset = data + size + (size % 2);
+
+    if (nextOffset > buffer.length) {
+      throw new Error(`Truncated WebP chunk: ${type}`);
+    }
 
     if (type === "VP8X" && data + 10 <= buffer.length) {
       return {
@@ -54,28 +64,36 @@ function webpDimensions(buffer) {
       };
     }
 
-    offset = data + size + (size % 2);
+    offset = nextOffset;
   }
 
   throw new Error("Decoded mobile background has no readable WebP dimensions");
 }
 
 const encoded = (await readFile(sourceUrl, "utf8")).replace(/\s+/g, "");
-const image = Buffer.from(encoded, "base64");
-const normalizedInput = encoded.replace(/=+$/, "");
-const normalizedOutput = image.toString("base64").replace(/=+$/, "");
-if (normalizedInput !== normalizedOutput) {
-  throw new Error("Mobile background source is not valid base64");
+const decoded = Buffer.from(encoded, "base64");
+assertWebpSignature(decoded);
+
+// The GitHub text transport can leave harmless non-base64 suffix bytes in the
+// encoded source. RIFF carries the canonical file length, so retain exactly the
+// declared WebP payload and reject either truncation or an implausible size.
+const declaredLength = decoded.readUInt32LE(4) + 8;
+if (declaredLength < 100_000 || declaredLength > 5_000_000) {
+  throw new Error(`Unexpected declared mobile background size: ${declaredLength} bytes`);
 }
+if (decoded.byteLength < declaredLength) {
+  throw new Error(
+    `Truncated mobile background: expected ${declaredLength} bytes, received ${decoded.byteLength}`,
+  );
+}
+const image = decoded.subarray(0, declaredLength);
+assertWebpSignature(image);
 
 const dimensions = webpDimensions(image);
 if (dimensions.width !== 853 || dimensions.height !== 1844) {
   throw new Error(
     `Unexpected mobile background dimensions: ${dimensions.width}x${dimensions.height}`,
   );
-}
-if (image.byteLength < 100_000 || image.byteLength > 5_000_000) {
-  throw new Error(`Unexpected mobile background size: ${image.byteLength} bytes`);
 }
 await writeFile(imageUrl, image);
 
