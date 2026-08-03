@@ -1,0 +1,55 @@
+name: Generate mobile woodland background
+
+on:
+  push:
+    branches:
+      - agent/mobile-woodland-spring-webp
+    paths:
+      - scripts/generate-mobile-woodland.py
+      - .github/workflows/generate-mobile-woodland.yml
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install image dependencies
+        run: python -m pip install --disable-pip-version-check pillow numpy
+
+      - name: Download licensed woodland source
+        run: |
+          curl --fail --location --retry 3 \
+            'https://images.unsplash.com/photo-1771178270491-dc8102689e43?auto=format&fit=crop&fm=jpg&q=90&w=1800' \
+            --output /tmp/woodland-source.jpg
+
+      - name: Generate looping WebP and still fallback
+        run: |
+          python scripts/generate-mobile-woodland.py \
+            /tmp/woodland-source.jpg \
+            public/scenes/mobile-woodland-spring-loop.webp \
+            public/scenes/mobile-woodland-spring-still.webp
+
+      - name: Commit generated assets
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            public/scenes/mobile-woodland-spring-loop.webp \
+            public/scenes/mobile-woodland-spring-still.webp
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Add animated woodland spring assets'
+          git push origin HEAD:${{ github.ref_name }}
