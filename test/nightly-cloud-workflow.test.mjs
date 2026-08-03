@@ -37,8 +37,26 @@ test("nightly workflow pins actions and isolates credentials by job", () => {
   const verify = jobSection(workflow, "verify", "publish");
   const publish = jobSection(workflow, "publish", "acknowledge");
   const acknowledge = jobSection(workflow, "acknowledge");
-  assert.equal((workflow.match(/secrets\.OPENAI_API_KEY/g) || []).length, 1);
+  assert.equal((workflow.match(/secrets\.OPENAI_API_KEY/g) || []).length, 2);
+  assert.equal(
+    (workflow.match(/\$\{\{ secrets\.OPENAI_API_KEY \}\}/g) || []).length,
+    1,
+  );
+  assert.match(
+    prepare,
+    /OPENAI_API_KEY_CONFIGURED: \$\{\{ secrets\.OPENAI_API_KEY != '' \}\}/,
+  );
+  assert.match(prepare, /Missing repository Actions secret/);
+  assert.ok(
+    prepare.indexOf("Require the repository OpenAI API key") <
+      prepare.indexOf("Start the protected Codex API proxy"),
+  );
+  assert.ok(
+    prepare.indexOf("Require the repository OpenAI API key") <
+      prepare.indexOf("Check out bounded durable state without credentials"),
+  );
   assert.match(prepare, /openai-api-key: \$\{\{ secrets\.OPENAI_API_KEY \}\}/);
+  assert.doesNotMatch(prepare, /OPENAI_API_KEY:\s*\$\{\{ secrets\.OPENAI_API_KEY \}\}/);
   for (const section of [verify, publish, acknowledge]) {
     assert.doesNotMatch(section, /OPENAI_API_KEY|secrets\./);
   }
