@@ -65,6 +65,17 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Require the repository OpenAI API key
+        shell: bash
+        env:
+          OPENAI_API_KEY_CONFIGURED: ${{ secrets.OPENAI_API_KEY != '' }}
+        run: |
+          set -euo pipefail
+          if [[ "$OPENAI_API_KEY_CONFIGURED" != "true" ]]; then
+            echo "::error title=Missing repository Actions secret::OPENAI_API_KEY is not configured under Settings > Secrets and variables > Actions. Add or re-save it, then rerun this workflow."
+            exit 1
+          fi
+
       - name: Check out bounded durable state without credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
