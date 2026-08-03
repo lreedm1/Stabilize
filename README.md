@@ -32,7 +32,7 @@ The language model is not the only safety layer. Urgent phrases are routed to fi
 | `src/index.js` | Cloudflare Worker routes, OpenAI call, and account-memory routing |
 | `src/auth.js` | Google OpenID Connect flow and signed account session |
 | `src/session-memory.js` | Per-account Durable Object memory, expiry, and compaction state |
-| `public/` | Static CSS, browser JavaScript, terrain renderer, safe Markdown renderer, Lexend font, and asset security headers |
+| `public/` | Static CSS, browser JavaScript, public privacy/support pages, terrain renderer, safe Markdown renderer, Lexend font, and asset security headers |
 | `test/` | Deterministic router and Worker endpoint tests |
 | `docs/` | Public-safe background material for the protocol |
 | `wrangler.jsonc` | Cloudflare configuration and non-secret model settings |
@@ -124,7 +124,7 @@ Before a broad public launch, add or verify:
 - independent clinical, crisis-response, privacy, and security review
 - Cloudflare rate limiting or WAF rules for `/api/chat`
 - a much larger adversarial and multilingual test set
-- monitoring that never records prompt bodies
+- if persistent monitoring is re-enabled, a reviewed design that never records prompt bodies or sensitive request metadata
 - a production privacy policy and terms matching the real deployment
 - verified crisis and basic-needs resources for every supported location
 - OAuth consent-screen, redirect-URI, cookie, and account-recovery review
@@ -140,6 +140,10 @@ Guest chats create no server-side memory. After Google sign-in, the Worker deriv
 The landscape animation tokenizes submitted prompts and displayed replies locally, immediately reduces them to numeric climate and motion signals, and does not add message text to animation storage, requests, or logs. Reduced-motion preferences receive a static landscape.
 
 The application never reads `CF-Connecting-IP`, derives network aliases, or includes account/network identifiers in successful-chat logs. Both reply and summary requests use OpenAI with `store: false`. Google, Cloudflare, OpenAI, and network infrastructure may still process request data and metadata under their applicable terms. See `PRIVACY.md` for the complete implementation-level description and limitations.
+
+The native iOS app is guest-only, keeps its visible conversation only while open, and asks for permission before a first message can be shared through Stabilize with OpenAI. Users can revoke future AI sharing under **About → AI sharing permission**; revocation does not recall messages already sent.
+
+The checked-in Worker configuration disables Workers observability persistence, invocation logs, traces, telemetry destinations, and Trace Events Logpush. Cloudflare still processes the network request, and separate real-time, account-level, or zone-level products must be reviewed before deployment. Privacy questions and deletion requests use the monitored support path at `https://stabilize.info/support.html`.
 
 ## License
 

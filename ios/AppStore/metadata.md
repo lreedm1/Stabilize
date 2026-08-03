@@ -15,7 +15,7 @@
 ## URLs
 
 - Privacy policy: `https://stabilize.info/privacy.html`
-- Support: `https://github.com/lreedm1/Stabilize/issues`
+- Support: `https://stabilize.info/support.html`
 - Marketing: `https://stabilize.info`
 
 ## Localized listing (English, U.S.)
@@ -37,7 +37,7 @@ Stabilize can help you:
 - identify a practical next action
 - find immediate U.S. crisis and emergency contact options when the situation may be urgent
 
-Guest conversations are not saved on your device or remembered by the Stabilize server. Messages are transmitted to Stabilize's Cloudflare-hosted service and processed by OpenAI to generate a response. Review the privacy policy for provider-processing details.
+Guest conversations are not saved on your device or remembered by the Stabilize server. Before the first send, the app asks permission to share messages through Stabilize's Cloudflare-hosted service with OpenAI to generate ordinary responses. Review the privacy policy for provider-processing and consent-revocation details.
 
 Stabilize is not therapy, diagnosis, medical treatment, emergency monitoring, or a substitute for a qualified professional or emergency service. AI responses can be incomplete or wrong. In immediate danger or a medical emergency, contact a person or service able to respond now.
 
@@ -60,13 +60,13 @@ Conservative disclosure based on the current production path:
 - Linked to user: No
 - Used for tracking: No
 
-Reason: free-form chat text is sent to the backend and OpenAI. The app and Stabilize backend do not retain guest conversation history, but OpenAI's default abuse-monitoring logs may retain customer content for up to 30 days unless the API organization is approved for Modified Abuse Monitoring or Zero Data Retention.
+Reason: free-form chat text is sent to the backend and, for ordinary replies, OpenAI. The native app and Stabilize backend do not retain guest conversation history. The release Worker configuration disables persistent Workers observability, invocation logs, traces, telemetry destinations, and Trace Events Logpush. Cloudflare still processes requests and network metadata to deliver and protect the service. OpenAI's default abuse-monitoring logs may retain customer content for up to 30 days unless the API organization is approved for Modified Abuse Monitoring or Zero Data Retention.
 
 Do not select Health data merely because a user might type health information into the generic free-form field; Apple's guidance uses Other User Content for a generic text field unless the app specifically asks for a particular data type.
 
 ## Review notes
 
-Stabilize is a guest-only AI check-in; no account or demo credentials are required. The app sends messages to `https://stabilize.info/api/chat` and displays the returned response. The backend is live.
+Stabilize is a guest-only AI check-in; no account or demo credentials are required. Before the first send, the app discloses that the message is sent through Stabilize to OpenAI and requires the user to choose Allow & Send Message. Permission can be revoked in About, after which the app asks again before another send. The app sends permitted messages to `https://stabilize.info/api/chat` and displays the returned response. The backend is live.
 
 The app does not diagnose, prescribe, provide therapy, monitor users, or contact emergency responders. A deterministic server-side safety route can display a clearly labeled urgent-help sheet with U.S. 911 and 988 call/text links. The app also explains these limitations in its About and Safety screens.
 
@@ -83,5 +83,5 @@ The app uses only system-provided HTTPS encryption and declares that it does not
 - Capture current iPhone and iPad screenshots from the signed release candidate.
 - Complete the age-rating questionnaire accurately and keep the listing adults-only.
 - Set availability to the United States for version 1.0.
-- Confirm the privacy answers above against the actual OpenAI and Cloudflare production account settings.
+- Deploy and verify the privacy configuration above, including the absence of account-level or zone-level log exports, against the actual OpenAI and Cloudflare production account settings.
 - Add review contact information and submit only after the safety/privacy owner approves the release candidate.

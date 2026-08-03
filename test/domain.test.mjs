@@ -43,6 +43,7 @@ test("stabilize.info is the canonical production domain", async () => {
   assert.match(sitemap, /https:\/\/stabilize\.info\//);
   assert.match(sitemap, /https:\/\/stabilize\.info\/about\.html/);
   assert.match(sitemap, /https:\/\/stabilize\.info\/sustainability\.html/);
+  assert.match(sitemap, /https:\/\/stabilize\.info\/support\.html/);
   assert.doesNotMatch(sitemap, /reedlokken\.com/);
   assert.match(robots, /Sitemap: https:\/\/stabilize\.info\/sitemap\.xml/);
   assert.match(workflow, /https:\/\/stabilize\.info\/api\/auth/);
@@ -57,12 +58,45 @@ test("all public guide pages use stabilize.info canonicals", async () => {
     repositoryFile("public/floor-first.html"),
     repositoryFile("public/safety.html"),
     repositoryFile("public/privacy.html"),
+    repositoryFile("public/support.html"),
   ]);
 
   for (const page of pages) {
     assert.match(page, /rel="canonical" href="https:\/\/stabilize\.info\//);
     assert.doesNotMatch(page, /rel="canonical" href="https:\/\/reedlokken\.com\//);
   }
+});
+
+test("the release configuration disables persisted Worker telemetry", async () => {
+  const config = JSON.parse(await repositoryFile("wrangler.jsonc"));
+
+  assert.equal(config.logpush, false);
+  assert.deepEqual(config.observability, {
+    enabled: false,
+    logs: {
+      enabled: false,
+      invocation_logs: false,
+      persist: false,
+      destinations: [],
+    },
+    traces: {
+      enabled: false,
+      persist: false,
+      destinations: [],
+    },
+  });
+});
+
+test("the support page provides a privacy-safe contact path", async () => {
+  const support = await repositoryFile("public/support.html");
+
+  assert.match(support, /mailto:info@reedlokken\.com/);
+  assert.match(support, />info@reedlokken\.com</);
+  assert.match(support, /do not email chat text or sensitive information/i);
+  assert.match(support, /privacy and deletion requests/i);
+  assert.match(support, /Revoke AI Sharing Permission/);
+  assert.match(support, /href="\/privacy\.html"/);
+  assert.match(support, /href="\/safety\.html"/);
 });
 
 test("the About page preserves the origin while stating evidence and sustainability limits", async () => {

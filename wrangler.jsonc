@@ -7,6 +7,7 @@
   "keep_vars": true,
   "workers_dev": true,
   "preview_urls": true,
+  "logpush": false,
   "routes": [
     {
       "pattern": "stabilize.info/*",
@@ -56,15 +57,17 @@
     ]
   },
   "observability": {
-    "enabled": true,
+    "enabled": false,
     "logs": {
-      "enabled": true,
-      "head_sampling_rate": 1,
-      "invocation_logs": true
+      "enabled": false,
+      "invocation_logs": false,
+      "persist": false,
+      "destinations": []
     },
     "traces": {
-      "enabled": true,
-      "head_sampling_rate": 0.01
+      "enabled": false,
+      "persist": false,
+      "destinations": []
     }
   }
 }
