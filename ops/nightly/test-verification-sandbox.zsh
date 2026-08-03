@@ -18,6 +18,10 @@ profile="$script_dir/verification.sb"
 
 probe_root="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/stabilize-sandbox-root.XXXXXX")"
 outside_root="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/stabilize-sandbox-outside.XXXXXX")"
+# Seatbelt path filters compare against canonical paths. GitHub's TMPDIR ends
+# with a slash, so mktemp can echo a harmless but noncanonical `//` path.
+probe_root="${probe_root:A}"
+outside_root="${outside_root:A}"
 cleanup() {
   set +e
   /bin/rm -f -- \

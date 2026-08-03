@@ -67,4 +67,7 @@ test("verification profile and executable smoke probe enforce a writable root", 
   assert.match(profile, /\(deny network\*\)/);
   const probe = path.join(REPO_ROOT, "ops", "nightly", "test-verification-sandbox.zsh");
   assert.notEqual(statSync(probe).mode & 0o111, 0);
+  const probeSource = readFileSync(probe, "utf8");
+  assert.match(probeSource, /probe_root="\$\{probe_root:A\}"/);
+  assert.match(probeSource, /outside_root="\$\{outside_root:A\}"/);
 });
