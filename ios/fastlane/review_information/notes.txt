@@ -1,0 +1,9 @@
+Stabilize is a native SwiftUI guest client for https://stabilize.info/api/chat. No account, purchase, subscription, or external paid-plan link is available in the iOS app.
+
+The app is not therapy, diagnosis, emergency care, or a medical device. It provides short AI-generated practical support. The backend first applies deterministic routing for selected urgent safety, medical, unsafe-shelter, and medication-change/access inputs. When an urgent response is returned, the app displays native Call 988, Text 988, and Call 911 actions. These actions are for the United States.
+
+For a deterministic review flow, launch with the argument --ui-testing. Any ordinary message returns a fixed non-urgent sample response. After a response that requests a safety answer, a message containing “yes” or “unsure” returns the fixed urgent sample. This mode does not call the production AI.
+
+Guest app chats do not create server-side conversation memory. The native app does not intentionally persist prompts or replies. The app transmits user-entered text to the Stabilize Cloudflare Worker; ordinary replies are processed by OpenAI. Privacy and safety links are available from the in-app information screen.
+
+The production backend and all linked URLs will remain live during review.

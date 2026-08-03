@@ -1,0 +1,47 @@
+# App Store submission checklist
+
+## Already prepared in this repository
+
+- Native iPhone SwiftUI app rather than a web wrapper
+- Bundle ID: `info.stabilize.app`
+- Version/build: `1.0.0 (1)`
+- App icon source and asset catalog
+- Privacy manifest
+- Unit tests and macOS 26 / Xcode 26 CI
+- App Store description, subtitle, keywords, URLs, review notes, and release notes
+- No Google login, external paid-plan link, analytics SDK, ads, tracking, HealthKit, location, camera, microphone, contacts, or notifications in version 1
+- In-app privacy, safety, support, and project links
+
+## Apple-account work that cannot be stored in a public repository
+
+1. Enroll in the Apple Developer Program and accept current agreements.
+2. Register `info.stabilize.app` in Certificates, Identifiers & Profiles.
+3. Create the App Store Connect record:
+   - Name: Stabilize
+   - Primary language: English (U.S.)
+   - SKU: `stabilize-ios-1`
+   - Bundle ID: `info.stabilize.app`
+4. Enter an App Review contact phone number and email.
+5. Complete the current age-rating questionnaire honestly. The product is intended for adults 18+; App Store Connect determines the displayed rating from the answers.
+6. Complete App Privacy answers to match `privacy.html` and the implementation. User-entered text is transmitted for app functionality, is not used for tracking, and is not linked to an in-app identity in version 1.
+7. Answer export compliance: the app uses only Apple's standard HTTPS networking and declares `ITSAppUsesNonExemptEncryption = NO`.
+8. Choose Lifestyle as the primary category. Avoid medical-device, therapy, diagnosis, or suicide-prevention outcome claims.
+9. Capture at least one real iPhone screenshot. Recommended: three portrait screenshots at an accepted 6.9-inch size, showing:
+   - the starter screen;
+   - a normal floor-first reply;
+   - an urgent response with 988/911 actions (using the deterministic `--ui-testing` app mode, not a real person's data).
+10. In Xcode, select the developer team, archive with Xcode 26+, upload to App Store Connect, and test through TestFlight.
+11. Keep `https://stabilize.info`, `privacy.html`, `safety.html`, `support.html`, and the API live during App Review.
+12. Paste the prepared review notes and submit manually only after an on-device safety and accessibility check.
+
+## Suggested review sequence
+
+1. Internal TestFlight
+2. Small external TestFlight group
+3. Fix crashes, layout issues, VoiceOver problems, and backend errors
+4. Independent privacy/security/safety review appropriate to the product's risk
+5. App Review submission with manual release selected
+
+## Stop conditions before submission
+
+Do not submit if the backend is in demo mode unexpectedly, urgent fixed routes fail, the privacy page is inaccurate, support contact does not work, the app crashes, or a real-device test has not been completed.

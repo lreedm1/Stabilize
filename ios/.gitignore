@@ -1,0 +1,10 @@
+.DS_Store
+Stabilize.xcodeproj/
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.xcarchive
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/

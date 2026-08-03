@@ -1,0 +1,15 @@
+Stabilize is a floor-first AI check-in for overloaded moments.
+
+Tell Stabilize what is happening. It aims to reduce cognitive load, notice when a basic need or urgent practical problem changes what matters first, and offer one clear, manageable next step.
+
+The native app includes:
+• A focused check-in designed for short, practical responses
+• Starter prompts for common overloaded moments
+• Deterministic server-side routing for selected urgent safety, medical, shelter, and medication situations
+• Native 988, 911, copy, and share actions when relevant
+• Dynamic Type, VoiceOver labels, reduced visual complexity, and no advertising or tracking SDK
+• Guest use without an account
+
+Privacy matters. The app does not intentionally save your prompt or reply. Messages are sent to Stabilize's Cloudflare Worker, and ordinary AI replies are processed by OpenAI. Guest app chats do not create server-side conversation memory.
+
+Important limits: Stabilize is not therapy, diagnosis, emergency care, or a guarantee of safety or accuracy. It is intended for adults 18+. In immediate danger or a medical emergency, contact a person or service able to respond now.
