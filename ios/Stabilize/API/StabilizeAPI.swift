@@ -140,13 +140,44 @@ struct PreviewStabilizeAPI: StabilizeAPI {
     try await Task.sleep(for: .milliseconds(250))
 
     let normalized = message.lowercased()
-    if awaitingSafetyAnswer, normalized.contains("yes") || normalized.contains("unsure") {
+
+    if !awaitingSafetyAnswer,
+      normalized.contains("review safety check") || normalized.contains("not sure i am safe")
+    {
       return ChatResponse(
-        route: "IMMEDIATE_DANGER",
-        reply:
-          "Move toward a safe person or staffed place now. In the U.S., call or text 988. If an attempt, overdose, serious injury, or immediate danger may be happening, call 911 or go to an emergency department. Tell someone: “I may not be safe alone right now. Please stay with me.”",
-        showEmergency: true,
-        awaitingSafetyAnswer: false
+        route: "SAFETY_UNCLEAR",
+        reply: "Might you hurt yourself in the next few hours? Reply yes, no, or unsure.",
+        showEmergency: false,
+        awaitingSafetyAnswer: true
+      )
+    }
+
+    if awaitingSafetyAnswer {
+      if normalized.contains("yes") || normalized.contains("unsure") {
+        return ChatResponse(
+          route: "IMMEDIATE_DANGER",
+          reply:
+            "Move toward a safe person or staffed place now. In the U.S., call or text 988. If an attempt, overdose, serious injury, or immediate danger may be happening, call 911 or go to an emergency department. Tell someone: “I may not be safe alone right now. Please stay with me.”",
+          showEmergency: true,
+          awaitingSafetyAnswer: false
+        )
+      }
+
+      if normalized.contains("no") {
+        return ChatResponse(
+          route: "SUPPORT",
+          reply:
+            "Thank you for answering. Since you are not in immediate danger, lower the load first: move near a safe person or into a calmer shared place, then choose one small body or logistics need to handle next.",
+          showEmergency: false,
+          awaitingSafetyAnswer: false
+        )
+      }
+
+      return ChatResponse(
+        route: "SAFETY_UNCLEAR",
+        reply: "Please reply yes, no, or unsure: might you hurt yourself in the next few hours?",
+        showEmergency: false,
+        awaitingSafetyAnswer: true
       )
     }
 
