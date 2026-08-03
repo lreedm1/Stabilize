@@ -3,9 +3,10 @@ import { DurableObject } from "cloudflare:workers";
 export const SESSION_RETENTION_DAYS = 30;
 
 const SESSION_RETENTION_MS = SESSION_RETENTION_DAYS * 24 * 60 * 60 * 1_000;
+const SAFETY_ANSWER_MAX_AGE_MS = 2 * 60 * 60 * 1_000;
 const MAX_RECENT_MESSAGES = 8;
 const MAX_STORED_MESSAGE_CHARS = 4_000;
-const MAX_SUMMARY_CHARS = 1_600;
+const MAX_SUMMARY_CHARS = 1_000;
 
 function boundedText(value, limit) {
   return String(value || "").trim().slice(0, limit);
@@ -19,6 +20,62 @@ function emptyContext() {
     turnCount: 0,
     updatedAt: null,
   };
+}
+
+function validTimestamp(value) {
+  const timestamp = Number(value);
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
+}
+
+function ageDescription(timestamp, now = Date.now()) {
+  const ageMs = Math.max(0, now - timestamp);
+  const minutes = Math.floor(ageMs / 60_000);
+  if (minutes < 1) return "less than a minute old";
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} old`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} old`;
+
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} old`;
+}
+
+function relevanceDescription(timestamp, now = Date.now()) {
+  const ageMs = Math.max(0, now - timestamp);
+  if (ageMs <= 6 * 60 * 60 * 1_000) {
+    return "recent context; consider it, but current-turn evidence still wins";
+  }
+  if (ageMs <= 24 * 60 * 60 * 1_000) {
+    return "same-day background; use only when it helps answer the current message";
+  }
+  if (ageMs <= 3 * 24 * 60 * 60 * 1_000) {
+    return "older context with reduced relevance; do not infer the user's present state from it";
+  }
+  return "historical context only; it is not evidence of present danger or current intent";
+}
+
+function timestampedMemory(content, createdAt, now = Date.now()) {
+  const timestamp = validTimestamp(createdAt);
+  const clean = boundedText(content, MAX_STORED_MESSAGE_CHARS);
+  if (!timestamp) return clean;
+
+  return `[Recorded ${new Date(timestamp).toISOString()}; ${ageDescription(
+    timestamp,
+    now,
+  )}; ${relevanceDescription(timestamp, now)}]\n${clean}`;
+}
+
+function timestampedSummary(summary, updatedAt, now = Date.now()) {
+  const clean = boundedText(summary, MAX_SUMMARY_CHARS);
+  const timestamp = validTimestamp(updatedAt);
+  if (!clean || !timestamp) return clean;
+
+  return `[Historical summary last updated ${new Date(
+    timestamp,
+  ).toISOString()}; ${ageDescription(
+    timestamp,
+    now,
+  )}. Background only: never treat past risk as proof of present risk.]\n${clean}`;
 }
 
 export class SessionMemory extends DurableObject {
@@ -57,24 +114,32 @@ export class SessionMemory extends DurableObject {
 
     if (!state) return emptyContext();
 
+    const now = Date.now();
+    const updatedAt = validTimestamp(state.updated_at);
     const recent = this.ctx.storage.sql
       .exec(
-        `SELECT role, content
+        `SELECT role, content, created_at
          FROM recent_messages
          ORDER BY sequence ASC`,
       )
       .toArray()
       .map((message) => ({
         role: message.role,
-        content: boundedText(message.content, MAX_STORED_MESSAGE_CHARS),
+        content: timestampedMemory(message.content, message.created_at, now),
+        createdAt: validTimestamp(message.created_at),
       }));
 
+    const pendingSafetyQuestionIsCurrent =
+      state.awaiting_safety_answer === 1 &&
+      updatedAt !== null &&
+      now - updatedAt <= SAFETY_ANSWER_MAX_AGE_MS;
+
     return {
-      summary: boundedText(state.summary, MAX_SUMMARY_CHARS),
+      summary: timestampedSummary(state.summary, updatedAt, now),
       recent,
-      awaitingSafetyAnswer: state.awaiting_safety_answer === 1,
+      awaitingSafetyAnswer: pendingSafetyQuestionIsCurrent,
       turnCount: Number(state.turn_count) || 0,
-      updatedAt: Number(state.updated_at) || null,
+      updatedAt,
     };
   }
 
@@ -143,7 +208,7 @@ export class SessionMemory extends DurableObject {
   async getCompactionSnapshot() {
     const state = this.ctx.storage.sql
       .exec(
-        `SELECT summary, summary_version
+        `SELECT summary, summary_version, updated_at
          FROM memory_state WHERE id = 1`,
       )
       .toArray()[0];
@@ -151,7 +216,7 @@ export class SessionMemory extends DurableObject {
 
     const messages = this.ctx.storage.sql
       .exec(
-        `SELECT sequence, role, content
+        `SELECT sequence, role, content, created_at
          FROM recent_messages
          ORDER BY sequence ASC`,
       )
@@ -160,15 +225,21 @@ export class SessionMemory extends DurableObject {
         sequence: Number(message.sequence),
         role: message.role,
         content: boundedText(message.content, MAX_STORED_MESSAGE_CHARS),
+        createdAt: validTimestamp(message.created_at),
       }));
 
     if (messages.length < 2) return null;
 
     return {
       summary: boundedText(state.summary, MAX_SUMMARY_CHARS),
+      summaryUpdatedAt: validTimestamp(state.updated_at),
       summaryVersion: Number(state.summary_version) || 0,
       throughSequence: messages.at(-1).sequence,
-      messages: messages.map(({ role, content }) => ({ role, content })),
+      messages: messages.map(({ role, content, createdAt }) => ({
+        role,
+        content,
+        createdAt,
+      })),
     };
   }
 
