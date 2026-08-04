@@ -41,7 +41,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          payload="$(printf '{"state":"pending","context":"deployment/cloudflare","description":"Waiting for Cloudflare deployment and live chat checks","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          payload="$(printf '{"state":"pending","context":"deployment/cloudflare","description":"Waiting for Cloudflare deployment, billing, and live chat checks","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           curl --fail-with-body --silent --show-error \
             --request POST \
             --header "Accept: application/vnd.github+json" \
@@ -107,6 +107,70 @@ jobs:
             sleep 10
           done
           echo "::error::stabilize.info did not serve the Stabilize Worker, or reedlokken.com did not permanently redirect to it."
+          exit 1
+
+      - name: Verify production billing navigation
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          for attempt in {1..12}; do
+            headers="$(mktemp)"
+            body="$(mktemp)"
+            status="$(
+              curl --max-time 20 --silent --show-error \
+                --request POST \
+                --header "Accept: application/json" \
+                --header "Origin: null" \
+                --header "Sec-Fetch-Site: same-origin" \
+                --header "Cache-Control: no-cache" \
+                --dump-header "$headers" \
+                --output "$body" \
+                --write-out "%{http_code}" \
+                "https://stabilize.info/billing/checkout?deployment=${GITHUB_SHA}" || true
+            )"
+            content_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$headers" | tail -n 1)"
+            echo "Billing route attempt ${attempt}: HTTP ${status}; ${content_type:-no-content-type}"
+
+            if [[ "$status" == "401" && "$content_type" == application/json* ]] && \
+              node -e '
+                const fs = require("node:fs");
+                try {
+                  const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+                  process.exit(
+                    value.error === "Sign in to unlock model choice." &&
+                    value.signInUrl === "/auth/google"
+                      ? 0
+                      : 1,
+                  );
+                } catch {
+                  process.exit(1);
+                }
+              ' "$body"; then
+              rm -f "$headers" "$body"
+              exit 0
+            fi
+
+            node -e '
+              const fs = require("node:fs");
+              try {
+                const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+                console.log(
+                  "Safe billing diagnostic:",
+                  JSON.stringify({
+                    error: typeof value.error === "string" ? value.error : null,
+                    signInUrl:
+                      typeof value.signInUrl === "string" ? value.signInUrl : null,
+                  }),
+                );
+              } catch {
+                console.log("Safe billing diagnostic: unparseable response");
+              }
+            ' "$body" || true
+
+            rm -f "$headers" "$body"
+            sleep 10
+          done
+          echo "::error::stabilize.info did not expose the repaired opaque-origin billing route."
           exit 1
 
       - name: Verify production chat streaming
@@ -195,10 +259,10 @@ jobs:
         run: |
           if [[ "$JOB_STATUS" == "success" ]]; then
             state="success"
-            description="Cloudflare deployment and live chat checks passed"
+            description="Cloudflare deployment, billing, and live chat checks passed"
           else
             state="failure"
-            description="Cloudflare deployment or live chat checks failed"
+            description="Cloudflare deployment, billing, or live chat checks failed"
           fi
           payload="$(printf '{"state":"%s","context":"deployment/cloudflare","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           curl --fail-with-body --silent --show-error \
