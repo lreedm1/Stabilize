@@ -1,8 +1,11 @@
 @media (max-width: 980px) and (orientation: portrait) {
   .photo-backdrop {
-    background:
-      url("/scenes/mobile-woodland-spring-still.webp?v=20260802-9")
-      50% 50% / cover no-repeat;
+    overflow: hidden;
+    background: #173f31;
+    filter: none;
+    transform: none;
+    animation: none;
+    will-change: auto;
   }
 
   .photo-backdrop img {
@@ -11,13 +14,15 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: 50% 56%;
+    object-position: 50% 50%;
+    opacity: 1;
     filter: none;
     transform: none !important;
     animation: none !important;
     will-change: auto;
   }
 
+  .photo-backdrop::before,
   .photo-backdrop::after {
     display: none !important;
     content: none !important;
