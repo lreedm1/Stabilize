@@ -74,12 +74,12 @@ const oldBillingCss = `  if (!html.includes('href="/billing.css"')) {
 const versionedBillingCss = `  if (!html.includes('href="/billing.css')) {
     html = html.replace(
       "</head>",
-      '    <link rel="stylesheet" href="/billing.css?v=20260804-paid-model-choice-1" />\\n  </head>',
+      '    <link rel="stylesheet" href="/billing.css?v=20260804-composer-model-picker-1" />\\n  </head>',
     );
   } else {
     html = html.replace(
       /href="\\/billing\\.css(?:\\?v=[^"]*)?"/,
-      'href="/billing.css?v=20260804-paid-model-choice-1"',
+      'href="/billing.css?v=20260804-composer-model-picker-1"',
     );
   }`;
 if (text.includes(oldBillingCss)) {
@@ -87,12 +87,12 @@ if (text.includes(oldBillingCss)) {
 } else {
   requireText(
     text,
-    "/billing.css?v=20260804-paid-model-choice-1",
+    "/billing.css?v=20260804-composer-model-picker-1",
     "the versioned billing stylesheet",
   );
 }
 
-if (!text.includes('src="/billing-client.js?v=20260804-paid-model-choice-1"')) {
+if (!text.includes('src="/billing-client.js?v=20260804-composer-model-picker-1"')) {
   const anchor = `  if (notice) {
     html = html.replace(`;
   requireText(text, anchor, "the billing notice injection");
@@ -101,7 +101,7 @@ if (!text.includes('src="/billing-client.js?v=20260804-paid-model-choice-1"')) {
     `  if (markup && !html.includes('src="/billing-client.js')) {
     html = html.replace(
       "</body>",
-      '    <script type="module" src="/billing-client.js?v=20260804-paid-model-choice-1"></script>\\n  </body>',
+      '    <script type="module" src="/billing-client.js?v=20260804-composer-model-picker-1"></script>\\n  </body>',
     );
   }
   if (notice) {
@@ -178,7 +178,7 @@ requireText(text, "billingNavigationResponse(request, url)", "the JSON checkout 
 requireText(text, "signedOutBillingResponse(request)", "the signed-out JSON response");
 requireText(
   text,
-  'src="/billing-client.js?v=20260804-paid-model-choice-1"',
+  'src="/billing-client.js?v=20260804-composer-model-picker-1"',
   "the billing client script",
 );
 requireText(text, 'origin !== "null"', "opaque-origin compatibility");

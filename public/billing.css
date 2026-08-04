@@ -129,3 +129,217 @@
   text-align: center;
   text-decoration: none;
 }
+
+.composer-entry-row {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: 10px;
+}
+
+.composer-entry-row .chat-form,
+.composer-entry-row textarea {
+  min-width: 0;
+}
+
+.composer-model-picker {
+  position: relative;
+  z-index: 5;
+  min-width: 0;
+  align-self: end;
+}
+
+.composer-model-button {
+  display: flex;
+  width: 92px;
+  min-height: 64px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  border: 1px solid rgba(148, 168, 155, 0.95);
+  border-radius: 14px;
+  background: rgba(255, 255, 252, 0.76);
+  box-shadow: 0 6px 18px rgba(10, 33, 23, 0.2);
+  color: var(--accent-dark);
+  cursor: pointer;
+  list-style: none;
+  padding: 8px 10px;
+  text-align: center;
+  user-select: none;
+}
+
+.composer-model-button::-webkit-details-marker {
+  display: none;
+}
+
+.composer-model-button::after {
+  width: 7px;
+  height: 7px;
+  margin-top: 4px;
+  border-top: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  content: "";
+  transform: rotate(-45deg);
+  transition: transform 140ms ease;
+}
+
+.composer-model-picker[open] .composer-model-button {
+  border-color: var(--accent);
+  background: rgba(255, 255, 252, 0.96);
+}
+
+.composer-model-picker[open] .composer-model-button::after {
+  transform: rotate(135deg);
+}
+
+.composer-model-button:focus-visible {
+  outline: 3px solid rgba(46, 101, 80, 0.35);
+  outline-offset: 3px;
+}
+
+.composer-model-kicker {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 680;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.composer-model-current {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  font-weight: 780;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-model-panel {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  bottom: calc(100% + 10px);
+  width: min(330px, calc(100vw - 36px));
+  max-height: min(70vh, 430px);
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 14px;
+  background: rgba(255, 252, 242, 0.98);
+  box-shadow: 0 12px 34px rgba(8, 31, 21, 0.28);
+  color: var(--text);
+  padding: 14px;
+  text-align: left;
+}
+
+.composer-model-panel h2 {
+  margin: 0 0 9px;
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 790;
+  letter-spacing: -0.01em;
+}
+
+.composer-model-panel p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.composer-model-panel strong {
+  color: var(--text);
+}
+
+.composer-model-panel form {
+  margin: 0;
+}
+
+.composer-model-panel button,
+.composer-model-panel select {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 10px;
+  font: inherit;
+}
+
+.composer-model-panel button {
+  cursor: pointer;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  font-weight: 760;
+}
+
+.composer-model-panel form[aria-busy="true"] button,
+.composer-model-panel button:disabled {
+  cursor: progress;
+  opacity: 0.68;
+}
+
+.composer-model-panel .billing-usage {
+  margin-top: 9px;
+  margin-bottom: 0;
+  font-size: 0.68rem;
+}
+
+.composer-model-panel .billing-action-status {
+  margin-top: 8px;
+  margin-bottom: 0;
+  color: var(--accent-dark);
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-align: center;
+}
+
+.composer-model-panel .billing-action-status[hidden] {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .composer-entry-row {
+    gap: 7px;
+  }
+
+  .composer-model-button {
+    width: 64px;
+    padding-inline: 6px;
+  }
+
+  .composer-model-current {
+    font-size: 0.68rem;
+  }
+
+  .composer-model-panel {
+    width: min(320px, calc(100vw - 20px));
+  }
+}
+
+@media (max-width: 380px) {
+  .composer-entry-row {
+    gap: 6px;
+  }
+
+  .composer-model-button {
+    width: 56px;
+    padding-inline: 4px;
+  }
+
+  .composer-model-kicker {
+    font-size: 0.56rem;
+  }
+
+  .composer-model-current {
+    font-size: 0.63rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-model-button::after {
+    transition: none;
+  }
+}

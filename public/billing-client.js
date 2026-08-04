@@ -1,4 +1,7 @@
 const billingForms = document.querySelectorAll("form[data-billing-redirect]");
+const composerModelPickers = document.querySelectorAll(
+  "details.composer-model-picker",
+);
 
 function allowedStripeUrl(value) {
   try {
@@ -13,17 +16,17 @@ function allowedStripeUrl(value) {
 }
 
 function billingStatus(form) {
-  const menu = form.closest(".billing-menu");
-  if (!(menu instanceof HTMLElement)) return null;
+  const container = form.closest(".billing-menu, .composer-model-panel");
+  if (!(container instanceof HTMLElement)) return null;
 
-  let status = menu.querySelector(".billing-action-status");
+  let status = container.querySelector(".billing-action-status");
   if (!(status instanceof HTMLElement)) {
     status = document.createElement("p");
     status.className = "billing-action-status";
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
     status.hidden = true;
-    menu.appendChild(status);
+    container.appendChild(status);
   }
   return status;
 }
@@ -91,3 +94,32 @@ for (const form of billingForms) {
     }
   });
 }
+
+function closePicker(picker, { restoreFocus = false } = {}) {
+  if (!(picker instanceof HTMLDetailsElement) || !picker.open) return;
+  picker.open = false;
+  if (!restoreFocus) return;
+  const summary = picker.querySelector("summary");
+  if (summary instanceof HTMLElement) summary.focus();
+}
+
+document.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof Node)) return;
+  for (const picker of composerModelPickers) {
+    if (picker instanceof HTMLDetailsElement && !picker.contains(target)) {
+      closePicker(picker);
+    }
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  for (const picker of composerModelPickers) {
+    if (picker instanceof HTMLDetailsElement && picker.open) {
+      event.preventDefault();
+      closePicker(picker, { restoreFocus: true });
+      break;
+    }
+  }
+});
