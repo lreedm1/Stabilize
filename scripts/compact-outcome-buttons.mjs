@@ -31,28 +31,25 @@ ${marker}
   display: none;
 }
 
-.outcome-actions,
-@media (max-width: 620px) {
-  .outcome-actions {
-    display: flex;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    gap: 6px;
-    margin: 0;
-    width: max-content;
-    min-width: 100%;
-  }
+.outcome-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 6px;
+  margin: 0;
+  width: max-content;
+  min-width: 100%;
+}
 
-  .outcome-button {
-    width: auto;
-    min-height: 30px;
-    flex: 0 0 auto;
-    border-radius: 999px;
-    padding: 5px 10px;
-    font-size: 0.69rem;
-    line-height: 1.1;
-    white-space: nowrap;
-  }
+.outcome-button {
+  width: auto;
+  min-height: 30px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.69rem;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 `;
 
