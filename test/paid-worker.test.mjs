@@ -125,6 +125,46 @@ test("opaque cross-site billing submissions remain blocked", async () => {
   });
 });
 
+test("the homepage places the current model picker left of the message form", async () => {
+  const user = await identity("paid-model-picker-user");
+  await user.billing.updateBilling({
+    customerId: "cus_picker_12345678",
+    subscriptionId: "sub_picker_12345678",
+    subscriptionStatus: "active",
+  });
+  await user.billing.setSelectedModel("gpt-5.1");
+
+  const response = await worker.fetch(
+    new Request("https://stabilize.info/", {
+      headers: { Cookie: user.cookie },
+    }),
+    TEST_ENV,
+    {},
+  );
+
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  const rowIndex = html.indexOf('class="composer-entry-row"');
+  const pickerIndex = html.indexOf('class="composer-model-picker"', rowIndex);
+  const chatFormIndex = html.indexOf('id="chat-form"', rowIndex);
+
+  assert.ok(rowIndex >= 0);
+  assert.ok(pickerIndex > rowIndex);
+  assert.ok(chatFormIndex > pickerIndex);
+  assert.match(
+    html,
+    /<span class="composer-model-current">GPT-5\.1<\/span>/,
+  );
+  assert.match(
+    html,
+    /<select id="composer-model-choice" name="model">[\s\S]*?<option value="gpt-5\.1" selected>/,
+  );
+  assert.equal(
+    html.indexOf('<form action="/account/model"', chatFormIndex),
+    -1,
+  );
+});
+
 test("an entitled user can select a paid model and the chat request uses it", async () => {
   const user = await identity("paid-model-user");
   await user.billing.updateBilling({
