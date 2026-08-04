@@ -22,6 +22,7 @@ const POLICY_SCRIPTS = [
   "scripts/use-supported-openai-model.mjs",
   "scripts/apply-adaptive-reasoning.mjs",
   "scripts/apply-new-conversation.mjs",
+  "scripts/apply-private-chat.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
