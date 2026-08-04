@@ -19,6 +19,7 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - no full transcript database; account memory uses a rolling summary with a bounded recent-message buffer
 - safety and route tests
 - public-safe protocol background documents
+- a native, guest-only SwiftUI iPhone client with explicit OpenAI sharing permission
 
 The language model is not the only safety layer. Urgent phrases are routed to fixed responses before model generation, and ordinary model calls use a 500-token generation budget plus a small final validation check. OpenAI counts hidden reasoning and formatting tokens inside that budget. Assistant Markdown is rendered locally with DOM nodes; raw HTML remains text and executable link schemes are rejected. These defenses are intentionally conservative, but they are not comprehensive and require independent review before a high-stakes public launch.
 
@@ -35,6 +36,7 @@ The language model is not the only safety layer. Urgent phrases are routed to fi
 | `public/` | Static CSS, browser JavaScript, terrain renderer, safe Markdown renderer, Lexend font, and asset security headers |
 | `test/` | Deterministic router and Worker endpoint tests |
 | `docs/` | Public-safe background material for the protocol |
+| `ios/` | Native SwiftUI app, unit tests, App Store metadata, and release tooling |
 | `wrangler.jsonc` | Cloudflare configuration and non-secret model settings |
 
 ## Edit site text

@@ -1,0 +1,1 @@
+Initial release of the native Stabilize check-in for iPhone.

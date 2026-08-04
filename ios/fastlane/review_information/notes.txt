@@ -1,0 +1,11 @@
+Stabilize is a native SwiftUI guest client for https://stabilize.info/api/chat. No account, purchase, subscription, or external paid-plan link is available in the iOS app.
+
+The app is not therapy, diagnosis, emergency care, or a medical device. It provides short AI-generated practical support. The backend first applies deterministic routing for selected urgent safety, medical, unsafe-shelter, and medication-change/access inputs. When an urgent response is returned, the app displays native Call 988, Text 988, and Call 911 actions. These actions are for the United States.
+
+The submitted app uses the live production backend by default. Before the first send, it identifies OpenAI as the third-party AI provider, explains the purpose and current provider retention, and requires Allow & Send Message. Permission can be revoked under About. Any ordinary check-in can then be used to review the normal response flow.
+
+The app also includes a deterministic --ui-testing launch mode for automated pre-submission screenshots and regression tests; it does not call production AI. In that mode, enter “Review safety check,” choose Allow & Send Message if prompted, then enter “Unsure” to display the fixed urgent response and native 988/911 actions. Entering “No” instead returns a fixed non-emergency support response.
+
+The native app does not intentionally persist prompts or replies as a local transcript. Guest app chats do not create a retrievable conversation history on the Stabilize Worker. Ordinary replies use OpenAI with store: true, so OpenAI currently stores resulting Responses API data for at least 30 days unless project data controls override the request. Privacy and safety links are available from the in-app information screen.
+
+The production backend and all linked URLs will remain live during review.
