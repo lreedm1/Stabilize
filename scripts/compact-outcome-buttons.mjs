@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 
 const cssPath = "public/product.css";
 const pagePath = "src/page.js";
+const productTestPath = "test/product.test.mjs";
 const marker = "/* compact horizontal outcome buttons */";
 const assetVersion = "20260804-compact-outcomes-2";
 
@@ -72,5 +73,23 @@ if (!nextPage.includes(`/product.css?v=${assetVersion}`)) {
   throw new Error("Could not cache-bust the product stylesheet");
 }
 if (nextPage !== pageSource) await writeFile(pagePath, nextPage);
+
+const productTestSource = await readFile(productTestPath, "utf8");
+const expectedAssertion = `  assert.match(
+    pageSource,
+    /href="\\/product\\.css\\?v=${assetVersion}"/,
+  );`;
+let nextProductTest = productTestSource;
+if (!nextProductTest.includes(expectedAssertion)) {
+  const oldAssertion =
+    '  assert.match(pageSource, /href="\\/product\\.css"/);';
+  if (!nextProductTest.includes(oldAssertion)) {
+    throw new Error("Could not align the product stylesheet regression check");
+  }
+  nextProductTest = nextProductTest.replace(oldAssertion, expectedAssertion);
+}
+if (nextProductTest !== productTestSource) {
+  await writeFile(productTestPath, nextProductTest);
+}
 
 console.log("Compacted follow-up prompts and cache-busted their stylesheet.");
