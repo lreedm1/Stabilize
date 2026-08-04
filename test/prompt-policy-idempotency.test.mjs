@@ -25,6 +25,13 @@ const POLICY_SCRIPTS = [
   "scripts/prepare-stream-hardening.mjs",
   "scripts/harden-openai-streaming.mjs",
   "scripts/restore-adaptive-stream-reasoning.mjs",
+  "scripts/prepare-outcome-tray.mjs",
+  "scripts/move-outcome-buttons-above-composer.mjs",
+  "scripts/align-outcome-tray-tests.mjs",
+  "scripts/compact-outcome-buttons.mjs",
+  "scripts/prepare-private-chat-after-outcome-tray.mjs",
+  "scripts/apply-private-chat.mjs",
+  "scripts/finalize-private-chat.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
@@ -36,11 +43,13 @@ const POLICY_TARGETS = [
   "src/reasoning-policy.js",
   "public/app.js",
   "public/seo.css",
+  "public/product.css",
   "test/worker.test.mjs",
   "test/session-memory.test.mjs",
   "test/prompt-submit.test.mjs",
   "test/outcome-followup.test.mjs",
   "test/streaming-response.test.mjs",
+  "test/product.test.mjs",
   "wrangler.jsonc",
 ];
 const FIXTURES = [...POLICY_SCRIPTS, ...POLICY_TARGETS];
