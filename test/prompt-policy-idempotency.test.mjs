@@ -64,13 +64,14 @@ function runPolicy(destination) {
   }
 }
 
-async function policyDigest(destination) {
-  const hash = createHash("sha256");
+async function policySnapshot(destination) {
+  const snapshot = {};
   for (const relativePath of POLICY_TARGETS) {
-    hash.update(relativePath);
+    const hash = createHash("sha256");
     hash.update(await readFile(path.join(destination, relativePath)));
+    snapshot[relativePath] = hash.digest("hex");
   }
-  return hash.digest("hex");
+  return snapshot;
 }
 
 test("the prompt policy pipeline is idempotent", async (context) => {
@@ -81,8 +82,18 @@ test("the prompt policy pipeline is idempotent", async (context) => {
 
   await copyFixtures(fixtureRoot);
   runPolicy(fixtureRoot);
-  const firstDigest = await policyDigest(fixtureRoot);
+  const firstSnapshot = await policySnapshot(fixtureRoot);
 
   runPolicy(fixtureRoot);
-  assert.equal(await policyDigest(fixtureRoot), firstDigest);
+  const secondSnapshot = await policySnapshot(fixtureRoot);
+  const changedPaths = POLICY_TARGETS.filter(
+    (relativePath) =>
+      firstSnapshot[relativePath] !== secondSnapshot[relativePath],
+  );
+
+  assert.deepEqual(
+    changedPaths,
+    [],
+    `Prompt policy changed on its second pass: ${changedPaths.join(", ")}`,
+  );
 });
