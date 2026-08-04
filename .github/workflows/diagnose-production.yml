@@ -1,0 +1,22 @@
+name: Diagnose Stabilize production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read live health state
+        shell: bash
+        run: |
+          echo "Production health:"
+          curl --max-time 20 --silent --show-error --include \
+            "https://stabilize.info/api/health?diagnostic=${GITHUB_SHA}" || true
