@@ -76,7 +76,6 @@ workerAfter = workerAfter.replace(
 );
 
 if (
-  workerAfter === workerBefore ||
   !workerAfter.includes('includes("application/x-ndjson")') ||
   !workerAfter.includes("latestText.length > MAX_MESSAGE_CHARS") ||
   !workerAfter.includes("return streamChatReply(messages, route, env, latestText, stub, ctx);")
@@ -84,7 +83,7 @@ if (
   throw new Error("Final streaming handler normalization failed");
 }
 
-await writeFile(workerPath, workerAfter);
+if (workerAfter !== workerBefore) await writeFile(workerPath, workerAfter);
 
 const clientPath = "public/app.js";
 const clientBefore = await readFile(clientPath, "utf8");
