@@ -10,6 +10,24 @@ Google sign-in is optional and is used only to provide continuity. The server us
 
 After a successful callback, the Worker briefly processes Google's stable `sub` claim and immediately derives a domain-separated HMAC alias. It does not store the raw `sub`, Google access token, ID token, authorization code, email address, or client secret. The signed application cookie contains only the pseudonymous account alias and issue/expiry times. It is `HttpOnly`, `SameSite=Lax`, and `Secure` on HTTPS, and expires after 30 days.
 
+## Native iOS app
+
+Version 1 of the native app is guest-only. It does not intentionally persist prompts or replies as
+a local transcript and does not use account login, payments, analytics, advertising, or tracking
+SDKs. It displays a privacy cover when the app is not active to reduce disclosure through the app
+switcher.
+
+Before the first attempted send, the app explains that the message goes through Stabilize's
+Cloudflare-hosted service and, for an ordinary reply, is shared with OpenAI. Nothing is sent until
+the user chooses **Allow & Send Message**. The permission choice is stored in app-specific
+`UserDefaults`, declared with required reason `CA92.1` in the privacy manifest. A user can revoke
+the choice under **About → AI sharing permission**. Revocation blocks future sends until permission
+is granted again; it cannot recall a message already transmitted or undo provider processing.
+
+The native client sends the current message and safety-answer state to the same `/api/chat`
+endpoint as the website. The Worker may answer an urgent message through a fixed route before an
+OpenAI request. Ordinary replies use the `store: true` provider behavior described below.
+
 ## What account memory stores
 
 Each pseudonymous signed-in account alias addresses one Cloudflare Durable Object. It stores:
@@ -51,6 +69,7 @@ This version no longer reads the earlier `stabilize_session` cookie and asks bro
 
 - Account memory follows the same Google account across supported browsers and devices.
 - Guest chats have no continuity after the response.
+- Native consent is a local future-send control; revoking it does not delete provider-held data.
 - Cookie deletion or sign-out removes local access but does not erase an unexpired server record.
 - Rotating `AUTH_SECRET` invalidates all sign-in cookies and changes account aliases, making prior memory inaccessible.
 - A condensed memory can omit context or preserve an inaccurate interpretation.
@@ -62,6 +81,8 @@ This version no longer reads the earlier `stabilize_session` cookie and asks bro
 Anyone deploying this project should:
 
 - disclose the actual identity provider, storage, logging, and retention settings
+- keep native first-send permission, App Store privacy answers, and provider-retention disclosures
+  aligned with production behavior
 - keep the Google client secret, OpenAI key, and `AUTH_SECRET` in Worker secrets
 - restrict access to Durable Object data and operational logs
 - avoid adding prompt, response, email, account-alias, or network-address logging by default
