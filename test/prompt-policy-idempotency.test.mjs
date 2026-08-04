@@ -25,6 +25,7 @@ const POLICY_SCRIPTS = [
   "scripts/prepare-stream-hardening.mjs",
   "scripts/harden-openai-streaming.mjs",
   "scripts/restore-adaptive-stream-reasoning.mjs",
+  "scripts/apply-private-chat.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
