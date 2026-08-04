@@ -22,6 +22,9 @@ const POLICY_SCRIPTS = [
   "scripts/use-supported-openai-model.mjs",
   "scripts/apply-adaptive-reasoning.mjs",
   "scripts/apply-new-conversation.mjs",
+  "scripts/prepare-stream-hardening.mjs",
+  "scripts/harden-openai-streaming.mjs",
+  "scripts/restore-adaptive-stream-reasoning.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
