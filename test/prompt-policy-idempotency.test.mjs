@@ -11,9 +11,14 @@ const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const POLICY_SCRIPTS = [
   "scripts/apply-4000-character-policy.mjs",
   "scripts/align-4000-character-tests.mjs",
+  "scripts/prepare-openai-policy-pass.mjs",
   "scripts/apply-max-reasoning-slim-runtime.mjs",
   "scripts/align-max-reasoning-tests.mjs",
   "scripts/apply-recency-policy.mjs",
+  "scripts/apply-streaming-policy.mjs",
+  "scripts/align-streaming-compatibility.mjs",
+  "scripts/finalize-streaming-handler.mjs",
+  "scripts/fix-openai-response-schema.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
@@ -24,6 +29,7 @@ const POLICY_TARGETS = [
   "test/worker.test.mjs",
   "test/prompt-submit.test.mjs",
   "test/outcome-followup.test.mjs",
+  "test/streaming-response.test.mjs",
   "wrangler.jsonc",
 ];
 const FIXTURES = [...POLICY_SCRIPTS, ...POLICY_TARGETS];
