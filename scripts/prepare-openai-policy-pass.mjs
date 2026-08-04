@@ -5,8 +5,12 @@ const before = await readFile(path, "utf8");
 let after = before;
 
 // The legacy max-reasoning generator expects this intermediate shape.
-// Restore it only for that generator; the final schema pass removes the
-// unsupported field before tests, builds, or deployment.
+// Restore it only for that generator; the final schema and adaptive passes
+// produce the valid per-turn request shape used by tests and deployment.
+after = after.replaceAll(
+  'reasoning: { effort: turnReasoningEffort },',
+  'reasoning: { effort: reasoningEffort, context: "current_turn" },',
+);
 after = after.replaceAll(
   'reasoning: { effort: reasoningEffort },\n      text: { verbosity: "low" },',
   'reasoning: { effort: reasoningEffort, context: "current_turn" },\n      text: { verbosity: "low" },',
