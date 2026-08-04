@@ -72,7 +72,7 @@ const ROUTE_ACTION_SETS = {
 
 const CONTENT_ACTION_SETS = [
   {
-    pattern: /\b(message|text|email|reply|conversation|apolog(?:y|ize)|boundary|send it)\b/i,
+    pattern: /\\b(message|text|email|reply|conversation|apolog(?:y|ize)|boundary|send it)\\b/i,
     question: "What should we do with the message?",
     actions: [
       { label: "Draft it", prompt: "Draft the message in a calm, direct tone. Keep it concise and preserve my boundary." },
@@ -81,7 +81,7 @@ const CONTENT_ACTION_SETS = [
     ],
   },
   {
-    pattern: /\b(decision|decide|choice|choose|compare|option|trade-?off|pros? and cons?)\b/i,
+    pattern: /\\b(decision|decide|choice|choose|compare|option|trade-?off|pros? and cons?)\\b/i,
     question: "What would make the choice clearer?",
     actions: [
       { label: "Compare the options", prompt: "Compare the realistic options using impact, effort, cost, risk, and reversibility." },
@@ -90,7 +90,7 @@ const CONTENT_ACTION_SETS = [
     ],
   },
   {
-    pattern: /\b(work|school|class|assignment|project|deadline|application|internship|meeting)\b/i,
+    pattern: /\\b(work|school|class|assignment|project|deadline|application|internship|meeting)\\b/i,
     question: "What would move this forward?",
     actions: [
       { label: "Break off 10 minutes", prompt: "Turn this into one useful task I can complete in ten minutes." },
@@ -99,7 +99,7 @@ const CONTENT_ACTION_SETS = [
     ],
   },
   {
-    pattern: /\b(money|budget|rent|housing|apartment|cost|debt|bill|financial|afford)\b/i,
+    pattern: /\\b(money|budget|rent|housing|apartment|cost|debt|bill|financial|afford)\\b/i,
     question: "What would protect the essentials?",
     actions: [
       { label: "Compare the costs", prompt: "Compare the realistic costs, hidden costs, and financial risk of the options." },
@@ -108,7 +108,7 @@ const CONTENT_ACTION_SETS = [
     ],
   },
   {
-    pattern: /\b(friend|social|lonely|alone|isolation|reach out|connection|meet people|community)\b/i,
+    pattern: /\\b(friend|social|lonely|alone|isolation|reach out|connection|meet people|community)\\b/i,
     question: "What would make connection easier?",
     actions: [
       { label: "Draft a low-pressure text", prompt: "Draft a low-pressure message that invites connection without overexplaining." },
