@@ -27,6 +27,7 @@ const POLICY_SCRIPTS = [
   "scripts/restore-adaptive-stream-reasoning.mjs",
   "scripts/prepare-outcome-tray.mjs",
   "scripts/move-outcome-buttons-above-composer.mjs",
+  "scripts/finalize-outcome-tray-tests.mjs",
   "scripts/align-outcome-tray-tests.mjs",
   "scripts/compact-outcome-buttons.mjs",
   "scripts/prepare-private-chat-after-outcome-tray.mjs",
