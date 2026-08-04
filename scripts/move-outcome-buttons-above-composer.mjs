@@ -169,4 +169,27 @@ ${anchor}`,
   return text;
 });
 
+await update("test/outcome-followup.test.mjs", (source) => {
+  let text = source.replace(
+    /app\\\.js\\\?v=20260804-[^/]+/,
+    "app\\.js\\?v=20260804-outcome-tray-1",
+  );
+
+  if (!text.includes("follow-up buttons render above the composer")) {
+    const marker = "\n});\n";
+    const position = text.lastIndexOf(marker);
+    if (position < 0) throw new Error("Outcome-tray policy could not extend the follow-up test");
+    const assertions = `
+  assert.match(pageSource, /id=\\"outcome-tray\\"[\\s\\S]*?<form id=\\"chat-form\\"/);
+  assert.match(clientScript, /function renderOutcomeCheck\\(previousReply, route\\)/);
+  assert.match(clientScript, /outcomeTray\\.replaceChildren\\(section\\)/);
+  assert.doesNotMatch(clientScript, /appendOutcomeCheck\\(article/);
+`;
+    text = text.slice(0, position) + assertions + text.slice(position);
+  }
+
+  requireText(text, "outcomeTray\\.replaceChildren", "the outcome tray regression assertion");
+  return text;
+});
+
 console.log("Moved follow-up prompt buttons above the user composer.");
