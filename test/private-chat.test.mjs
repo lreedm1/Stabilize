@@ -36,6 +36,18 @@ test("signed-in private chat disables Stabilize memory end to end", async () => 
   assert.match(clientSource, /sessionStorage\.setItem\(PRIVATE_CHAT_STORAGE_KEY/);
   assert.match(clientSource, /privateChatButton\.setAttribute\("aria-pressed"/);
   assert.match(clientSource, /privateChatStatus\.hidden = !active/);
+  assert.match(clientSource, /let privateThreadMessages = \[\]/);
+  assert.match(clientSource, /function appendPrivateThreadMessage\(/);
+  assert.match(clientSource, /appendPrivateThreadMessage\("user", clean\)/);
+  assert.match(
+    clientSource,
+    /appendPrivateThreadMessage\("assistant", cleanReply\)/,
+  );
+  assert.match(
+    clientSource,
+    /messages:\s*privateChat \? privateThreadMessages : undefined/,
+  );
+  assert.match(clientSource, /rollbackPrivateUser\(clean\)/);
   assert.match(
     clientSource,
     /body:\s*JSON\.stringify\(\{[\s\S]*message:\s*clean,[\s\S]*privateChat/,
@@ -54,6 +66,11 @@ test("signed-in private chat disables Stabilize memory end to end", async () => 
   assert.match(
     workerSource,
     /const stub = privateChat \? null : accountMemoryStub\(env, accountKey\);/,
+  );
+  assert.match(workerSource, /function privateModelInput\(/);
+  assert.match(
+    workerSource,
+    /privateChat[\s\S]*privateModelInput\(body\?\.messages, latestText\)/,
   );
   assert.match(
     workerSource,
