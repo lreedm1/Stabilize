@@ -8,6 +8,9 @@ let workerAfter = workerBefore.replace(
   const body = await readBoundedJson(request);
   const latestText = latestUserText(body);
   if (!latestText) throw new HttpError(400, COPY.api.messageRequired);
+  if (latestText.length > MAX_MESSAGE_CHARS) {
+    throw new HttpError(400, COPY.api.messageTooLong);
+  }
 
   const stub = accountMemoryStub(env, accountKey);
   const clientAwaiting = body?.awaitingSafetyAnswer === true;
@@ -75,6 +78,7 @@ workerAfter = workerAfter.replace(
 if (
   workerAfter === workerBefore ||
   !workerAfter.includes('includes("application/x-ndjson")') ||
+  !workerAfter.includes("latestText.length > MAX_MESSAGE_CHARS") ||
   !workerAfter.includes("return streamChatReply(messages, route, env, latestText, stub, ctx);")
 ) {
   throw new Error("Final streaming handler normalization failed");
