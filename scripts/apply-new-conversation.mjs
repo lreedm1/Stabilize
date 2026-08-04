@@ -192,7 +192,7 @@ await update("src/index.js", (source) => {
 await update("public/app.js", (source) => {
   let text = source;
 
-  if (!text.includes('document.querySelector("#new-conversation-button")')) {
+  if (!text.includes("const newConversationButton = document.querySelector(")) {
     const anchor =
       'const signOutForm = document.querySelector(\'form[action="/auth/logout"]\');';
     requireText(text, anchor, "the sign-out selector");
