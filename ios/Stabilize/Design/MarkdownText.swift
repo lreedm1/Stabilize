@@ -19,7 +19,7 @@ struct MarkdownText: View {
       )
     )) ?? AttributedString(markdown)
 
-    let untrustedLinkRanges = attributed.runs.compactMap { run in
+    let untrustedLinkRanges = attributed.runs.compactMap { run -> Range<AttributedString.Index>? in
       guard let link = run.link else { return nil }
       guard let scheme = link.scheme?.lowercased() else { return run.range }
       return allowedLinkSchemes.contains(scheme) ? nil : run.range
