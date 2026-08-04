@@ -34,6 +34,7 @@ const POLICY_SCRIPTS = [
   "scripts/apply-private-chat.mjs",
   "scripts/finalize-private-chat.mjs",
   "scripts/apply-consent-before-help.mjs",
+  "scripts/compact-final-system-prompt.mjs",
   "scripts/fix-rounded-conversation-test.mjs",
   "scripts/fix-paid-model-choice.mjs",
 ];
