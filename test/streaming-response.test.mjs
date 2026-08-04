@@ -16,6 +16,19 @@ test("model replies stream through NDJSON while fixed routes remain deterministi
   assert.match(workerSource, /type:\s*"delta"/);
   assert.match(workerSource, /type:\s*"done"/);
   assert.match(workerSource, /await recordExchange\(stub/);
+  assert.match(workerSource, /selectReasoningEffort/);
+  assert.equal(
+    (
+      workerSource.match(
+        /reasoning:\s*\{ effort: turnReasoningEffort \}/g,
+      ) || []
+    ).length,
+    2,
+  );
+  assert.doesNotMatch(
+    workerSource,
+    /reasoning:\s*\{ effort: reasoningEffort \}/,
+  );
   assert.match(
     workerSource,
     /if \(fixed\)[\s\S]*return jsonResponse\(\{ route, \.\.\.fixed \}\)/,
@@ -33,4 +46,6 @@ test("model replies stream through NDJSON while fixed routes remain deterministi
   assert.match(clientSource, /const pendingOutput = showOutput\(copy\.thinking/);
 
   assert.match(packageSource, /apply-streaming-policy\.mjs/);
+  assert.match(packageSource, /use-supported-openai-model\.mjs/);
+  assert.match(packageSource, /apply-adaptive-reasoning\.mjs/);
 });
