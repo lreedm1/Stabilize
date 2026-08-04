@@ -203,7 +203,7 @@ test("layout fills the dynamic viewport without a fixed-width shell", async () =
   assert.match(styles, /\.chat-card\s*{[\s\S]*?flex:\s*1 1 auto;/);
   assert.match(styles, /\.chat-card\s*{[\s\S]*?overflow:\s*hidden;/);
   assert.match(styles, /\.chat-card\s*{[\s\S]*?padding:\s*0;/);
-  assert.match(styles, /\.chat-log\s*{[\s\S]*?background:\s*transparent;[\s\S]*?box-shadow:\s*none;/);
+  assert.match(styles, /\\.chat-log\\s*{[\\s\\S]*?border-radius:\\s*22px;[\\s\\S]*?background:\\s*rgba\\(247,\\s*251,\\s*247,\\s*0\\.28\\);/);
   const pageShellRule = styles.match(/\.page-shell\s*{([\s\S]*?)}\s*/)?.[1] || "";
   assert.doesNotMatch(pageShellRule, /width:\s*min\(/);
 });
