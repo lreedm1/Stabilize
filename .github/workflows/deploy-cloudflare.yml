@@ -21,7 +21,7 @@ jobs:
   test-and-deploy:
     name: Test and deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Check out repository
@@ -41,7 +41,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          payload="$(printf '{"state":"pending","context":"deployment/cloudflare","description":"Waiting for Cloudflare deployment and domain checks","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          payload="$(printf '{"state":"pending","context":"deployment/cloudflare","description":"Waiting for Cloudflare deployment and live chat checks","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           curl --fail-with-body --silent --show-error \
             --request POST \
             --header "Accept: application/vnd.github+json" \
@@ -109,6 +109,63 @@ jobs:
           echo "::error::stabilize.info did not serve the Stabilize Worker, or reedlokken.com did not permanently redirect to it."
           exit 1
 
+      - name: Verify production chat streaming
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          for attempt in {1..8}; do
+            headers="$(mktemp)"
+            body="$(mktemp)"
+            status="$(
+              curl --max-time 75 --silent --show-error \
+                --request POST \
+                --header "Content-Type: application/json" \
+                --header "Accept: application/x-ndjson, application/json" \
+                --header "Cache-Control: no-cache" \
+                --data '{"message":"Hi"}' \
+                --dump-header "$headers" \
+                --output "$body" \
+                --write-out "%{http_code}" \
+                "https://stabilize.info/api/chat?deployment=${GITHUB_SHA}" || true
+            )"
+            content_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$headers" | tail -n 1)"
+            echo "Chat stream attempt ${attempt}: HTTP ${status}; ${content_type:-no-content-type}"
+
+            if [[ "$status" == "200" && "$content_type" == application/x-ndjson* ]] && \
+              node -e '
+                const fs = require("node:fs");
+                const lines = fs.readFileSync(process.argv[1], "utf8")
+                  .split(/\r?\n/)
+                  .filter(Boolean);
+                let streamedText = "";
+                let completed = null;
+                for (const line of lines) {
+                  const event = JSON.parse(line);
+                  if (event.type === "error") process.exit(1);
+                  if (event.type === "delta" && typeof event.delta === "string") {
+                    streamedText += event.delta;
+                  }
+                  if (event.type === "done") completed = event;
+                }
+                process.exit(
+                  streamedText.trim() &&
+                  completed &&
+                  typeof completed.reply === "string" &&
+                  completed.reply.trim()
+                    ? 0
+                    : 1,
+                );
+              ' "$body"; then
+              rm -f "$headers" "$body"
+              exit 0
+            fi
+
+            rm -f "$headers" "$body"
+            sleep 10
+          done
+          echo "::error::stabilize.info did not produce a complete streamed assistant reply."
+          exit 1
+
       - name: Publish Cloudflare deployment result
         if: always() && github.event_name != 'pull_request'
         shell: bash
@@ -118,10 +175,10 @@ jobs:
         run: |
           if [[ "$JOB_STATUS" == "success" ]]; then
             state="success"
-            description="Cloudflare deployment and domain checks passed"
+            description="Cloudflare deployment and live chat checks passed"
           else
             state="failure"
-            description="Cloudflare deployment or domain checks failed"
+            description="Cloudflare deployment or live chat checks failed"
           fi
           payload="$(printf '{"state":"%s","context":"deployment/cloudflare","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           curl --fail-with-body --silent --show-error \
