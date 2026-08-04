@@ -18,7 +18,7 @@
     "nightly:uninstall": "ops/nightly/uninstall-launch-agent.zsh",
     "test": "npm run apply:prompt-policy && npm run test:node && npm run test:worker",
     "test:node": "node --test test/safety.test.mjs test/reasoning-policy.test.mjs test/markdown.test.mjs test/terrain.test.mjs test/ui.test.mjs test/thread-history.test.mjs test/streaming-response.test.mjs test/product.test.mjs test/mobile-quality.test.mjs test/domain.test.mjs test/billing.test.mjs test/feedback.test.mjs test/prompt-submit.test.mjs test/prompt-policy-idempotency.test.mjs test/outcome-followup.test.mjs test/recency-memory.test.mjs test/ios-release.test.mjs test/no-document-export.test.mjs test/sustainability.test.mjs test/nightly-review.test.mjs test/nightly-cloud-state.test.mjs test/nightly-cloud-bundle.test.mjs test/nightly-cloud-workflow.test.mjs",
-    "test:worker": "vitest run --config vitest.config.js test/worker.test.mjs test/session-memory.test.mjs test/billing-account.test.mjs test/feedback-gate.test.mjs test/feedback-worker.test.mjs test/auth.test.mjs",
+    "test:worker": "vitest run --config vitest.config.js test/worker.test.mjs test/openai-streaming-worker.test.mjs test/session-memory.test.mjs test/billing-account.test.mjs test/feedback-gate.test.mjs test/feedback-worker.test.mjs test/auth.test.mjs",
     "types": "wrangler types --include-runtime false"
   },
   "devDependencies": {
