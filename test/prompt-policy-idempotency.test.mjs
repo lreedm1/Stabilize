@@ -33,6 +33,10 @@ const POLICY_SCRIPTS = [
   "scripts/prepare-private-chat-after-outcome-tray.mjs",
   "scripts/apply-private-chat.mjs",
   "scripts/finalize-private-chat.mjs",
+  "scripts/apply-consent-before-help.mjs",
+  "scripts/compact-final-system-prompt.mjs",
+  "scripts/fix-rounded-conversation-test.mjs",
+  "scripts/fix-paid-model-choice.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
@@ -51,6 +55,7 @@ const POLICY_TARGETS = [
   "test/outcome-followup.test.mjs",
   "test/streaming-response.test.mjs",
   "test/product.test.mjs",
+  "test/ui.test.mjs",
   "wrangler.jsonc",
 ];
 const FIXTURES = [...POLICY_SCRIPTS, ...POLICY_TARGETS];

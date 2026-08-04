@@ -38,6 +38,12 @@
   font-weight: 760;
 }
 
+.billing-menu form[aria-busy="true"] button,
+.billing-menu button:disabled {
+  cursor: progress;
+  opacity: 0.68;
+}
+
 .billing-primary {
   border: 1px solid var(--accent);
   background: var(--accent);
@@ -80,6 +86,19 @@
   font-size: 0.68rem;
 }
 
+.billing-menu .billing-action-status {
+  margin-top: 8px;
+  margin-bottom: 0;
+  color: var(--accent-dark);
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-align: center;
+}
+
+.billing-menu .billing-action-status[hidden] {
+  display: none;
+}
+
 .billing-notice {
   width: fit-content;
   max-width: min(620px, 100%);
@@ -96,7 +115,6 @@
   line-height: 1.4;
   text-align: center;
 }
-
 
 .billing-link {
   display: flex;
