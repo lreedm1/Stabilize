@@ -20,9 +20,10 @@ test("signed-in private chat disables Stabilize memory end to end", async () => 
   assert.ok(menuStart >= 0 && menuEnd > menuStart);
   assert.match(
     pageSource.slice(menuStart, menuEnd),
-    /privateChatControl[\s\S]*id="private-chat-button"/,
+    /\$\{privateChatControl\}/,
   );
   assert.match(pageSource, /const privateChatControl = signedIn/);
+  assert.match(pageSource, /id="private-chat-button"/);
   assert.doesNotMatch(
     pageSource.slice(composerStart),
     /id="private-chat-button"/,
