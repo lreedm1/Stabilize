@@ -1,8 +1,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const path = "public/product.css";
+const cssPath = "public/product.css";
+const pagePath = "src/page.js";
 const marker = "/* compact horizontal outcome buttons */";
-const source = await readFile(path, "utf8");
+const assetVersion = "20260804-compact-outcomes-2";
 
 const compactStyles = `
 
@@ -53,9 +54,23 @@ ${marker}
 }
 `;
 
-let next = source;
-const start = next.indexOf(marker);
-if (start >= 0) next = next.slice(0, Math.max(0, start - 2)).trimEnd() + "\n";
-next += compactStyles;
-await writeFile(path, next);
-console.log("Compacted follow-up prompts into a horizontal button row.");
+const cssSource = await readFile(cssPath, "utf8");
+let nextCss = cssSource;
+const markerStart = nextCss.indexOf(marker);
+if (markerStart >= 0) {
+  nextCss = nextCss.slice(0, Math.max(0, markerStart - 2)).trimEnd() + "\n";
+}
+nextCss += compactStyles;
+if (nextCss !== cssSource) await writeFile(cssPath, nextCss);
+
+const pageSource = await readFile(pagePath, "utf8");
+const nextPage = pageSource.replace(
+  /href="\/product\.css(?:\?v=[^"]*)?"/,
+  `href="/product.css?v=${assetVersion}"`,
+);
+if (!nextPage.includes(`/product.css?v=${assetVersion}`)) {
+  throw new Error("Could not cache-bust the product stylesheet");
+}
+if (nextPage !== pageSource) await writeFile(pagePath, nextPage);
+
+console.log("Compacted follow-up prompts and cache-busted their stylesheet.");
