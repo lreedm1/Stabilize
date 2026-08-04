@@ -6,7 +6,7 @@
     <title>Privacy and Memory — Stabilize</title>
     <meta
       name="description"
-      content="Learn how guest chats, the native iOS app, signed-in memory, feedback, Google authentication, Stripe billing, OpenAI processing, and Cloudflare infrastructure work in Stabilize."
+      content="Learn how guest chats, private chat, the native iOS app, signed-in memory, feedback, Google authentication, Stripe billing, OpenAI processing, and Cloudflare infrastructure work in Stabilize."
     />
     <link rel="canonical" href="https://stabilize.info/privacy.html" />
     <meta name="robots" content="index,follow" />
@@ -71,6 +71,21 @@
         exchange. This local retention limit does not shorten the separate OpenAI storage period.
       </p>
 
+      <h2>Private chat</h2>
+      <p>
+        Signed-in users can start <strong>Private chat</strong> from the site menu. While it is
+        active, the chat does not use or update your Stabilize memory: the Worker does not read your
+        rolling summary or recent-message buffer, and it does not write the message, response, or a
+        fixed safety-route event back to account memory. Starting another conversation while in
+        Private chat also leaves the existing account memory unchanged.
+      </p>
+      <p>
+        The Private chat setting is kept only for the current browser tab so it can survive a
+        refresh, and a visible label stays above the composer while it is active. Private chat is
+        not a separate provider-retention mode. Cloudflare still carries the request, and OpenAI
+        processing and storage still applies to ordinary AI replies as described below.
+      </p>
+
       <h2>Public feedback</h2>
       <p>
         Signed-in web users can optionally submit feedback. Each accepted submission is committed
@@ -114,7 +129,8 @@
         OpenAI's current platform documentation, resulting Responses API data is stored as
         application state for at least 30 days unless organization or project data controls cause
         the request to be treated differently. OpenAI says API data is not used to train its models
-        unless the API customer explicitly opts in.
+        unless the API customer explicitly opts in. Private chat prevents Stabilize account-memory
+        reads and writes, but it does not change this provider processing.
       </p>
 
       <h2>Use caution with sensitive information</h2>
@@ -128,9 +144,9 @@
       <p>
         See <a href="/support.html">Support</a> for contact information. Stabilize cannot identify a
         particular guest chat as an account history for deletion. Signed-in web requests can cover
-        account-linked records controlled by Stabilize. A local deletion or consent revocation does
-        not recall processing already completed by a provider or shorten OpenAI's stored Responses
-        retention period.
+        account-linked records controlled by Stabilize. A local deletion, Private chat setting, or
+        consent revocation does not recall processing already completed by a provider or shorten
+        OpenAI's stored Responses retention period.
       </p>
 
       <p class="notice">
@@ -141,7 +157,7 @@
       <a class="cta" href="/">Return to Stabilize</a>
     </main>
     <footer>
-      Last reviewed August 3, 2026. See the repository privacy documentation for implementation-level detail.
+      Last reviewed August 4, 2026. See the repository privacy documentation for implementation-level detail.
     </footer>
   </body>
 </html>
