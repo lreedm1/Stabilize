@@ -283,9 +283,10 @@ h2 {
   justify-content: center;
   overflow-y: auto;
   margin: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 22px;
+  background: rgba(247, 251, 247, 0.28);
+  box-shadow: 0 8px 24px rgba(12, 35, 25, 0.08);
   padding: clamp(8px, 2vh, 20px) clamp(2px, 2vw, 20px);
   line-height: 1.6;
   scroll-behavior: smooth;
