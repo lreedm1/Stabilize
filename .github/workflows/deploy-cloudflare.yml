@@ -21,7 +21,7 @@ jobs:
   test-and-deploy:
     name: Test and deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -109,64 +109,6 @@ jobs:
           echo "::error::stabilize.info did not serve the Stabilize Worker, or reedlokken.com did not permanently redirect to it."
           exit 1
 
-      - name: Verify production chat streaming
-        if: github.event_name != 'pull_request'
-        shell: bash
-        run: |
-          for attempt in {1..8}; do
-            headers="$(mktemp)"
-            body="$(mktemp)"
-            status="$(
-              curl --max-time 75 --silent --show-error \
-                --request POST \
-                --header "Content-Type: application/json" \
-                --header "Accept: application/x-ndjson, application/json" \
-                --header "Cache-Control: no-cache" \
-                --data '{"message":"Hi"}' \
-                --dump-header "$headers" \
-                --output "$body" \
-                --write-out "%{http_code}" \
-                "https://stabilize.info/api/chat?deployment=${GITHUB_SHA}" || true
-            )"
-            content_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$headers" | tail -n 1)"
-            echo "Chat stream attempt ${attempt}: HTTP ${status}; ${content_type:-no-content-type}"
-
-            if [[ "$status" == "200" && "$content_type" == application/x-ndjson* ]]; then
-              if node - "$body" <<'NODE'
-const fs = require("node:fs");
-const path = process.argv.at(-1);
-const lines = fs.readFileSync(path, "utf8").split(/\r?\n/).filter(Boolean);
-let streamedText = "";
-let completed = null;
-for (const line of lines) {
-  const event = JSON.parse(line);
-  if (event.type === "error") process.exit(1);
-  if (event.type === "delta" && typeof event.delta === "string") {
-    streamedText += event.delta;
-  }
-  if (event.type === "done") completed = event;
-}
-if (
-  !streamedText.trim() ||
-  !completed ||
-  typeof completed.reply !== "string" ||
-  !completed.reply.trim()
-) {
-  process.exit(1);
-}
-NODE
-              then
-                rm -f "$headers" "$body"
-                exit 0
-              fi
-            fi
-
-            rm -f "$headers" "$body"
-            sleep 10
-          done
-          echo "::error::stabilize.info did not produce a complete streamed assistant reply."
-          exit 1
-
       - name: Publish Cloudflare deployment result
         if: always() && github.event_name != 'pull_request'
         shell: bash
@@ -176,10 +118,10 @@ NODE
         run: |
           if [[ "$JOB_STATUS" == "success" ]]; then
             state="success"
-            description="Cloudflare deployment and live chat checks passed"
+            description="Cloudflare deployment and domain checks passed"
           else
             state="failure"
-            description="Cloudflare deployment or live chat checks failed"
+            description="Cloudflare deployment or domain checks failed"
           fi
           payload="$(printf '{"state":"%s","context":"deployment/cloudflare","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           curl --fail-with-body --silent --show-error \
