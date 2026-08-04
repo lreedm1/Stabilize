@@ -142,14 +142,14 @@ function billingNotice(url, reconciled) {
 function billingMenuMarkup({ signedIn, configured, state, choices, defaultModel, limit }) {
   if (!configured) return "";
   if (!signedIn) {
-  return `<section class="billing-menu" aria-labelledby="billing-heading">
-    <h2 id="billing-heading">AI model</h2>
-    <p>Sign in to unlock paid model choice.</p>
-    <a class="billing-primary billing-link" href="/auth/google">Sign in to choose a model</a>
-  </section>`;
-}
+    return `<section class="billing-menu" aria-labelledby="billing-heading">
+      <h2 id="billing-heading">AI model</h2>
+      <p>Sign in to unlock paid model choice.</p>
+      <a class="billing-primary billing-link" href="/auth/google">Sign in to choose a model</a>
+    </section>`;
+  }
 
-if (!state.entitled) {
+  if (!state.entitled) {
     return `<section class="billing-menu" aria-labelledby="billing-heading">
       <h2 id="billing-heading">AI model</h2>
       <p>Use the standard model free, or subscribe to choose from additional models.</p>
@@ -163,15 +163,25 @@ if (!state.entitled) {
     </section>`;
   }
 
-  const selected = isAllowedModel({ MODEL_CHOICES: choices.map((choice) => `${choice.id}|${choice.label}`).join(","), OPENAI_MODEL: defaultModel }, state.selectedModel)
+  const selected = isAllowedModel(
+    {
+      MODEL_CHOICES: choices.map((choice) => `${choice.id}|${choice.label}`).join(","),
+      OPENAI_MODEL: defaultModel,
+    },
+    state.selectedModel,
+  )
     ? state.selectedModel
     : defaultModel;
-  const options = choices.map((choice) =>
-    `<option value="${escapeHtml(choice.id)}"${choice.id === selected ? " selected" : ""}>${escapeHtml(choice.label)}</option>`,
-  ).join("");
-  const used = state.usagePeriod === usagePeriod()
-    ? Math.max(0, Number(state.usageCount) || 0)
-    : 0;
+  const options = choices
+    .map(
+      (choice) =>
+        `<option value="${escapeHtml(choice.id)}"${choice.id === selected ? " selected" : ""}>${escapeHtml(choice.label)}</option>`,
+    )
+    .join("");
+  const used =
+    state.usagePeriod === usagePeriod()
+      ? Math.max(0, Number(state.usageCount) || 0)
+      : 0;
 
   return `<section class="billing-menu" aria-labelledby="billing-heading">
     <h2 id="billing-heading">AI model</h2>
@@ -277,9 +287,10 @@ async function checkoutResponse(request, env) {
   if (!authSession) return redirect("/auth/google", 303);
   const stub = billingStub(env, authSession.accountKey);
   const state = await readBillingState(stub);
-  const url = state.entitled && state.customerId
-    ? await createPortalSession(env, state)
-    : await createCheckoutSession(env, state, authSession.accountKey);
+  const url =
+    state.entitled && state.customerId
+      ? await createPortalSession(env, state)
+      : await createCheckoutSession(env, state, authSession.accountKey);
   return redirect(url, 303);
 }
 
@@ -311,9 +322,7 @@ async function webhookResponse(request, env) {
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405);
   const event = await readStripeWebhook(request, env);
   const update = stateFromStripeEvent(event);
-  if (update) {
-    await updateBillingState(billingStub(env, update.accountKey), update);
-  }
+  if (update) await updateBillingState(billingStub(env, update.accountKey), update);
   return jsonResponse({ received: true });
 }
 
@@ -324,9 +333,10 @@ async function paidChatResponse(request, env, ctx) {
   const stub = billingStub(env, authSession.accountKey);
   const state = await readBillingState(stub);
   const defaultModel = String(env.OPENAI_MODEL || "gpt-5.6-sol");
-  const selectedModel = state.entitled && isAllowedModel(env, state.selectedModel)
-    ? state.selectedModel
-    : defaultModel;
+  const selectedModel =
+    state.entitled && isAllowedModel(env, state.selectedModel)
+      ? state.selectedModel
+      : defaultModel;
   if (selectedModel === defaultModel) {
     return originalWorker.fetch(request, env, ctx);
   }
@@ -338,7 +348,10 @@ async function paidChatResponse(request, env, ctx) {
   );
   if (!reservation.allowed) {
     return jsonResponse(
-      { error: "The monthly paid-model message limit has been reached. Choose the default model or manage billing." },
+      {
+        error:
+          "The monthly paid-model message limit has been reached. Choose the default model or manage billing.",
+      },
       429,
     );
   }
@@ -348,8 +361,10 @@ async function paidChatResponse(request, env, ctx) {
     modelEnvironment(env, selectedModel),
     ctx,
   );
-  let refund = !response.ok;
-  if (response.ok) {
+
+  let refund = !response.ok || Boolean(response.headers.get("X-Stabilize-Nonbillable"));
+  const contentType = response.headers.get("content-type") || "";
+  if (!refund && response.ok && contentType.includes("application/json")) {
     try {
       const result = await response.clone().json();
       refund = Boolean(fixedReplyForRoute(result?.route));
@@ -394,14 +409,18 @@ const worker = {
         }
         return redirect("/?billing=error", 303);
       }
-      const reference = "BIL-" + crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase();
+      const reference =
+        "BIL-" + crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase();
       console.error(JSON.stringify({
         event: "billing_request_failed",
         error: error instanceof Error ? error.name : "UnknownError",
         path: url.pathname,
         reference,
       }));
-      return jsonResponse({ error: "Billing could not complete that request.", reference }, 503);
+      return jsonResponse(
+        { error: "Billing could not complete that request.", reference },
+        503,
+      );
     }
   },
 };

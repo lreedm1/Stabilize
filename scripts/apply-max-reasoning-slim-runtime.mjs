@@ -145,7 +145,7 @@ await transform("src/index.js", (source) => {
     text,
     '      reasoning: { effort: reasoningEffort, context: "current_turn" },\n      instructions:',
     '      reasoning: { effort: reasoningEffort, context: "current_turn" },\n      text: { verbosity: "low" },\n      instructions:',
-    /reasoning: \{ effort: reasoningEffort, context: "current_turn" \},\n      text: \{ verbosity: "low" \},/,
+    /reasoning: \{ effort: reasoningEffort, context: "current_turn" \},\n\s+text: \{ verbosity: "low" \},/,
     "the low-verbosity response setting",
   );
 

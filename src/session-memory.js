@@ -81,30 +81,35 @@ function timestampedSummary(summary, updatedAt, now = Date.now()) {
 export class SessionMemory extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
+    this.schemaReady = false;
+    ctx.blockConcurrencyWhile(() => this.ensureSchema());
+  }
 
-    ctx.blockConcurrencyWhile(async () => {
-      this.ctx.storage.sql.exec(`
-        CREATE TABLE IF NOT EXISTS memory_state (
-          id INTEGER PRIMARY KEY CHECK (id = 1),
-          summary TEXT NOT NULL DEFAULT '',
-          summary_version INTEGER NOT NULL DEFAULT 0,
-          turn_count INTEGER NOT NULL DEFAULT 0,
-          awaiting_safety_answer INTEGER NOT NULL DEFAULT 0,
-          created_at INTEGER NOT NULL,
-          updated_at INTEGER NOT NULL
-        );
+  async ensureSchema() {
+    if (this.schemaReady) return;
+    this.ctx.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS memory_state (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        summary TEXT NOT NULL DEFAULT '',
+        summary_version INTEGER NOT NULL DEFAULT 0,
+        turn_count INTEGER NOT NULL DEFAULT 0,
+        awaiting_safety_answer INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
 
-        CREATE TABLE IF NOT EXISTS recent_messages (
-          sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-          role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
-          content TEXT NOT NULL,
-          created_at INTEGER NOT NULL
-        );
-      `);
-    });
+      CREATE TABLE IF NOT EXISTS recent_messages (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+    `);
+    this.schemaReady = true;
   }
 
   async readContext() {
+    await this.ensureSchema();
     const state = this.ctx.storage.sql
       .exec(
         `SELECT summary, turn_count, awaiting_safety_answer, updated_at
@@ -143,7 +148,77 @@ export class SessionMemory extends DurableObject {
     };
   }
 
+  async readUserMemory() {
+    await this.ensureSchema();
+    const state = this.ctx.storage.sql
+      .exec(
+        `SELECT summary, turn_count, updated_at
+         FROM memory_state WHERE id = 1`,
+      )
+      .toArray()[0];
+    if (!state) return emptyContext();
+
+    const recent = this.ctx.storage.sql
+      .exec(
+        `SELECT role, content, created_at
+         FROM recent_messages
+         ORDER BY sequence ASC`,
+      )
+      .toArray()
+      .map((message) => ({
+        role: message.role,
+        content: boundedText(message.content, MAX_STORED_MESSAGE_CHARS),
+        createdAt: validTimestamp(message.created_at),
+      }));
+
+    return {
+      summary: boundedText(state.summary, MAX_SUMMARY_CHARS),
+      recent,
+      awaitingSafetyAnswer: false,
+      turnCount: Number(state.turn_count) || 0,
+      updatedAt: validTimestamp(state.updated_at),
+    };
+  }
+
+  async replaceSummary(value) {
+    const summary = boundedText(value, MAX_SUMMARY_CHARS);
+    if (!summary) {
+      await this.clearMemory();
+      return { summary: "", updatedAt: null };
+    }
+
+    await this.ensureSchema();
+    const now = Date.now();
+    await this.ctx.storage.setAlarm(now + SESSION_RETENTION_MS);
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec(
+        `INSERT INTO memory_state (
+           id, summary, summary_version, turn_count,
+           awaiting_safety_answer, created_at, updated_at
+         ) VALUES (1, ?, 1, 0, 0, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           summary = excluded.summary,
+           summary_version = memory_state.summary_version + 1,
+           awaiting_safety_answer = 0,
+           updated_at = excluded.updated_at`,
+        summary,
+        now,
+        now,
+      );
+      this.ctx.storage.sql.exec("DELETE FROM recent_messages");
+    });
+    return { summary, updatedAt: now };
+  }
+
+  async clearMemory() {
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+    this.schemaReady = false;
+    return { deleted: true };
+  }
+
   async recordExchange(exchange) {
+    await this.ensureSchema();
     const user = boundedText(exchange?.user, MAX_STORED_MESSAGE_CHARS);
     const assistant = boundedText(exchange?.assistant, MAX_STORED_MESSAGE_CHARS);
     if (!user || !assistant) throw new Error("Invalid memory exchange");
@@ -151,8 +226,6 @@ export class SessionMemory extends DurableObject {
     const awaitingSafetyAnswer = exchange?.awaitingSafetyAnswer === true ? 1 : 0;
     const now = Date.now();
 
-    // Schedule expiry before writing so a transient alarm failure cannot leave
-    // newly written sensitive context without a retention deadline.
     await this.ctx.storage.setAlarm(now + SESSION_RETENTION_MS);
 
     this.ctx.storage.transactionSync(() => {
@@ -206,6 +279,7 @@ export class SessionMemory extends DurableObject {
   }
 
   async getCompactionSnapshot() {
+    await this.ensureSchema();
     const state = this.ctx.storage.sql
       .exec(
         `SELECT summary, summary_version, updated_at
@@ -244,6 +318,7 @@ export class SessionMemory extends DurableObject {
   }
 
   async applySummary(summary, expectedVersion, throughSequence) {
+    await this.ensureSchema();
     const cleanSummary = boundedText(summary, MAX_SUMMARY_CHARS);
     const version = Number(expectedVersion);
     const sequence = Number(throughSequence);
@@ -279,9 +354,6 @@ export class SessionMemory extends DurableObject {
   }
 
   async alarm() {
-    this.ctx.storage.transactionSync(() => {
-      this.ctx.storage.sql.exec("DELETE FROM recent_messages");
-      this.ctx.storage.sql.exec("DELETE FROM memory_state");
-    });
+    await this.clearMemory();
   }
 }
