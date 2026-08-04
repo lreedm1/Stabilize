@@ -53,56 +53,63 @@ function webpInfo(buffer) {
   return { width, height, chunks };
 }
 
-test("mobile uses responsive high-DPI static generated WebPs", async () => {
-  const tiers = [
-    { filename: "mobile-golden-alpine-v3-720.webp", width: 720, height: 1556 },
-    { filename: "mobile-golden-alpine-v3-1080.webp", width: 1080, height: 2334 },
-    { filename: "mobile-golden-alpine-v3-1440.webp", width: 1440, height: 3112 },
-    { filename: "mobile-golden-alpine-v3-2160.webp", width: 2160, height: 4670 },
-  ];
-  const [pageSource, mobileQuality, mobileStyles, ...images] =
+test("mobile uses a direct looping woodland WebP with a still fallback", async () => {
+  const [pageSource, mobileQuality, loopStyles, loop, still] =
     await Promise.all([
       readFile(new URL("../src/page.js", import.meta.url), "utf8"),
       readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
       readFile(new URL("../public/mobile-woodland-loop.css", import.meta.url), "utf8"),
-      ...tiers.map(({ filename }) =>
-        readFile(new URL(`../public/scenes/${filename}`, import.meta.url)),
+      readFile(
+        new URL(
+          "../public/scenes/mobile-woodland-spring-loop.webp",
+          import.meta.url,
+        ),
+      ),
+      readFile(
+        new URL(
+          "../public/scenes/mobile-woodland-spring-still.webp",
+          import.meta.url,
+        ),
       ),
     ]);
 
-  const aspectRatios = images.map((image, index) => {
-    const imageInfo = webpInfo(image);
-    assert.deepEqual(
-      { width: imageInfo.width, height: imageInfo.height },
-      { width: tiers[index].width, height: tiers[index].height },
-    );
-    assert.ok(image.byteLength > 50_000);
-    assert.ok(image.byteLength < 25_000_000);
-    assert.equal(imageInfo.chunks.includes("ANIM"), false);
-    return imageInfo.width / imageInfo.height;
-  });
-  assert.ok(Math.max(...aspectRatios) - Math.min(...aspectRatios) < 0.001);
-  assert.ok(tiers.at(-1).width >= 2160);
+  const loopInfo = webpInfo(loop);
+  const stillInfo = webpInfo(still);
 
-  for (const { filename, width } of tiers) {
-    assert.equal(
-      [...pageSource.matchAll(new RegExp(`${filename} ${width}w`, "g"))].length,
-      2,
-      `${filename} should appear in both the preload and picture source sets`,
-    );
-  }
-  assert.match(pageSource, /rel="preload"[\s\S]*imagesrcset=/);
-  assert.match(pageSource, /imagesizes="100vw"/);
-  assert.match(pageSource, /href="\/scenes\/mobile-golden-alpine-v3-1440\.webp"/);
-  assert.match(pageSource, /mobile-woodland-loop\.css\?v=20260803-14/);
-  assert.doesNotMatch(pageSource, /mobile-golden-alpine-v2\.webp/);
-  assert.doesNotMatch(pageSource, /mobile-woodland-spring-loop/);
+  assert.deepEqual(
+    { width: loopInfo.width, height: loopInfo.height },
+    { width: 540, height: 960 },
+  );
+  assert.deepEqual(
+    { width: stillInfo.width, height: stillInfo.height },
+    { width: 540, height: 960 },
+  );
+  assert.ok(loop.byteLength > 300_000);
+  assert.ok(loop.byteLength < 5_000_000);
+  assert.ok(still.byteLength > 50_000);
+  assert.ok(still.byteLength < loop.byteLength);
+  assert.ok(loopInfo.chunks.includes("ANIM"));
+  assert.ok(loopInfo.chunks.filter((chunk) => chunk === "ANMF").length >= 8);
+  assert.equal(stillInfo.chunks.includes("ANIM"), false);
 
-  assert.match(mobileStyles, /opacity:\s*1/);
-  assert.match(mobileStyles, /object-fit:\s*cover/);
-  assert.match(mobileStyles, /animation:\s*none/);
-  assert.doesNotMatch(mobileStyles, /@keyframes/);
-  assert.doesNotMatch(mobileStyles, /mobile-golden-alpine\.avif/);
+  assert.match(
+    pageSource,
+    /mobile-woodland-spring-loop\.webp\?v=20260802-9 540w/,
+  );
+  assert.match(
+    pageSource,
+    /rel="preload"[\s\S]*mobile-woodland-spring-loop\.webp\?v=20260802-9/,
+  );
+  assert.match(pageSource, /mobile-woodland-loop\.css\?v=20260802-9/);
+  assert.doesNotMatch(pageSource, /mobile-golden-alpine-v3/);
+
+  assert.match(
+    loopStyles,
+    /mobile-woodland-spring-still\.webp\?v=20260802-9/,
+  );
+  assert.match(loopStyles, /animation:\s*none\s*!important/);
+  assert.match(loopStyles, /transform:\s*none\s*!important/);
+  assert.doesNotMatch(loopStyles, /@keyframes/);
 
   assert.match(mobileQuality, /max-width: 980px/);
   assert.match(mobileQuality, /orientation: portrait/);
