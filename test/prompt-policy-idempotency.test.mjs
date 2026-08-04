@@ -20,6 +20,7 @@ const POLICY_SCRIPTS = [
   "scripts/fix-openai-response-schema.mjs",
   "scripts/use-supported-openai-model.mjs",
   "scripts/apply-adaptive-reasoning.mjs",
+  "scripts/prepare-stream-hardening.mjs",
   "scripts/harden-openai-streaming.mjs",
   "scripts/restore-adaptive-stream-reasoning.mjs",
 ];
