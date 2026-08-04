@@ -13,9 +13,19 @@ function allowedStripeUrl(value) {
 }
 
 function billingStatus(form) {
-  return form
-    .closest(".billing-menu")
-    ?.querySelector(".billing-action-status");
+  const menu = form.closest(".billing-menu");
+  if (!(menu instanceof HTMLElement)) return null;
+
+  let status = menu.querySelector(".billing-action-status");
+  if (!(status instanceof HTMLElement)) {
+    status = document.createElement("p");
+    status.className = "billing-action-status";
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    status.hidden = true;
+    menu.appendChild(status);
+  }
+  return status;
 }
 
 function setStatus(form, message) {
