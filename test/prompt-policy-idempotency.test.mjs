@@ -37,6 +37,7 @@ const POLICY_SCRIPTS = [
   "scripts/compact-final-system-prompt.mjs",
   "scripts/fix-rounded-conversation-test.mjs",
   "scripts/fix-paid-model-choice.mjs",
+  "scripts/add-composer-model-picker.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
