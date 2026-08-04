@@ -32,6 +32,9 @@ const LAST_ANSWER_STORAGE_KEY = "stabilize:last-answer:v1";
 const LAST_ANSWER_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_PERSISTED_REPLY_CHARS = 12_000;
 
+chatLog.setAttribute("aria-atomic", "false");
+chatLog.setAttribute("aria-label", "Current conversation");
+
 const ROUTE_ACTION_SETS = {
   FLOOR_FOOD: {
     question: "What would help you eat now?",
@@ -69,7 +72,7 @@ const ROUTE_ACTION_SETS = {
 
 const CONTENT_ACTION_SETS = [
   {
-    pattern: /\\b(message|text|email|reply|conversation|apolog(?:y|ize)|boundary|send it)\\b/i,
+    pattern: /\b(message|text|email|reply|conversation|apolog(?:y|ize)|boundary|send it)\b/i,
     question: "What should we do with the message?",
     actions: [
       { label: "Draft it", prompt: "Draft the message in a calm, direct tone. Keep it concise and preserve my boundary." },
@@ -78,7 +81,7 @@ const CONTENT_ACTION_SETS = [
     ],
   },
   {
-    pattern: /\\b(decision|decide|choice|choose|compare|option|trade-?off|pros? and cons?)\\b/i,
+    pattern: /\b(decision|decide|choice|choose|compare|option|trade-?off|pros? and cons?)\b/i,
     question: "What would make the choice clearer?",
     actions: [
       { label: "Compare the options", prompt: "Compare the realistic options using impact, effort, cost, risk, and reversibility." },
@@ -87,7 +90,7 @@ const CONTENT_ACTION_SETS = [
     ],
   },
   {
-    pattern: /\\b(work|school|class|assignment|project|deadline|application|internship|meeting)\\b/i,
+    pattern: /\b(work|school|class|assignment|project|deadline|application|internship|meeting)\b/i,
     question: "What would move this forward?",
     actions: [
       { label: "Break off 10 minutes", prompt: "Turn this into one useful task I can complete in ten minutes." },
@@ -96,7 +99,7 @@ const CONTENT_ACTION_SETS = [
     ],
   },
   {
-    pattern: /\\b(money|budget|rent|housing|apartment|cost|debt|bill|financial|afford)\\b/i,
+    pattern: /\b(money|budget|rent|housing|apartment|cost|debt|bill|financial|afford)\b/i,
     question: "What would protect the essentials?",
     actions: [
       { label: "Compare the costs", prompt: "Compare the realistic costs, hidden costs, and financial risk of the options." },
@@ -105,7 +108,7 @@ const CONTENT_ACTION_SETS = [
     ],
   },
   {
-    pattern: /\\b(friend|social|lonely|alone|isolation|reach out|connection|meet people|community)\\b/i,
+    pattern: /\b(friend|social|lonely|alone|isolation|reach out|connection|meet people|community)\b/i,
     question: "What would make connection easier?",
     actions: [
       { label: "Draft a low-pressure text", prompt: "Draft a low-pressure message that invites connection without overexplaining." },
@@ -118,6 +121,8 @@ const CONTENT_ACTION_SETS = [
 let awaitingSafetyAnswer = false;
 let pending = false;
 let lastSubmittedText = "";
+let nextVisibleUserText = "";
+let activeAssistantOutput = null;
 
 function buildOutcomeActionPrompt(instruction, previousReply) {
   const request = String(instruction || "").trim();
@@ -181,6 +186,7 @@ function appendOutcomeCheck(article, previousReply, route) {
     button.addEventListener("click", () => {
       if (pending) return;
       disableButtons();
+      nextVisibleUserText = label;
       void sendMessage(buildOutcomeActionPrompt(prompt, previousReply));
     });
     buttons.push(button);
@@ -191,22 +197,51 @@ function appendOutcomeCheck(article, previousReply, route) {
   article.appendChild(section);
 }
 
+function scrollConversationToLatest() {
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+function appendUserOutput(content) {
+  const article = document.createElement("article");
+  article.className = "user-output";
+  article.setAttribute("aria-label", "You");
+
+  const paragraph = document.createElement("p");
+  paragraph.textContent = content;
+  article.appendChild(paragraph);
+
+  chatLog.appendChild(article);
+  chatLog.hidden = false;
+  conversationSurface.dataset.view = "response";
+  scrollConversationToLatest();
+  return article;
+}
+
 function showOutput(
   content,
   extraClass = "",
   view = "response",
   { offerOutcomeCheck = false, route = "ORDINARY" } = {},
 ) {
-  chatLog.replaceChildren();
-  const article = document.createElement("article");
+  if (view === "compose") chatLog.replaceChildren();
+
+  const article =
+    view !== "thinking" && activeAssistantOutput instanceof HTMLElement
+      ? activeAssistantOutput
+      : document.createElement("article");
+
   article.className = `assistant-output ${extraClass}`.trim();
+  article.setAttribute("aria-label", "Stabilize");
+  article.replaceChildren();
   article.appendChild(renderMarkdown(content));
   if (offerOutcomeCheck) appendOutcomeCheck(article, content, route);
-  chatLog.appendChild(article);
+  if (!article.isConnected) chatLog.appendChild(article);
+
   chatLog.hidden = false;
   chatLog.tabIndex = view === "response" ? 0 : -1;
   conversationSurface.dataset.view = view;
-  chatLog.scrollTop = 0;
+  activeAssistantOutput = view === "thinking" ? article : null;
+  scrollConversationToLatest();
   return article;
 }
 
@@ -298,11 +333,35 @@ function restoreComposeView() {
   chatLog.hidden = true;
   chatLog.tabIndex = -1;
   conversationSurface.dataset.view = "compose";
+  activeAssistantOutput = null;
+  nextVisibleUserText = "";
   setPending(false);
 
   if (!input.value && lastSubmittedText) {
     input.value = lastSubmittedText;
   }
+}
+
+function recoverInterruptedThinking() {
+  const thinkingOutput =
+    activeAssistantOutput instanceof HTMLElement
+      ? activeAssistantOutput
+      : chatLog.querySelector(".thinking-output");
+  thinkingOutput?.remove();
+  activeAssistantOutput = null;
+
+  const latestOutput = chatLog.lastElementChild;
+  if (latestOutput?.classList.contains("user-output")) latestOutput.remove();
+
+  if (!input.value && lastSubmittedText) input.value = lastSubmittedText;
+  lastSubmittedText = "";
+  setPending(false);
+
+  const hasConversation = chatLog.childElementCount > 0;
+  chatLog.hidden = !hasConversation;
+  chatLog.tabIndex = hasConversation ? 0 : -1;
+  conversationSurface.dataset.view = hasConversation ? "response" : "compose";
+  if (hasConversation) scrollConversationToLatest();
 }
 
 function requestErrorMessage(message, reference = "") {
@@ -320,11 +379,17 @@ function requestErrorMessage(message, reference = "") {
 
 async function sendMessage(text) {
   const clean = String(text || "").trim();
-  if (!clean || pending) return;
+  if (!clean || pending) {
+    nextVisibleUserText = "";
+    return;
+  }
 
+  const visibleUserText = String(nextVisibleUserText || clean).trim() || clean;
+  nextVisibleUserText = "";
   lastSubmittedText = clean;
   modulateTerrain(clean);
   input.value = "";
+  appendUserOutput(visibleUserText);
   setPending(true);
   showOutput(copy.thinking, "thinking-output", "thinking");
 
@@ -397,7 +462,12 @@ window.addEventListener("pageshow", (event) => {
   const outputIsMissing = chatLog.hidden || chatLog.childElementCount === 0;
   const interruptedThinkingView = event.persisted && view === "thinking";
 
-  if (interruptedThinkingView || (view !== "compose" && outputIsMissing)) {
+  if (interruptedThinkingView) {
+    recoverInterruptedThinking();
+    return;
+  }
+
+  if (view !== "compose" && outputIsMissing) {
     if (!restorePersistedAnswer()) restoreComposeView();
   }
 });
