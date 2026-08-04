@@ -21,6 +21,7 @@ const POLICY_SCRIPTS = [
   "scripts/fix-openai-response-schema.mjs",
   "scripts/use-supported-openai-model.mjs",
   "scripts/apply-adaptive-reasoning.mjs",
+  "scripts/apply-new-conversation.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
@@ -31,7 +32,9 @@ const POLICY_TARGETS = [
   "src/billing.js",
   "src/reasoning-policy.js",
   "public/app.js",
+  "public/seo.css",
   "test/worker.test.mjs",
+  "test/session-memory.test.mjs",
   "test/prompt-submit.test.mjs",
   "test/outcome-followup.test.mjs",
   "test/streaming-response.test.mjs",
