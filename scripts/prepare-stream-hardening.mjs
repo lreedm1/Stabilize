@@ -1,5 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 
+// Each policy pass rebuilds the generated stream functions. Remove helpers from
+// the prior pass before the canonical hardened implementation is inserted.
 const path = "src/index.js";
 const before = await readFile(path, "utf8");
 const helperStart = before.indexOf("function streamFailureDiagnostic(error) {");
