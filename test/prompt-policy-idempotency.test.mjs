@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -63,13 +62,15 @@ function runPolicy(destination) {
   }
 }
 
-async function policyDigest(destination) {
-  const hash = createHash("sha256");
+async function policySnapshot(destination) {
+  const snapshot = new Map();
   for (const relativePath of POLICY_TARGETS) {
-    hash.update(relativePath);
-    hash.update(await readFile(path.join(destination, relativePath)));
+    snapshot.set(
+      relativePath,
+      await readFile(path.join(destination, relativePath), "utf8"),
+    );
   }
-  return hash.digest("hex");
+  return snapshot;
 }
 
 test("the prompt policy pipeline is idempotent", async (context) => {
@@ -80,8 +81,15 @@ test("the prompt policy pipeline is idempotent", async (context) => {
 
   await copyFixtures(fixtureRoot);
   runPolicy(fixtureRoot);
-  const firstDigest = await policyDigest(fixtureRoot);
+  const first = await policySnapshot(fixtureRoot);
 
   runPolicy(fixtureRoot);
-  assert.equal(await policyDigest(fixtureRoot), firstDigest);
+  const second = await policySnapshot(fixtureRoot);
+  for (const relativePath of POLICY_TARGETS) {
+    assert.equal(
+      second.get(relativePath),
+      first.get(relativePath),
+      `${relativePath} changed when the policy pipeline ran a second time`,
+    );
+  }
 });
