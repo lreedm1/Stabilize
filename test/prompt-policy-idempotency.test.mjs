@@ -33,6 +33,8 @@ const POLICY_SCRIPTS = [
   "scripts/prepare-private-chat-after-outcome-tray.mjs",
   "scripts/apply-private-chat.mjs",
   "scripts/finalize-private-chat.mjs",
+  "scripts/apply-consent-before-help.mjs",
+  "scripts/fix-paid-model-choice.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
