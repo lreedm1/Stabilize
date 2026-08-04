@@ -22,8 +22,10 @@ const expandedOutput =
   "OUTPUT: Warm, concrete, and non-presumptive. Do not interpret disclosure, distress, or vulnerability as consent for help. When no request is present, acknowledge briefly and ask what the user wants from the conversation; do not attach advice, action steps, coping strategies, or suggested options to that acknowledgment. For explicit requests, answer directly without a redundant permission question. Do not recite the protocol or bury the answer under a checklist. Ask one question only when needed.";
 const intermediateOutput =
   "OUTPUT: Warm, concrete, and non-presumptive. Without a request, acknowledge and ask what the user wants; add no advice or action. Answer explicit requests directly. Do not recite the protocol or bury the answer under a checklist. Ask one question only when needed.";
-const newOutput =
+const compactOutput =
   "OUTPUT: Warm and concrete. Answer explicit requests directly; otherwise acknowledge and ask what the user wants. Do not recite the protocol. Ask one question only when needed. Keep ordinary responses to 220 words or fewer. For requested document-ready content, use needed length. Preserve the answer, caveat, and next action; omit repetition.";
+const newOutput =
+  "OUTPUT: Warm and concrete. Answer explicit requests directly; otherwise acknowledge and ask what the user wants. Do not recite the protocol. Ask one question only when needed. Keep ordinary responses to 220 words or fewer. For requested document-ready content, use the length needed. Preserve the answer, caveat, and next action; omit repetition.";
 
 let next = source;
 if (!next.includes(newMethod)) {
@@ -41,7 +43,9 @@ if (!next.includes(newMethod)) {
 }
 
 if (!next.includes(newOutput)) {
-  if (next.includes(intermediateOutput)) {
+  if (next.includes(compactOutput)) {
+    next = next.replace(compactOutput, newOutput);
+  } else if (next.includes(intermediateOutput)) {
     next = next.replace(intermediateOutput, newOutput);
   } else if (next.includes(expandedOutput)) {
     next = next.replace(expandedOutput, newOutput);
@@ -63,7 +67,7 @@ if (!next.includes("add no advice or action")) {
 if (!next.includes("220 words or fewer")) {
   throw new Error("The ordinary-response length bound is missing");
 }
-if (!next.includes("document-ready content")) {
+if (!next.includes("For requested document-ready content, use the length needed")) {
   throw new Error("The document-length exception is missing");
 }
 
