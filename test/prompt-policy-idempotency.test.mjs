@@ -19,12 +19,14 @@ const POLICY_SCRIPTS = [
   "scripts/align-streaming-compatibility.mjs",
   "scripts/finalize-streaming-handler.mjs",
   "scripts/fix-openai-response-schema.mjs",
+  "scripts/apply-adaptive-reasoning.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
   "src/page.js",
   "src/copy.js",
   "src/session-memory.js",
+  "src/reasoning-policy.js",
   "public/app.js",
   "test/worker.test.mjs",
   "test/prompt-submit.test.mjs",
