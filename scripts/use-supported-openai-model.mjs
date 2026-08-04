@@ -66,7 +66,7 @@ await update("test/worker.test.mjs", (source) => {
       createEnv({
         DEMO_MODE: "false",
         OPENAI_API_KEY: "test-openai-key",
-        OPENAI_MODEL: "${LEGACY_MODEL}",
+        OPENAI_MODEL: ["gpt-5.6", "sol"].join("-"),
       }),
     );
 
