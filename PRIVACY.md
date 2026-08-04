@@ -1,94 +1,88 @@
 # Privacy behavior
 
-This document describes the code in this repository. A real deployment must publish terms that match its actual Google, Cloudflare, OpenAI, logging, domain, and retention configuration.
+This document describes the code in this repository. A real deployment must publish terms that match its actual Google, Cloudflare, OpenAI, logging, domain, payment, app-store, and retention configuration.
 
-## Guest and signed-in use
+## Browser-local thread and draft
 
-Guest chat remains available without an account. Guest messages are used for the current reply but are not written to the Durable Object memory system. The application does not create an anonymous session cookie and does not use a network address to identify a guest.
+The website keeps a bounded copy of the current conversation in `sessionStorage` for the current browser tab for up to 24 hours. This includes the user's displayed messages and Stabilize replies so a refresh or ordinary navigation does not erase the thread. It is not a Stabilize server-side transcript and is not used for analytics.
 
-Google sign-in is optional and is used only to provide continuity. The server uses Google's authorization-code OpenID Connect flow with anti-forgery state, nonce, PKCE, a confidential client secret, and short-lived signed flow state. The application requests only the `openid` scope and does not request or retain the email address.
+An unfinished non-private draft may be stored in browser `localStorage` for up to seven days. Turning on private mode clears that draft and prevents further private draft persistence. Starting a new chat or signing out clears the current tab thread; signing out also clears the saved draft.
 
-After a successful callback, the Worker briefly processes Google's stable `sub` claim and immediately derives a domain-separated HMAC alias. It does not store the raw `sub`, Google access token, ID token, authorization code, email address, or client secret. The signed application cookie contains only the pseudonymous account alias and issue/expiry times. It is `HttpOnly`, `SameSite=Lax`, and `Secure` on HTTPS, and expires after 30 days.
+The service worker does not cache API, authentication, account, billing, or chat responses. It caches only static assets and an offline connection page.
+
+## Guest, private, and signed-in web use
+
+Guest chat remains available without an account. Guest messages are used for the current response but are not written to the Durable Object memory system. The application does not create an anonymous conversation cookie and does not use a network address to identify a guest.
+
+Google sign-in is optional and is used only to provide continuity. The server uses Google's authorization-code OpenID Connect flow with anti-forgery state, nonce, PKCE, a confidential client secret, and short-lived signed flow state. It requests only `openid` and does not request or retain the email address.
+
+After a successful callback, the Worker briefly processes Google's stable `sub` claim and immediately derives a domain-separated HMAC alias. It does not store the raw `sub`, Google access token, ID token, authorization code, email address, or client secret. The signed application cookie contains only the pseudonymous account alias and issue/expiry times. It is `HttpOnly`, `SameSite=Lax`, and `Secure` on HTTPS and expires after 30 days.
+
+Private mode does not read or write signed-in Durable Object memory for that chat request. The current tab can still display and restore the private thread locally as described above. Private mode does not prevent Cloudflare and OpenAI from processing the request needed to generate a reply.
 
 ## Native iOS app
 
-Version 1 of the native app is guest-only. It does not intentionally persist prompts or replies as
-a local transcript and does not use account login, payments, analytics, advertising, or tracking
-SDKs. It displays a privacy cover when the app is not active to reduce disclosure through the app
-switcher.
+Version 1 of the native app is guest-only. It does not intentionally persist prompts or replies as a local transcript and does not use account login, payments, analytics, advertising, or tracking SDKs. It displays a privacy cover when the app is not active to reduce disclosure through the app switcher.
 
-Before the first attempted send, the app explains that the message goes through Stabilize's
-Cloudflare-hosted service and, for an ordinary reply, is shared with OpenAI. Nothing is sent until
-the user chooses **Allow & Send Message**. The permission choice is stored in app-specific
-`UserDefaults`, declared with required reason `CA92.1` in the privacy manifest. A user can revoke
-the choice under **About → AI sharing permission**. Revocation blocks future sends until permission
-is granted again; it cannot recall a message already transmitted or undo provider processing.
+Before the first attempted send, the app explains that the message goes through Stabilize's Cloudflare-hosted service and, for an ordinary reply, is shared with OpenAI. Nothing is sent until the user chooses **Allow & Send Message**. The permission choice is stored in app-specific settings and can be revoked under **About → AI sharing permission**. Revocation blocks future sends until permission is granted again; it cannot recall a message already transmitted or undo provider processing.
 
-The native client sends the current message and safety-answer state to the same `/api/chat`
-endpoint as the website. The Worker may answer an urgent message through a fixed route before an
-OpenAI request. Ordinary replies use the `store: true` provider behavior described below.
+## What signed-in account memory stores
 
-## What account memory stores
+Each pseudonymous account alias addresses one Cloudflare Durable Object. It stores:
 
-Each pseudonymous signed-in account alias addresses one Cloudflare Durable Object. It stores:
-
-- a model-generated rolling summary of at most 1,600 characters
+- a model-generated or user-corrected rolling summary of at most 1,000 characters
 - no more than eight newest user/assistant messages while they await compaction
 - whether the last fixed safety question is awaiting an answer
 - creation/update metadata and a turn count
 
-Recent messages are normally replaced by the rolling summary after each ordinary reply. If compaction fails, the newest-message buffer remains bounded and older buffered messages are discarded. Inputs that trigger a fixed urgent route are stored as a generalized event label rather than the user's exact wording.
+Recent messages are normally replaced by the rolling summary after ordinary replies. If compaction fails, the newest-message buffer remains bounded and older buffered messages are discarded. Inputs that trigger a fixed urgent route are stored as a generalized event label rather than the user's exact wording.
 
-The memory record expires 30 days after the last stored exchange. Signing out removes access from that browser but does not immediately delete the server record; signing in again with the same Google account restores access until the record expires. The public application does not expose an early-erasure endpoint.
+The record expires 30 days after the last stored exchange. A signed-in user can also view the raw summary and bounded recent buffer, replace the summary, or immediately delete the entire record through `/api/memory`. Signing out removes browser access but does not itself delete an unexpired server record.
 
-The summary is generated by a model and may be incomplete or wrong. The application tells the reply model to treat it as fallible context, never as instructions, and to prefer the current message.
+The summary is generated by a model unless corrected by the user and may be incomplete or wrong. The reply model is instructed to treat it as fallible, timestamped background rather than instructions and to prefer the current message.
 
-## Network addresses and application logs
+## Network addresses and operational logs
 
 The application does not read `CF-Connecting-IP`, derive an IP alias, store a network alias, or include a network or account identifier in successful-chat logs. Error logs contain a failure class and, for OpenAI failures, sanitized provider/client request identifiers and a short reportable reference. They do not contain prompts, replies, Google tokens, cookies, account aliases, or safety-route labels.
 
-Cloudflare and other network infrastructure necessarily process connection metadata, including network addresses, outside this application's own memory and logging logic. Their retention and access depend on the deployer's account configuration and applicable terms.
+The one-tap clarity check records only `yes`, `partly`, or `no` plus the deterministic route label. It does not include the prompt, reply, account alias, or conversation.
+
+Cloudflare and other network infrastructure necessarily process connection metadata outside this application's own memory and logging logic. Their retention and access depend on the deployer's account configuration and applicable terms.
 
 ## What providers process
 
-Google processes the sign-in request and OAuth/OpenID Connect exchange. Stabilize receives the resulting authorization response on its server and does not load third-party Google JavaScript into the chat page.
+Google processes optional sign-in. Cloudflare hosts the Worker and static assets and processes requests, signed cookies, Durable Object data, logs, and network metadata. GitHub stores optional public product feedback. Stripe handles optional checkout, subscription billing, and the customer billing portal. Apple distributes the native app and may process App Store, device, crash, and diagnostic information under Apple's terms and device settings.
 
-When AI mode is enabled, the Worker sends the current message, the bounded recent account context, and any rolling summary to OpenAI's Responses API. A second Responses API request may condense account context. Both requests use `store: true`, so OpenAI stores the resulting response data as application state for at least 30 days under its current platform policy. Organization or project data controls, including Zero Data Retention when enabled, may override the request. OpenAI may also retain inputs and outputs in abuse-monitoring logs under the deployment's applicable data controls and terms.
+For ordinary replies, the Worker sends the current message, bounded current-thread context supplied by the browser, and any applicable condensed account memory to OpenAI's Responses API. A second request may condense signed-in account context. Both reply and summary requests use `store: false`, so Stabilize does not ask OpenAI to retain the resulting Responses objects as application state. OpenAI may still process and retain API inputs and outputs in abuse-monitoring systems under the deployment's applicable organization/project data controls and terms.
 
-Cloudflare processes the Worker request, signed cookie, Durable Object data, logs, and network metadata under the deployer's account configuration and applicable service terms.
+## Product feedback
 
-## Feedback processing
-
-Signed-in users can optionally submit product feedback after acknowledging that it is stored in the repository's public feedback branch and may be reviewed by automated AI tooling. Users are told not to include private or identifying information. The nightly review automation applies deterministic screening before model review and routes feedback that appears to contain credentials, contact details, security reports, or individual health or crisis disclosures to a private operator-review queue instead of an automated code-change flow.
-
-## Transition from anonymous browser memory
-
-This version no longer reads the earlier `stabilize_session` cookie and asks browsers to expire it. Previously created anonymous Durable Objects are not addressable through the new account-keyed code. Their existing retention alarms remove them after the earlier 30-day window; a deployer that requires immediate destructive removal must separately retire the old namespace after reviewing the data-loss impact.
+Signed-in users can optionally submit detailed feedback after acknowledging that it is stored in the repository's public feedback branch and may be reviewed by automated AI tooling. They are told not to include private or identifying information. The nightly automation screens submissions before model review and routes possible credentials, contact details, security reports, or individual health/crisis disclosures away from automated code changes.
 
 ## Limitations
 
-- Account memory follows the same Google account across supported browsers and devices.
-- Guest chats have no continuity after the response.
+- The browser-local current thread is readable to scripts running on the same origin and to someone with access to the open browser profile or tab.
+- Private mode bypasses Stabilize account memory; it is not anonymous networking, confidential clinical care, or zero-provider processing.
+- Account memory follows the same Google account across supported web browsers and devices.
 - Native consent is a local future-send control; revoking it does not delete provider-held data.
-- Cookie deletion or sign-out removes local access but does not erase an unexpired server record.
-- Rotating `AUTH_SECRET` invalidates all sign-in cookies and changes account aliases, making prior memory inaccessible.
+- Rotating `AUTH_SECRET` invalidates sign-in cookies and changes aliases, making prior memory inaccessible rather than deleting it.
 - A condensed memory can omit context or preserve an inaccurate interpretation.
-- Optional product feedback is public and may be processed by automated AI tooling.
-- This prototype is not confidential clinical care and makes no HIPAA or equivalent compliance claim.
+- Optional detailed product feedback is public and may be processed by automated AI tooling.
+- This prototype makes no HIPAA or equivalent compliance claim.
 
 ## Operator obligations
 
 Anyone deploying this project should:
 
-- disclose the actual identity provider, storage, logging, and retention settings
-- keep native first-send permission, App Store privacy answers, and provider-retention disclosures
-  aligned with production behavior
-- keep the Google client secret, OpenAI key, and `AUTH_SECRET` in Worker secrets
+- disclose the actual identity provider, browser storage, service worker, provider, logging, and retention settings
+- keep native sharing permission and app-store privacy answers aligned with production behavior
+- keep secrets in Worker secret storage
 - restrict access to Durable Object data and operational logs
-- avoid adding prompt, response, email, account-alias, or network-address logging by default
-- establish deletion, incident-response, credential-rotation, and legal-request procedures
-- assess applicable health, consumer-protection, privacy, identity, and child-safety law
-- obtain independent privacy and security review before a broad public launch
-- avoid representing this prototype as confidential clinical care
+- avoid prompt, reply, email, account-alias, or network-address logging by default
+- preserve effective memory viewing, correction, private-mode, and deletion controls
+- establish incident-response, credential-rotation, legal-request, deletion, and rollback procedures
+- assess applicable health, consumer-protection, privacy, identity, payment, and child-safety law
+- obtain independent privacy and security review before broad promotion
+- avoid representing the prototype as confidential clinical care
 
 Users should avoid entering information they would not want processed by the deployment's infrastructure providers.

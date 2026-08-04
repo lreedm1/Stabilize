@@ -1,147 +1,53 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Privacy and Memory — Stabilize</title>
-    <meta
-      name="description"
-      content="Learn how guest chats, the native iOS app, signed-in memory, feedback, Google authentication, Stripe billing, OpenAI processing, and Cloudflare infrastructure work in Stabilize."
-    />
-    <link rel="canonical" href="https://stabilize.info/privacy.html" />
-    <meta name="robots" content="index,follow" />
-    <link rel="stylesheet" href="/guides.css" />
-  </head>
-  <body>
-    <header>
-      <a class="brand" href="/">Stabilize</a>
-      <nav aria-label="Resources">
-        <a href="/about.html">About</a>
-        <a href="/how-it-works.html">How it works</a>
-        <a href="/floor-first.html">Floor-first</a>
-        <a href="/safety.html">Safety</a>
-        <a href="/support.html">Support</a>
-      </nav>
-    </header>
-    <main>
-      <p><strong>Privacy and memory</strong></p>
-      <h1>What the current prototype remembers</h1>
-      <p class="lede">
-        Stabilize does not create its own server-side conversation history for guest chats. The
-        current web tab temporarily keeps only the latest assistant reply, and the native iOS app
-        does not intentionally save a prompt or reply on the device. OpenAI provider storage still
-        applies as described below.
-      </p>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Privacy and Memory — Stabilize</title>
+  <meta name="description" content="How current-thread storage, private chat, signed-in memory, feedback, authentication, OpenAI processing, and infrastructure work in Stabilize." />
+  <link rel="canonical" href="https://stabilize.info/privacy.html" />
+  <meta name="robots" content="index,follow" />
+  <link rel="stylesheet" href="/guides.css" />
+</head>
+<body>
+  <header>
+    <a class="brand" href="/">Stabilize</a>
+    <nav aria-label="Resources"><a href="/about.html">About</a><a href="/how-it-works.html">How it works</a><a href="/floor-first.html">Floor-first</a><a href="/safety.html">Safety</a><a href="/support.html">Support</a></nav>
+  </header>
+  <main>
+    <p><strong>Privacy and memory</strong></p>
+    <h1>What Stabilize remembers</h1>
+    <p class="lede">The current web tab can restore the conversation locally. Guest and private chats create no Stabilize account memory. Signed-in memory is condensed, viewable, correctable, and deletable.</p>
 
-      <h2>Guest web use</h2>
-      <p>
-        When you use Stabilize on the web without signing in, the application does not retain a
-        server-side conversation history for later guest sessions. The latest assistant reply and
-        minimal display state are stored in session storage for the current browser tab for up to
-        24 hours so a result can survive a refresh or ordinary navigation.
-        The user's prompt is not included in that tab-scoped record. It is cleared when the tab closes, when you sign out,
-        or when the record expires. Messages still travel through Cloudflare and, for ordinary AI
-        replies, are processed and stored by OpenAI under the provider behavior below.
-      </p>
+    <h2>Current web tab and unfinished drafts</h2>
+    <p>The website keeps a bounded copy of the visible current thread in browser session storage for up to 24 hours, including the user's messages and Stabilize replies. This lets a refresh or ordinary navigation preserve the conversation. It is not sent to Stabilize as analytics. Starting a new chat or signing out clears it.</p>
+    <p>An unfinished non-private draft may be saved locally for up to seven days. Turning on private mode clears the saved draft and prevents a private draft from being retained. Static offline support never caches chat, API, authentication, billing, or memory responses.</p>
 
-      <h2>Native iOS app</h2>
-      <p>
-        Version 1 of the native iOS app is guest-only. Before its first send, the app explains that
-        the message goes through Stabilize's Cloudflare Worker and, for an ordinary reply, is shared
-        with OpenAI. Nothing is sent until the user allows that sharing. The permission choice is
-        stored locally in app-specific settings and can be revoked under About, which makes the app
-        ask again before a later send. Revoking permission cannot recall data already transmitted.
-      </p>
-      <p>
-        The native app does not intentionally persist the user's prompt or assistant reply, does
-        not offer account sign-in, and does not create a retrievable guest conversation history on
-        the Stabilize Worker. Some urgent messages may receive a fixed safety response without an
-        OpenAI request. When the app leaves the foreground, it displays a privacy cover intended to
-        obscure prompts and replies in the app switcher. iOS may still create ordinary system-level
-        snapshots, logs, backups, or network records under Apple's platform behavior. The app does
-        not add analytics, advertising, tracking, location, camera, microphone, contacts, HealthKit,
-        or notification SDKs.
-      </p>
+    <h2>Guest and private chat</h2>
+    <p>Guest messages are processed for the current reply but are not written to Stabilize's server-side conversation memory. Private mode also bypasses signed-in account memory: it does not read the summary and does not record the exchange there. Private mode does not prevent the request from being processed by Cloudflare and OpenAI.</p>
 
-      <h2>Signed-in web memory</h2>
-      <p>
-        Google sign-in is optional on the website and is used only to associate a one-way account
-        alias with a rolling summary and a small recent-message buffer. The current implementation
-        is designed to delete that remembered Stabilize context 30 days after the last stored
-        exchange. This local retention limit does not shorten the separate OpenAI storage period.
-      </p>
+    <h2>Signed-in memory</h2>
+    <p>Google sign-in is optional and associates a one-way account alias—not an email address—with a rolling summary of at most 1,000 characters and no more than eight recent user/assistant messages awaiting condensation. The record expires 30 days after the last stored exchange.</p>
+    <p>From the site menu, signed-in users can view the raw summary and bounded recent context, save a correction, or immediately delete the complete memory record. The summary may be incomplete or wrong and is treated by the reply model as fallible background.</p>
 
-      <h2>Public feedback</h2>
-      <p>
-        Signed-in web users can optionally submit feedback. Each accepted submission is committed
-        as a separate JSON file on the public <code>feedback-inbox</code> branch of the Stabilize
-        GitHub repository. The committed record contains the feedback text, category, submission
-        time, a random feedback identifier, and a note that it came from Stabilize. It does not
-        include the Google account alias, email address, IP address, browser user agent, chat
-        history, or payment information. Because the repository is public, submitters are told not
-        to include private or identifying information and must acknowledge that warning.
-      </p>
+    <h2>OpenAI processing</h2>
+    <p>OpenAI processes ordinary reply requests and model-generated memory summaries. Stabilize sends both kinds of request with <code>store: false</code>, so it does not ask OpenAI to keep the resulting Responses objects as application state. OpenAI may still process and retain API inputs and outputs in abuse-monitoring systems under the deployment's applicable organization or project data controls and terms.</p>
 
-      <h2>Paid model choice on the web</h2>
-      <p>
-        If you subscribe to model choice on the website, Stripe hosts checkout and the billing
-        portal and processes payment information under Stripe's terms. Stabilize does not receive
-        or store complete card numbers. It stores Stripe customer and subscription identifiers,
-        subscription status, the chosen AI model, and a monthly paid-model message count under the
-        same one-way account alias used for signed-in continuity. Billing records may remain longer
-        than conversation memory because they are needed to manage an active or historical
-        subscription. Version 1 of the native iOS app does not offer purchases or subscription
-        management.
-      </p>
+    <h2>Other providers</h2>
+    <p>Cloudflare hosts the website and Worker. Google handles optional sign-in. Stripe handles optional web subscriptions. GitHub stores optional detailed public feedback. Apple distributes the native iOS app and may process app-store and device diagnostics under its terms and device settings.</p>
 
-      <h2>What is not used for memory</h2>
-      <p>
-        The application is not designed to use IP addresses as conversation-memory identifiers. It
-        does not request your Google email for account memory. Infrastructure providers may still
-        process network metadata under their own terms.
-      </p>
+    <h2>Feedback and operational logs</h2>
+    <p>The one-tap “Is the next step clearer?” signal records only the selected rating and deterministic route—not the prompt, reply, or account. Optional detailed feedback remains public after the user acknowledges that fact. Stabilize does not intentionally log successful prompt or reply bodies, account aliases, or IP-derived conversation identifiers.</p>
 
-      <h2>Third-party processing and retention</h2>
-      <p>
-        Cloudflare hosts the application and handles requests. Google handles optional web sign-in.
-        GitHub stores optional public feedback. Stripe handles optional web checkout, subscription
-        billing, and the customer billing portal. Apple distributes the native app and may process
-        App Store, device, crash, and diagnostic information under Apple's terms and user settings.
-      </p>
-      <p>
-        OpenAI processes messages used to generate ordinary replies and condensed web memory.
-        Stabilize sends both reply and summary requests with <code>store: true</code>. Under
-        OpenAI's current platform documentation, resulting Responses API data is stored as
-        application state for at least 30 days unless organization or project data controls cause
-        the request to be treated differently. OpenAI says API data is not used to train its models
-        unless the API customer explicitly opts in.
-      </p>
+    <h2>Native iOS app</h2>
+    <p>Version 1 of the native app is guest-only and asks permission before first sharing a message through the Worker and OpenAI. It does not intentionally save a local transcript or include analytics, advertising, or tracking SDKs. Revoking future-send permission cannot recall data already transmitted.</p>
 
-      <h2>Use caution with sensitive information</h2>
-      <p>
-        Do not enter passwords, authentication codes, financial account numbers, or information you
-        do not want transmitted to the service providers involved. No internet service can promise
-        zero risk.
-      </p>
+    <h2>Use caution</h2>
+    <p>Do not enter passwords, authentication codes, financial account numbers, or information you do not want transmitted to the involved providers. Private mode is not confidential clinical care, anonymous networking, or a guarantee of zero retention anywhere.</p>
 
-      <h2>Questions and deletion requests</h2>
-      <p>
-        See <a href="/support.html">Support</a> for contact information. Stabilize cannot identify a
-        particular guest chat as an account history for deletion. Signed-in web requests can cover
-        account-linked records controlled by Stabilize. A local deletion or consent revocation does
-        not recall processing already completed by a provider or shorten OpenAI's stored Responses
-        retention period.
-      </p>
-
-      <p class="notice">
-        <strong>Prototype status:</strong> This summary describes the intended current
-        implementation. A production launch requires independent privacy, security, tax, payment,
-        and legal review.
-      </p>
-      <a class="cta" href="/">Return to Stabilize</a>
-    </main>
-    <footer>
-      Last reviewed August 3, 2026. See the repository privacy documentation for implementation-level detail.
-    </footer>
-  </body>
+    <p class="notice"><strong>Prototype status:</strong> This describes the intended current implementation. Broad promotion still requires independent privacy, security, accessibility, clinical, payment, and legal review.</p>
+    <a class="cta" href="/">Return to Stabilize</a>
+  </main>
+  <footer>Last reviewed August 3, 2026. See the repository privacy documentation for implementation-level detail.</footer>
+</body>
 </html>
