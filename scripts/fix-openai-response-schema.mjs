@@ -43,6 +43,10 @@ await update("test/worker.test.mjs", (source) => {
     'assert.deepEqual(providerBody.reasoning, { effort: "xhigh" });',
   );
   text = text.replaceAll(
+    'assert.deepEqual(providerBody.reasoning, {\n      effort: "high",\n      context: "current_turn",\n    });',
+    'assert.deepEqual(providerBody.reasoning, { effort: "high" });',
+  );
+  text = text.replaceAll(
     'assert.deepEqual(providerBody.reasoning, {\n      effort: "low",\n      context: "current_turn",\n    });',
     'assert.deepEqual(providerBody.reasoning, { effort: "low" });',
   );
@@ -52,6 +56,7 @@ await update("test/worker.test.mjs", (source) => {
 await update("test/streaming-response.test.mjs", (source) =>
   source
     .replaceAll('effort: "max", context: "current_turn"', 'effort: "xhigh"')
+    .replaceAll('effort: "high", context: "current_turn"', 'effort: "high"')
     .replaceAll('effort: "low", context: "current_turn"', 'effort: "low"'),
 );
 
