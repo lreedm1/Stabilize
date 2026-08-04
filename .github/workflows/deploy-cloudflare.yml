@@ -160,6 +160,26 @@ jobs:
               exit 0
             fi
 
+            node -e '
+              const fs = require("node:fs");
+              const raw = fs.readFileSync(process.argv[1], "utf8");
+              const events = [];
+              for (const line of raw.split(/\r?\n/).filter(Boolean)) {
+                try {
+                  const event = JSON.parse(line);
+                  events.push({
+                    type: typeof event.type === "string" ? event.type : null,
+                    route: typeof event.route === "string" ? event.route : null,
+                    error: typeof event.error === "string" ? event.error : null,
+                    reference: typeof event.reference === "string" ? event.reference : null,
+                  });
+                } catch {
+                  events.push({ type: "unparseable", bytes: Buffer.byteLength(line) });
+                }
+              }
+              console.log("Safe chat stream diagnostic:", JSON.stringify(events));
+            ' "$body" || true
+
             rm -f "$headers" "$body"
             sleep 10
           done
