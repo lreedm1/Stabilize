@@ -44,6 +44,7 @@ const POLICY_SCRIPTS = [
   "scripts/set-gpt54-default.mjs",
   "scripts/apply-model-limit-fallback-and-transparent-chat.mjs",
   "scripts/add-model-tile-and-favicon.mjs",
+  "scripts/compact-header-and-menu-info.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
