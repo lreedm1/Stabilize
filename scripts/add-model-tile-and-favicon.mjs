@@ -180,7 +180,7 @@ for (const path of STATIC_PAGES) {
     if (themePattern.test(source)) {
       return source.replace(themePattern, `$1\n${FAVICON_LINK}`);
     }
-    requireText(source, "</head>", `${FAVICON_LINK}\n  </head>`);
+    requireText(source, "</head>", `${path} head closing tag`);
     return source.replace("</head>", `${FAVICON_LINK}\n  </head>`);
   });
 }
