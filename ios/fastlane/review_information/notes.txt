@@ -1,3 +1,5 @@
+Review build: Stabilize 1.1 (2), archived, signed, and uploaded through Xcode Cloud.
+
 Stabilize is a native SwiftUI guest client for https://stabilize.info/api/chat. No account, purchase, subscription, or external paid-plan link is available in the iOS app.
 
 The app is not therapy, diagnosis, emergency care, or a medical device. It provides short AI-generated practical support. The backend first applies deterministic routing for selected urgent safety, medical, unsafe-shelter, and medication-change/access inputs. When an urgent response is returned, the app displays native Call 988, Text 988, and Call 911 actions. These actions are for the United States.
