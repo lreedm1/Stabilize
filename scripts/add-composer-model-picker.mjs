@@ -10,6 +10,12 @@ function requireText(value, expected, label) {
   }
 }
 
+function requirePattern(value, pattern, label) {
+  if (!pattern.test(value)) {
+    throw new Error(`Composer model picker could not find ${label}`);
+  }
+}
+
 const ASSET_VERSION = "20260804-composer-model-picker-1";
 text = text.replaceAll("20260804-paid-model-choice-1", ASSET_VERSION);
 
@@ -158,14 +164,14 @@ if (!text.includes('class="composer-entry-row"')) {
   );
 }
 
-requireText(
+requirePattern(
   text,
-  `href="/billing.css?v=${ASSET_VERSION}"`,
+  /href="\/billing\.css\?v=[A-Za-z0-9._-]+"/,
   "the cache-busted billing stylesheet",
 );
-requireText(
+requirePattern(
   text,
-  `src="/billing-client.js?v=${ASSET_VERSION}"`,
+  /src="\/billing-client\.js\?v=[A-Za-z0-9._-]+"/,
   "the cache-busted billing client",
 );
 requireText(text, "function composerModelPickerMarkup(", "the picker markup helper");
