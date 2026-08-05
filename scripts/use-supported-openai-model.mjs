@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const DEFAULT_MODEL = "gpt-5-mini";
+const DEFAULT_MODEL = "gpt-5.4";
 const SOL_MODEL = "gpt-5.6-sol";
 
 async function update(path, transform) {
@@ -25,7 +25,7 @@ await update("src/index.js", (source) => {
   if (legacyMapping.test(text)) {
     text = text.replace(legacyMapping, directConfig);
   }
-  for (const previous of ["gpt-5.6-sol", "gpt-5.2"]) {
+  for (const previous of ["gpt-5-mini", "gpt-5.6-sol", "gpt-5.2"]) {
     text = text.replaceAll(
       `String(env.OPENAI_MODEL || "${previous}")`,
       `String(env.OPENAI_MODEL || "${DEFAULT_MODEL}")`,
@@ -33,7 +33,7 @@ await update("src/index.js", (source) => {
   }
 
   if (!text.includes(directConfig)) {
-    throw new Error("Could not establish the GPT-5 mini model configuration");
+    throw new Error("Could not establish the GPT-5.4 model configuration");
   }
   if (text.includes('configuredModel === "gpt-5.6-sol"')) {
     throw new Error("GPT-5.6 Sol is still mapped to an older model");
@@ -43,7 +43,7 @@ await update("src/index.js", (source) => {
 
 await update("src/billing.js", (source) => {
   let text = source;
-  for (const previous of ["gpt-5.6-sol", "gpt-5.2"]) {
+  for (const previous of ["gpt-5-mini", "gpt-5.6-sol", "gpt-5.2"]) {
     text = text.replaceAll(
       `env.OPENAI_MODEL || "${previous}"`,
       `env.OPENAI_MODEL || "${DEFAULT_MODEL}"`,
