@@ -46,8 +46,12 @@ const POLICY_SCRIPTS = [
   "scripts/add-model-tile-and-favicon.mjs",
   "scripts/compact-header-and-menu-info.mjs",
   "scripts/align-menu-info-worker-test.mjs",
+  "scripts/embed-favicon-fallback.mjs",
 ];
 const POLICY_TARGETS = [
+  "scripts/favicon-assets/favicon.ico.b64",
+  "scripts/favicon-assets/favicon-32x32.png.b64",
+  "scripts/favicon-assets/apple-touch-icon.png.b64",
   "src/index.js",
   "src/page.js",
   "src/copy.js",
