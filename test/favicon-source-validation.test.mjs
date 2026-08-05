@@ -12,9 +12,10 @@ const PNG_SIGNATURE = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
 
-test("favicon source payloads decode to real ICO and PNG files", async () => {
-  const [ico, png, apple] = await Promise.all([
+test("favicon source payloads decode to real ICO and exact-size PNG files", async () => {
+  const [ico, png16, png32, apple] = await Promise.all([
     readSource("scripts/favicon-assets/favicon.ico.b64"),
+    readSource("scripts/favicon-assets/favicon-16x16.png.b64"),
     readSource("scripts/favicon-assets/favicon-32x32.png.b64"),
     readSource("scripts/favicon-assets/apple-touch-icon.png.b64"),
   ]);
@@ -23,8 +24,13 @@ test("favicon source payloads decode to real ICO and PNG files", async () => {
   assert.equal(ico.readUInt16LE(4), 4);
   assert.ok(ico.byteLength > 1_000);
 
-  for (const image of [png, apple]) {
+  for (const image of [png16, png32, apple]) {
     assert.deepEqual(image.subarray(0, PNG_SIGNATURE.length), PNG_SIGNATURE);
-    assert.ok(image.byteLength > 250);
   }
+  assert.equal(png16.readUInt32BE(16), 16);
+  assert.equal(png16.readUInt32BE(20), 16);
+  assert.equal(png32.readUInt32BE(16), 32);
+  assert.equal(png32.readUInt32BE(20), 32);
+  assert.equal(apple.readUInt32BE(16), 180);
+  assert.equal(apple.readUInt32BE(20), 180);
 });
