@@ -21,7 +21,7 @@ const PNG_SIGNATURE = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
 
-test("the model tile shows 5.x, the composer is compact, and pages hard-reset browser tab icons", async () => {
+test("the model tile shows 5.x, the composer is 42px tall, and pages hard-reset browser tab icons", async () => {
   const [
     worker,
     client,
@@ -65,10 +65,10 @@ test("the model tile shows 5.x, the composer is compact, and pages hard-reset br
     css,
     /\.composer-model-button \{[\s\S]*?width: 66px;[\s\S]*?min-width: 66px;/,
   );
-  assert.match(css, /\/\* Compact 32px composer bar \*\//);
+  assert.match(css, /\/\* Balanced 42px composer bar \*\//);
   assert.match(
     css,
-    /\.composer-model-button,[\s\S]*?\.composer-dock textarea,[\s\S]*?\.composer-dock #send-button \{[\s\S]*?height: 32px;[\s\S]*?min-height: 32px;[\s\S]*?max-height: 32px;/,
+    /\.composer-model-button,[\s\S]*?\.composer-dock textarea,[\s\S]*?\.composer-dock #send-button \{[\s\S]*?height: 42px;[\s\S]*?min-height: 42px;[\s\S]*?max-height: 42px;/,
   );
   assert.match(
     css,
