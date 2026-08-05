@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { renderPage } from "../src/page.js";
 
-test("Home lives in the hamburger menu and model choice is not duplicated there", async () => {
+test("Home lives in the hamburger menu without chat actions or duplicate model choice", async () => {
   const [pageSource, workerSource, seoStyles, packageSource] = await Promise.all([
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
     readFile(new URL("../src/paid-worker.js", import.meta.url), "utf8"),
@@ -22,6 +23,28 @@ test("Home lives in the hamburger menu and model choice is not duplicated there"
   assert.ok(aboutIndex > homeIndex);
   assert.doesNotMatch(pageSource, /class="home-button"/);
   assert.doesNotMatch(seoStyles, /\.home-button|\.home-icon/);
+
+  const html = renderPage({
+    signedIn: true,
+    googleSignInAvailable: true,
+  });
+  const menuPanelStart = html.indexOf('class="menu-panel"');
+  const menuPanelEnd = html.indexOf("</details>", menuPanelStart);
+  const menuPanel = html.slice(menuPanelStart, menuPanelEnd);
+  const proxyStart = html.indexOf('class="chat-action-proxies"');
+  const proxyEnd = html.indexOf('<main class="chat-card"', proxyStart);
+  const proxies = html.slice(proxyStart, proxyEnd);
+
+  assert.ok(menuPanelStart >= 0);
+  assert.ok(menuPanelEnd > menuPanelStart);
+  assert.doesNotMatch(menuPanel, /new-conversation-button/);
+  assert.doesNotMatch(menuPanel, /private-chat-button/);
+
+  assert.ok(proxyStart >= 0);
+  assert.ok(proxyEnd > proxyStart);
+  assert.match(proxies, /class="chat-action-proxies" hidden aria-hidden="true"/);
+  assert.match(proxies, /id="new-conversation-button"/);
+  assert.match(proxies, /id="private-chat-button"/);
 
   assert.match(workerSource, /const markup = "";/);
   assert.match(

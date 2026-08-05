@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("signed-in private chat disables Stabilize memory end to end", async () => {
+test("signed-in private chat stays out of the hamburger menu and disables memory end to end", async () => {
   const [pageSource, clientSource, menuStyles, workerSource, copySource, privacyPage] =
     await Promise.all([
       readFile(new URL("../src/page.js", import.meta.url), "utf8"),
@@ -14,13 +14,24 @@ test("signed-in private chat disables Stabilize memory end to end", async () => 
     ]);
 
   const menuStart = pageSource.indexOf('<div class="menu-panel">');
-  const menuEnd = pageSource.indexOf("</details>", menuStart);
+  const menuEnd = pageSource.indexOf(
+    "\n            </div>\n          </details>",
+    menuStart,
+  );
+  const proxyStart = pageSource.indexOf('<div class="chat-action-proxies"');
+  const proxyEnd = pageSource.indexOf("\n      </div>", proxyStart);
   const composerStart = pageSource.indexOf('<div class="composer-dock">');
 
   assert.ok(menuStart >= 0 && menuEnd > menuStart);
-  assert.match(
+  assert.doesNotMatch(
     pageSource.slice(menuStart, menuEnd),
-    /\$\{privateChatControl\}/,
+    /\$\{privateChatControl\}|id="private-chat-button"/,
+  );
+
+  assert.ok(proxyStart >= 0 && proxyEnd > proxyStart);
+  assert.match(
+    pageSource.slice(proxyStart, proxyEnd),
+    /class="chat-action-proxies" hidden aria-hidden="true"[\s\S]*\$\{privateChatControl\}/,
   );
   assert.match(pageSource, /const privateChatControl = signedIn/);
   assert.match(pageSource, /id="private-chat-button"/);

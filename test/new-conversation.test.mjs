@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("New conversation is a visible menu action rather than a composer control", async () => {
+test("New conversation stays out of the hamburger menu while remaining functional", async () => {
   const [pageSource, clientSource, menuStyles, workerSource, memorySource] =
     await Promise.all([
       readFile(new URL("../src/page.js", import.meta.url), "utf8"),
@@ -13,21 +13,33 @@ test("New conversation is a visible menu action rather than a composer control",
     ]);
 
   const menuStart = pageSource.indexOf('<div class="menu-panel">');
-  const menuEnd = pageSource.indexOf("</details>", menuStart);
+  const menuEnd = pageSource.indexOf(
+    "\n            </div>\n          </details>",
+    menuStart,
+  );
+  const proxyStart = pageSource.indexOf('<div class="chat-action-proxies"');
+  const proxyEnd = pageSource.indexOf("\n      </div>", proxyStart);
   const buttonIndex = pageSource.indexOf('id="new-conversation-button"');
   const composerIndex = pageSource.indexOf('id="chat-form"');
 
   assert.ok(menuStart >= 0);
   assert.ok(menuEnd > menuStart);
-  assert.ok(buttonIndex > menuStart && buttonIndex < menuEnd);
+  assert.doesNotMatch(
+    pageSource.slice(menuStart, menuEnd),
+    /new-conversation-button/,
+  );
+
+  assert.ok(proxyStart >= 0);
+  assert.ok(proxyEnd > proxyStart);
+  assert.ok(buttonIndex > proxyStart && buttonIndex < proxyEnd);
   assert.ok(buttonIndex < composerIndex);
   assert.match(
-    pageSource.slice(menuStart, menuEnd),
-    /id="new-conversation-button"[\s\S]*page\.chat\.newConversationButton/,
+    pageSource.slice(proxyStart, proxyEnd),
+    /class="chat-action-proxies" hidden aria-hidden="true"[\s\S]*id="new-conversation-button"[\s\S]*page\.chat\.newConversationButton/,
   );
   assert.doesNotMatch(
     pageSource.slice(pageSource.indexOf('<div class="composer-dock">')),
-    /new-conversation-button/,
+    /id="new-conversation-button"/,
   );
 
   assert.match(
