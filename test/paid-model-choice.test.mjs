@@ -45,7 +45,7 @@ test("free and subscriber model choice share a resilient left-side picker", asyn
   );
   assert.match(
     workerSource,
-    /src="\/billing-client\.js\?v=20260805-composer-chat-sections-1"/,
+    /src="\/billing-client\.js\?v=20260804-composer-model-picker-1"/,
   );
   assert.match(workerSource, /form action="\/account\/model"/);
   assert.match(workerSource, /select id="model-choice" name="model"/);
@@ -63,10 +63,7 @@ test("free and subscriber model choice share a resilient left-side picker", asyn
   assert.match(workerSource, /allowance resets at 00:00 UTC/);
 
   assert.match(workerSource, /function composerModelPickerMarkup\(/);
-  assert.match(
-    workerSource,
-    /class="composer-model-picker composer-quick-menu"/,
-  );
+  assert.match(workerSource, /class="composer-model-picker"/);
   assert.match(workerSource, /class="composer-model-button"/);
   assert.match(workerSource, /id="composer-model-choice" name="model"/);
   assert.match(workerSource, /class="composer-entry-row"/);
