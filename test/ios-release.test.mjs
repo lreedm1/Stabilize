@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 
-const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
+const fileUrl = (path) => new URL(`../${path}`, import.meta.url);
+const read = (path) => readFile(fileUrl(path), "utf8");
 
 test("native iOS sends only after explicit OpenAI sharing permission", async () => {
   const [checkIn, consent, info, config, manifest, publicPrivacy, reviewNotes] =
@@ -47,6 +48,8 @@ test("native iOS sends only after explicit OpenAI sharing permission", async () 
 });
 
 test("Stabilize 1.1 reserves all iOS build and distribution work for Xcode Cloud", async () => {
+  const postClonePath = "ios/ci_scripts/ci_post_clone.sh";
+  const postBuildPath = "ios/ci_scripts/ci_post_xcodebuild.sh";
   const [
     workflow,
     project,
@@ -54,6 +57,10 @@ test("Stabilize 1.1 reserves all iOS build and distribution work for Xcode Cloud
     scheme,
     iosIgnore,
     fastfile,
+    postClone,
+    postBuild,
+    postCloneStat,
+    postBuildStat,
     readme,
     submission,
     cloudPlan,
@@ -65,6 +72,10 @@ test("Stabilize 1.1 reserves all iOS build and distribution work for Xcode Cloud
     read("ios/Stabilize.xcodeproj/xcshareddata/xcschemes/Stabilize.xcscheme"),
     read("ios/.gitignore"),
     read("ios/fastlane/Fastfile"),
+    read(postClonePath),
+    read(postBuildPath),
+    stat(fileUrl(postClonePath)),
+    stat(fileUrl(postBuildPath)),
     read("ios/README.md"),
     read("ios/AppStore/SUBMISSION.md"),
     read("ios/AppStore/XCODE_CLOUD_1_1.md"),
@@ -97,10 +108,20 @@ test("Stabilize 1.1 reserves all iOS build and distribution work for Xcode Cloud
   assert.doesNotMatch(fastfile, /build_app\(/);
   assert.doesNotMatch(fastfile, /upload_to_testflight\(/);
 
+  assert.equal(postCloneStat.mode & 0o111, 0o111);
+  assert.equal(postBuildStat.mode & 0o111, 0o111);
+  assert.match(postClone, /STABILIZE_XCODE_CLOUD_FASTLANE_LANE/);
+  assert.match(postClone, /bundle install/);
+  assert.match(postBuild, /STABILIZE_XCODE_CLOUD_RELEASE/);
+  assert.match(postBuild, /CI_XCODEBUILD_ACTION/);
+  assert.match(postBuild, /metadata\|submit/);
+  assert.match(postBuild, /bundle exec fastlane ios/);
+
   assert.match(readme, /Xcode Cloud is the only iOS build system/);
   assert.match(submission, /must not merge until an Xcode Cloud/);
   assert.match(cloudPlan, /Pull Request Verification/);
   assert.match(cloudPlan, /Stabilize 1\.1 Release/);
+  assert.match(cloudPlan, /Stabilize 1\.1 Submit/);
   assert.match(cloudPlan, /physical iPhone/);
   assert.match(notes, /Stabilize 1\.1/);
 });
