@@ -47,21 +47,41 @@ test("native iOS sends only after explicit OpenAI sharing permission", async () 
 });
 
 test("Stabilize 1.1 reserves all iOS build and distribution work for Xcode Cloud", async () => {
-  const [workflow, project, fastfile, readme, submission, cloudPlan, notes] =
-    await Promise.all([
-      read(".github/workflows/ios.yml"),
-      read("ios/project.yml"),
-      read("ios/fastlane/Fastfile"),
-      read("ios/README.md"),
-      read("ios/AppStore/SUBMISSION.md"),
-      read("ios/AppStore/XCODE_CLOUD_1_1.md"),
-      read("ios/fastlane/metadata/en-US/release_notes.txt"),
-    ]);
+  const [
+    workflow,
+    project,
+    generatedProject,
+    scheme,
+    iosIgnore,
+    fastfile,
+    readme,
+    submission,
+    cloudPlan,
+    notes,
+  ] = await Promise.all([
+    read(".github/workflows/ios.yml"),
+    read("ios/project.yml"),
+    read("ios/Stabilize.xcodeproj/project.pbxproj"),
+    read("ios/Stabilize.xcodeproj/xcshareddata/xcschemes/Stabilize.xcscheme"),
+    read("ios/.gitignore"),
+    read("ios/fastlane/Fastfile"),
+    read("ios/README.md"),
+    read("ios/AppStore/SUBMISSION.md"),
+    read("ios/AppStore/XCODE_CLOUD_1_1.md"),
+    read("ios/fastlane/metadata/en-US/release_notes.txt"),
+  ]);
 
   assert.match(project, /CURRENT_PROJECT_VERSION: 2/);
   assert.match(project, /MARKETING_VERSION: 1\.1/);
   assert.match(project, /PRODUCT_BUNDLE_IDENTIFIER: info\.stabilize\.app/);
   assert.match(project, /CODE_SIGN_STYLE: Automatic/);
+  assert.match(generatedProject, /CURRENT_PROJECT_VERSION = 2;/);
+  assert.match(generatedProject, /MARKETING_VERSION = 1\.1;/);
+  assert.match(generatedProject, /PRODUCT_BUNDLE_IDENTIFIER = info\.stabilize\.app;/);
+  assert.match(scheme, /buildForTesting = "YES"/);
+  assert.match(scheme, /buildForArchiving = "YES"/);
+  assert.match(scheme, /StabilizeTests\.xctest/);
+  assert.doesNotMatch(iosIgnore, /Stabilize\.xcodeproj/);
 
   assert.match(workflow, /runs-on: ubuntu-latest/);
   assert.match(workflow, /Validate Xcode Cloud release configuration/);
