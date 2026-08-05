@@ -10,7 +10,7 @@ test("the main-branch favicon gate publishes a status only after live byte check
 
   assert.match(workflow, /push:[\s\S]*branches:[\s\S]*- main/);
   assert.match(workflow, /statuses:\s*write/);
-  assert.match(workflow, /context\\\":\\\"verification\/favicon/);
+  assert.match(workflow, /"context":"verification\/favicon"/);
   assert.match(workflow, /favicon\.ico\?favicon-gate=/);
   assert.match(workflow, /favicon-32x32\.png\?favicon-gate=/);
   assert.match(workflow, /apple-touch-icon\.png\?favicon-gate=/);
