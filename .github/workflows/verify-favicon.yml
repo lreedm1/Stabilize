@@ -1,0 +1,74 @@
+name: Verify production favicon
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy Stabilize to Cloudflare
+    branches:
+      - main
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stabilize-production-favicon
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify browser tab icon
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Verify HTML links and icon bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for attempt in {1..30}; do
+            root="$(mktemp)"
+            ico_headers="$(mktemp)"
+            ico_body="$(mktemp)"
+            png_headers="$(mktemp)"
+            png_body="$(mktemp)"
+            apple_headers="$(mktemp)"
+            apple_body="$(mktemp)"
+
+            root_status="$(curl --max-time 20 --silent --show-error --output "$root" --write-out "%{http_code}" "https://stabilize.info/?favicon-check=${attempt}" || true)"
+            ico_status="$(curl --max-time 20 --silent --show-error --dump-header "$ico_headers" --output "$ico_body" --write-out "%{http_code}" "https://stabilize.info/favicon.ico?favicon-check=${attempt}" || true)"
+            png_status="$(curl --max-time 20 --silent --show-error --dump-header "$png_headers" --output "$png_body" --write-out "%{http_code}" "https://stabilize.info/favicon-32x32.png?favicon-check=${attempt}" || true)"
+            apple_status="$(curl --max-time 20 --silent --show-error --dump-header "$apple_headers" --output "$apple_body" --write-out "%{http_code}" "https://stabilize.info/apple-touch-icon.png?favicon-check=${attempt}" || true)"
+
+            ico_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$ico_headers" | tail -n 1)"
+            png_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$png_headers" | tail -n 1)"
+            apple_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$apple_headers" | tail -n 1)"
+            ico_magic="$(od -An -tx1 -N4 "$ico_body" | tr -d ' \n')"
+            png_magic="$(od -An -tx1 -N8 "$png_body" | tr -d ' \n')"
+            apple_magic="$(od -An -tx1 -N8 "$apple_body" | tr -d ' \n')"
+
+            echo "Favicon attempt ${attempt}: root=${root_status}; ico=${ico_status}/${ico_type:-none}/${ico_magic:-none}; png=${png_status}/${png_type:-none}/${png_magic:-none}; apple=${apple_status}/${apple_type:-none}/${apple_magic:-none}"
+
+            if [[ "$root_status" == "200" ]] &&
+              grep -Fq 'href="/favicon.ico?v=20260805-7"' "$root" &&
+              grep -Fq 'href="/favicon-32x32.png?v=20260805-7"' "$root" &&
+              grep -Fq 'href="/apple-touch-icon.png?v=20260805-7"' "$root" &&
+              [[ "$ico_status" == "200" && "$ico_type" == image/x-icon* && "$ico_magic" == "00000100" ]] &&
+              [[ "$png_status" == "200" && "$png_type" == image/png* && "$png_magic" == "89504e470d0a1a0a" ]] &&
+              [[ "$apple_status" == "200" && "$apple_type" == image/png* && "$apple_magic" == "89504e470d0a1a0a" ]]; then
+              rm -f "$root" "$ico_headers" "$ico_body" "$png_headers" "$png_body" "$apple_headers" "$apple_body"
+              exit 0
+            fi
+
+            rm -f "$root" "$ico_headers" "$ico_body" "$png_headers" "$png_body" "$apple_headers" "$apple_body"
+            sleep 10
+          done
+
+          echo "::error::Production did not serve valid browser-compatible favicon assets and matching HTML links."
+          exit 1
