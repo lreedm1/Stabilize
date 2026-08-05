@@ -45,6 +45,7 @@ const POLICY_SCRIPTS = [
   "scripts/apply-model-limit-fallback-and-transparent-chat.mjs",
   "scripts/add-model-tile-and-favicon.mjs",
   "scripts/compact-header-and-menu-info.mjs",
+  "scripts/align-menu-info-worker-test.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
