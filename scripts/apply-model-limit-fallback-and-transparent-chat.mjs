@@ -6,26 +6,22 @@ function requireText(value, expected, label) {
   }
 }
 
-async function replaceLegacyExpectation(path, legacy, replacement, label) {
+async function update(path, transform) {
   const before = await readFile(path, "utf8");
-  let after = before;
-  if (after.includes(legacy)) after = after.replace(legacy, replacement);
-  else requireText(after, replacement, label);
+  const after = transform(before);
   if (after !== before) await writeFile(path, after);
 }
 
-const workerPath = "src/paid-worker.js";
-const workerBefore = await readFile(workerPath, "utf8");
-let workerAfter = workerBefore;
-
-if (!workerAfter.includes('X-Stabilize-Model-Fallback')) {
-  const deniedPattern = /  if \(!reservation\.allowed\) \{[\s\S]*?\n  \}\n\n  const response = await originalWorker\.fetch\(/;
-  const deniedMatch = workerAfter.match(deniedPattern);
-  if (!deniedMatch) {
-    throw new Error("Model fallback update could not find the quota denial block");
-  }
-
-  const replacement = `  if (!reservation.allowed) {
+await update("src/paid-worker.js", (source) => {
+  let text = source;
+  if (!text.includes('X-Stabilize-Model-Fallback')) {
+    const deniedPattern = /  if \(!reservation\.allowed\) \{[\s\S]*?\n  \}\n\n  const response = await originalWorker\.fetch\(/;
+    if (!deniedPattern.test(text)) {
+      throw new Error("Model fallback update could not find the quota denial block");
+    }
+    text = text.replace(
+      deniedPattern,
+      `  if (!reservation.allowed) {
     if (tier === "free") {
       await stub.setSelectedModel(defaultModel);
       const fallbackResponse = await originalWorker.fetch(
@@ -56,26 +52,22 @@ if (!workerAfter.includes('X-Stabilize-Model-Fallback')) {
     );
   }
 
-  const response = await originalWorker.fetch(`;
-  workerAfter = workerAfter.replace(deniedPattern, replacement);
-}
+  const response = await originalWorker.fetch(`,
+    );
+  }
+  for (const expected of [
+    "await stub.setSelectedModel(defaultModel)",
+    "X-Stabilize-Model-Fallback",
+    '"daily-limit"',
+    "modelEnvironment(env, defaultModel)",
+  ]) requireText(text, expected, expected);
+  return text;
+});
 
-for (const expected of [
-  'await stub.setSelectedModel(defaultModel)',
-  'X-Stabilize-Model-Fallback',
-  '"daily-limit"',
-  'modelEnvironment(env, defaultModel)',
-]) {
-  requireText(workerAfter, expected, expected);
-}
-if (workerAfter !== workerBefore) await writeFile(workerPath, workerAfter);
-
-const clientPath = "public/billing-client.js";
-const clientBefore = await readFile(clientPath, "utf8");
-let clientAfter = clientBefore;
-
-if (!clientAfter.includes("function showModelFallbackNotice(")) {
-  clientAfter += `
+await update("public/billing-client.js", (source) => {
+  let text = source;
+  if (!text.includes("function showModelFallbackNotice(")) {
+    text += `
 
 function showModelFallbackNotice(defaultModel) {
   let notice = document.querySelector('[data-model-fallback-notice="true"]');
@@ -91,7 +83,6 @@ function showModelFallbackNotice(defaultModel) {
   }
   notice.textContent =
     "You used today’s 20 selected-model messages. Stabilize switched to GPT-5.4 automatically; your message was still sent.";
-
   for (const select of document.querySelectorAll(
     '#model-choice, #composer-model-choice',
   )) {
@@ -116,21 +107,19 @@ globalThis.fetch = async (...args) => {
   return response;
 };
 `;
-}
+  }
+  for (const expected of [
+    "function showModelFallbackNotice(",
+    "X-Stabilize-Model-Fallback",
+    "switched to GPT-5.4 automatically",
+  ]) requireText(text, expected, expected);
+  return text;
+});
 
-for (const expected of [
-  "function showModelFallbackNotice(",
-  'X-Stabilize-Model-Fallback',
-  "switched to GPT-5.4 automatically",
-]) {
-  requireText(clientAfter, expected, expected);
-}
-if (clientAfter !== clientBefore) await writeFile(clientPath, clientAfter);
-
-const stylesPath = "public/styles.css";
-const stylesBefore = await readFile(stylesPath, "utf8");
-let stylesAfter = stylesBefore;
-const transparentStyles = `
+await update("public/styles.css", (source) => {
+  let text = source;
+  if (!text.includes(".model-fallback-notice")) {
+    text += `
 
 /* Keep the landscape visible behind the current conversation. */
 .chat-log,
@@ -157,60 +146,76 @@ const transparentStyles = `
   text-align: center;
 }
 `;
-if (!stylesAfter.includes(".model-fallback-notice")) {
-  stylesAfter += transparentStyles;
-}
-for (const expected of [
-  ".chat-log,\n.assistant-output",
-  "background: transparent",
-  ".model-fallback-notice",
-]) {
-  requireText(stylesAfter, expected, expected);
-}
-if (stylesAfter !== stylesBefore) await writeFile(stylesPath, stylesAfter);
+  }
+  requireText(text, ".chat-log,\n.assistant-output", "transparent chat surfaces");
+  requireText(text, ".model-fallback-notice", "fallback notice styling");
+  return text;
+});
 
-const paidWorkerLegacy = `    assert.equal(blocked.status, 429);
-    assert.match(
-      (await blocked.json()).error,
-      /daily free model-select limit of 2 messages has been reached/i,
-    );
-    assert.equal(providerBody.model, "gpt-5.1");`;
-const paidWorkerFallback = `    assert.equal(blocked.status, 200);
+await update("test/paid-worker.test.mjs", (source) => {
+  let text = source;
+  text = text.replace(
+    /    assert\.equal\(blocked\.status, 429\);\n    assert\.match\(\n      \(await blocked\.json\(\)\)\.error,\n      \/daily free model-select limit of 2 messages has been reached\/i,\n    \);\n    assert\.equal\(providerBody\.model, "gpt-5\.1"\);/,
+    `    assert.equal(blocked.status, 200);
     assert.equal(blocked.headers.get("X-Stabilize-Model-Fallback"), "daily-limit");
-    assert.equal(blocked.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");
-    assert.equal((await blocked.json()).reply, "Use the smallest reversible step.");
-    assert.equal(providerBody.model, "gpt-5.4");`;
-await replaceLegacyExpectation(
-  "test/paid-worker.test.mjs",
-  paidWorkerLegacy,
-  paidWorkerFallback,
-  "the free-user fallback test",
-);
-
-const usageLegacy = `    assert.equal(blocked.status, 429);
-    assert.match(
-      (await blocked.json()).error,
-      /daily free model-select limit of 2 messages has been reached/i,
+    assert.equal(
+      blocked.headers.get("X-Stabilize-Model-Selected"),
+      limitedEnv.OPENAI_MODEL,
     );
+    assert.equal((await blocked.json()).reply, "Use the smallest reversible step.");
+    assert.equal(providerBody.model, limitedEnv.OPENAI_MODEL);`,
+  );
+  text = text.replaceAll(
+    'assert.equal(blocked.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");',
+    `assert.equal(
+      blocked.headers.get("X-Stabilize-Model-Selected"),
+      limitedEnv.OPENAI_MODEL,
+    );`,
+  );
+  text = text.replaceAll(
+    'assert.equal(providerBody.model, "gpt-5.4");',
+    "assert.equal(providerBody.model, limitedEnv.OPENAI_MODEL);",
+  );
+  requireText(text, "limitedEnv.OPENAI_MODEL", "configured-default paid-worker assertion");
+  return text;
+});
+
+await update("test/model-usage-worker.test.mjs", (source) => {
+  let text = source;
+  text = text.replace(
+    /    assert\.equal\(blocked\.status, 429\);\n    assert\.match\(\n      \(await blocked\.json\(\)\)\.error,\n      \/daily free model-select limit of 2 messages has been reached\/i,\n    \);\n    assert\.ok\(\n      providerModels\.filter\(\(model\) => model === "gpt-5\.6-terra"\)\.length >= 2,\n    \);/,
+    `    assert.equal(blocked.status, 200);
+    assert.equal(blocked.headers.get("X-Stabilize-Model-Fallback"), "daily-limit");
+    assert.equal(
+      blocked.headers.get("X-Stabilize-Model-Selected"),
+      BASE_ENV.OPENAI_MODEL,
+    );
+    assert.equal((await blocked.json()).reply, "Use the smallest reversible step.");
     assert.ok(
       providerModels.filter((model) => model === "gpt-5.6-terra").length >= 2,
-    );`;
-const usageFallback = `    assert.equal(blocked.status, 200);
-    assert.equal(blocked.headers.get("X-Stabilize-Model-Fallback"), "daily-limit");
-    assert.equal(blocked.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");
-    assert.equal((await blocked.json()).reply, "Use the smallest reversible step.");
-    assert.ok(
-      providerModels.filter((model) => model === "gpt-5.6-terra").length >= 2,
     );
-    assert.equal(providerModels.at(-1), "gpt-5.4");
+    assert.equal(providerModels.at(-1), BASE_ENV.OPENAI_MODEL);
     const fallbackState = await user.billing.readState();
-    assert.equal(fallbackState.selectedModel, "gpt-5.4");`;
-await replaceLegacyExpectation(
-  "test/model-usage-worker.test.mjs",
-  usageLegacy,
-  usageFallback,
-  "the persistent fallback usage test",
-);
+    assert.equal(fallbackState.selectedModel, BASE_ENV.OPENAI_MODEL);`,
+  );
+  text = text.replaceAll(
+    'assert.equal(blocked.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");',
+    `assert.equal(
+      blocked.headers.get("X-Stabilize-Model-Selected"),
+      BASE_ENV.OPENAI_MODEL,
+    );`,
+  );
+  text = text.replaceAll(
+    'assert.equal(providerModels.at(-1), "gpt-5.4");',
+    "assert.equal(providerModels.at(-1), BASE_ENV.OPENAI_MODEL);",
+  );
+  text = text.replaceAll(
+    'assert.equal(fallbackState.selectedModel, "gpt-5.4");',
+    "assert.equal(fallbackState.selectedModel, BASE_ENV.OPENAI_MODEL);",
+  );
+  requireText(text, "fallbackState.selectedModel, BASE_ENV.OPENAI_MODEL", "configured-default usage assertion");
+  return text;
+});
 
 console.log(
   "Applied 20-message automatic GPT-5.4 fallback and transparent chat surfaces.",
