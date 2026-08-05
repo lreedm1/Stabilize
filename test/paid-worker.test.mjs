@@ -16,6 +16,7 @@ const TEST_ENV = {
   OPENAI_REASONING_EFFORT: "medium",
   MODEL_CHOICES:
     "gpt-5.2|Stabilize default,gpt-5.1|GPT-5.1,gpt-5-mini|GPT-5 mini",
+  FREE_DAILY_MODEL_MESSAGE_LIMIT: "20",
   PAID_MONTHLY_MESSAGE_LIMIT: "200",
   STRIPE_SECRET_KEY: "sk_test_1234567890abcdefghijklmnop",
   STRIPE_WEBHOOK_SECRET: "whsec_1234567890abcdefghijklmnop",
@@ -165,7 +166,107 @@ test("the homepage places the current model picker left of the message form", as
   );
 });
 
-test("an entitled user can select a paid model and the chat request uses it", async () => {
+test("a free signed-in user can select a model for the daily allowance", async () => {
+  const user = await identity("free-daily-model-user");
+
+  const page = await worker.fetch(
+    new Request("https://stabilize.info/", {
+      headers: { Cookie: user.cookie },
+    }),
+    TEST_ENV,
+    {},
+  );
+  assert.equal(page.status, 200);
+  const html = await page.text();
+  assert.match(html, /0 of 20 free model-select messages used today/);
+  assert.match(html, /id="composer-model-choice" name="model"/);
+  assert.doesNotMatch(
+    html,
+    /Subscribe to choose another model/,
+  );
+
+  const selection = await worker.fetch(
+    new Request("https://stabilize.info/account/model", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Cookie: user.cookie,
+        Origin: "https://stabilize.info",
+        "Sec-Fetch-Site": "same-origin",
+      },
+      body: new URLSearchParams({ model: "gpt-5.1" }),
+    }),
+    TEST_ENV,
+    {},
+  );
+  assert.equal(selection.status, 303);
+  assert.equal(selection.headers.get("location"), "/?model=saved");
+  assert.equal((await user.billing.readState()).selectedModel, "gpt-5.1");
+
+  const limitedEnv = {
+    ...TEST_ENV,
+    FREE_DAILY_MODEL_MESSAGE_LIMIT: "2",
+  };
+  const originalFetch = globalThis.fetch;
+  let providerBody;
+  globalThis.fetch = async (_input, init) => {
+    providerBody = JSON.parse(init.body);
+    return responseWithText("Use the smallest reversible step.");
+  };
+
+  try {
+    for (let index = 0; index < 2; index += 1) {
+      const response = await worker.fetch(
+        new Request("https://stabilize.info/api/chat", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            Cookie: user.cookie,
+            Origin: "https://stabilize.info",
+          },
+          body: JSON.stringify({
+            message: `Give me one reversible next step for option ${index + 1}.`,
+          }),
+        }),
+        limitedEnv,
+        {},
+      );
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).reply, "Use the smallest reversible step.");
+    }
+
+    const blocked = await worker.fetch(
+      new Request("https://stabilize.info/api/chat", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Cookie: user.cookie,
+          Origin: "https://stabilize.info",
+        },
+        body: JSON.stringify({ message: "Give me one more next step." }),
+      }),
+      limitedEnv,
+      {},
+    );
+    assert.equal(blocked.status, 429);
+    assert.match(
+      (await blocked.json()).error,
+      /daily free model-select limit of 2 messages has been reached/i,
+    );
+    assert.equal(providerBody.model, "gpt-5.1");
+
+    const state = await user.billing.readState();
+    assert.match(state.freeUsagePeriod, /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(state.freeUsageCount, 2);
+    assert.equal(state.paidUsageCount, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("an entitled user can select a subscriber model and the chat request uses it", async () => {
   const user = await identity("paid-model-user");
   await user.billing.updateBilling({
     customerId: "cus_12345678",
@@ -223,6 +324,8 @@ test("an entitled user can select a paid model and the chat request uses it", as
     assert.equal(providerBody.model, "gpt-5.1");
     const state = await user.billing.readState();
     assert.equal(state.usageCount, 1);
+    assert.equal(state.paidUsageCount, 1);
+    assert.equal(state.freeUsageCount, 0);
   } finally {
     globalThis.fetch = originalFetch;
   }

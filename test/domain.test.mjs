@@ -82,7 +82,8 @@ test("the About page preserves the origin while stating evidence and sustainabil
   assert.match(about, /has not been clinically validated/i);
   assert.match(about, /preserve agency/i);
   assert.match(about, /Impact requires sustainability/i);
-  assert.match(about, /current paid model-choice subscription is an early payment experiment/i);
+  assert.match(about, /20 messages per UTC day/i);
+  assert.match(about, /current paid model-allowance\s+subscription is an early payment experiment/i);
   assert.match(about, /not emergency care/i);
   assert.match(enhancer, /href=\"\/about\.html\"/);
 
