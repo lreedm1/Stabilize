@@ -1,52 +1,70 @@
-# App Store submission checklist
+# Stabilize 1.1 App Store submission checklist
 
-## Already prepared in this repository
+## Prepared in this repository
 
 - Native iPhone SwiftUI app rather than a web wrapper
 - Bundle ID: `info.stabilize.app`
-- Version/build: `1.0.0 (1)`
+- Version/build: `1.1 (2)`
+- Automatic signing configuration
 - App icon source and asset catalog
-- Privacy manifest and an app-switcher privacy cover
+- Privacy manifest and app-switcher privacy cover
 - Explicit pre-send OpenAI permission with revocation under About
-- Unit tests and macOS 26 / Xcode 26 CI
-- App Store description, subtitle, keywords, URLs, review notes, and release notes
-- No Google login, external paid-plan link, analytics SDK, ads, tracking, HealthKit, location, camera, microphone, contacts, or notifications in version 1
+- App Store description, subtitle, keywords, URLs, review notes, and 1.1 release notes
+- No Google login, in-app purchase, external paid-plan link, analytics SDK, ads, tracking, HealthKit, location, camera, microphone, contacts, or notifications
 - In-app privacy, safety, support, and project links
+- A repository policy that prohibits local or GitHub-hosted iOS builds, tests, archives, signing, and binary uploads
 
-## Apple-account work that cannot be stored in a public repository
+## Required Xcode Cloud configuration
 
-1. Enroll in the Apple Developer Program and accept current agreements.
-2. Register `info.stabilize.app` in Certificates, Identifiers & Profiles.
-3. Create the App Store Connect record:
+The release cannot merge until an Xcode Cloud pull-request workflow has completed successfully. Configure the workflows in `XCODE_CLOUD_1_1.md`.
+
+The release workflow must:
+
+1. Use the committed `Stabilize.xcodeproj` and shared `Stabilize` scheme.
+2. Run `StabilizeTests` in Xcode Cloud.
+3. Perform a clean archive in Xcode Cloud with automatic signing.
+4. Upload the archive to App Store Connect and distribute it to an internal TestFlight group.
+5. Keep manual App Store release selected.
+6. Set `STABILIZE_XCODE_CLOUD_RELEASE=1` before any Fastlane metadata or submission lane runs.
+
+Do not use local Xcode builds, local Simulator, GitHub Actions macOS builds, Fastlane `build_app`, Transporter, or `altool` for Stabilize 1.1.
+
+## Apple-account work
+
+These fields and permissions are account-bound and must not be committed to this public repository:
+
+1. Active Apple Developer Program membership and accepted agreements.
+2. Registration of `info.stabilize.app` in Certificates, Identifiers & Profiles.
+3. App Store Connect app record:
    - Preferred name: Stabilize
-   - Fallback if the exact name is unavailable: Stabilize: One Next Step
+   - Fallback if unavailable: Stabilize: One Next Step
    - Primary language: English (U.S.)
    - SKU: `stabilize-ios-1`
    - Bundle ID: `info.stabilize.app`
-4. Enter an App Review contact phone number and email.
-5. Complete the current age-rating questionnaire honestly. The product is intended for adults 18+; App Store Connect determines the displayed rating from the answers.
-6. Complete App Privacy answers to match `privacy.html` and the implementation. Declare Other User Content collected for App Functionality, not linked to an in-app identity and not used for tracking. User-entered text is sent off-device and OpenAI currently stores resulting Responses API data for at least 30 days because the Worker uses `store: true`, unless project data controls override the request.
-7. Answer export compliance: the app uses only Apple's standard HTTPS networking and declares `ITSAppUsesNonExemptEncryption = NO`.
-8. Choose Lifestyle as the primary category. Avoid medical-device, therapy, diagnosis, or suicide-prevention outcome claims.
-9. Limit version 1 availability to the United States. The native urgent-action buttons and fixed response text use U.S. 988 and 911 resources; add localized resources before expanding storefront availability.
-10. Capture at least one accepted iPhone screenshot. Recommended: three portrait screenshots at an accepted 6.9-inch size, showing:
-    - the starter screen;
-    - a normal floor-first reply;
-    - an urgent response with 988/911 actions.
+4. Xcode Cloud access to `lreedm1/Stabilize` through Apple’s GitHub app.
+5. App Review contact name, phone number, and email address.
+6. Age-rating questionnaire. The product is intended for adults 18+; App Store Connect determines the displayed rating from the answers.
+7. App Privacy answers matching the current implementation and public privacy disclosure.
+8. Export compliance: the app uses Apple’s standard HTTPS networking and declares `ITSAppUsesNonExemptEncryption = NO`.
+9. Primary category: Lifestyle.
+10. Initial availability: United States only, because the native urgent actions use U.S. 988 and 911 resources.
+11. At least one accepted iPhone screenshot. Recommended: three portrait screenshots at an accepted current iPhone size showing the starter screen, a normal reply, and an urgent response with 988/911 actions.
+12. An internal TestFlight tester group and a completed TestFlight pass on a physical iPhone.
+13. VoiceOver, first-send consent, consent revocation, urgent-route, and production-backend checks on the TestFlight build.
 
-    For deterministic screenshot data, launch with `--ui-testing`. Enter `Review safety check`, choose **Allow & Send Message** if prompted, then enter `Unsure` to reach the urgent screen without using a real person's information.
-11. In Xcode, select the developer team, archive with Xcode 26+, upload to App Store Connect, and test through TestFlight.
-12. Keep `https://stabilize.info`, `privacy.html`, `safety.html`, `support.html`, and the API live during App Review.
-13. Paste the prepared review notes and submit manually only after on-device safety, accessibility, first-send consent, and consent-revocation checks.
+## Submission sequence
 
-## Suggested review sequence
+1. Open the release pull request and let Xcode Cloud run the pull-request workflow.
+2. Fix branch failures and rerun Xcode Cloud until build, test, and analyze actions pass.
+3. Merge only after the Xcode Cloud check and repository checks are successful.
+4. Start the clean Stabilize 1.1 release workflow from the merged commit or release tag.
+5. Let Xcode Cloud archive, sign, upload, and distribute build `2` to internal TestFlight.
+6. Complete the physical-device TestFlight checks.
+7. Upload screenshots and finish the account-bound App Store Connect questionnaires.
+8. Run the Xcode Cloud-restricted Fastlane metadata lane, or enter the prepared metadata in App Store Connect.
+9. Select the processed Xcode Cloud build for version 1.1.
+10. Add version 1.1 for review and submit the draft submission to App Review with manual release selected.
 
-1. Internal TestFlight
-2. Small external TestFlight group
-3. Fix crashes, layout issues, VoiceOver problems, and backend errors
-4. Independent privacy/security/safety review appropriate to the product's risk
-5. App Review submission with manual release selected
+## Stop conditions
 
-## Stop conditions before submission
-
-Do not submit if the backend is in demo mode unexpectedly, urgent fixed routes fail, consent can be bypassed, revocation does not restore the consent prompt, the privacy page is inaccurate, support contact does not work, the app crashes, or a real-device test has not been completed.
+Do not merge or submit if the Xcode Cloud workflow is absent or failing, the backend is unexpectedly in demo mode, urgent fixed routes fail, consent can be bypassed, revocation does not restore the consent prompt, the privacy page is inaccurate, support contact does not work, the app crashes, screenshots are missing, or a physical-device TestFlight pass has not been completed.
