@@ -1,0 +1,40 @@
+{
+  "platform": "IOS",
+  "versionString": "1.1",
+  "buildNumber": "2",
+  "bundleId": "info.stabilize.app",
+  "appName": "Stabilize",
+  "fallbackAppName": "Stabilize: One Next Step",
+  "sku": "stabilize-ios-1",
+  "primaryLocale": "en-US",
+  "primaryCategory": "LIFESTYLE",
+  "availability": [
+    "USA"
+  ],
+  "releaseType": "MANUAL",
+  "usesNonExemptEncryption": false,
+  "marketingUrl": "https://stabilize.info/",
+  "supportUrl": "https://stabilize.info/support.html",
+  "privacyPolicyUrl": "https://stabilize.info/privacy.html",
+  "metadataPath": "ios/fastlane/metadata/en-US",
+  "reviewNotesPath": "ios/fastlane/review_information/notes.txt",
+  "binarySource": "XCODE_CLOUD_ONLY",
+  "requiredChecks": [
+    "repository release configuration",
+    "Xcode Cloud build",
+    "Xcode Cloud unit tests",
+    "Xcode Cloud analyze",
+    "internal TestFlight physical-device pass"
+  ],
+  "accountBoundFields": [
+    "Apple Developer Program membership and agreements",
+    "App Store Connect app record",
+    "Xcode Cloud GitHub authorization and workflows",
+    "review contact",
+    "age rating",
+    "App Privacy answers",
+    "screenshots",
+    "internal tester group",
+    "App Store Connect API credentials when automation is used"
+  ]
+}
