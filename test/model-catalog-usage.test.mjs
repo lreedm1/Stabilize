@@ -5,9 +5,10 @@ import { readFile } from "node:fs/promises";
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("GPT-5 mini is the default and GPT-5.6 tiers are selectable", async () => {
-  const [configText, workerSource, clientSource, policySource] =
+  const [configText, indexSource, workerSource, clientSource, policySource] =
     await Promise.all([
       read("wrangler.jsonc"),
+      read("src/index.js"),
       read("src/paid-worker.js"),
       read("public/billing-client.js"),
       read("scripts/fix-live-model-usage-and-catalog.mjs"),
@@ -27,6 +28,9 @@ test("GPT-5 mini is the default and GPT-5.6 tiers are selectable", async () => {
     ].join(","),
   );
   assert.doesNotMatch(config.vars.MODEL_CHOICES, /gpt-5\.1-mini/);
+
+  assert.match(indexSource, /const model = String\(env\.OPENAI_MODEL \|\| "gpt-5-mini"\)/);
+  assert.doesNotMatch(indexSource, /configuredModel === "gpt-5\.6-sol"/);
 
   assert.match(workerSource, /env\.OPENAI_MODEL \|\| "gpt-5-mini"/);
   assert.match(workerSource, /data-model-usage="true"/);
