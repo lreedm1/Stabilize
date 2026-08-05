@@ -116,6 +116,56 @@ await update("public/billing.css", (source) => {
 `;
 });
 
+await update("public/billing.css", (source) => {
+  if (source.includes("/* Compact 32px composer bar */")) return source;
+  return `${source.trimEnd()}
+
+/* Compact 32px composer bar */
+.composer-model-button,
+.composer-dock textarea,
+.composer-dock #send-button {
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+}
+
+.composer-model-button {
+  border-radius: 10px;
+  padding: 2px 5px;
+}
+
+.composer-model-kicker {
+  display: none;
+}
+
+.composer-model-current {
+  margin-top: 0;
+  line-height: 1;
+}
+
+.composer-model-button::after {
+  display: none;
+  content: none;
+}
+
+.composer-dock textarea {
+  border-radius: 10px;
+  padding: 5px 10px;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.composer-dock textarea::placeholder {
+  line-height: 1.2;
+}
+
+.composer-dock #send-button {
+  border-radius: 10px;
+  padding-inline: 14px;
+}
+`;
+});
+
 await update("src/page.js", (source) => {
   if (source.includes('href="/favicon.svg"')) return source;
   const anchor = '    <meta name="theme-color" content="#173f31" />';
@@ -130,7 +180,7 @@ for (const path of STATIC_PAGES) {
     if (themePattern.test(source)) {
       return source.replace(themePattern, `$1\n${FAVICON_LINK}`);
     }
-    requireText(source, "</head>", `${path} head closing tag`);
+    requireText(source, "</head>", `${FAVICON_LINK}\n  </head>`);
     return source.replace("</head>", `${FAVICON_LINK}\n  </head>`);
   });
 }
@@ -146,5 +196,5 @@ await update("test/paid-worker.test.mjs", (source) => {
 });
 
 console.log(
-  "Made the model tile show the active 5.x version and added the Stabilize favicon.",
+  "Made the model tile show the active 5.x version, compacted the composer, and added the Stabilize favicon.",
 );
