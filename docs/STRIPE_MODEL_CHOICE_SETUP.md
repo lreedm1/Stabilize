@@ -68,7 +68,8 @@ Every signed-in user can save any model on the configured allowlist. On each ord
 
 The current configured choices are:
 
-- **GPT-5 mini** — the default; always available and does not consume either allowance
+- **GPT-5.4** — the default; always available and does not consume either allowance
+- **GPT-5 mini**
 - **GPT-5.1**
 - **GPT-5.6 Luna**
 - **GPT-5.6 Terra**
@@ -91,7 +92,7 @@ Expected free flow:
 3. Choose an allowed model and save it.
 4. Send up to 20 non-default-model messages that UTC day and confirm the visible count increases after each completed reply.
 5. Reload the page and confirm the count remains.
-6. After the allowance is used, switch to **GPT-5 mini** or return after `00:00 UTC`.
+6. After the allowance is used, switch to **GPT-5.4** or return after `00:00 UTC`.
 
 Expected subscriber flow:
 
