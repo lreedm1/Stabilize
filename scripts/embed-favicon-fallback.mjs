@@ -10,19 +10,41 @@ const STATIC_PAGES = [
   "public/sustainability.html",
 ];
 
-const ICON_VERSION = "20260805-7";
+const ICON_RELEASE = "20260805";
+const REFRESH_VERSION = "20260805-8";
 const BINARY_ASSETS = [
   ["scripts/favicon-assets/favicon.ico.b64", "public/favicon.ico"],
+  [
+    "scripts/favicon-assets/favicon.ico.b64",
+    `public/stabilize-tab-${ICON_RELEASE}.ico`,
+  ],
+  ["scripts/favicon-assets/favicon-16x16.png.b64", "public/favicon-16x16.png"],
+  [
+    "scripts/favicon-assets/favicon-16x16.png.b64",
+    `public/stabilize-tab-${ICON_RELEASE}-16.png`,
+  ],
   ["scripts/favicon-assets/favicon-32x32.png.b64", "public/favicon-32x32.png"],
+  [
+    "scripts/favicon-assets/favicon-32x32.png.b64",
+    `public/stabilize-tab-${ICON_RELEASE}-32.png`,
+  ],
   ["scripts/favicon-assets/apple-touch-icon.png.b64", "public/apple-touch-icon.png"],
+  [
+    "scripts/favicon-assets/apple-touch-icon.png.b64",
+    `public/stabilize-app-${ICON_RELEASE}-180.png`,
+  ],
 ];
 
-const ICON_LINKS = `    <link rel="icon" href="/favicon.ico?v=${ICON_VERSION}" sizes="any" />
-    <link rel="icon" href="/favicon.svg?v=${ICON_VERSION}" type="image/svg+xml" sizes="any" />
-    <link rel="icon" href="/favicon-32x32.png?v=${ICON_VERSION}" type="image/png" sizes="32x32" />
-    <link rel="shortcut icon" href="/favicon.ico?v=${ICON_VERSION}" type="image/x-icon" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=${ICON_VERSION}" sizes="180x180" />
-    <link rel="mask-icon" href="/favicon.svg?v=${ICON_VERSION}" color="#173f31" />`;
+const ICON_LINKS = `    <link rel="shortcut icon" href="/stabilize-tab-${ICON_RELEASE}.ico" type="image/x-icon" />
+    <link rel="icon" href="/stabilize-tab-${ICON_RELEASE}.ico" type="image/x-icon" sizes="16x16 32x32 48x48" />
+    <link rel="icon" href="/stabilize-tab-${ICON_RELEASE}-16.png" type="image/png" sizes="16x16" />
+    <link rel="icon" href="/stabilize-tab-${ICON_RELEASE}-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/stabilize-app-${ICON_RELEASE}-180.png" sizes="180x180" />
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#173f31" />
+    <link rel="manifest" href="/site.webmanifest?v=${REFRESH_VERSION}" />
+    <meta name="application-name" content="STABILIZE" />
+    <meta name="apple-mobile-web-app-title" content="STABILIZE" />
+    <script src="/favicon-refresh.js?v=${REFRESH_VERSION}" defer></script>`;
 
 function requireText(value, expected, label) {
   if (!value.includes(expected)) {
@@ -36,11 +58,24 @@ async function update(path, transform) {
   if (after !== before) await writeFile(path, after);
 }
 
+function stripIconMetadata(source) {
+  return source
+    .replace(
+      /^\s*<link\s+rel="(?:icon|alternate icon|shortcut icon|apple-touch-icon|mask-icon|manifest)"[^>]*>\s*$/gim,
+      "",
+    )
+    .replace(
+      /^\s*<meta\s+name="(?:application-name|apple-mobile-web-app-title)"[^>]*>\s*$/gim,
+      "",
+    )
+    .replace(
+      /^\s*<script\s+src="\/favicon-refresh\.js[^"]*"\s+defer><\/script>\s*$/gim,
+      "",
+    );
+}
+
 function normalizeIconLinks(source, anchor, label) {
-  let text = source.replace(
-    /^\s*<link\s+rel="(?:icon|alternate icon|shortcut icon|apple-touch-icon|mask-icon)"[^>]*>\s*$/gim,
-    "",
-  );
+  const text = stripIconMetadata(source);
   requireText(text, anchor, label);
   return text.replace(anchor, `${anchor}\n${ICON_LINKS}`);
 }
@@ -65,10 +100,7 @@ for (const path of STATIC_PAGES) {
       return normalizeIconLinks(source, themeMatch[0], `${path} theme color`);
     }
 
-    let text = source.replace(
-      /^\s*<link\s+rel="(?:icon|alternate icon|shortcut icon|apple-touch-icon|mask-icon)"[^>]*>\s*$/gim,
-      "",
-    );
+    const text = stripIconMetadata(source);
     requireText(text, "</head>", `${path} head closing tag`);
     return text.replace("</head>", `${ICON_LINKS}\n  </head>`);
   });
@@ -80,13 +112,24 @@ await update("src/index.js", (source) => {
   const typesBlock = `const FAVICON_CONTENT_TYPES = new Map([
   ["/favicon.ico", "image/x-icon"],
   ["/favicon.svg", "image/svg+xml; charset=utf-8"],
+  ["/favicon-16x16.png", "image/png"],
   ["/favicon-32x32.png", "image/png"],
   ["/apple-touch-icon.png", "image/png"],
+  ["/stabilize-tab-${ICON_RELEASE}.ico", "image/x-icon"],
+  ["/stabilize-tab-${ICON_RELEASE}-16.png", "image/png"],
+  ["/stabilize-tab-${ICON_RELEASE}-32.png", "image/png"],
+  ["/stabilize-app-${ICON_RELEASE}-180.png", "image/png"],
+  ["/safari-pinned-tab.svg", "image/svg+xml; charset=utf-8"],
+  ["/site.webmanifest", "application/manifest+json; charset=utf-8"],
 ]);
 
 `;
+  const typesPattern =
+    /const FAVICON_CONTENT_TYPES = new Map\(\[[\s\S]*?\]\);\n\n/;
   const typesAnchor = "const FIXED_ROUTE_MEMORY = {";
-  if (!text.includes("const FAVICON_CONTENT_TYPES = new Map([")) {
+  if (typesPattern.test(text)) {
+    text = text.replace(typesPattern, typesBlock);
+  } else {
     requireText(text, typesAnchor, "the fixed-route memory map");
     text = text.replace(typesAnchor, typesBlock + typesAnchor);
   }
@@ -104,7 +147,7 @@ await update("src/index.js", (source) => {
 
   const headers = new Headers(asset.headers);
   headers.set("Content-Type", contentType);
-  headers.set("Cache-Control", "public, max-age=300, must-revalidate");
+  headers.set("Cache-Control", "no-store, max-age=0");
   headers.set("Content-Disposition", "inline");
   headers.set("X-Content-Type-Options", "nosniff");
   return new Response(request.method === "HEAD" ? null : asset.body, {
@@ -115,8 +158,12 @@ await update("src/index.js", (source) => {
 }
 
 `;
+  const helperPattern =
+    /async function faviconAssetResponse\([\s\S]*?\n}\n\n(?=function jsonResponse)/;
   const helperAnchor = "function jsonResponse(body, status = 200, extraHeaders = {}) {";
-  if (!text.includes("async function faviconAssetResponse(")) {
+  if (helperPattern.test(text)) {
+    text = text.replace(helperPattern, helper);
+  } else {
     requireText(text, helperAnchor, "the JSON response helper");
     text = text.replace(helperAnchor, helper + helperAnchor);
   }
@@ -140,16 +187,19 @@ await update("src/index.js", (source) => {
 });
 
 await update("test/worker.test.mjs", (source) => {
-  if (source.includes('test("favicon endpoints return browser-compatible content types"')) {
-    return source;
-  }
-
   const testBlock = `test("favicon endpoints return browser-compatible content types", async () => {
   const cases = [
     ["/favicon.ico", "image/x-icon"],
     ["/favicon.svg", "image/svg+xml; charset=utf-8"],
+    ["/favicon-16x16.png", "image/png"],
     ["/favicon-32x32.png", "image/png"],
     ["/apple-touch-icon.png", "image/png"],
+    ["/stabilize-tab-${ICON_RELEASE}.ico", "image/x-icon"],
+    ["/stabilize-tab-${ICON_RELEASE}-16.png", "image/png"],
+    ["/stabilize-tab-${ICON_RELEASE}-32.png", "image/png"],
+    ["/stabilize-app-${ICON_RELEASE}-180.png", "image/png"],
+    ["/safari-pinned-tab.svg", "image/svg+xml; charset=utf-8"],
+    ["/site.webmanifest", "application/manifest+json; charset=utf-8"],
   ];
 
   for (const [path, contentType] of cases) {
@@ -159,17 +209,20 @@ await update("test/worker.test.mjs", (source) => {
     );
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("content-type"), contentType);
-    assert.match(response.headers.get("cache-control") || "", /max-age=300/);
+    assert.match(response.headers.get("cache-control") || "", /no-store/);
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   }
 });
 
 `;
+  const testPattern =
+    /test\("favicon endpoints return browser-compatible content types",[\s\S]*?\n}\);\n\n(?=test\("root page renders the simplified chat without audio or a danger shortcut")/;
   const testAnchor = 'test("root page renders the simplified chat without audio or a danger shortcut"';
+  if (testPattern.test(source)) return source.replace(testPattern, testBlock);
   requireText(source, testAnchor, "the root-page Worker test");
   return source.replace(testAnchor, testBlock + testAnchor);
 });
 
 console.log(
-  "Generated ICO, PNG, and Apple favicon assets with explicit browser-compatible responses.",
+  "Hard-reset favicon identity with new tab-icon URLs, a true 16px PNG, and a valid Safari mask.",
 );
