@@ -39,6 +39,7 @@ const POLICY_SCRIPTS = [
   "scripts/fix-paid-model-choice.mjs",
   "scripts/add-composer-model-picker.mjs",
   "scripts/enable-free-daily-model-choice.mjs",
+  "scripts/fix-live-model-usage-and-catalog.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
@@ -49,6 +50,7 @@ const POLICY_TARGETS = [
   "src/billing.js",
   "src/reasoning-policy.js",
   "public/app.js",
+  "public/billing-client.js",
   "public/seo.css",
   "public/product.css",
   "test/worker.test.mjs",
