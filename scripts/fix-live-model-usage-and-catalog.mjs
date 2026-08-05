@@ -16,6 +16,12 @@ function requireText(value, expected, label) {
   }
 }
 
+function requirePattern(value, pattern, label) {
+  if (!pattern.test(value)) {
+    throw new Error(`Live model usage repair could not find ${label}`);
+  }
+}
+
 const configPath = "wrangler.jsonc";
 const configBefore = await readFile(configPath, "utf8");
 const config = JSON.parse(configBefore);
@@ -133,7 +139,6 @@ if (!workerAfter.includes("X-Stabilize-Model-Usage-Used")) {
 
 for (const expected of [
   'env.OPENAI_MODEL || "gpt-5-mini"',
-  `billing-client.js?v=${ASSET_VERSION}`,
   'data-model-usage="true"',
   "X-Stabilize-Model-Usage-Tier",
   "X-Stabilize-Model-Usage-Used",
@@ -143,6 +148,11 @@ for (const expected of [
 ]) {
   requireText(workerAfter, expected, expected);
 }
+requirePattern(
+  workerAfter,
+  /billing-client\.js\?v=[A-Za-z0-9._-]+/,
+  "a cache-busted billing client",
+);
 if (workerAfter !== workerBefore) await writeFile(workerPath, workerAfter);
 
 const clientPath = "public/billing-client.js";
@@ -255,7 +265,7 @@ const oldAssetAssertion = String.raw`  assert.match(
   );`;
 const newAssetAssertion = String.raw`  assert.match(
     workerSource,
-    /src="\/billing-client\.js\?v=20260805-live-model-usage-1"/,
+    /src="\/billing-client\.js\?v=[A-Za-z0-9._-]+"/,
   );`;
 if (pickerTestAfter.includes(oldAssetAssertion)) {
   pickerTestAfter = pickerTestAfter.replace(
@@ -266,7 +276,7 @@ if (pickerTestAfter.includes(oldAssetAssertion)) {
   requireText(
     pickerTestAfter,
     newAssetAssertion,
-    "the live model-usage asset assertion",
+    "the cache-busted billing-client asset assertion",
   );
 }
 if (pickerTestAfter !== pickerTestBefore) {
