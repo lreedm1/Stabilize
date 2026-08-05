@@ -25,18 +25,49 @@ config.vars.FREE_DAILY_MODEL_MESSAGE_LIMIT = "20";
 const configAfter = `${JSON.stringify(config, null, 2)}\n`;
 if (configAfter !== configBefore) await writeFile(configPath, configAfter);
 
+const indexPath = "src/index.js";
+const indexBefore = await readFile(indexPath, "utf8");
+let indexAfter = indexBefore;
+const legacyCompatibility = `  const configuredModel = String(env.OPENAI_MODEL || "gpt-5.2");
+  const model =
+    configuredModel === "gpt-5.6-sol" ? "gpt-5.2" : configuredModel;`;
+const directModel = `  const model = String(env.OPENAI_MODEL || "gpt-5-mini");`;
+if (indexAfter.includes(legacyCompatibility)) {
+  indexAfter = indexAfter.replace(legacyCompatibility, directModel);
+} else {
+  indexAfter = indexAfter.replaceAll(
+    '  const model = String(env.OPENAI_MODEL || "gpt-5.2");',
+    directModel,
+  );
+}
+indexAfter = indexAfter.replaceAll(
+  'String(env.OPENAI_MODEL || "gpt-5.2")',
+  'String(env.OPENAI_MODEL || "gpt-5-mini")',
+);
+indexAfter = indexAfter.replaceAll(
+  'String(env.OPENAI_MODEL || "gpt-5.6-sol")',
+  'String(env.OPENAI_MODEL || "gpt-5-mini")',
+);
+requireText(indexAfter, directModel, "the direct default model configuration");
+if (indexAfter.includes('configuredModel === "gpt-5.6-sol"')) {
+  throw new Error("GPT-5.6 Sol is still being redirected to an older model");
+}
+if (indexAfter !== indexBefore) await writeFile(indexPath, indexAfter);
+
 const workerPath = "src/paid-worker.js";
 const workerBefore = await readFile(workerPath, "utf8");
 let workerAfter = workerBefore;
 
-workerAfter = workerAfter.replaceAll(
-  'env.OPENAI_MODEL || choices[0]?.id || "gpt-5.6-sol"',
-  'env.OPENAI_MODEL || choices[0]?.id || "gpt-5-mini"',
-);
-workerAfter = workerAfter.replaceAll(
-  'env.OPENAI_MODEL || "gpt-5.6-sol"',
-  'env.OPENAI_MODEL || "gpt-5-mini"',
-);
+for (const previousModel of ["gpt-5.2", "gpt-5.6-sol"]) {
+  workerAfter = workerAfter.replaceAll(
+    `env.OPENAI_MODEL || choices[0]?.id || "${previousModel}"`,
+    'env.OPENAI_MODEL || choices[0]?.id || "gpt-5-mini"',
+  );
+  workerAfter = workerAfter.replaceAll(
+    `env.OPENAI_MODEL || "${previousModel}"`,
+    'env.OPENAI_MODEL || "gpt-5-mini"',
+  );
+}
 workerAfter = workerAfter.replaceAll(
   `'<p class="billing-usage">' +`,
   `'<p class="billing-usage" data-model-usage="true" aria-live="polite">' +`,
