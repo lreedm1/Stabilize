@@ -42,6 +42,7 @@ const POLICY_SCRIPTS = [
   "scripts/enable-free-daily-model-choice.mjs",
   "scripts/fix-live-model-usage-and-catalog.mjs",
   "scripts/set-gpt54-default.mjs",
+  "scripts/apply-model-limit-fallback-and-transparent-chat.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
@@ -53,9 +54,12 @@ const POLICY_TARGETS = [
   "src/reasoning-policy.js",
   "public/app.js",
   "public/billing-client.js",
+  "public/styles.css",
   "public/seo.css",
   "public/product.css",
   "test/worker.test.mjs",
+  "test/paid-worker.test.mjs",
+  "test/model-usage-worker.test.mjs",
   "test/paid-model-choice.test.mjs",
   "test/session-memory.test.mjs",
   "test/prompt-submit.test.mjs",
