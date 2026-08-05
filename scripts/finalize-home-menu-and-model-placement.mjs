@@ -33,6 +33,23 @@ await update("src/page.js", (source) => {
     );
   }
 
+  const newConversationButtonPattern =
+    /\n\s*<button\s+id="new-conversation-button"\s+class="new-conversation-button"\s+type="button"\s*>\$\{escapeHtml\(page\.chat\.newConversationButton\)\}<\/button>/;
+  if (newConversationButtonPattern.test(text)) {
+    text = text.replace(newConversationButtonPattern, "");
+  }
+  if (text.includes('id="new-conversation-button"')) {
+    throw new Error("The New conversation menu button remains");
+  }
+
+  const privateChatMenuPattern = /\n\s*\$\{privateChatControl\}/;
+  if (privateChatMenuPattern.test(text)) {
+    text = text.replace(privateChatMenuPattern, "");
+  }
+  if (text.includes("${privateChatControl}")) {
+    throw new Error("The Private chat menu control remains");
+  }
+
   const homeIndex = text.indexOf('<a href="/">Home</a>');
   const aboutIndex = text.indexOf('<a href="/about.html">About</a>');
   if (homeIndex < 0 || aboutIndex < 0 || homeIndex > aboutIndex) {
@@ -97,5 +114,5 @@ await update("src/paid-worker.js", (source) => {
 });
 
 console.log(
-  "Moved Home into the hamburger menu and removed duplicate model selection from that menu.",
+  "Kept Home in the hamburger menu and removed New conversation, Private chat, and duplicate model selection from that menu.",
 );
