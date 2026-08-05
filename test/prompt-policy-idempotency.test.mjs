@@ -38,6 +38,7 @@ const POLICY_SCRIPTS = [
   "scripts/fix-rounded-conversation-test.mjs",
   "scripts/fix-paid-model-choice.mjs",
   "scripts/add-composer-model-picker.mjs",
+  "scripts/enable-free-daily-model-choice.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
