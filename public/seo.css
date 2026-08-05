@@ -8,6 +8,48 @@
   text-shadow: 0 2px 8px rgba(5, 25, 18, 0.78);
 }
 
+.header-navigation {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-button {
+  display: inline-flex;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: 12px;
+  background: rgba(255, 252, 242, 0.72);
+  box-shadow: 0 5px 18px rgba(5, 25, 18, 0.18);
+  color: var(--accent-dark);
+  padding: 0 12px;
+  font-size: 0.78rem;
+  font-weight: 760;
+  line-height: 1;
+  text-decoration: none;
+  backdrop-filter: blur(7px);
+}
+
+.home-button:hover,
+.home-button:focus-visible {
+  background: rgba(255, 255, 252, 0.9);
+}
+
+.home-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
 .header-actions {
   display: flex;
   min-width: 0;
@@ -84,7 +126,8 @@
 .menu-panel {
   position: absolute;
   top: calc(100% + 10px);
-  right: 0;
+  left: 0;
+  right: auto;
   width: min(290px, calc(100vw - 20px));
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.76);
@@ -265,9 +308,24 @@
     display: none;
   }
 
+  .menu-toggle,
+  .home-button {
+    height: 38px;
+  }
+
   .menu-toggle {
     width: 38px;
-    height: 38px;
+  }
+
+  .home-button {
+    gap: 6px;
+    padding-inline: 10px;
+    font-size: 0.72rem;
+  }
+
+  .home-icon {
+    width: 17px;
+    height: 17px;
   }
 }
 
