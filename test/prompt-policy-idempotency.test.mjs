@@ -47,6 +47,9 @@ const POLICY_SCRIPTS = [
   "scripts/compact-header-and-menu-info.mjs",
   "scripts/align-menu-info-worker-test.mjs",
   "scripts/embed-favicon-fallback.mjs",
+  "scripts/finalize-home-menu-and-model-placement.mjs",
+  "scripts/add-composer-chat-sections.mjs",
+  "scripts/align-composer-chat-section-tests.mjs",
 ];
 const POLICY_TARGETS = [
   "scripts/favicon-assets/favicon.ico.b64",
