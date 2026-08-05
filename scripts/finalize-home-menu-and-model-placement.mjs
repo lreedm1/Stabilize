@@ -33,22 +33,63 @@ await update("src/page.js", (source) => {
     );
   }
 
+  const proxyMarker = 'class="chat-action-proxies"';
   const newConversationButtonPattern =
     /\n\s*<button\s+id="new-conversation-button"\s+class="new-conversation-button"\s+type="button"\s*>\$\{escapeHtml\(page\.chat\.newConversationButton\)\}<\/button>/;
-  if (newConversationButtonPattern.test(text)) {
+  const privateChatMenuPattern = /\n\s*\$\{privateChatControl\}/;
+
+  if (!text.includes(proxyMarker)) {
+    if (!newConversationButtonPattern.test(text)) {
+      throw new Error("The New conversation menu button could not be relocated");
+    }
+    if (!privateChatMenuPattern.test(text)) {
+      throw new Error("The Private chat menu control could not be relocated");
+    }
+
     text = text.replace(newConversationButtonPattern, "");
-  }
-  if (text.includes('id="new-conversation-button"')) {
-    throw new Error("The New conversation menu button remains");
+    text = text.replace(privateChatMenuPattern, "");
+
+    const headerAnchor = "      </header>\n\n";
+    requireText(text, headerAnchor, "the header closing anchor");
+    const proxyMarkup = `      </header>
+
+      <div class="chat-action-proxies" hidden aria-hidden="true">
+        <button
+          id="new-conversation-button"
+          class="new-conversation-button"
+          type="button"
+        >\${escapeHtml(page.chat.newConversationButton)}</button>
+        \${privateChatControl}
+      </div>
+
+`;
+    text = text.replace(headerAnchor, proxyMarkup);
   }
 
-  const privateChatMenuPattern = /\n\s*\$\{privateChatControl\}/;
-  if (privateChatMenuPattern.test(text)) {
-    text = text.replace(privateChatMenuPattern, "");
+  const menuPanelStart = text.indexOf('<div class="menu-panel">');
+  const menuPanelEnd = text.indexOf(
+    "\n            </div>\n          </details>",
+    menuPanelStart,
+  );
+  if (menuPanelStart < 0 || menuPanelEnd <= menuPanelStart) {
+    throw new Error("The hamburger-menu panel could not be inspected");
   }
-  if (text.includes("${privateChatControl}")) {
-    throw new Error("The Private chat menu control remains");
+  const menuPanel = text.slice(menuPanelStart, menuPanelEnd);
+  if (
+    menuPanel.includes('id="new-conversation-button"') ||
+    menuPanel.includes("${privateChatControl}")
+  ) {
+    throw new Error("Chat actions remain inside the hamburger menu");
   }
+
+  const proxyStart = text.indexOf('<div class="chat-action-proxies"');
+  const proxyEnd = text.indexOf("\n      </div>", proxyStart);
+  if (proxyStart < 0 || proxyEnd <= proxyStart) {
+    throw new Error("The hidden chat-action proxy container is missing");
+  }
+  const proxy = text.slice(proxyStart, proxyEnd);
+  requireText(proxy, 'id="new-conversation-button"', "the hidden new-chat proxy");
+  requireText(proxy, "${privateChatControl}", "the hidden private-chat proxy");
 
   const homeIndex = text.indexOf('<a href="/">Home</a>');
   const aboutIndex = text.indexOf('<a href="/about.html">About</a>');
@@ -114,5 +155,5 @@ await update("src/paid-worker.js", (source) => {
 });
 
 console.log(
-  "Kept Home in the hamburger menu and removed New conversation, Private chat, and duplicate model selection from that menu.",
+  "Kept Home in the hamburger menu, moved chat-action proxies outside it, and removed duplicate model selection from that menu.",
 );
