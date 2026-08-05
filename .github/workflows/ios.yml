@@ -40,12 +40,3 @@ jobs:
 
       - name: Validate version, metadata, and cloud-only release policy
         run: node --test test/ios-release.test.mjs
-
-      - name: Confirm GitHub is not an iOS build runner
-        shell: bash
-        run: |
-          set -euo pipefail
-          if grep -Eq 'xcodebuild|simctl|iphonesimulator|build_app\(|upload_to_testflight\(' .github/workflows/ios.yml ios/fastlane/Fastfile; then
-            echo "::error::iOS builds, tests, archives, signing, and binary uploads must run in Xcode Cloud."
-            exit 1
-          fi
