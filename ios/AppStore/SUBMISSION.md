@@ -16,7 +16,7 @@
 
 ## Required Xcode Cloud configuration
 
-The release cannot merge until an Xcode Cloud pull-request workflow has completed successfully. Configure the workflows in `XCODE_CLOUD_1_1.md`.
+The release must not merge until an Xcode Cloud pull-request workflow has completed successfully. Configure the workflows in `XCODE_CLOUD_1_1.md`.
 
 The release workflow must:
 
