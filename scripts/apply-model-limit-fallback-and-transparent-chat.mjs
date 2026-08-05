@@ -6,6 +6,14 @@ function requireText(value, expected, label) {
   }
 }
 
+async function replaceLegacyExpectation(path, legacy, replacement, label) {
+  const before = await readFile(path, "utf8");
+  let after = before;
+  if (after.includes(legacy)) after = after.replace(legacy, replacement);
+  else requireText(after, replacement, label);
+  if (after !== before) await writeFile(path, after);
+}
+
 const workerPath = "src/paid-worker.js";
 const workerBefore = await readFile(workerPath, "utf8");
 let workerAfter = workerBefore;
@@ -160,6 +168,49 @@ for (const expected of [
   requireText(stylesAfter, expected, expected);
 }
 if (stylesAfter !== stylesBefore) await writeFile(stylesPath, stylesAfter);
+
+const paidWorkerLegacy = `    assert.equal(blocked.status, 429);
+    assert.match(
+      (await blocked.json()).error,
+      /daily free model-select limit of 2 messages has been reached/i,
+    );
+    assert.equal(providerBody.model, "gpt-5.1");`;
+const paidWorkerFallback = `    assert.equal(blocked.status, 200);
+    assert.equal(blocked.headers.get("X-Stabilize-Model-Fallback"), "daily-limit");
+    assert.equal(blocked.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");
+    assert.equal((await blocked.json()).reply, "Use the smallest reversible step.");
+    assert.equal(providerBody.model, "gpt-5.4");`;
+await replaceLegacyExpectation(
+  "test/paid-worker.test.mjs",
+  paidWorkerLegacy,
+  paidWorkerFallback,
+  "the free-user fallback test",
+);
+
+const usageLegacy = `    assert.equal(blocked.status, 429);
+    assert.match(
+      (await blocked.json()).error,
+      /daily free model-select limit of 2 messages has been reached/i,
+    );
+    assert.ok(
+      providerModels.filter((model) => model === "gpt-5.6-terra").length >= 2,
+    );`;
+const usageFallback = `    assert.equal(blocked.status, 200);
+    assert.equal(blocked.headers.get("X-Stabilize-Model-Fallback"), "daily-limit");
+    assert.equal(blocked.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");
+    assert.equal((await blocked.json()).reply, "Use the smallest reversible step.");
+    assert.ok(
+      providerModels.filter((model) => model === "gpt-5.6-terra").length >= 2,
+    );
+    assert.equal(providerModels.at(-1), "gpt-5.4");
+    const fallbackState = await user.billing.readState();
+    assert.equal(fallbackState.selectedModel, "gpt-5.4");`;
+await replaceLegacyExpectation(
+  "test/model-usage-worker.test.mjs",
+  usageLegacy,
+  usageFallback,
+  "the persistent fallback usage test",
+);
 
 console.log(
   "Applied 20-message automatic GPT-5.4 fallback and transparent chat surfaces.",
