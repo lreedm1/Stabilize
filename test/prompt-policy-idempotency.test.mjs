@@ -58,6 +58,8 @@ const POLICY_TARGETS = [
   "public/seo.css",
   "public/product.css",
   "test/worker.test.mjs",
+  "test/paid-worker.test.mjs",
+  "test/model-usage-worker.test.mjs",
   "test/paid-model-choice.test.mjs",
   "test/session-memory.test.mjs",
   "test/prompt-submit.test.mjs",
