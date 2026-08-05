@@ -135,6 +135,16 @@ for (const path of STATIC_PAGES) {
   });
 }
 
+await update("test/paid-worker.test.mjs", (source) => {
+  const oldExpectation = String.raw`/<span class="composer-model-current">GPT-5\.1<\/span>/,`;
+  const newExpectation = String.raw`/<span class="composer-model-current">5\.1<\/span>/,`;
+  if (source.includes(oldExpectation)) {
+    return source.replace(oldExpectation, newExpectation);
+  }
+  requireText(source, newExpectation, "the compact model tile Worker test");
+  return source;
+});
+
 console.log(
   "Made the model tile show the active 5.x version and added the Stabilize favicon.",
 );
