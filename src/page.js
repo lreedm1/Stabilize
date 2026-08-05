@@ -150,9 +150,7 @@ export function renderPage(options = {}) {
     ></canvas>
     <div class="page-shell">
       <header class="site-header">
-        <a class="site-name" href="/" aria-label="Stabilize home">${escapeHtml(page.header.name)}</a>
-        <div class="header-actions">
-          ${headerAuthControl ? `<nav class="auth-actions header-auth-actions" aria-label="${escapeHtml(page.auth.label)}">${headerAuthControl}</nav>` : ""}
+        <nav class="header-navigation" aria-label="Primary navigation">
           <details class="site-menu">
             <summary class="menu-toggle" aria-label="Open site menu">
               <span class="sr-only">Menu</span>
@@ -176,6 +174,15 @@ export function renderPage(options = {}) {
               </div>
             </div>
           </details>
+          <a class="home-button" href="/" aria-label="Home">
+            <svg class="home-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M3.5 10.75 12 3.75l8.5 7v8.5a1 1 0 0 1-1 1h-5v-6.5h-5v6.5h-5a1 1 0 0 1-1-1z"></path>
+            </svg>
+            <span>Home</span>
+          </a>
+        </nav>
+        <div class="header-actions">
+          ${headerAuthControl ? `<nav class="auth-actions header-auth-actions" aria-label="${escapeHtml(page.auth.label)}">${headerAuthControl}</nav>` : ""}
         </div>
       </header>
 
