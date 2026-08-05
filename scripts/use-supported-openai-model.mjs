@@ -25,7 +25,7 @@ await update("src/index.js", (source) => {
   if (legacyMapping.test(text)) {
     text = text.replace(legacyMapping, directConfig);
   }
-  for (const previous of ["gpt-5.6-sol", "gpt-5.2"]) {
+  for (const previous of ["gpt-5.4", "gpt-5.6-sol", "gpt-5.2"]) {
     text = text.replaceAll(
       `String(env.OPENAI_MODEL || "${previous}")`,
       `String(env.OPENAI_MODEL || "${DEFAULT_MODEL}")`,
@@ -43,7 +43,7 @@ await update("src/index.js", (source) => {
 
 await update("src/billing.js", (source) => {
   let text = source;
-  for (const previous of ["gpt-5.6-sol", "gpt-5.2"]) {
+  for (const previous of ["gpt-5.4", "gpt-5.6-sol", "gpt-5.2"]) {
     text = text.replaceAll(
       `env.OPENAI_MODEL || "${previous}"`,
       `env.OPENAI_MODEL || "${DEFAULT_MODEL}"`,
@@ -106,5 +106,5 @@ await update("test/worker.test.mjs", (source) => {
 });
 
 console.log(
-  `Using ${DEFAULT_MODEL} as the default while preserving configured GPT-5.6 models.`,
+  `Using ${DEFAULT_MODEL} as the compatibility-stage default before the final model policy.`,
 );

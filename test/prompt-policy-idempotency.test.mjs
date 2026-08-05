@@ -41,6 +41,7 @@ const POLICY_SCRIPTS = [
   "scripts/add-composer-model-picker.mjs",
   "scripts/enable-free-daily-model-choice.mjs",
   "scripts/fix-live-model-usage-and-catalog.mjs",
+  "scripts/set-gpt54-default.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
