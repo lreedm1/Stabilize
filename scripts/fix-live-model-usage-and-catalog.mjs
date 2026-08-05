@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 
 const DEFAULT_MODEL = "gpt-5-mini";
+const ASSET_VERSION = "20260805-live-model-usage-1";
 const MODEL_CHOICES = [
   "gpt-5-mini|GPT-5 mini (default)",
   "gpt-5.1|GPT-5.1",
@@ -69,6 +70,10 @@ for (const previousModel of ["gpt-5.2", "gpt-5.6-sol"]) {
   );
 }
 workerAfter = workerAfter.replaceAll(
+  "20260804-composer-model-picker-1",
+  ASSET_VERSION,
+);
+workerAfter = workerAfter.replaceAll(
   `'<p class="billing-usage">' +`,
   `'<p class="billing-usage" data-model-usage="true" aria-live="polite">' +`,
 );
@@ -128,6 +133,7 @@ if (!workerAfter.includes("X-Stabilize-Model-Usage-Used")) {
 
 for (const expected of [
   'env.OPENAI_MODEL || "gpt-5-mini"',
+  `billing-client.js?v=${ASSET_VERSION}`,
   'data-model-usage="true"',
   "X-Stabilize-Model-Usage-Tier",
   "X-Stabilize-Model-Usage-Used",
@@ -239,6 +245,33 @@ for (const expected of [
   requireText(clientAfter, expected, expected);
 }
 if (clientAfter !== clientBefore) await writeFile(clientPath, clientAfter);
+
+const pickerTestPath = "test/paid-model-choice.test.mjs";
+const pickerTestBefore = await readFile(pickerTestPath, "utf8");
+let pickerTestAfter = pickerTestBefore;
+const oldAssetAssertion = String.raw`  assert.match(
+    workerSource,
+    /src="\/billing-client\.js\?v=20260804-composer-model-picker-1"/,
+  );`;
+const newAssetAssertion = String.raw`  assert.match(
+    workerSource,
+    /src="\/billing-client\.js\?v=20260805-live-model-usage-1"/,
+  );`;
+if (pickerTestAfter.includes(oldAssetAssertion)) {
+  pickerTestAfter = pickerTestAfter.replace(
+    oldAssetAssertion,
+    newAssetAssertion,
+  );
+} else {
+  requireText(
+    pickerTestAfter,
+    newAssetAssertion,
+    "the live model-usage asset assertion",
+  );
+}
+if (pickerTestAfter !== pickerTestBefore) {
+  await writeFile(pickerTestPath, pickerTestAfter);
+}
 
 console.log(
   "Set GPT-5 mini as the default, added GPT-5.6 choices, and enabled live usage counters.",
