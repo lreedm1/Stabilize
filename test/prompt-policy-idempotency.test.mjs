@@ -36,9 +36,11 @@ const POLICY_SCRIPTS = [
   "scripts/apply-consent-before-help.mjs",
   "scripts/compact-final-system-prompt.mjs",
   "scripts/fix-rounded-conversation-test.mjs",
+  "scripts/prepare-live-model-usage.mjs",
   "scripts/fix-paid-model-choice.mjs",
   "scripts/add-composer-model-picker.mjs",
   "scripts/enable-free-daily-model-choice.mjs",
+  "scripts/fix-live-model-usage-and-catalog.mjs",
 ];
 const POLICY_TARGETS = [
   "src/index.js",
@@ -49,9 +51,11 @@ const POLICY_TARGETS = [
   "src/billing.js",
   "src/reasoning-policy.js",
   "public/app.js",
+  "public/billing-client.js",
   "public/seo.css",
   "public/product.css",
   "test/worker.test.mjs",
+  "test/paid-model-choice.test.mjs",
   "test/session-memory.test.mjs",
   "test/prompt-submit.test.mjs",
   "test/outcome-followup.test.mjs",

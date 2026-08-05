@@ -64,19 +64,21 @@ The free model picker remains available even when Stripe is not configured. Only
 
 ## Access and model selection
 
-Every signed-in user can save any model on the configured allowlist. On each ordinary chat request, the Worker reads the selected model from the account's Billing Durable Object and passes that model to the OpenAI Responses API.
+Every signed-in user can save any model on the configured allowlist. On each ordinary chat request, the Worker reads the selected model from the account's Billing Durable Object and passes that exact model to the OpenAI Responses API.
 
 The current configured choices are:
 
-- **Stabilize default** — always available and does not consume either allowance
+- **GPT-5 mini** — the default; always available and does not consume either allowance
 - **GPT-5.1**
-- **GPT-5 mini**
+- **GPT-5.6 Luna**
+- **GPT-5.6 Terra**
+- **GPT-5.6 Sol**
 
 Free signed-in accounts receive **20 free model-select messages per UTC day**. The daily counter resets at `00:00 UTC`.
 
 Accounts with an `active` or `trialing` subscription receive **200 non-default-model messages per UTC month**. Free daily and subscriber monthly counters are stored separately, so canceling and later reactivating a subscription does not erase prior monthly usage.
 
-Failed provider requests and fixed safety-route replies are refunded and do not consume the applicable allowance.
+Each successful non-default-model response returns the reserved count to the browser, which updates every visible usage counter immediately. Reloading the page reads the same persisted count from the Billing Durable Object. Failed provider requests and fixed safety-route replies are refunded and do not consume the applicable allowance.
 
 ## Deploy and test
 
@@ -87,8 +89,9 @@ Expected free flow:
 1. Sign in with Google.
 2. Use the **Model** button to the left of the message box.
 3. Choose an allowed model and save it.
-4. Send up to 20 non-default-model messages that UTC day.
-5. After the allowance is used, switch to **Stabilize default** or return after `00:00 UTC`.
+4. Send up to 20 non-default-model messages that UTC day and confirm the visible count increases after each completed reply.
+5. Reload the page and confirm the count remains.
+6. After the allowance is used, switch to **GPT-5 mini** or return after `00:00 UTC`.
 
 Expected subscriber flow:
 
