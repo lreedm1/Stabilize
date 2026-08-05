@@ -31,12 +31,20 @@ test("Home lives in the hamburger menu without chat actions or duplicate model c
   const menuPanelStart = html.indexOf('class="menu-panel"');
   const menuPanelEnd = html.indexOf("</details>", menuPanelStart);
   const menuPanel = html.slice(menuPanelStart, menuPanelEnd);
+  const proxyStart = html.indexOf('class="chat-action-proxies"');
+  const proxyEnd = html.indexOf('<main class="chat-card"', proxyStart);
+  const proxies = html.slice(proxyStart, proxyEnd);
 
   assert.ok(menuPanelStart >= 0);
   assert.ok(menuPanelEnd > menuPanelStart);
   assert.doesNotMatch(menuPanel, /new-conversation-button/);
   assert.doesNotMatch(menuPanel, /private-chat-button/);
-  assert.doesNotMatch(pageSource, /\$\{privateChatControl\}/);
+
+  assert.ok(proxyStart >= 0);
+  assert.ok(proxyEnd > proxyStart);
+  assert.match(proxies, /class="chat-action-proxies" hidden aria-hidden="true"/);
+  assert.match(proxies, /id="new-conversation-button"/);
+  assert.match(proxies, /id="private-chat-button"/);
 
   assert.match(workerSource, /const markup = "";/);
   assert.match(
