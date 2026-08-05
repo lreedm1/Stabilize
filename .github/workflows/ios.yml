@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release-configuration:
@@ -40,32 +40,3 @@ jobs:
 
       - name: Validate version, metadata, and cloud-only release policy
         run: node --test test/ios-release.test.mjs
-
-  materialize-script-modes:
-    name: Materialize Xcode Cloud script modes
-    if: github.event_name == 'pull_request' && github.head_ref == 'agent/stabilize-1.1-xcode-cloud'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - name: Check out the release branch
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-          persist-credentials: true
-
-      - name: Preserve executable Xcode Cloud hooks
-        shell: bash
-        run: |
-          set -euo pipefail
-          chmod +x ios/ci_scripts/ci_post_clone.sh ios/ci_scripts/ci_post_xcodebuild.sh
-          git add --chmod=+x ios/ci_scripts/ci_post_clone.sh ios/ci_scripts/ci_post_xcodebuild.sh
-          if git diff --cached --quiet; then
-            echo "Xcode Cloud hook modes are already correct."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Preserve executable Xcode Cloud release hooks"
-          git push origin HEAD:${{ github.head_ref }}
