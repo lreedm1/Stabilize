@@ -1,1 +1,1 @@
-Initial release of the native Stabilize check-in for iPhone.
+Stabilize 1.1 brings the native floor-first check-in to iPhone with explicit AI-sharing consent, clear privacy controls, and direct U.S. 988/911 actions when the service marks a response urgent.
