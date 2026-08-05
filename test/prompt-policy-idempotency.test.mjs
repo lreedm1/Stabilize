@@ -36,6 +36,7 @@ const POLICY_SCRIPTS = [
   "scripts/apply-consent-before-help.mjs",
   "scripts/compact-final-system-prompt.mjs",
   "scripts/fix-rounded-conversation-test.mjs",
+  "scripts/prepare-live-model-usage.mjs",
   "scripts/fix-paid-model-choice.mjs",
   "scripts/add-composer-model-picker.mjs",
   "scripts/enable-free-daily-model-choice.mjs",
