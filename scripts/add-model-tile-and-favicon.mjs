@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 
+const ASSET_VERSION = "20260805-compact-composer-1";
 const FAVICON_LINK =
   '    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />';
 const STATIC_PAGES = [
@@ -34,6 +35,16 @@ await update("src/paid-worker.js", (source) => {
 }
 
 `;
+  text = text
+    .replace(
+      /\/billing\.css\?v=[A-Za-z0-9._-]+/g,
+      `/billing.css?v=${ASSET_VERSION}`,
+    )
+    .replace(
+      /\/billing-client\.js\?v=[A-Za-z0-9._-]+/g,
+      `/billing-client.js?v=${ASSET_VERSION}`,
+    );
+
   const anchor = "function composerModelPickerMarkup({";
   if (!text.includes("function compactModelTileLabel(")) {
     requireText(text, anchor, "the composer model picker");
@@ -49,6 +60,17 @@ await update("src/paid-worker.js", (source) => {
   } else {
     requireText(text, newButtonLabel, "the compact model tile label");
   }
+
+  requireText(
+    text,
+    `/billing.css?v=${ASSET_VERSION}`,
+    "the compact composer stylesheet cache key",
+  );
+  requireText(
+    text,
+    `/billing-client.js?v=${ASSET_VERSION}`,
+    "the compact composer client cache key",
+  );
 
   return text;
 });
@@ -116,6 +138,56 @@ await update("public/billing.css", (source) => {
 `;
 });
 
+await update("public/billing.css", (source) => {
+  if (source.includes("/* Compact 32px composer bar */")) return source;
+  return `${source.trimEnd()}
+
+/* Compact 32px composer bar */
+.composer-model-button,
+.composer-dock textarea,
+.composer-dock #send-button {
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+}
+
+.composer-model-button {
+  border-radius: 10px;
+  padding: 2px 5px;
+}
+
+.composer-model-kicker {
+  display: none;
+}
+
+.composer-model-current {
+  margin-top: 0;
+  line-height: 1;
+}
+
+.composer-model-button::after {
+  display: none;
+  content: none;
+}
+
+.composer-dock textarea {
+  border-radius: 10px;
+  padding: 5px 10px;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.composer-dock textarea::placeholder {
+  line-height: 1.2;
+}
+
+.composer-dock #send-button {
+  border-radius: 10px;
+  padding-inline: 14px;
+}
+`;
+});
+
 await update("src/page.js", (source) => {
   if (source.includes('href="/favicon.svg"')) return source;
   const anchor = '    <meta name="theme-color" content="#173f31" />';
@@ -146,5 +218,5 @@ await update("test/paid-worker.test.mjs", (source) => {
 });
 
 console.log(
-  "Made the model tile show the active 5.x version and added the Stabilize favicon.",
+  "Made the model tile show the active 5.x version, compacted the composer, and added the Stabilize favicon.",
 );

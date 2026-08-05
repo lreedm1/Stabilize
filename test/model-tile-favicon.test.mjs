@@ -21,7 +21,7 @@ const PNG_SIGNATURE = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
 
-test("the model tile shows 5.x and pages hard-reset browser tab icons", async () => {
+test("the model tile shows 5.x, the composer is compact, and pages hard-reset browser tab icons", async () => {
   const [
     worker,
     client,
@@ -63,8 +63,18 @@ test("the model tile shows 5.x and pages hard-reset browser tab icons", async ()
   assert.match(css, /\/\* Exact 5\.x model tile \*\//);
   assert.match(
     css,
-    /\.composer-model-button \{[\s\S]*?width: 66px;[\s\S]*?height: 64px;/,
+    /\.composer-model-button \{[\s\S]*?width: 66px;[\s\S]*?min-width: 66px;/,
   );
+  assert.match(css, /\/\* Compact 32px composer bar \*\//);
+  assert.match(
+    css,
+    /\.composer-model-button,[\s\S]*?\.composer-dock textarea,[\s\S]*?\.composer-dock #send-button \{[\s\S]*?height: 32px;[\s\S]*?min-height: 32px;[\s\S]*?max-height: 32px;/,
+  );
+  assert.match(
+    css,
+    /\.composer-model-button::after \{[\s\S]*?display: none;[\s\S]*?content: none;/,
+  );
+  assert.match(css, /\.composer-model-kicker \{[\s\S]*?display: none;/);
 
   const pageIconPatterns = [
     /<link rel="shortcut icon" href="\/stabilize-tab-20260805\.ico" type="image\/x-icon" \/>/,
