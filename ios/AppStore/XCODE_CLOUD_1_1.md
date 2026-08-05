@@ -1,6 +1,6 @@
 # Xcode Cloud plan for Stabilize 1.1
 
-This is the authoritative iOS build, test, archive, signing, TestFlight, and App Store Connect upload path for version 1.1. No local Mac, local Simulator, or GitHub-hosted iOS build may substitute for it.
+This is the authoritative iOS build, test, archive, signing, TestFlight, App Store Connect upload, metadata, and App Review submission path for version 1.1. No local Mac, local Simulator, or GitHub-hosted iOS build may substitute for it.
 
 ## Prerequisites
 
@@ -11,6 +11,7 @@ This is the authoritative iOS build, test, archive, signing, TestFlight, and App
 - Xcode Cloud connected to the `lreedm1/Stabilize` GitHub repository
 - Cloud-managed automatic signing enabled for the Stabilize product
 - An internal TestFlight group
+- App Store Connect API credentials stored as Xcode Cloud secret environment variables for the metadata and submission workflows
 
 ## Workflow 1: Pull Request Verification
 
@@ -34,17 +35,18 @@ This is the authoritative iOS build, test, archive, signing, TestFlight, and App
 
 **Name:** Stabilize 1.1 Release
 
-**Start condition:** Manual only, from the merged release commit or a `ios-1.1` tag.
+**Start condition:** Manual only, from the merged release commit or an `ios-1.1` tag.
 
 **Environment:** Current publicly released Xcode and macOS versions, Clean enabled.
 
 **Environment variables:**
 
 - `STABILIZE_XCODE_CLOUD_RELEASE=1`
-- `APP_STORE_CONNECT_KEY_ID` — Secret, only if Fastlane metadata/submission automation is used
-- `APP_STORE_CONNECT_ISSUER_ID` — Secret, only if Fastlane metadata/submission automation is used
-- `APP_STORE_CONNECT_KEY_CONTENT_BASE64` — Secret, only if Fastlane metadata/submission automation is used
-- `XCODE_CLOUD_BUILD_NUMBER=2` — set only after build 2 is processed and selected for automated submission
+- `STABILIZE_XCODE_CLOUD_FASTLANE_LANE=metadata`
+- `STABILIZE_XCODE_CLOUD_FASTLANE_ACTION=archive`
+- `APP_STORE_CONNECT_KEY_ID` — Secret
+- `APP_STORE_CONNECT_ISSUER_ID` — Secret
+- `APP_STORE_CONNECT_KEY_CONTENT_BASE64` — Secret
 
 **Actions:**
 
@@ -53,11 +55,33 @@ This is the authoritative iOS build, test, archive, signing, TestFlight, and App
 
 **Post-actions:**
 
-1. Upload the archive to App Store Connect.
-2. Distribute to the internal TestFlight group.
+1. Upload the archive to App Store Connect with Xcode Cloud's App Store distribution post-action.
+2. Make the build available for internal TestFlight distribution. If the chosen Apple account configuration requires group assignment in App Store Connect, add the processed Xcode Cloud build to the internal group there.
 3. Retain manual App Store release.
 
-The release workflow may run `bundle exec fastlane ios metadata` after the Xcode Cloud build has been uploaded and processed. It may run `bundle exec fastlane ios submit` only after screenshots, review contact, privacy, age rating, export compliance, category, availability, and the physical-device TestFlight pass are complete.
+After the archive action, `ios/ci_scripts/ci_post_xcodebuild.sh` runs the prepared Fastlane `metadata` lane inside Xcode Cloud. The script does not build, sign, or upload a binary; Xcode Cloud performs those operations.
+
+## Workflow 3: Stabilize 1.1 Submit
+
+**Name:** Stabilize 1.1 Submit
+
+**Start condition:** Manual only, after the release build is processed in App Store Connect and the TestFlight, screenshot, privacy, age-rating, export-compliance, category, availability, and review-contact gates are complete.
+
+**Environment variables:**
+
+- `STABILIZE_XCODE_CLOUD_RELEASE=1`
+- `STABILIZE_XCODE_CLOUD_FASTLANE_LANE=submit`
+- `STABILIZE_XCODE_CLOUD_FASTLANE_ACTION=analyze`
+- `XCODE_CLOUD_BUILD_NUMBER=2`
+- `APP_STORE_CONNECT_KEY_ID` — Secret
+- `APP_STORE_CONNECT_ISSUER_ID` — Secret
+- `APP_STORE_CONNECT_KEY_CONTENT_BASE64` — Secret
+
+**Actions:**
+
+1. Analyze the `Stabilize` scheme.
+
+After Analyze succeeds, the Xcode Cloud post-build script runs `bundle exec fastlane ios submit`. The lane selects the already-uploaded build, uploads the prepared metadata, adds version 1.1 to App Review, submits it with manual release selected, and does not build or upload a binary.
 
 ## Build numbering
 
@@ -72,6 +96,7 @@ If Xcode Cloud is configured to manage build numbers automatically, set its next
 - Do not switch to GitHub Actions, a local build, or a local Simulator to bypass a failure.
 - Do not merge while the Xcode Cloud required check is missing, queued indefinitely, cancelled, or failing.
 - Do not submit a build that has not completed internal TestFlight testing on a physical iPhone.
+- Do not run the submission workflow until the processed build and all account-bound App Store Connect fields are ready.
 
 ## First-workflow account gate
 
