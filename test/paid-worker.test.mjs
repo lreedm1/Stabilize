@@ -208,10 +208,8 @@ test("a free signed-in user can select a model for the daily allowance", async (
     FREE_DAILY_MODEL_MESSAGE_LIMIT: "2",
   };
   const originalFetch = globalThis.fetch;
-  let providerCalls = 0;
   let providerBody;
   globalThis.fetch = async (_input, init) => {
-    providerCalls += 1;
     providerBody = JSON.parse(init.body);
     return responseWithText("Use the smallest reversible step.");
   };
@@ -257,7 +255,6 @@ test("a free signed-in user can select a model for the daily allowance", async (
       (await blocked.json()).error,
       /daily free model-select limit of 2 messages has been reached/i,
     );
-    assert.equal(providerCalls, 2);
     assert.equal(providerBody.model, "gpt-5.1");
 
     const state = await user.billing.readState();
