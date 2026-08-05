@@ -26,7 +26,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          payload="$(printf '{"state":"pending","context":"verification/favicon","description":"Checking live HTML, MIME types, and icon bytes","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          payload="$(printf '{"state":"pending","context":"verification/favicon","description":"Checking new icon identity, Safari mask, MIME types, and bytes","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           curl --fail-with-body --silent --show-error \
             --request POST \
             --header "Accept: application/vnd.github+json" \
@@ -44,41 +44,65 @@ jobs:
             root="$(mktemp)"
             ico_headers="$(mktemp)"
             ico_body="$(mktemp)"
-            png_headers="$(mktemp)"
-            png_body="$(mktemp)"
+            png16_headers="$(mktemp)"
+            png16_body="$(mktemp)"
+            png32_headers="$(mktemp)"
+            png32_body="$(mktemp)"
             apple_headers="$(mktemp)"
             apple_body="$(mktemp)"
+            mask_headers="$(mktemp)"
+            mask_body="$(mktemp)"
+            manifest_headers="$(mktemp)"
+            manifest_body="$(mktemp)"
+            refresh_body="$(mktemp)"
 
             root_status="$(curl --max-time 20 --silent --show-error --output "$root" --write-out "%{http_code}" "https://stabilize.info/?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
-            ico_status="$(curl --max-time 20 --silent --show-error --dump-header "$ico_headers" --output "$ico_body" --write-out "%{http_code}" "https://stabilize.info/favicon.ico?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
-            png_status="$(curl --max-time 20 --silent --show-error --dump-header "$png_headers" --output "$png_body" --write-out "%{http_code}" "https://stabilize.info/favicon-32x32.png?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
-            apple_status="$(curl --max-time 20 --silent --show-error --dump-header "$apple_headers" --output "$apple_body" --write-out "%{http_code}" "https://stabilize.info/apple-touch-icon.png?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
+            ico_status="$(curl --max-time 20 --silent --show-error --dump-header "$ico_headers" --output "$ico_body" --write-out "%{http_code}" "https://stabilize.info/stabilize-tab-20260805.ico?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
+            png16_status="$(curl --max-time 20 --silent --show-error --dump-header "$png16_headers" --output "$png16_body" --write-out "%{http_code}" "https://stabilize.info/stabilize-tab-20260805-16.png?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
+            png32_status="$(curl --max-time 20 --silent --show-error --dump-header "$png32_headers" --output "$png32_body" --write-out "%{http_code}" "https://stabilize.info/stabilize-tab-20260805-32.png?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
+            apple_status="$(curl --max-time 20 --silent --show-error --dump-header "$apple_headers" --output "$apple_body" --write-out "%{http_code}" "https://stabilize.info/stabilize-app-20260805-180.png?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
+            mask_status="$(curl --max-time 20 --silent --show-error --dump-header "$mask_headers" --output "$mask_body" --write-out "%{http_code}" "https://stabilize.info/safari-pinned-tab.svg?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
+            manifest_status="$(curl --max-time 20 --silent --show-error --dump-header "$manifest_headers" --output "$manifest_body" --write-out "%{http_code}" "https://stabilize.info/site.webmanifest?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
+            refresh_status="$(curl --max-time 20 --silent --show-error --output "$refresh_body" --write-out "%{http_code}" "https://stabilize.info/favicon-refresh.js?v=20260805-8&favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
 
             ico_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$ico_headers" | tail -n 1)"
-            png_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$png_headers" | tail -n 1)"
+            png16_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$png16_headers" | tail -n 1)"
+            png32_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$png32_headers" | tail -n 1)"
             apple_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$apple_headers" | tail -n 1)"
+            mask_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$mask_headers" | tail -n 1)"
+            manifest_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$manifest_headers" | tail -n 1)"
             ico_magic="$(od -An -tx1 -N4 "$ico_body" | tr -d ' \n')"
-            png_magic="$(od -An -tx1 -N8 "$png_body" | tr -d ' \n')"
+            png16_magic="$(od -An -tx1 -N8 "$png16_body" | tr -d ' \n')"
+            png32_magic="$(od -An -tx1 -N8 "$png32_body" | tr -d ' \n')"
             apple_magic="$(od -An -tx1 -N8 "$apple_body" | tr -d ' \n')"
 
-            echo "Favicon gate ${attempt}: root=${root_status}; ico=${ico_status}/${ico_type:-none}/${ico_magic:-none}; png=${png_status}/${png_type:-none}/${png_magic:-none}; apple=${apple_status}/${apple_type:-none}/${apple_magic:-none}"
+            echo "Favicon gate ${attempt}: root=${root_status}; ico=${ico_status}/${ico_type:-none}/${ico_magic:-none}; png16=${png16_status}/${png16_type:-none}/${png16_magic:-none}; png32=${png32_status}/${png32_type:-none}/${png32_magic:-none}; apple=${apple_status}/${apple_type:-none}/${apple_magic:-none}; mask=${mask_status}/${mask_type:-none}; manifest=${manifest_status}/${manifest_type:-none}; refresh=${refresh_status}"
 
             if [[ "$root_status" == "200" ]] &&
-              grep -Fq 'href="/favicon.ico?v=20260805-7"' "$root" &&
-              grep -Fq 'href="/favicon-32x32.png?v=20260805-7"' "$root" &&
-              grep -Fq 'href="/apple-touch-icon.png?v=20260805-7"' "$root" &&
+              grep -Fq 'href="/stabilize-tab-20260805-16.png"' "$root" &&
+              grep -Fq 'href="/stabilize-tab-20260805-32.png"' "$root" &&
+              grep -Fq 'href="/safari-pinned-tab.svg"' "$root" &&
+              grep -Fq 'src="/favicon-refresh.js?v=20260805-8"' "$root" &&
               [[ "$ico_status" == "200" && "$ico_type" == image/x-icon* && "$ico_magic" == "00000100" ]] &&
-              [[ "$png_status" == "200" && "$png_type" == image/png* && "$png_magic" == "89504e470d0a1a0a" ]] &&
-              [[ "$apple_status" == "200" && "$apple_type" == image/png* && "$apple_magic" == "89504e470d0a1a0a" ]]; then
-              rm -f "$root" "$ico_headers" "$ico_body" "$png_headers" "$png_body" "$apple_headers" "$apple_body"
+              [[ "$png16_status" == "200" && "$png16_type" == image/png* && "$png16_magic" == "89504e470d0a1a0a" ]] &&
+              [[ "$png32_status" == "200" && "$png32_type" == image/png* && "$png32_magic" == "89504e470d0a1a0a" ]] &&
+              [[ "$apple_status" == "200" && "$apple_type" == image/png* && "$apple_magic" == "89504e470d0a1a0a" ]] &&
+              [[ "$mask_status" == "200" && "$mask_type" == image/svg+xml* ]] &&
+              grep -Fq 'viewBox="0 0 16 16"' "$mask_body" &&
+              grep -Fq 'fill="#000000"' "$mask_body" &&
+              [[ "$manifest_status" == "200" && "$manifest_type" == application/manifest+json* ]] &&
+              grep -Fq '/stabilize-app-20260805-180.png' "$manifest_body" &&
+              [[ "$refresh_status" == "200" ]] &&
+              grep -Fq '/stabilize-tab-20260805-32.png?refresh=20260805-8' "$refresh_body"; then
+              rm -f "$root" "$ico_headers" "$ico_body" "$png16_headers" "$png16_body" "$png32_headers" "$png32_body" "$apple_headers" "$apple_body" "$mask_headers" "$mask_body" "$manifest_headers" "$manifest_body" "$refresh_body"
               exit 0
             fi
 
-            rm -f "$root" "$ico_headers" "$ico_body" "$png_headers" "$png_body" "$apple_headers" "$apple_body"
+            rm -f "$root" "$ico_headers" "$ico_body" "$png16_headers" "$png16_body" "$png32_headers" "$png32_body" "$apple_headers" "$apple_body" "$mask_headers" "$mask_body" "$manifest_headers" "$manifest_body" "$refresh_body"
             sleep 10
           done
 
-          echo "::error::Production did not serve valid browser-compatible favicon assets and matching HTML links."
+          echo "::error::Production did not expose the new tab-icon identity and Safari-compatible assets."
           exit 1
 
       - name: Publish favicon verification result
@@ -90,10 +114,10 @@ jobs:
         run: |
           if [[ "$JOB_STATUS" == "success" ]]; then
             state="success"
-            description="Live ICO, PNG, Apple icon, MIME, and HTML checks passed"
+            description="New tab-icon identity, Safari mask, MIME, and byte checks passed"
           else
             state="failure"
-            description="Live favicon compatibility verification failed"
+            description="Live favicon identity or compatibility verification failed"
           fi
           payload="$(printf '{"state":"%s","context":"verification/favicon","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           curl --fail-with-body --silent --show-error \

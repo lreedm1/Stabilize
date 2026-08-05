@@ -50,6 +50,7 @@ const POLICY_SCRIPTS = [
 ];
 const POLICY_TARGETS = [
   "scripts/favicon-assets/favicon.ico.b64",
+  "scripts/favicon-assets/favicon-16x16.png.b64",
   "scripts/favicon-assets/favicon-32x32.png.b64",
   "scripts/favicon-assets/apple-touch-icon.png.b64",
   "src/index.js",

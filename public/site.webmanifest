@@ -1,0 +1,18 @@
+{
+  "name": "STABILIZE",
+  "short_name": "STABILIZE",
+  "description": "One clear next step for overloaded moments.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#173f31",
+  "theme_color": "#173f31",
+  "icons": [
+    {
+      "src": "/stabilize-app-20260805-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
