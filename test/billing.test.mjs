@@ -9,9 +9,13 @@ if (!globalThis.crypto) {
 const {
   MANAGED_PAYMENTS_STRIPE_VERSION,
   createCheckoutSession,
+  dailyUsagePeriod,
+  freeDailyModelMessageLimit,
   modelChoices,
+  monthlyModelMessageLimit,
   stateFromStripeEvent,
   subscriptionHasAccess,
+  usagePeriod,
   verifyStripeSignature,
 } = await import("../src/billing.js");
 
@@ -27,7 +31,23 @@ test("model choices are bounded, deduplicated, and include the default", () => {
   ]);
 });
 
-test("only active and trialing subscriptions grant model choice", () => {
+test("free model choice gets 20 messages per UTC day while subscribers remain monthly", () => {
+  const instant = new Date("2026-08-05T23:59:59.000Z");
+  assert.equal(freeDailyModelMessageLimit({}), 20);
+  assert.equal(
+    freeDailyModelMessageLimit({ FREE_DAILY_MODEL_MESSAGE_LIMIT: "35" }),
+    35,
+  );
+  assert.equal(
+    freeDailyModelMessageLimit({ FREE_DAILY_MODEL_MESSAGE_LIMIT: "invalid" }),
+    20,
+  );
+  assert.equal(monthlyModelMessageLimit({}), 200);
+  assert.equal(dailyUsagePeriod(instant), "2026-08-05");
+  assert.equal(usagePeriod(instant), "2026-08");
+});
+
+test("only active and trialing subscriptions grant the larger subscriber allowance", () => {
   assert.equal(subscriptionHasAccess("active"), true);
   assert.equal(subscriptionHasAccess("trialing"), true);
   assert.equal(subscriptionHasAccess("past_due"), false);
