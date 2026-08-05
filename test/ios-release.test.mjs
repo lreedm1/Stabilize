@@ -46,12 +46,41 @@ test("native iOS sends only after explicit OpenAI sharing permission", async () 
   assert.match(reviewNotes, /requires Allow & Send Message/);
 });
 
-test("iOS CI builds the generated project and enforces simulator tests", async () => {
-  const workflow = await read(".github/workflows/ios.yml");
+test("Stabilize 1.1 reserves all iOS build and distribution work for Xcode Cloud", async () => {
+  const [workflow, project, fastfile, readme, submission, cloudPlan, notes] =
+    await Promise.all([
+      read(".github/workflows/ios.yml"),
+      read("ios/project.yml"),
+      read("ios/fastlane/Fastfile"),
+      read("ios/README.md"),
+      read("ios/AppStore/SUBMISSION.md"),
+      read("ios/AppStore/XCODE_CLOUD_1_1.md"),
+      read("ios/fastlane/metadata/en-US/release_notes.txt"),
+    ]);
 
-  assert.match(workflow, /runs-on: macos-26/);
-  assert.match(workflow, /xcodegen generate/);
-  assert.match(workflow, /generic\/platform=iOS Simulator/);
-  assert.match(workflow, /xcodebuild[\s\S]*test/);
-  assert.match(workflow, /Enforce unit-test result/);
+  assert.match(project, /CURRENT_PROJECT_VERSION: 2/);
+  assert.match(project, /MARKETING_VERSION: 1\.1/);
+  assert.match(project, /PRODUCT_BUNDLE_IDENTIFIER: info\.stabilize\.app/);
+  assert.match(project, /CODE_SIGN_STYLE: Automatic/);
+
+  assert.match(workflow, /runs-on: ubuntu-latest/);
+  assert.match(workflow, /Validate Xcode Cloud release configuration/);
+  assert.doesNotMatch(workflow, /runs-on: macos/);
+  assert.doesNotMatch(workflow, /xcodebuild/);
+  assert.doesNotMatch(workflow, /simctl/);
+  assert.doesNotMatch(workflow, /iOS Simulator/);
+
+  assert.match(fastfile, /STABILIZE_XCODE_CLOUD_RELEASE/);
+  assert.match(fastfile, /app_version: "1\.1"/);
+  assert.match(fastfile, /skip_binary_upload: true/);
+  assert.match(fastfile, /submit_for_review: true/);
+  assert.doesNotMatch(fastfile, /build_app\(/);
+  assert.doesNotMatch(fastfile, /upload_to_testflight\(/);
+
+  assert.match(readme, /Xcode Cloud is the only iOS build system/);
+  assert.match(submission, /must not merge until an Xcode Cloud/);
+  assert.match(cloudPlan, /Pull Request Verification/);
+  assert.match(cloudPlan, /Stabilize 1\.1 Release/);
+  assert.match(cloudPlan, /physical iPhone/);
+  assert.match(notes, /Stabilize 1\.1/);
 });
