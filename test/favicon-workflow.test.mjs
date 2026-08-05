@@ -20,5 +20,5 @@ test("post-deploy favicon verification checks new URLs, Safari mask, and bytes",
   assert.match(workflow, /image\/x-icon/);
   assert.match(workflow, /image\/png/);
   assert.match(workflow, /image\/svg\+xml/);
-  assert.match(workflow, /viewBox=\\"0 0 16 16\\"/);
+  assert.match(workflow, /viewBox="0 0 16 16"/);
 });
