@@ -21,7 +21,7 @@ test("the main-branch favicon gate verifies the new icon identity and Safari ass
   assert.match(workflow, /ico_magic[\s\S]*00000100/);
   assert.match(workflow, /png16_magic[\s\S]*89504e470d0a1a0a/);
   assert.match(workflow, /png32_magic[\s\S]*89504e470d0a1a0a/);
-  assert.match(workflow, /viewBox=\\"0 0 16 16\\"/);
+  assert.match(workflow, /viewBox="0 0 16 16"/);
   assert.match(workflow, /application\/manifest\+json/);
   assert.match(
     workflow,
