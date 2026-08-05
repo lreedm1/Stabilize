@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 
+const ASSET_VERSION = "20260805-compact-composer-1";
 const FAVICON_LINK =
   '    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />';
 const STATIC_PAGES = [
@@ -34,6 +35,16 @@ await update("src/paid-worker.js", (source) => {
 }
 
 `;
+  text = text
+    .replace(
+      /\/billing\.css\?v=[A-Za-z0-9._-]+/g,
+      `/billing.css?v=${ASSET_VERSION}`,
+    )
+    .replace(
+      /\/billing-client\.js\?v=[A-Za-z0-9._-]+/g,
+      `/billing-client.js?v=${ASSET_VERSION}`,
+    );
+
   const anchor = "function composerModelPickerMarkup({";
   if (!text.includes("function compactModelTileLabel(")) {
     requireText(text, anchor, "the composer model picker");
@@ -49,6 +60,17 @@ await update("src/paid-worker.js", (source) => {
   } else {
     requireText(text, newButtonLabel, "the compact model tile label");
   }
+
+  requireText(
+    text,
+    `/billing.css?v=${ASSET_VERSION}`,
+    "the compact composer stylesheet cache key",
+  );
+  requireText(
+    text,
+    `/billing-client.js?v=${ASSET_VERSION}`,
+    "the compact composer client cache key",
+  );
 
   return text;
 });
