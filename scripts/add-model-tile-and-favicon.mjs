@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const ASSET_VERSION = "20260805-compact-composer-1";
+const ASSET_VERSION = "20260805-taller-composer-1";
 const FAVICON_LINK =
   '    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />';
 const STATIC_PAGES = [
@@ -64,12 +64,12 @@ await update("src/paid-worker.js", (source) => {
   requireText(
     text,
     `/billing.css?v=${ASSET_VERSION}`,
-    "the compact composer stylesheet cache key",
+    "the taller composer stylesheet cache key",
   );
   requireText(
     text,
     `/billing-client.js?v=${ASSET_VERSION}`,
-    "the compact composer client cache key",
+    "the taller composer client cache key",
   );
 
   return text;
@@ -139,10 +139,7 @@ await update("public/billing.css", (source) => {
 });
 
 await update("public/billing.css", (source) => {
-  if (source.includes("/* Compact 32px composer bar */")) return source;
-  return `${source.trimEnd()}
-
-/* Compact 32px composer bar */
+  const oldBlock = `/* Compact 32px composer bar */
 .composer-model-button,
 .composer-dock textarea,
 .composer-dock #send-button {
@@ -184,8 +181,54 @@ await update("public/billing.css", (source) => {
 .composer-dock #send-button {
   border-radius: 10px;
   padding-inline: 14px;
+}`;
+  const newBlock = `/* Balanced 42px composer bar */
+.composer-model-button,
+.composer-dock textarea,
+.composer-dock #send-button {
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
 }
-`;
+
+.composer-model-button {
+  border-radius: 10px;
+  padding: 2px 5px;
+}
+
+.composer-model-kicker {
+  display: none;
+}
+
+.composer-model-current {
+  margin-top: 0;
+  line-height: 1;
+}
+
+.composer-model-button::after {
+  display: none;
+  content: none;
+}
+
+.composer-dock textarea {
+  border-radius: 10px;
+  padding: 5px 10px;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.composer-dock textarea::placeholder {
+  line-height: 1.2;
+}
+
+.composer-dock #send-button {
+  border-radius: 10px;
+  padding-inline: 14px;
+}`;
+
+  if (source.includes(newBlock)) return source;
+  if (source.includes(oldBlock)) return source.replace(oldBlock, newBlock);
+  return `${source.trimEnd()}\n\n${newBlock}\n`;
 });
 
 await update("src/page.js", (source) => {
@@ -202,7 +245,7 @@ for (const path of STATIC_PAGES) {
     if (themePattern.test(source)) {
       return source.replace(themePattern, `$1\n${FAVICON_LINK}`);
     }
-    requireText(source, "</head>", `${path} head closing tag`);
+    requireText(source, "</head>", `${FAVICON_LINK}\n  </head>`);
     return source.replace("</head>", `${FAVICON_LINK}\n  </head>`);
   });
 }
@@ -218,5 +261,5 @@ await update("test/paid-worker.test.mjs", (source) => {
 });
 
 console.log(
-  "Made the model tile show the active 5.x version, compacted the composer, and added the Stabilize favicon.",
+  "Made the model tile show the active 5.x version, set the composer to 42px, and added the Stabilize favicon.",
 );
