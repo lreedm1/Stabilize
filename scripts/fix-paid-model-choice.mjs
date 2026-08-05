@@ -10,6 +10,12 @@ function requireText(value, expected, label) {
   }
 }
 
+function requirePattern(value, pattern, label) {
+  if (!pattern.test(value)) {
+    throw new Error(`Paid model-choice repair could not find ${label}`);
+  }
+}
+
 const oldOriginCheck = `function sameOriginOrNonBrowser(request) {
   const origin = request.headers.get("origin");
   return !origin || origin === new URL(request.url).origin;
@@ -82,17 +88,21 @@ const versionedBillingCss = `  if (!html.includes('href="/billing.css')) {
       'href="/billing.css?v=20260804-composer-model-picker-1"',
     );
   }`;
+const versionedBillingCssPattern =
+  /\/billing\.css\?v=[A-Za-z0-9._-]+/;
 if (text.includes(oldBillingCss)) {
   text = text.replace(oldBillingCss, versionedBillingCss);
 } else {
-  requireText(
+  requirePattern(
     text,
-    "/billing.css?v=20260804-composer-model-picker-1",
+    versionedBillingCssPattern,
     "the versioned billing stylesheet",
   );
 }
 
-if (!text.includes('src="/billing-client.js?v=20260804-composer-model-picker-1"')) {
+const versionedBillingClientPattern =
+  /src="\/billing-client\.js\?v=[A-Za-z0-9._-]+"/;
+if (!versionedBillingClientPattern.test(text)) {
   const anchor = `  if (notice) {
     html = html.replace(`;
   requireText(text, anchor, "the billing notice injection");
@@ -176,11 +186,7 @@ requireText(text, 'data-billing-redirect="checkout"', "the checkout action hook"
 requireText(text, 'data-billing-redirect="portal"', "the portal action hook");
 requireText(text, "billingNavigationResponse(request, url)", "the JSON checkout response");
 requireText(text, "signedOutBillingResponse(request)", "the signed-out JSON response");
-requireText(
-  text,
-  'src="/billing-client.js?v=20260804-composer-model-picker-1"',
-  "the billing client script",
-);
+requirePattern(text, versionedBillingClientPattern, "the billing client script");
 requireText(text, 'origin !== "null"', "opaque-origin compatibility");
 requireText(text, 'fetchSite && !["same-origin", "none"].includes(fetchSite)', "cross-site rejection");
 
