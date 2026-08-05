@@ -1,97 +1,51 @@
-name: iOS
+name: iOS release configuration
 
 on:
   pull_request:
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
+      - "test/ios-release.test.mjs"
   push:
     branches: [main]
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
+      - "test/ios-release.test.mjs"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  build-and-test:
-    runs-on: macos-26
-    timeout-minutes: 30
+  release-configuration:
+    name: Validate Xcode Cloud release configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
-      - name: Show toolchain
-        run: |
-          sw_vers
-          xcodebuild -version
-          swift --version
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - name: Install repository dependencies
+        run: npm ci
 
-      - name: Generate project
-        working-directory: ios
-        run: xcodegen generate
+      - name: Validate version, metadata, and cloud-only release policy
+        run: node --test test/ios-release.test.mjs
 
-      - name: Build without signing
-        working-directory: ios
-        run: |
-          set -o pipefail
-          xcodebuild \
-            -project Stabilize.xcodeproj \
-            -scheme Stabilize \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO \
-            clean build
-
-      - name: Select an available iPhone simulator
-        id: simulator
-        run: |
-          DEVICE_ID=$(python3 - <<'PY'
-          import json, subprocess
-          data = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "devices", "available", "--json"]))
-          for runtime, devices in data["devices"].items():
-              if "iOS" not in runtime:
-                  continue
-              for device in devices:
-                  if device["name"].startswith("iPhone"):
-                      print(device["udid"])
-                      raise SystemExit(0)
-          raise SystemExit("No available iPhone simulator")
-          PY
-          )
-          echo "id=$DEVICE_ID" >> "$GITHUB_OUTPUT"
-
-      - name: Run unit tests
-        id: unit-tests
-        continue-on-error: true
-        working-directory: ios
+      - name: Confirm GitHub is not an iOS build runner
         shell: bash
         run: |
-          set -o pipefail
-          xcodebuild \
-            -project Stabilize.xcodeproj \
-            -scheme Stabilize \
-            -configuration Debug \
-            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
-            CODE_SIGNING_ALLOWED=NO \
-            test 2>&1 | tee test-output.log
-
-      - name: Preserve unit-test output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-test-output-${{ github.run_id }}
-          path: ios/test-output.log
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Enforce unit-test result
-        if: always() && steps.unit-tests.outcome == 'failure'
-        run: exit 1
+          set -euo pipefail
+          if grep -Eq 'xcodebuild|simctl|iphonesimulator|build_app\(|upload_to_testflight\(' .github/workflows/ios.yml ios/fastlane/Fastfile; then
+            echo "::error::iOS builds, tests, archives, signing, and binary uploads must run in Xcode Cloud."
+            exit 1
+          fi
