@@ -12,53 +12,12 @@ import {
   schedule,
 } from "./impact-shards.js";
 
-const IMPACT_ASSET_VERSION = "20260805-1";
-const IMPACT_PROMPT_VERSION = "outcome-v1";
+const IMPACT_ASSET_VERSION = "20260805-2";
+const IMPACT_PROMPT_VERSION = "next-step-v1";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const EVENT_TYPES = new Set([
-  "outcome_prompt_shown",
-  "clarity_answered",
-  "outcome_selected",
-  "revision_requested",
-  "proportionality_answered",
-  "response_completed",
-  "session_ended",
-]);
-const RESPONSE_TYPES = new Set([
-  "information",
-  "writing",
-  "planning",
-  "decision",
-  "support",
-  "handoff",
-  "unknown",
-]);
-const EVENT_VALUES = {
-  outcome_prompt_shown: new Set([""]),
-  clarity_answered: new Set(["yes", "partly", "no"]),
-  outcome_selected: new Set([
-    "answer",
-    "action",
-    "contact",
-    "pause",
-    "information_only",
-  ]),
-  proportionality_answered: new Set([
-    "too_intense",
-    "about_right",
-    "not_enough",
-  ]),
-  response_completed: new Set(["completed", "error"]),
-  session_ended: new Set(["done"]),
-};
-
-function eventValueIsValid(eventType, value) {
-  if (eventType === "revision_requested") {
-    return /^[a-z0-9_-]{1,48}$/.test(value);
-  }
-  return EVENT_VALUES[eventType]?.has(value) === true;
-}
+const EVENT_TYPE = "next_step_reported";
+const EVENT_VALUES = new Set(["shown", "yes", "partly", "no"]);
 
 function cleanEventPayload(body) {
   const eventId = String(body?.eventId || "");
@@ -67,7 +26,6 @@ function cleanEventPayload(body) {
   const turnId = String(body?.turnId || "");
   const eventType = String(body?.event || "");
   const eventValue = String(body?.value || "");
-  const responseType = String(body?.responseType || "unknown");
   const promptVersion = String(body?.promptVersion || "");
 
   if (
@@ -75,9 +33,8 @@ function cleanEventPayload(body) {
     !UUID_PATTERN.test(sessionId) ||
     !UUID_PATTERN.test(browserId) ||
     !UUID_PATTERN.test(turnId) ||
-    !EVENT_TYPES.has(eventType) ||
-    !eventValueIsValid(eventType, eventValue) ||
-    !RESPONSE_TYPES.has(responseType) ||
+    eventType !== EVENT_TYPE ||
+    !EVENT_VALUES.has(eventValue) ||
     promptVersion !== IMPACT_PROMPT_VERSION
   ) {
     return null;
@@ -90,10 +47,7 @@ function cleanEventPayload(body) {
     turnId,
     eventType,
     eventValue,
-    responseType,
     promptVersion,
-    firstTokenMs: boundedNumber(body?.firstTokenMs, 0, 600_000, 0),
-    totalResponseMs: boundedNumber(body?.totalResponseMs, 0, 600_000, 0),
   };
 }
 
@@ -115,6 +69,7 @@ export async function impactEventResponse(request, env) {
   if (!sessionHash || !browserHash) {
     return jsonResponse({ error: "Impact measurement is unavailable." }, 503);
   }
+
   const store = impactStub(env, browserHash);
   if (!store || typeof store.recordEvent !== "function") {
     return jsonResponse({ error: "Impact measurement is unavailable." }, 503);
@@ -128,10 +83,7 @@ export async function impactEventResponse(request, env) {
     turnId: body.turnId,
     eventType: body.eventType,
     eventValue: body.eventValue,
-    responseType: body.responseType,
     promptVersion: body.promptVersion,
-    firstTokenMs: body.firstTokenMs,
-    totalResponseMs: body.totalResponseMs,
   });
 
   if (!result?.accepted) {
@@ -298,17 +250,22 @@ export async function enhancePrivacyPage(response, request) {
   if (!html.includes('id="outcome-measurement"')) {
     const section = `<h2 id="outcome-measurement">Outcome measurement</h2>
       <p>
-        On the web, Stabilize may ask whether an answer helped and what you are leaving with.
-        It records only structured selections, response timing, the broad response route, and
-        one-way hashes of random browser and tab identifiers. It does not place the user’s message
-        or the assistant’s reply in the impact analytics store. The browser identifier rotates
-        after 30 days, the tab identifier ends with the tab, and stored impact records are designed
-        to expire after 180 days. The private dashboard is intended for aggregate product and
-        sustainability review, not individual monitoring.
+        On the web, Stabilize may ask one optional question after an eligible,
+        non-emergency response: “Did you choose a next step?” One structured state
+        is kept for that response: shown, yes, partly, or no. The impact store also
+        keeps broad route, completion, configured cost, and timing metadata, plus
+        one-way hashes of random browser and tab identifiers. It does not place the
+        user’s message or the assistant’s reply in impact analytics. The browser
+        identifier rotates after 30 days, the tab identifier ends with the tab, and
+        impact records are designed to expire after 180 days. The private dashboard
+        is for aggregate product and sustainability review, not individual monitoring.
       </p>
 
       `;
-    html = html.replace('<h2>Public feedback</h2>', `${section}<h2>Public feedback</h2>`);
+    html = html.replace(
+      '<h2>Public feedback</h2>',
+      `${section}<h2>Public feedback</h2>`,
+    );
   }
 
   const headers = new Headers(response.headers);

@@ -27,7 +27,7 @@ function executionContext() {
   };
 }
 
-function impactEvent(turnId, sessionId, browserId, event, value, responseType = "planning") {
+function nextStepEvent(turnId, sessionId, browserId, value) {
   return new Request("https://stabilize.test/api/impact-event", {
     method: "POST",
     headers: {
@@ -39,17 +39,14 @@ function impactEvent(turnId, sessionId, browserId, event, value, responseType = 
       sessionId,
       browserId,
       turnId,
-      event,
+      event: "next_step_reported",
       value,
-      responseType,
-      promptVersion: "outcome-v1",
-      firstTokenMs: 125,
-      totalResponseMs: 800,
+      promptVersion: "next-step-v1",
     }),
   });
 }
 
-test("a verified chat turn accepts structured impact events and appears in the private dashboard", async () => {
+test("one verified event row advances from shown to yes and appears in the six-number dashboard", async () => {
   const sessionId = crypto.randomUUID();
   const browserId = crypto.randomUUID();
   const ctx = executionContext();
@@ -62,7 +59,7 @@ test("a verified chat turn accepts structured impact events and appears in the p
         "X-Stabilize-Session-Id": sessionId,
         "X-Stabilize-Browser-Id": browserId,
       },
-      body: JSON.stringify({ message: "Help me plan one task for today." }),
+      body: JSON.stringify({ message: "Help me choose one task for today." }),
     }),
     TEST_ENV,
     ctx,
@@ -70,20 +67,14 @@ test("a verified chat turn accepts structured impact events and appears in the p
 
   const turnId = chat.headers.get("x-stabilize-turn-id");
   assert.match(turnId || "", /^[0-9a-f-]{36}$/i);
-  assert.equal(chat.headers.get("x-stabilize-impact-version"), "outcome-v1");
+  assert.equal(chat.headers.get("x-stabilize-impact-version"), "next-step-v1");
   assert.match(chat.headers.get("content-type") || "", /application\/x-ndjson/);
   assert.match(await chat.text(), /"type":"done"/);
   await Promise.all(ctx.tasks);
 
-  const events = [
-    ["response_completed", "completed", "unknown"],
-    ["outcome_prompt_shown", "", "planning"],
-    ["clarity_answered", "yes", "planning"],
-    ["outcome_selected", "action", "planning"],
-  ];
-  for (const [event, value, responseType] of events) {
+  for (const value of ["shown", "yes", "shown"]) {
     const response = await worker.fetch(
-      impactEvent(turnId, sessionId, browserId, event, value, responseType),
+      nextStepEvent(turnId, sessionId, browserId, value),
       TEST_ENV,
       {},
     );
@@ -115,20 +106,22 @@ test("a verified chat turn accepts structured impact events and appears in the p
   );
   const html = await dashboard.text();
   assert.equal(dashboard.status, 200);
-  assert.match(html, /Orderly impact/);
-  assert.match(html, /Resolved outcomes/);
-  assert.match(html, />1<\/strong>/);
+  assert.match(html, /One question\. Six numbers\. One decision each week\./);
+  assert.match(html, /Eligible checks shown/);
+  assert.match(html, /Reports received/);
+  assert.match(html, /Reported next-step rate/);
+  assert.match(html, /One decision this week/);
   assert.match(html, /2\.00×/);
-  assert.doesNotMatch(html, /Help me plan one task/);
+  assert.equal((html.match(/class="tile"/g) || []).length, 6);
+  assert.doesNotMatch(html, /Help me choose one task/);
 });
 
 test("impact events are rejected when they do not match a server-created turn", async () => {
   const response = await worker.fetch(
-    impactEvent(
+    nextStepEvent(
       crypto.randomUUID(),
       crypto.randomUUID(),
       crypto.randomUUID(),
-      "clarity_answered",
       "yes",
     ),
     TEST_ENV,
@@ -137,12 +130,37 @@ test("impact events are rejected when they do not match a server-created turn", 
   assert.equal(response.status, 409);
 });
 
-test("canonical and file privacy routes receive the outcome-measurement disclosure", async () => {
+test("the event endpoint rejects extra event types", async () => {
+  const response = await worker.fetch(
+    new Request("https://stabilize.test/api/impact-event", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://stabilize.test",
+      },
+      body: JSON.stringify({
+        eventId: crypto.randomUUID(),
+        sessionId: crypto.randomUUID(),
+        browserId: crypto.randomUUID(),
+        turnId: crypto.randomUUID(),
+        event: "proportionality_answered",
+        value: "about_right",
+        promptVersion: "next-step-v1",
+      }),
+    }),
+    TEST_ENV,
+    {},
+  );
+  assert.equal(response.status, 400);
+});
+
+test("canonical and file privacy routes receive the one-question disclosure", async () => {
   const assets = {
-    fetch: async () => new Response(
-      '<!doctype html><html><body><h2>Public feedback</h2></body></html>',
-      { headers: { "Content-Type": "text/html; charset=utf-8" } },
-    ),
+    fetch: async () =>
+      new Response(
+        '<!doctype html><html><body><h2>Public feedback</h2></body></html>',
+        { headers: { "Content-Type": "text/html; charset=utf-8" } },
+      ),
   };
 
   for (const path of ["/privacy", "/privacy.html"]) {
@@ -154,6 +172,7 @@ test("canonical and file privacy routes receive the outcome-measurement disclosu
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(html, /id="outcome-measurement"/);
-    assert.match(html, /does not place the user’s message/);
+    assert.match(html, /Did you choose a next step/);
+    assert.match(html, /does not place the\s+user’s message/);
   }
 });

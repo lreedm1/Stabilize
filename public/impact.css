@@ -9,7 +9,8 @@
 }
 
 .impact-question,
-.impact-thanks {
+.impact-thanks,
+.impact-continuation-label {
   margin: 0 0 8px;
   color: #203b31;
   font-size: 0.82rem;
@@ -21,6 +22,12 @@
   margin-bottom: 0;
 }
 
+.impact-continuation-label {
+  margin-top: 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
 .impact-actions {
   display: flex;
   flex-wrap: wrap;
@@ -28,7 +35,6 @@
 }
 
 .impact-choice,
-.impact-secondary,
 .impact-skip {
   appearance: none;
   min-height: 32px;
@@ -45,9 +51,7 @@
 }
 
 .impact-choice:hover,
-.impact-choice:focus-visible,
-.impact-secondary:hover,
-.impact-secondary:focus-visible {
+.impact-choice:focus-visible {
   border-color: rgba(31, 111, 84, 0.58);
   background: rgba(241, 249, 244, 0.96);
   outline: none;
@@ -56,10 +60,6 @@
 .impact-choice:disabled {
   cursor: default;
   opacity: 0.58;
-}
-
-.impact-secondary {
-  margin-top: 8px;
 }
 
 .impact-skip {
@@ -74,44 +74,9 @@
   padding: 5px;
 }
 
-.impact-outcome-types,
-.impact-revision-actions {
-  padding-right: 2px;
-}
-
-.impact-outcome-types .impact-choice,
-.impact-revision-actions .impact-choice {
+.impact-continuation-actions .impact-choice {
   border-radius: 10px;
   text-align: left;
-}
-
-@media (max-width: 560px) {
-  .impact-outcome-card {
-    padding: 9px 10px;
-  }
-
-  .impact-actions {
-    gap: 6px;
-  }
-
-  .impact-choice,
-  .impact-secondary {
-    font-size: 0.74rem;
-    padding: 7px 9px;
-  }
-
-  .impact-outcome-types .impact-choice,
-  .impact-revision-actions .impact-choice {
-    flex: 1 1 100%;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .impact-choice,
-  .impact-secondary,
-  .impact-skip {
-    transition: none;
-  }
 }
 
 .impact-privacy-note {
@@ -124,4 +89,30 @@
 .impact-privacy-note a {
   color: inherit;
   text-underline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+  .impact-outcome-card {
+    padding: 9px 10px;
+  }
+
+  .impact-actions {
+    gap: 6px;
+  }
+
+  .impact-choice {
+    font-size: 0.74rem;
+    padding: 7px 9px;
+  }
+
+  .impact-continuation-actions .impact-choice {
+    flex: 1 1 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .impact-choice,
+  .impact-skip {
+    transition: none;
+  }
 }

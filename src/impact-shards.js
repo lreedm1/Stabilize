@@ -1,8 +1,3 @@
-import {
-  IMPACT_LATENCY_BUCKETS_MS,
-  percentileFromHistogram,
-} from "./impact-analytics.js";
-
 const IMPACT_SHARD_COUNT = 16;
 const MAX_EVENT_BODY_BYTES = 4_096;
 const UUID_PATTERN =
@@ -73,7 +68,10 @@ export function readCookie(request, name) {
   return null;
 }
 
-export function pageHeaders(contentType = "text/html; charset=utf-8", extra = {}) {
+export function pageHeaders(
+  contentType = "text/html; charset=utf-8",
+  extra = {},
+) {
   const headers = new Headers({
     "Cache-Control": "no-store",
     "Content-Security-Policy":
@@ -180,20 +178,14 @@ function impactStubs(env) {
   );
 }
 
+function metricRate(numerator, denominator) {
+  return denominator > 0 ? numerator / denominator : null;
+}
+
 function addCounts(target, source) {
   for (const [key, value] of Object.entries(source || {})) {
     target[key] = Number(target[key] || 0) + Number(value || 0);
   }
-}
-
-function mergeHistograms(target, source) {
-  for (let index = 0; index < target.length; index += 1) {
-    target[index] += Math.max(0, Number(source?.[index]) || 0);
-  }
-}
-
-function metricRate(numerator, denominator) {
-  return denominator > 0 ? numerator / denominator : null;
 }
 
 function mergeImpactSummaries(summaries, since, now) {
@@ -201,33 +193,21 @@ function mergeImpactSummaries(summaries, since, now) {
     since,
     now,
     prompts: 0,
-    clarityAnswers: 0,
-    clarity: {},
-    outcomeAnswers: 0,
-    outcomes: {},
+    responses: 0,
     resolved: 0,
-    proportionality: {},
-    revisions: {},
+    outcomeStates: {},
     sessions: 0,
     browsers: 0,
     chats: 0,
     completedChats: 0,
     estimatedCostMicros: 0,
-    latency: {
-      samples: 0,
-      firstTokenHistogram: Array(IMPACT_LATENCY_BUCKETS_MS.length).fill(0),
-      totalHistogram: Array(IMPACT_LATENCY_BUCKETS_MS.length).fill(0),
-    },
   };
-  const routeCounts = new Map();
-  const trendCounts = new Map();
 
   for (const summary of summaries) {
     if (!summary) continue;
     for (const key of [
       "prompts",
-      "clarityAnswers",
-      "outcomeAnswers",
+      "responses",
       "resolved",
       "sessions",
       "browsers",
@@ -237,83 +217,22 @@ function mergeImpactSummaries(summaries, since, now) {
     ]) {
       merged[key] += Number(summary[key] || 0);
     }
-    addCounts(merged.clarity, summary.clarity);
-    addCounts(merged.outcomes, summary.outcomes);
-    addCounts(merged.proportionality, summary.proportionality);
-    addCounts(merged.revisions, summary.revisions);
-    merged.latency.samples += Number(summary.latency?.samples || 0);
-    mergeHistograms(
-      merged.latency.firstTokenHistogram,
-      summary.latency?.firstTokenHistogram,
-    );
-    mergeHistograms(
-      merged.latency.totalHistogram,
-      summary.latency?.totalHistogram,
-    );
-
-    for (const row of summary.routes || []) {
-      routeCounts.set(
-        row.route,
-        Number(routeCounts.get(row.route) || 0) + Number(row.count || 0),
-      );
-    }
-    for (const row of summary.trend || []) {
-      const current = trendCounts.get(row.date) || { prompts: 0, resolved: 0 };
-      current.prompts += Number(row.prompts || 0);
-      current.resolved += Number(row.resolved || 0);
-      trendCounts.set(row.date, current);
-    }
+    addCounts(merged.outcomeStates, summary.outcomeStates);
   }
 
-  merged.reportedClarityRate = metricRate(
-    Number(merged.clarity.yes || 0) + Number(merged.clarity.partly || 0),
-    merged.clarityAnswers,
-  );
-  merged.promptResponseRate = metricRate(merged.clarityAnswers, merged.prompts);
+  merged.responseRate = metricRate(merged.responses, merged.prompts);
   merged.reportedResolutionRate = metricRate(
     merged.resolved,
-    merged.outcomeAnswers,
+    merged.responses,
   );
-  merged.resolutionLowerBound = metricRate(merged.resolved, merged.prompts);
-  merged.proportionalResponseRate = metricRate(
-    Number(merged.proportionality.about_right || 0),
-    Object.values(merged.proportionality).reduce(
-      (sum, value) => sum + Number(value || 0),
-      0,
-    ),
+  merged.chatCompletionRate = metricRate(
+    merged.completedChats,
+    merged.chats,
   );
-  merged.chatCompletionRate = metricRate(merged.completedChats, merged.chats);
   merged.estimatedCostPerResolutionMicros =
     merged.resolved > 0 && merged.estimatedCostMicros > 0
       ? Math.round(merged.estimatedCostMicros / merged.resolved)
       : null;
-  merged.latency.firstTokenP50Ms = percentileFromHistogram(
-    merged.latency.firstTokenHistogram,
-    0.5,
-  );
-  merged.latency.firstTokenP95Ms = percentileFromHistogram(
-    merged.latency.firstTokenHistogram,
-    0.95,
-  );
-  merged.latency.totalP50Ms = percentileFromHistogram(
-    merged.latency.totalHistogram,
-    0.5,
-  );
-  merged.latency.totalP95Ms = percentileFromHistogram(
-    merged.latency.totalHistogram,
-    0.95,
-  );
-  merged.routes = [...routeCounts.entries()]
-    .map(([route, count]) => ({ route, count }))
-    .sort((left, right) => right.count - left.count);
-  merged.trend = [...trendCounts.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([date, row]) => ({
-      date,
-      prompts: row.prompts,
-      resolved: row.resolved,
-      lowerBound: metricRate(row.resolved, row.prompts),
-    }));
   return merged;
 }
 
@@ -332,9 +251,11 @@ export function schedule(ctx, promise) {
     return;
   }
   void promise.catch((error) => {
-    console.error(JSON.stringify({
-      event: "impact_background_task_failed",
-      error: error instanceof Error ? error.name : "UnknownError",
-    }));
+    console.error(
+      JSON.stringify({
+        event: "impact_background_task_failed",
+        error: error instanceof Error ? error.name : "UnknownError",
+      }),
+    );
   });
 }
