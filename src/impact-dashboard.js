@@ -12,6 +12,8 @@ import {
 
 const ADMIN_COOKIE = "stabilize_impact_admin";
 const ADMIN_COOKIE_SECONDS = 7 * 24 * 60 * 60;
+const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
+const textEncoder = new TextEncoder();
 
 async function readBoundedAdminForm(request) {
   const text = await readBoundedRequestText(
@@ -22,16 +24,74 @@ async function readBoundedAdminForm(request) {
   return new URLSearchParams(text);
 }
 
-function adminSecret(env) {
+function adminPasswordHash(env) {
+  const hash = String(env?.IMPACT_ADMIN_PASSWORD_SHA256 || "")
+    .trim()
+    .toLowerCase()
+    .replaceAll(":", "")
+    .replaceAll("-", "");
+  return SHA256_HEX_PATTERN.test(hash) ? hash : "";
+}
+
+function legacyAdminSecret(env) {
   const secret = String(env?.IMPACT_ADMIN_SECRET || "");
   return secret.length >= 24 ? secret : "";
 }
 
+function adminSigningSecret(env) {
+  const secret = String(env?.AUTH_SECRET || "");
+  return secret.length >= 32 ? secret : "";
+}
+
+function adminConfigured(env) {
+  return Boolean(
+    adminSigningSecret(env) &&
+      (adminPasswordHash(env) || legacyAdminSecret(env)),
+  );
+}
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    textEncoder.encode(String(value || "")),
+  );
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function adminCredentialFingerprint(env) {
+  const configuredHash = adminPasswordHash(env);
+  if (configuredHash) return configuredHash;
+  const legacySecret = legacyAdminSecret(env);
+  return legacySecret ? sha256Hex(legacySecret) : "";
+}
+
+async function adminPasswordAccepted(env, password) {
+  const supplied = String(password || "");
+  if (!supplied) return false;
+
+  const configuredHash = adminPasswordHash(env);
+  if (configuredHash) {
+    return timingSafeTextEqual(configuredHash, await sha256Hex(supplied));
+  }
+
+  const legacySecret = legacyAdminSecret(env);
+  return Boolean(
+    legacySecret && (await timingSafeTextEqual(legacySecret, supplied)),
+  );
+}
+
 async function adminCookieValue(env) {
-  const secret = adminSecret(env);
-  if (!secret) return "";
+  const signingSecret = adminSigningSecret(env);
+  const credentialFingerprint = await adminCredentialFingerprint(env);
+  if (!signingSecret || !credentialFingerprint) return "";
   return base64UrlEncode(
-    await hmac(secret, "impact-admin-cookie", "authorized"),
+    await hmac(
+      signingSecret,
+      "impact-admin-cookie",
+      credentialFingerprint,
+    ),
   );
 }
 
@@ -134,7 +194,7 @@ function adminLoginPage(configured, error = false) {
     ? error
       ? "That dashboard password was not accepted."
       : "Enter the private impact-dashboard password."
-    : "Set the IMPACT_ADMIN_SECRET Worker secret before using this dashboard.";
+    : "Dashboard access is not configured.";
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Stabilize impact dashboard</title><style>
@@ -172,13 +232,12 @@ export async function adminLoginResponse(request, env) {
   if (!sameOriginRequest(request)) {
     return new Response("Forbidden", { status: 403 });
   }
-  const secret = adminSecret(env);
-  if (!secret) {
+  if (!adminConfigured(env)) {
     return new Response(adminLoginPage(false), { headers: pageHeaders() });
   }
   const form = await readBoundedAdminForm(request);
   const password = String(form.get("password") || "").slice(0, 512);
-  if (!(await timingSafeTextEqual(secret, password))) {
+  if (!(await adminPasswordAccepted(env, password))) {
     return new Response(adminLoginPage(true, true), {
       status: 401,
       headers: pageHeaders(),
@@ -201,7 +260,7 @@ export async function adminImpactResponse(request, env) {
   if (!["GET", "HEAD"].includes(request.method)) {
     return new Response("Method not allowed", { status: 405 });
   }
-  const configured = Boolean(adminSecret(env));
+  const configured = adminConfigured(env);
   if (!configured || !(await adminAuthorized(request, env))) {
     return new Response(
       request.method === "HEAD" ? null : adminLoginPage(configured),

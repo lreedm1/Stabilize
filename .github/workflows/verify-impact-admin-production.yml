@@ -1,0 +1,89 @@
+name: Verify Stabilize impact dashboard access
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: stabilize-impact-admin-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  verify-impact-admin:
+    name: Verify configured impact dashboard login
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Mark dashboard verification pending
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          payload="$(printf '{"state":"pending","context":"verification/impact-admin","description":"Waiting for configured impact dashboard login","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+
+      - name: Verify configured login in production
+        shell: bash
+        run: |
+          body="$(mktemp)"
+          cleanup() { rm -f "$body"; }
+          trap cleanup EXIT
+
+          for attempt in {1..30}; do
+            : > "$body"
+            status="$(
+              curl --max-time 20 --compressed --silent --show-error \
+                --header "Cache-Control: no-cache" \
+                --output "$body" \
+                --write-out "%{http_code}" \
+                "https://stabilize.info/admin/impact?deployment=${GITHUB_SHA}" || true
+            )"
+            echo "Impact dashboard attempt ${attempt}: HTTP ${status}"
+
+            if [[ "$status" == "401" ]] && \
+              grep -Fq 'action="/admin/impact/login"' "$body" && \
+              grep -Fq 'Enter the private impact-dashboard password.' "$body" && \
+              ! grep -Fq 'Dashboard access is not configured.' "$body"; then
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "::error::The production impact dashboard did not expose a configured password login."
+          exit 1
+
+      - name: Publish dashboard verification result
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [[ "$JOB_STATUS" == "success" ]]; then
+            state="success"
+            description="Impact dashboard password login is configured"
+          else
+            state="failure"
+            description="Impact dashboard password login is not configured"
+          fi
+          payload="$(printf '{"state":"%s","context":"verification/impact-admin","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
