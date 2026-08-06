@@ -4,7 +4,9 @@ import test from "node:test";
 
 const files = {
   client: "public/message-feedback.js",
+  outcomeClient: "public/impact.js",
   css: "public/message-feedback.css",
+  impactCss: "public/impact.css",
   events: "src/impact-events.js",
   analytics: "src/impact-analytics.js",
   shards: "src/impact-shards.js",
@@ -43,6 +45,25 @@ test("each completed assistant response receives private inline feedback", async
   assert.match(events, /Did you choose a next step/);
 });
 
+test("New conversation triggers optional whole-chat feedback without gating reset", async () => {
+  const [client, css, events] = await Promise.all([
+    source(files.outcomeClient),
+    source(files.impactCss),
+    source(files.events),
+  ]);
+
+  assert.match(client, /Did this conversation help you move forward\?/);
+  assert.match(client, /conversation_help_reported/);
+  assert.match(client, /conversation-help-v1/);
+  assert.match(client, /newConversationButton\.addEventListener/);
+  assert.match(client, /setTimeout\(\(\) => renderConversationFeedback\(turn\), 0\)/);
+  assert.match(client, /URGENT_ROUTES\.has\(turn\.route\)/);
+  assert.match(client, /Optional and separate from your new conversation/);
+  assert.match(css, /\.impact-conversation-card/);
+  assert.match(events, /conversation_help_reported/);
+  assert.match(events, /separate non-blocking/);
+});
+
 test("message feedback is verified against the recorded chat turn", async () => {
   const [endpoint, worker, analytics] = await Promise.all([
     source(files.endpoint),
@@ -71,6 +92,8 @@ test("the private dashboard exposes engagement, quality, and comment review", as
   for (const field of [
     "feedbackResponseRate",
     "helpfulResponseRate",
+    "conversationResponseRate",
+    "conversationHelpRate",
     "secondMessageRate",
     "returningBrowserRate",
     "averageResponseMs",
@@ -85,6 +108,8 @@ test("the private dashboard exposes engagement, quality, and comment review", as
   assert.match(dashboard, /Second-message rate/);
   assert.match(dashboard, /Helpful response rate/);
   assert.match(dashboard, /Feedback response rate/);
+  assert.match(dashboard, /Conversation help rate/);
+  assert.match(dashboard, /Conversation feedback rate/);
   assert.match(dashboard, /Top feedback reasons/);
   assert.match(dashboard, /Recent written feedback/);
   assert.match(dashboard, /feedbackCommentList\(summary\)/);
