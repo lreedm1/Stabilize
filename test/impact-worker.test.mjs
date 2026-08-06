@@ -137,20 +137,23 @@ test("impact events are rejected when they do not match a server-created turn", 
   assert.equal(response.status, 409);
 });
 
-test("the privacy page receives the outcome-measurement disclosure", async () => {
+test("canonical and file privacy routes receive the outcome-measurement disclosure", async () => {
   const assets = {
     fetch: async () => new Response(
       '<!doctype html><html><body><h2>Public feedback</h2></body></html>',
       { headers: { "Content-Type": "text/html; charset=utf-8" } },
     ),
   };
-  const response = await worker.fetch(
-    new Request("https://stabilize.test/privacy.html"),
-    { ...TEST_ENV, ASSETS: assets },
-    {},
-  );
-  const html = await response.text();
-  assert.equal(response.status, 200);
-  assert.match(html, /id="outcome-measurement"/);
-  assert.match(html, /does not place the user’s message/);
+
+  for (const path of ["/privacy", "/privacy.html"]) {
+    const response = await worker.fetch(
+      new Request(`https://stabilize.test${path}`),
+      { ...TEST_ENV, ASSETS: assets },
+      {},
+    );
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /id="outcome-measurement"/);
+    assert.match(html, /does not place the user’s message/);
+  }
 });
