@@ -88,6 +88,15 @@ test("the private dashboard has six numbers and one weekly decision", () => {
   assert.match(dashboard, /Guardrails that cannot be traded away/);
 });
 
+test("the weekly decision panel aligns with the other dashboard sections", () => {
+  assert.match(
+    dashboard,
+    /\.decision\{width:100%;min-width:0;max-width:none;margin:0;padding:19px;border-left:0;text-align:left;justify-self:stretch\}/,
+  );
+  assert.doesNotMatch(dashboard, /\.decision\{[^}]*border-left:5px/);
+  assert.doesNotMatch(dashboard, /\.decision\{[^}]*padding:22px/);
+});
+
 test("production dashboard access uses a public hash without committing the password", () => {
   const config = JSON.parse(wrangler);
   const configuredHash = config.vars.IMPACT_ADMIN_PASSWORD_SHA256;
