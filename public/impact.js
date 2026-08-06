@@ -170,8 +170,12 @@ async function inspectChatResponse(response, turn) {
 
 window.fetch = async (input, init) => {
   if (newConversationRequest(input)) {
+    const previousTurn = latestTurn;
     const response = await originalFetch(input, init);
-    if (response.ok) rotateConversationId();
+    if (response.ok) {
+      rotateConversationId();
+      setTimeout(() => renderConversationFeedback(previousTurn), 0);
+    }
     return response;
   }
   if (!chatRequest(input)) return originalFetch(input, init);
@@ -434,11 +438,6 @@ function renderConversationFeedback(turn) {
   void postConversationHelp(turn, "shown");
 }
 
-function queueConversationFeedback() {
-  const turn = latestTurn;
-  setTimeout(() => renderConversationFeedback(turn), 0);
-}
-
 function queueOutcomeEnhancement() {
   queueMicrotask(() => {
     const candidates = document.querySelectorAll(
@@ -446,11 +445,6 @@ function queueOutcomeEnhancement() {
     );
     for (const check of candidates) enhanceOutcomeCheck(check);
   });
-}
-
-const newConversationButton = document.querySelector("#new-conversation-button");
-if (newConversationButton instanceof HTMLButtonElement) {
-  newConversationButton.addEventListener("click", queueConversationFeedback);
 }
 
 const observer = new MutationObserver(queueOutcomeEnhancement);
