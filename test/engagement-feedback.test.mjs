@@ -32,6 +32,7 @@ test("each completed assistant response receives private inline feedback", async
   assert.match(client, /completedTurns\.push\(turn\)/);
   assert.match(client, /article\.appendChild\(section\)/);
   assert.match(client, /postFeedback\(turn, "shown"\)/);
+  assert.match(client, /response\.status === 409/);
   assert.doesNotMatch(client, /assistant(?:Message|Reply|Text)\s*:/);
 
   assert.match(css, /\.message-feedback \{/);
@@ -39,6 +40,7 @@ test("each completed assistant response receives private inline feedback", async
   assert.match(events, /message-feedback\.css/);
   assert.match(events, /message-feedback\.js/);
   assert.match(events, /optional details; those details are stored privately/);
+  assert.match(events, /Did you choose a next step/);
 });
 
 test("message feedback is verified against the recorded chat turn", async () => {
@@ -59,7 +61,7 @@ test("message feedback is verified against the recorded chat turn", async () => 
   assert.match(analytics, /DELETE FROM message_feedback WHERE occurred_at < \?/);
 });
 
-test("the private dashboard exposes engagement and response-quality metrics", async () => {
+test("the private dashboard exposes engagement, quality, and comment review", async () => {
   const [analytics, shards, dashboard] = await Promise.all([
     source(files.analytics),
     source(files.shards),
@@ -73,6 +75,7 @@ test("the private dashboard exposes engagement and response-quality metrics", as
     "returningBrowserRate",
     "averageResponseMs",
     "estimatedCostPerHelpfulMicros",
+    "recentFeedbackComments",
   ]) {
     assert.match(analytics, new RegExp(field));
     assert.match(shards, new RegExp(field));
@@ -83,5 +86,8 @@ test("the private dashboard exposes engagement and response-quality metrics", as
   assert.match(dashboard, /Helpful response rate/);
   assert.match(dashboard, /Feedback response rate/);
   assert.match(dashboard, /Top feedback reasons/);
+  assert.match(dashboard, /Recent written feedback/);
+  assert.match(dashboard, /feedbackCommentList\(summary\)/);
+  assert.match(dashboard, /escapeHtml\(entry\.comment\)/);
   assert.match(dashboard, /Daily usage/);
 });
