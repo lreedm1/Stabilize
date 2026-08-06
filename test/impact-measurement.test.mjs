@@ -24,13 +24,15 @@ const [
   readFile("wrangler.jsonc", "utf8"),
 ]);
 
-test("orderly impact uses one question and one structured event", () => {
+test("orderly impact keeps the outcome question and verified structured events", () => {
   assert.match(worker, /\/api\/impact-event/);
+  assert.match(worker, /\/api\/message-feedback/);
   assert.match(worker, /\/admin\/impact/);
   assert.match(events, /X-Stabilize-Turn-Id/);
   assert.match(shards, /IMPACT_SHARD_COUNT = 16/);
   assert.doesNotMatch(shards, /global-impact-v1/);
   assert.match(events, /impact\.js\?v=/);
+  assert.match(events, /message-feedback\.js\?v=/);
 
   assert.match(client, /Did you choose a next step\?/);
   assert.match(client, /event: "next_step_reported"/);
@@ -58,7 +60,7 @@ test("orderly impact uses one question and one structured event", () => {
   );
 });
 
-test("one row advances from shown to a first answer", () => {
+test("one outcome row advances from shown to a first answer", () => {
   assert.match(analytics, /const NEXT_STEP_EVENT = "next_step_reported"/);
   assert.match(analytics, /existing\.event_value !== "shown"/);
   assert.match(analytics, /eventValue === "shown"/);
@@ -69,8 +71,8 @@ test("one row advances from shown to a first answer", () => {
   assert.match(analytics, /MAX_EVENTS_PER_SESSION_HOUR/);
 });
 
-test("the private dashboard has six numbers and one weekly decision", () => {
-  assert.equal((dashboard.match(/<div class=\"tile\">/g) || []).length, 6);
+test("the private dashboard covers outcomes, engagement, quality, reliability, and cost", () => {
+  assert.equal((dashboard.match(/<div class=\"tile\">/g) || []).length, 15);
   for (const label of [
     "Eligible checks shown",
     "Reports received",
@@ -78,12 +80,25 @@ test("the private dashboard has six numbers and one weekly decision", () => {
     "Reported next-step rate",
     "Est. cost / reported next step",
     "Self-funding ratio",
+    "Chats started",
+    "Second-message rate",
+    "Helpful response rate",
+    "Feedback response rate",
+    "Failed responses",
+    "Average response time",
+    "Returning-browser rate",
+    "Est. cost / helpful response",
+    "Written comments",
   ]) {
     assert.match(
       dashboard,
       new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
     );
   }
+  assert.match(dashboard, /Daily usage/);
+  assert.match(dashboard, /Top feedback reasons/);
+  assert.match(dashboard, /Recent written feedback/);
+  assert.match(dashboard, /feedbackCommentList\(summary\)/);
   assert.match(dashboard, /One decision this week/);
   assert.match(dashboard, /Guardrails that cannot be traded away/);
 });
