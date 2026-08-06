@@ -41,6 +41,10 @@
       {
         "name": "FEEDBACK_INBOX",
         "class_name": "FeedbackInbox"
+      },
+      {
+        "name": "IMPACT",
+        "class_name": "ImpactAnalytics"
       }
     ]
   },
@@ -63,6 +67,12 @@
         "FeedbackGate",
         "FeedbackInbox"
       ]
+    },
+    {
+      "tag": "v4",
+      "new_sqlite_classes": [
+        "ImpactAnalytics"
+      ]
     }
   ],
   "vars": {
@@ -76,7 +86,11 @@
     "STRIPE_MODEL_CHOICE_PRICE_ID": "price_1U01Jp96tfbPOBGIbQNXDlPx",
     "FEEDBACK_REPOSITORY": "lreedm1/Stabilize",
     "FEEDBACK_BRANCH": "feedback-inbox",
-    "FEEDBACK_PATH": "feedback"
+    "FEEDBACK_PATH": "feedback",
+    "IMPACT_RETENTION_DAYS": "180",
+    "IMPACT_ESTIMATED_CHAT_COST_MICROS": "0",
+    "IMPACT_MONTHLY_RECURRING_REVENUE_CENTS": "0",
+    "IMPACT_MONTHLY_RECURRING_COST_CENTS": "0"
   },
   "secrets": {
     "required": [

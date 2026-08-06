@@ -20,13 +20,15 @@ test("starter prompt buttons call the model with a cache-busted client", async (
 });
 
 test("signed-out users get a one-time memory reminder on their second send", async () => {
-  const [wrapperSource, reminderSource, routerSource] = await Promise.all([
+  const [wrapperSource, reminderSource, routerSource, impactWorkerSource] = await Promise.all([
     readFile(new URL("../src/memory-prompt-worker.js", import.meta.url), "utf8"),
     readFile(new URL("../public/guest-memory-prompt.js", import.meta.url), "utf8"),
     readFile(new URL("../src/domain-router.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/impact-worker.js", import.meta.url), "utf8"),
   ]);
 
-  assert.match(routerSource, /from "\.\/memory-prompt-worker\.js"/);
+  assert.match(routerSource, /from "\.\/impact-worker\.js"/);
+  assert.match(impactWorkerSource, /from "\.\/memory-prompt-worker\.js"/);
   assert.match(wrapperSource, /readAuthSession\(request, env\)/);
   assert.match(
     wrapperSource,

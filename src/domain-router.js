@@ -2,11 +2,18 @@ import worker, {
   BillingAccount,
   FeedbackGate,
   FeedbackInbox,
+  ImpactAnalytics,
   SessionMemory,
-} from "./memory-prompt-worker.js";
+} from "./impact-worker.js";
 import { signOut } from "./auth.js";
 
-export { BillingAccount, FeedbackGate, FeedbackInbox, SessionMemory };
+export {
+  BillingAccount,
+  FeedbackGate,
+  FeedbackInbox,
+  ImpactAnalytics,
+  SessionMemory,
+};
 
 const CANONICAL_ORIGIN = "https://stabilize.info";
 const HSTS_VALUE = "max-age=31536000; includeSubDomains";
