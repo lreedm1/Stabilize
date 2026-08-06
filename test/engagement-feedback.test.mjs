@@ -45,7 +45,7 @@ test("each completed assistant response receives private inline feedback", async
   assert.match(events, /Did you choose a next step/);
 });
 
-test("New conversation triggers optional whole-chat feedback without gating reset", async () => {
+test("New conversation triggers optional whole-chat feedback only after reset succeeds", async () => {
   const [client, css, events] = await Promise.all([
     source(files.outcomeClient),
     source(files.impactCss),
@@ -55,8 +55,10 @@ test("New conversation triggers optional whole-chat feedback without gating rese
   assert.match(client, /Did this conversation help you move forward\?/);
   assert.match(client, /conversation_help_reported/);
   assert.match(client, /conversation-help-v1/);
-  assert.match(client, /newConversationButton\.addEventListener/);
-  assert.match(client, /setTimeout\(\(\) => renderConversationFeedback\(turn\), 0\)/);
+  assert.match(client, /const previousTurn = latestTurn/);
+  assert.match(client, /if \(response\.ok\) \{/);
+  assert.match(client, /renderConversationFeedback\(previousTurn\)/);
+  assert.doesNotMatch(client, /newConversationButton\.addEventListener/);
   assert.match(client, /URGENT_ROUTES\.has\(turn\.route\)/);
   assert.match(client, /Optional and separate from your new conversation/);
   assert.match(css, /\.impact-conversation-card/);
@@ -75,7 +77,7 @@ test("engagement uses a rotating privacy-hashed conversation identifier", async 
   assert.match(client, /CONVERSATION_KEY/);
   assert.match(client, /X-Stabilize-Conversation-Id/);
   assert.match(client, /newConversationRequest\(input\)/);
-  assert.match(client, /if \(response\.ok\) rotateConversationId\(\)/);
+  assert.match(client, /if \(response\.ok\) \{[\s\S]*rotateConversationId\(\)/);
   assert.match(events, /hashIdentifier\(env, "impact-conversation"/);
   assert.match(events, /conversationHash/);
   assert.match(analytics, /conversation_hash TEXT/);
