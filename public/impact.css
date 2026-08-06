@@ -1,0 +1,127 @@
+.impact-outcome-card {
+  position: relative;
+  border: 1px solid rgba(31, 111, 84, 0.24);
+  border-radius: 14px;
+  background: rgba(255, 253, 247, 0.86);
+  box-shadow: 0 6px 18px rgba(7, 31, 21, 0.11);
+  padding: 10px 12px;
+  backdrop-filter: blur(10px);
+}
+
+.impact-question,
+.impact-thanks {
+  margin: 0 0 8px;
+  color: #203b31;
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.impact-thanks {
+  margin-bottom: 0;
+}
+
+.impact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.impact-choice,
+.impact-secondary,
+.impact-skip {
+  appearance: none;
+  min-height: 32px;
+  border: 1px solid rgba(31, 111, 84, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #214f3d;
+  font: inherit;
+  font-size: 0.77rem;
+  font-weight: 620;
+  line-height: 1.2;
+  padding: 7px 11px;
+  cursor: pointer;
+}
+
+.impact-choice:hover,
+.impact-choice:focus-visible,
+.impact-secondary:hover,
+.impact-secondary:focus-visible {
+  border-color: rgba(31, 111, 84, 0.58);
+  background: rgba(241, 249, 244, 0.96);
+  outline: none;
+}
+
+.impact-choice:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.impact-secondary {
+  margin-top: 8px;
+}
+
+.impact-skip {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  min-height: auto;
+  border: 0;
+  background: transparent;
+  color: rgba(32, 59, 49, 0.68);
+  font-size: 0.68rem;
+  padding: 5px;
+}
+
+.impact-outcome-types,
+.impact-revision-actions {
+  padding-right: 2px;
+}
+
+.impact-outcome-types .impact-choice,
+.impact-revision-actions .impact-choice {
+  border-radius: 10px;
+  text-align: left;
+}
+
+@media (max-width: 560px) {
+  .impact-outcome-card {
+    padding: 9px 10px;
+  }
+
+  .impact-actions {
+    gap: 6px;
+  }
+
+  .impact-choice,
+  .impact-secondary {
+    font-size: 0.74rem;
+    padding: 7px 9px;
+  }
+
+  .impact-outcome-types .impact-choice,
+  .impact-revision-actions .impact-choice {
+    flex: 1 1 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .impact-choice,
+  .impact-secondary,
+  .impact-skip {
+    transition: none;
+  }
+}
+
+.impact-privacy-note {
+  margin: 8px 0 0;
+  color: rgba(32, 59, 49, 0.72);
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+
+.impact-privacy-note a {
+  color: inherit;
+  text-underline-offset: 2px;
+}

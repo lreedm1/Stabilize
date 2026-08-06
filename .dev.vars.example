@@ -4,5 +4,7 @@ GOOGLE_CLIENT_ID=replace-with-a-google-web-client-id
 GOOGLE_CLIENT_SECRET=replace-with-a-google-web-client-secret
 # Generate at least 32 random bytes, for example: openssl rand -base64 32
 AUTH_SECRET=replace-with-a-long-random-auth-secret
+# Private password for /admin/impact. Use at least 24 random characters.
+IMPACT_ADMIN_SECRET=replace-with-a-long-random-dashboard-secret
 # Exact origin only; no path. HTTPS is required outside localhost.
 PUBLIC_ORIGIN=http://localhost:8787
