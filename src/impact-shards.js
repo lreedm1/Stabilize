@@ -200,6 +200,11 @@ function mergeImpactSummaries(summaries, since, now) {
     outcomeStates: {},
     sessions: 0,
     browsers: 0,
+    conversationPrompts: 0,
+    conversationResponses: 0,
+    conversationHelped: 0,
+    conversationYes: 0,
+    conversationStates: {},
     feedbackShown: 0,
     feedbackResponses: 0,
     helpfulResponses: 0,
@@ -228,6 +233,10 @@ function mergeImpactSummaries(summaries, since, now) {
       "resolved",
       "sessions",
       "browsers",
+      "conversationPrompts",
+      "conversationResponses",
+      "conversationHelped",
+      "conversationYes",
       "feedbackShown",
       "feedbackResponses",
       "helpfulResponses",
@@ -247,6 +256,7 @@ function mergeImpactSummaries(summaries, since, now) {
       merged[key] += Number(summary[key] || 0);
     }
     addCounts(merged.outcomeStates, summary.outcomeStates);
+    addCounts(merged.conversationStates, summary.conversationStates);
     addCounts(merged.feedbackStates, summary.feedbackStates);
     addCounts(merged.feedbackReasons, summary.feedbackReasons);
     for (const comment of summary.recentFeedbackComments || []) {
@@ -267,6 +277,18 @@ function mergeImpactSummaries(summaries, since, now) {
   merged.reportedResolutionRate = metricRate(
     merged.resolved,
     merged.responses,
+  );
+  merged.conversationResponseRate = metricRate(
+    merged.conversationResponses,
+    merged.conversationPrompts,
+  );
+  merged.conversationHelpRate = metricRate(
+    merged.conversationHelped,
+    merged.conversationResponses,
+  );
+  merged.conversationYesRate = metricRate(
+    merged.conversationYes,
+    merged.conversationResponses,
   );
   merged.feedbackResponseRate = metricRate(
     merged.feedbackResponses,
