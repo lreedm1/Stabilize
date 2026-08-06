@@ -5,6 +5,8 @@ const pagePath = "src/page.js";
 const productTestPath = "test/product.test.mjs";
 const marker = "/* compact horizontal outcome buttons */";
 const assetVersion = "20260804-compact-outcomes-2";
+const mainBoxStylesheet =
+  '    <link rel="stylesheet" href="/main-box-white.css?v=20260805-1" />';
 
 const compactStyles = `
 
@@ -65,12 +67,26 @@ nextCss += compactStyles;
 if (nextCss !== cssSource) await writeFile(cssPath, nextCss);
 
 const pageSource = await readFile(pagePath, "utf8");
-const nextPage = pageSource.replace(
+let nextPage = pageSource.replace(
   /href="\/product\.css(?:\?v=[^"]*)?"/,
   `href="/product.css?v=${assetVersion}"`,
 );
 if (!nextPage.includes(`/product.css?v=${assetVersion}`)) {
   throw new Error("Could not cache-bust the product stylesheet");
+}
+if (!nextPage.includes('href="/main-box-white.css')) {
+  const productLinkPattern =
+    /^(\s*<link rel="stylesheet" href="\/product\.css\?v=[^"]+" \/>)$/m;
+  if (!productLinkPattern.test(nextPage)) {
+    throw new Error("Could not place the main-box text stylesheet");
+  }
+  nextPage = nextPage.replace(
+    productLinkPattern,
+    `$1\n${mainBoxStylesheet}`,
+  );
+}
+if (!nextPage.includes(mainBoxStylesheet.trim())) {
+  throw new Error("Could not link the main-box text stylesheet");
 }
 if (nextPage !== pageSource) await writeFile(pagePath, nextPage);
 
@@ -92,4 +108,6 @@ if (nextProductTest !== productTestSource) {
   await writeFile(productTestPath, nextProductTest);
 }
 
-console.log("Compacted follow-up prompts and cache-busted their stylesheet.");
+console.log(
+  "Compacted follow-up prompts, linked white main-box text, and cache-busted the product stylesheet.",
+);
