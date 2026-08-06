@@ -26,7 +26,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          payload="$(printf '{"state":"pending","context":"verification/impact","description":"Waiting for live inline-feedback checks","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          payload="$(printf '{"state":"pending","context":"verification/impact","description":"Waiting for live inline-feedback and sharing checks","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           curl --fail-with-body --silent --show-error \
             --request POST \
             --header "Accept: application/vnd.github+json" \
@@ -132,17 +132,23 @@ jobs:
 
             if [[ "$home_status" == "200" && "$impact_script_status" == "200" && "$impact_styles_status" == "200" && "$feedback_script_status" == "200" && "$feedback_styles_status" == "200" && "$privacy_status" == "200" ]] && \
               [[ "$dashboard_status" == "401" || "$dashboard_status" == "503" ]] && \
+              grep -Fq 'Stabilize helps you turn an overloaded moment into one safe, practical next step.' "$home" && \
               grep -Fq 'stabilize:followup-actions' "$impact_script" && \
               grep -Fq 'modelReplyNeedsFollowups' "$impact_script" && \
               ! grep -Fq 'Did you choose a next step?' "$impact_script" && \
               grep -Fq 'next_step_reported' "$impact_script" && \
               grep -Fq 'message-feedback-actions' "$feedback_script" && \
               ! grep -Fq 'Was this helpful?' "$feedback_script" && \
+              grep -Fq 'function createShareEditor' "$feedback_script" && \
+              grep -Fq 'navigator.share(payload)' "$feedback_script" && \
+              grep -Fq 'Copy next step' "$feedback_script" && \
               grep -Fq '.outcome-tray' "$feedback_styles" && \
               grep -Fq 'display: none !important' "$feedback_styles" && \
               grep -Fq '.message-feedback-action' "$feedback_styles" && \
+              grep -Fq '.message-feedback-share' "$feedback_styles" && \
               grep -Fq 'id="outcome-measurement"' "$privacy" && \
               grep -Fq 'up to three optional action buttons beside' "$privacy" && \
+              grep -Fq 'id="sharing-a-next-step"' "$privacy" && \
               grep -Fq 'Stabilize impact dashboard' "$dashboard"; then
               exit 0
             fi
@@ -150,7 +156,7 @@ jobs:
             sleep 10
           done
 
-          echo "::error::Production did not expose the expected inline follow-up assets, privacy disclosure, and protected dashboard route."
+          echo "::error::Production did not expose the expected promise, inline feedback, shareable next-step controls, privacy disclosure, and protected dashboard route."
           exit 1
 
       - name: Publish impact verification result
@@ -162,10 +168,10 @@ jobs:
         run: |
           if [[ "$JOB_STATUS" == "success" ]]; then
             state="success"
-            description="Inline feedback, privacy, and dashboard checks passed"
+            description="Promise, sharing, privacy, and dashboard checks passed"
           else
             state="failure"
-            description="Inline feedback, privacy, or dashboard checks failed"
+            description="Promise, sharing, privacy, or dashboard checks failed"
           fi
           payload="$(printf '{"state":"%s","context":"verification/impact","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           curl --fail-with-body --silent --show-error \
