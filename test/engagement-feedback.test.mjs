@@ -40,15 +40,21 @@ test("each completed assistant response receives private inline feedback", async
   assert.match(css, /\.message-feedback \{/);
   assert.match(
     css,
-    /\.message-feedback-prompt\s*\{[\s\S]*?color: var\(--text\);/,
+    /\.message-feedback-prompt\s*\{[\s\S]*?color: inherit;/,
   );
   assert.match(
     css,
-    /\.message-feedback-choice\s*\{[\s\S]*?border: 0;[\s\S]*?background: transparent;[\s\S]*?box-shadow: none;/,
+    /\.message-feedback-choice\s*\{[\s\S]*?-webkit-appearance: none !important;[\s\S]*?background-color: transparent !important;[\s\S]*?background-image: none !important;[\s\S]*?box-shadow: none !important;[\s\S]*?font-size: 0;/,
+  );
+  assert.match(css, /\.message-feedback-choice::before/);
+  assert.match(css, /-webkit-mask-image: url\("data:image\/svg\+xml/);
+  assert.match(
+    css,
+    /\.message-feedback-choice\[data-value="down"\]::before\s*\{[\s\S]*?transform: rotate\(180deg\);/,
   );
   assert.match(
     css,
-    /\.message-feedback-choice:hover,[\s\S]*?\.message-feedback-choice\[aria-pressed="true"\]\s*\{[\s\S]*?background: transparent;/,
+    /\.message-feedback-choice:hover,[\s\S]*?\.message-feedback-choice\[aria-pressed="true"\]\s*\{[\s\S]*?background-color: transparent !important;/,
   );
   assert.match(css, /@media \(max-width: 560px\)/);
   assert.match(events, /message-feedback\.css/);
