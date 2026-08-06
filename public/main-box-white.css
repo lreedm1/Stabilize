@@ -30,3 +30,13 @@
 .assistant-output pre code {
   background: transparent;
 }
+
+/* Translucent gray reading surfaces */
+.seo-intro,
+.assistant-output {
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  background: rgba(42, 47, 46, 0.68);
+  box-shadow: 0 10px 30px rgba(4, 13, 10, 0.24);
+  -webkit-backdrop-filter: blur(10px) saturate(0.82);
+  backdrop-filter: blur(10px) saturate(0.82);
+}
