@@ -53,6 +53,7 @@ const POLICY_SCRIPTS = [
   "scripts/restore-gray-reading-box.mjs",
   "scripts/unify-public-page-theme.mjs",
   "scripts/unify-impact-dashboard-theme.mjs",
+  "scripts/add-admin-menu-button.mjs",
 ];
 const POLICY_TARGETS = [
   "scripts/favicon-assets/favicon.ico.b64",
