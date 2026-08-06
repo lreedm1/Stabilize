@@ -207,6 +207,7 @@ function mergeImpactSummaries(summaries, since, now) {
     feedbackStates: {},
     feedbackReasons: {},
     feedbackComments: 0,
+    recentFeedbackComments: [],
     chats: 0,
     completedChats: 0,
     failedChats: 0,
@@ -248,8 +249,20 @@ function mergeImpactSummaries(summaries, since, now) {
     addCounts(merged.outcomeStates, summary.outcomeStates);
     addCounts(merged.feedbackStates, summary.feedbackStates);
     addCounts(merged.feedbackReasons, summary.feedbackReasons);
+    for (const comment of summary.recentFeedbackComments || []) {
+      merged.recentFeedbackComments.push({
+        occurredAt: Number(comment?.occurredAt || 0),
+        rating: String(comment?.rating || "").slice(0, 16),
+        reason: String(comment?.reason || "").slice(0, 64) || null,
+        comment: String(comment?.comment || "").slice(0, 500),
+      });
+    }
   }
 
+  merged.recentFeedbackComments = merged.recentFeedbackComments
+    .filter((entry) => entry.occurredAt > 0 && entry.comment)
+    .sort((left, right) => right.occurredAt - left.occurredAt)
+    .slice(0, 20);
   merged.responseRate = metricRate(merged.responses, merged.prompts);
   merged.reportedResolutionRate = metricRate(
     merged.resolved,
