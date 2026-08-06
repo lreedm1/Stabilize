@@ -216,8 +216,8 @@ function mergeImpactSummaries(summaries, since, now) {
     chats: 0,
     completedChats: 0,
     failedChats: 0,
-    chatSessions: 0,
-    multiTurnSessions: 0,
+    conversations: 0,
+    multiTurnConversations: 0,
     chatBrowsers: 0,
     returningBrowsers: 0,
     responseMsTotal: 0,
@@ -245,8 +245,8 @@ function mergeImpactSummaries(summaries, since, now) {
       "chats",
       "completedChats",
       "failedChats",
-      "chatSessions",
-      "multiTurnSessions",
+      "conversations",
+      "multiTurnConversations",
       "chatBrowsers",
       "returningBrowsers",
       "responseMsTotal",
@@ -303,8 +303,8 @@ function mergeImpactSummaries(summaries, since, now) {
     merged.chats,
   );
   merged.secondMessageRate = metricRate(
-    merged.multiTurnSessions,
-    merged.chatSessions,
+    merged.multiTurnConversations,
+    merged.conversations,
   );
   merged.returningBrowserRate = metricRate(
     merged.returningBrowsers,
