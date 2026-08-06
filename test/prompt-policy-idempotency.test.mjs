@@ -52,6 +52,7 @@ const POLICY_SCRIPTS = [
   "scripts/align-composer-chat-section-tests.mjs",
   "scripts/restore-gray-reading-box.mjs",
   "scripts/unify-public-page-theme.mjs",
+  "scripts/unify-impact-dashboard-theme.mjs",
 ];
 const POLICY_TARGETS = [
   "scripts/favicon-assets/favicon.ico.b64",
@@ -65,6 +66,7 @@ const POLICY_TARGETS = [
   "src/paid-worker.js",
   "src/billing.js",
   "src/reasoning-policy.js",
+  "src/impact-dashboard.js",
   "public/app.js",
   "public/billing-client.js",
   "public/billing.css",
