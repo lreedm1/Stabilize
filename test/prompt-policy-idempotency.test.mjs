@@ -60,6 +60,7 @@ const POLICY_SCRIPTS = [
   "scripts/inline-followups-with-feedback.mjs",
   "scripts/enforce-model-only-followups.mjs",
   "scripts/finalize-inline-followup-tests.mjs",
+  "scripts/add-shareable-next-step.mjs",
 ];
 const POLICY_TARGETS = [
   "scripts/favicon-assets/favicon.ico.b64",
