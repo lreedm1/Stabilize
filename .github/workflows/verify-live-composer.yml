@@ -35,7 +35,7 @@ jobs:
 
           asset_version="$(
             sed -n 's/^const ASSET_VERSION = "\([^"]*\)";$/\1/p' \
-              scripts/add-model-tile-and-favicon.mjs \
+              scripts/center-composer-placeholder.mjs \
               | head -n 1
           )"
           if [[ -z "$asset_version" ]]; then
@@ -85,8 +85,11 @@ jobs:
 
               if grep -Fq "/* Balanced 42px composer bar */" <<<"$css" \
                 && grep -Fq "padding: 10px;" <<<"$css" \
-                && grep -Fq "line-height: 20px;" <<<"$css"; then
-                echo "Production serves composer asset ${asset_version} with vertically centered text."
+                && grep -Fq "line-height: 20px;" <<<"$css" \
+                && grep -Fq "/* Horizontally centered composer placeholder */" <<<"$css" \
+                && grep -Fq "text-align: left;" <<<"$css" \
+                && grep -Fq "text-align: center;" <<<"$css"; then
+                echo "Production serves composer asset ${asset_version} with the placeholder centered on both axes."
                 publish_status \
                   success \
                   "Exact centered composer release is live"
@@ -101,5 +104,5 @@ jobs:
           publish_status \
             failure \
             "Production did not serve the centered composer release"
-          echo "::error::Production never served billing.css?v=${asset_version} with the centered textarea rules."
+          echo "::error::Production never served billing.css?v=${asset_version} with the centered placeholder rules."
           exit 1
