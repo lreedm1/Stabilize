@@ -39,11 +39,13 @@ jobs:
         shell: bash
         run: |
           body="$(mktemp)"
-          cleanup() { rm -f "$body"; }
+          login_body="$(mktemp)"
+          cleanup() { rm -f "$body" "$login_body"; }
           trap cleanup EXIT
 
           for attempt in {1..30}; do
             : > "$body"
+            : > "$login_body"
             status="$(
               curl --max-time 20 --compressed --silent --show-error \
                 --header "Cache-Control: no-cache" \
@@ -57,12 +59,30 @@ jobs:
               grep -Fq 'action="/admin/impact/login"' "$body" && \
               grep -Fq 'Enter the private impact-dashboard password.' "$body" && \
               ! grep -Fq 'Dashboard access is not configured.' "$body"; then
-              exit 0
+              login_status="$(
+                curl --max-time 20 --compressed --silent --show-error \
+                  --request POST \
+                  --header "Cache-Control: no-cache" \
+                  --header "Origin: null" \
+                  --header "Sec-Fetch-Site: none" \
+                  --header "Content-Type: application/x-www-form-urlencoded" \
+                  --data 'password=production-opaque-origin-probe-not-the-password' \
+                  --output "$login_body" \
+                  --write-out "%{http_code}" \
+                  "https://stabilize.info/admin/impact/login?deployment=${GITHUB_SHA}" || true
+              )"
+              echo "Opaque-origin login probe ${attempt}: HTTP ${login_status}"
+
+              if [[ "$login_status" == "401" ]] && \
+                grep -Fq 'That dashboard password was not accepted.' "$login_body" && \
+                ! grep -Fq 'Forbidden' "$login_body"; then
+                exit 0
+              fi
             fi
             sleep 10
           done
 
-          echo "::error::The production impact dashboard did not expose a configured password login."
+          echo "::error::The production impact dashboard did not accept an opaque-origin password form safely."
           exit 1
 
       - name: Publish dashboard verification result
@@ -74,10 +94,10 @@ jobs:
         run: |
           if [[ "$JOB_STATUS" == "success" ]]; then
             state="success"
-            description="Impact dashboard password login is configured"
+            description="Impact dashboard password login works in iOS browsers"
           else
             state="failure"
-            description="Impact dashboard password login is not configured"
+            description="Impact dashboard password login is still blocked"
           fi
           payload="$(printf '{"state":"%s","context":"verification/impact-admin","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           curl --fail-with-body --silent --show-error \
