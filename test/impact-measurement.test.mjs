@@ -88,6 +88,35 @@ test("the private dashboard has six numbers and one weekly decision", () => {
   assert.match(dashboard, /Guardrails that cannot be traded away/);
 });
 
+test("the private dashboard shares the Stabilize background and reading palette", () => {
+  assert.equal(
+    (
+      dashboard.match(
+        /guides\.css\?v=20260806-unified-site-theme-1/g,
+      ) || []
+    ).length,
+    2,
+  );
+  for (const token of [
+    "var(--stabilize-reading-surface)",
+    "var(--stabilize-reading-text)",
+    "var(--stabilize-reading-border)",
+    "var(--stabilize-reading-shadow)",
+    "var(--stabilize-reading-filter)",
+  ]) {
+    assert.ok(dashboard.includes(token), `Missing shared theme token ${token}`);
+  }
+  assert.match(
+    dashboard,
+    /\.tile,\.panel,\.note\{[^}]*background:var\(--stabilize-reading-surface\)/,
+  );
+  assert.match(
+    dashboard,
+    /input\{[^}]*background:var\(--stabilize-reading-surface\)[^}]*color:var\(--stabilize-reading-text\)/,
+  );
+  assert.doesNotMatch(dashboard, /#eef3ef|#edf3ef|background:#fff|color:#173f31/);
+});
+
 test("Cloudflare exports and binds the impact durable object", () => {
   assert.match(router, /ImpactAnalytics/);
   assert.match(router, /\.\/impact-worker\.js/);
