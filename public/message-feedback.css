@@ -30,10 +30,13 @@
 }
 
 .message-feedback-choice {
+  appearance: none;
   min-width: 2rem;
   min-height: 2rem;
   padding: 0.22rem 0.48rem;
-  background: rgba(255, 253, 247, 0.9);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
   line-height: 1;
 }
 
@@ -44,6 +47,12 @@
 .message-feedback-reason[aria-pressed="true"] {
   background: rgba(230, 243, 235, 0.96);
   border-color: rgba(31, 111, 84, 0.58);
+}
+
+.message-feedback-choice:hover,
+.message-feedback-choice[aria-pressed="true"] {
+  border-color: transparent;
+  background: transparent;
 }
 
 .message-feedback-choice:focus-visible,
