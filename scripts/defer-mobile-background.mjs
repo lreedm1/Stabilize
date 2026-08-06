@@ -66,6 +66,8 @@ for (const path of [
   });
 }
 
+await import("./optimize-static-delivery.mjs");
+
 console.log(
   "Deferred interactive backgrounds and kept mobile clients on the static image path.",
 );
