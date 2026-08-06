@@ -12,6 +12,16 @@ function requireText(value, expected, label) {
   }
 }
 
+await update("src/impact-events.js", (source) => {
+  const oldDisclosure =
+    "        The outcome check records only shown, yes, partly, or no. The response-quality";
+  if (!source.includes(oldDisclosure)) return source;
+  return source.replace(
+    oldDisclosure,
+    "        The outcome check asks “Did you choose a next step?” and records only shown,\n        yes, partly, or no. The response-quality",
+  );
+});
+
 await update("src/impact-analytics.js", (source) => {
   let text = source;
   if (!text.includes("const dailyUsage = this.ctx.storage.sql")) {
@@ -61,15 +71,15 @@ await update("src/impact-shards.js", (source) => {
       `    estimatedCostMicros: 0,\n    dailyUsageByDate: {},\n  };`,
     );
 
-    const loopMarker = `    addCounts(merged.feedbackReasons, summary.feedbackReasons);\n  }`;
+    const loopMarker = `    addCounts(merged.feedbackReasons, summary.feedbackReasons);\n    for (const comment of summary.recentFeedbackComments || []) {`;
     requireText(text, loopMarker, "the shard summary loop");
     text = text.replace(
       loopMarker,
-      `    addCounts(merged.feedbackReasons, summary.feedbackReasons);\n    for (const day of summary.dailyUsage || []) {\n      const date = String(day?.date || \"\");\n      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) continue;\n      const current = merged.dailyUsageByDate[date] || { users: 0, messages: 0 };\n      current.users += Number(day.users || 0);\n      current.messages += Number(day.messages || 0);\n      merged.dailyUsageByDate[date] = current;\n    }\n  }`,
+      `    addCounts(merged.feedbackReasons, summary.feedbackReasons);\n    for (const day of summary.dailyUsage || []) {\n      const date = String(day?.date || \"\");\n      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) continue;\n      const current = merged.dailyUsageByDate[date] || { users: 0, messages: 0 };\n      current.users += Number(day.users || 0);\n      current.messages += Number(day.messages || 0);\n      merged.dailyUsageByDate[date] = current;\n    }\n    for (const comment of summary.recentFeedbackComments || []) {`,
     );
 
-    const ratesMarker = `\n  merged.responseRate = metricRate`;
-    requireText(text, ratesMarker, "the merged rate calculations");
+    const ratesMarker = `\n  merged.recentFeedbackComments = merged.recentFeedbackComments`;
+    requireText(text, ratesMarker, "the merged comment calculations");
     text = text.replace(
       ratesMarker,
       `\n  merged.dailyUsage = Object.entries(merged.dailyUsageByDate)\n    .sort(([left], [right]) => left.localeCompare(right))\n    .map(([date, values]) => ({ date, ...values }));\n  delete merged.dailyUsageByDate;\n${ratesMarker}`,
@@ -155,6 +165,22 @@ function feedbackReasonList(summary) {
     .join("");
 }
 
+function feedbackCommentList(summary) {
+  const rows = (summary.recentFeedbackComments || []).slice(0, 20);
+  if (!rows.length) return "<p>No written feedback submitted yet.</p>";
+  return rows
+    .map((entry) => {
+      const rating = entry.rating === "up" ? "Helpful" : "Not helpful";
+      const reason = FEEDBACK_REASON_LABELS[entry.reason] || entry.reason || "No reason tag";
+      const date = new Date(Number(entry.occurredAt) || 0)
+        .toISOString()
+        .replace("T", " ")
+        .slice(0, 16) + " UTC";
+      return \`<article class="feedback-comment"><div><strong>${"${escapeHtml(rating)}"}</strong><span>${"${escapeHtml(date)}"} · ${"${escapeHtml(reason)}"}</span></div><p>${"${escapeHtml(entry.comment)}"}</p></article>\`;
+    })
+    .join("");
+}
+
 function weeklyDecision`;
     text = text.replace(marker, helpers);
   }
@@ -200,6 +226,7 @@ function weeklyDecision`;
     const panels = `</section>
 <section class="panel usage"><div class="usage-heading"><div><h2>Daily usage</h2><p>Unique browsers and submitted chat messages by UTC day.</p></div><div class="usage-today"><span>Today</span><strong>${"${formatInteger(dailyUsageRows(summary, 1)[0]?.users || 0)}"} users</strong><strong>${"${formatInteger(dailyUsageRows(summary, 1)[0]?.messages || 0)}"} messages</strong></div></div><div class="usage-table-wrap"><table><thead><tr><th>Date</th><th>Users</th><th>Messages</th></tr></thead><tbody>${"${dailyUsageTable(summary)}"}</tbody></table></div></section>
 <section class="panel feedback-reasons"><h2>Top feedback reasons</h2><ul>${"${feedbackReasonList(summary)}"}</ul><p>${"${formatInteger(summary.helpfulResponses)}"} helpful · ${"${formatInteger(summary.unhelpfulResponses)}"} not helpful · ${"${formatInteger(summary.feedbackComments)}"} written comments</p></section>
+<section class="panel feedback-comments"><h2>Recent written feedback</h2><p class="feedback-comments-note">Private, retention-limited comments. No chat text or user identifier is shown.</p><div>${"${feedbackCommentList(summary)}"}</div></section>
 <section class="panel decision">`;
     text = text.replace(marker, panels);
   }
@@ -207,7 +234,7 @@ function weeklyDecision`;
   if (!text.includes(".feedback-reasons{")) {
     const marker = `.decision h2,.guardrails h2{font-size:1.05rem;margin:0 0 10px}`;
     requireText(text, marker, "the dashboard panel heading styles");
-    const styles = `.decision h2,.guardrails h2,.usage h2,.feedback-reasons h2{font-size:1.05rem;margin:0 0 10px}.usage,.feedback-reasons{margin-bottom:14px;padding:19px}.usage-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.usage-heading p,.feedback-reasons p{margin:0;line-height:1.45}.usage-today{display:grid;gap:3px;text-align:right;white-space:nowrap}.usage-today span{font-size:.78rem;opacity:.8}.usage-today strong{font-size:.95rem}.usage-table-wrap{overflow-x:auto;margin-top:16px}table{width:100%;border-collapse:collapse}th,td{border-top:1px solid #dce6df;padding:9px 10px;text-align:right}th:first-child,td:first-child{text-align:left}thead th{border-top:0;font-size:.78rem}tbody th{font-weight:600}.feedback-reasons ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px;list-style:none;padding:0;margin:0 0 14px}.feedback-reasons li{display:flex;justify-content:space-between;gap:14px;border-bottom:1px solid #e4ebe6;padding:7px 0}`;
+    const styles = `.decision h2,.guardrails h2,.usage h2,.feedback-reasons h2,.feedback-comments h2{font-size:1.05rem;margin:0 0 10px}.usage,.feedback-reasons,.feedback-comments{margin-bottom:14px;padding:19px}.usage-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.usage-heading p,.feedback-reasons p,.feedback-comments-note{margin:0;line-height:1.45}.usage-today{display:grid;gap:3px;text-align:right;white-space:nowrap}.usage-today span{font-size:.78rem;opacity:.8}.usage-today strong{font-size:.95rem}.usage-table-wrap{overflow-x:auto;margin-top:16px}table{width:100%;border-collapse:collapse}th,td{border-top:1px solid #dce6df;padding:9px 10px;text-align:right}th:first-child,td:first-child{text-align:left}thead th{border-top:0;font-size:.78rem}tbody th{font-weight:600}.feedback-reasons ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px;list-style:none;padding:0;margin:0 0 14px}.feedback-reasons li{display:flex;justify-content:space-between;gap:14px;border-bottom:1px solid #e4ebe6;padding:7px 0}.feedback-comments>div{display:grid;gap:10px;margin-top:14px}.feedback-comment{border:1px solid #dce6df;border-radius:12px;padding:12px}.feedback-comment div{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px}.feedback-comment span{font-size:.78rem;color:#607b6f}.feedback-comment p{white-space:pre-wrap;overflow-wrap:anywhere;margin:9px 0 0;line-height:1.45}`;
     text = text.replace(marker, styles);
     const mobileMarker = `@media(max-width:520px){.shell`;
     requireText(text, mobileMarker, "the dashboard mobile styles");
