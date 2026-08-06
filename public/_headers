@@ -6,6 +6,9 @@
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
 
+/message-feedback.css
+  Cache-Control: no-store, max-age=0
+
 /mobile-quality.js
   Cache-Control: no-store, max-age=0
 
