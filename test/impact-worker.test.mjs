@@ -334,6 +334,6 @@ test("canonical and file privacy routes receive the outcome and feedback disclos
     assert.match(html, /id="outcome-measurement"/);
     assert.match(html, /Did you choose a next step/);
     assert.match(html, /response-quality/);
-    assert.match(html, /does not place the user's message/);
+    assert.match(html, /does not\s+place the user's message/);
   }
 });
