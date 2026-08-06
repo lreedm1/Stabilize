@@ -1,0 +1,144 @@
+name: Verify Stabilize impact measurement
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: stabilize-impact-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  verify-impact:
+    name: Verify impact measurement in production
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Mark impact verification pending
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          payload="$(printf '{"state":"pending","context":"verification/impact","description":"Waiting for live outcome-measurement checks","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+
+      - name: Verify production impact surfaces
+        shell: bash
+        run: |
+          home="$(mktemp)"
+          script="$(mktemp)"
+          styles="$(mktemp)"
+          privacy="$(mktemp)"
+          dashboard="$(mktemp)"
+          cleanup() {
+            rm -f "$home" "$script" "$styles" "$privacy" "$dashboard"
+          }
+          trap cleanup EXIT
+
+          for attempt in {1..30}; do
+            : > "$home"
+            : > "$script"
+            : > "$styles"
+            : > "$privacy"
+            : > "$dashboard"
+
+            home_status="$(
+              curl --max-time 20 --compressed --silent --show-error \
+                --header "Cache-Control: no-cache" \
+                --output "$home" \
+                --write-out "%{http_code}" \
+                "https://stabilize.info/?deployment=${GITHUB_SHA}" || true
+            )"
+            script_path="$(grep -oE 'src="/impact\.js\?v=[^"]+"' "$home" | head -n 1 | sed -E 's/^src="//; s/"$//' || true)"
+            styles_path="$(grep -oE 'href="/impact\.css\?v=[^"]+"' "$home" | head -n 1 | sed -E 's/^href="//; s/"$//' || true)"
+
+            script_status="000"
+            styles_status="000"
+            if [[ -n "$script_path" ]]; then
+              script_status="$(
+                curl --max-time 20 --compressed --silent --show-error \
+                  --header "Cache-Control: no-cache" \
+                  --output "$script" \
+                  --write-out "%{http_code}" \
+                  "https://stabilize.info${script_path}" || true
+              )"
+            fi
+            if [[ -n "$styles_path" ]]; then
+              styles_status="$(
+                curl --max-time 20 --compressed --silent --show-error \
+                  --header "Cache-Control: no-cache" \
+                  --output "$styles" \
+                  --write-out "%{http_code}" \
+                  "https://stabilize.info${styles_path}" || true
+              )"
+            fi
+
+            privacy_status="$(
+              curl --max-time 20 --compressed --silent --show-error \
+                --header "Cache-Control: no-cache" \
+                --output "$privacy" \
+                --write-out "%{http_code}" \
+                "https://stabilize.info/privacy.html?deployment=${GITHUB_SHA}" || true
+            )"
+            dashboard_status="$(
+              curl --max-time 20 --compressed --silent --show-error \
+                --header "Cache-Control: no-cache" \
+                --output "$dashboard" \
+                --write-out "%{http_code}" \
+                "https://stabilize.info/admin/impact?deployment=${GITHUB_SHA}" || true
+            )"
+
+            echo "Impact check attempt ${attempt}: home=${home_status}, script=${script_status}, styles=${styles_status}, privacy=${privacy_status}, dashboard=${dashboard_status}"
+
+            if [[ "$home_status" == "200" && "$script_status" == "200" && "$styles_status" == "200" && "$privacy_status" == "200" ]] && \
+              [[ "$dashboard_status" == "401" || "$dashboard_status" == "503" ]] && \
+              grep -Fq 'Did this answer what you needed?' "$script" && \
+              grep -Fq 'proportionality_answered' "$script" && \
+              grep -Fq '.impact-outcome-card' "$styles" && \
+              grep -Fq 'id="outcome-measurement"' "$privacy" && \
+              grep -Fq 'structured selections' "$privacy" && \
+              grep -Fq 'Stabilize impact dashboard' "$dashboard"; then
+              exit 0
+            fi
+
+            sleep 10
+          done
+
+          echo "::error::Production did not expose the expected outcome assets, privacy disclosure, and protected dashboard route."
+          exit 1
+
+      - name: Publish impact verification result
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [[ "$JOB_STATUS" == "success" ]]; then
+            state="success"
+            description="Impact assets, privacy, and dashboard checks passed"
+          else
+            state="failure"
+            description="Impact assets, privacy, or dashboard checks failed"
+          fi
+          payload="$(printf '{"state":"%s","context":"verification/impact","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
