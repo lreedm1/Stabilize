@@ -39,7 +39,9 @@ test("orderly impact keeps verified next-step and whole-conversation events", ()
   assert.match(client, /"next_step_reported"/);
   assert.match(client, /Did this conversation help you move forward\?/);
   assert.match(client, /"conversation_help_reported"/);
-  assert.match(client, /#new-conversation-button/);
+  assert.match(client, /newConversationRequest\(input\)/);
+  assert.match(client, /const previousTurn = latestTurn/);
+  assert.match(client, /renderConversationFeedback\(previousTurn\)/);
   assert.match(client, /\["Yes", "yes"\]/);
   assert.match(client, /\["Partly", "partly"\]/);
   assert.match(client, /\["No", "no"\]/);
@@ -47,7 +49,7 @@ test("orderly impact keeps verified next-step and whole-conversation events", ()
   assert.match(client, /X-Stabilize-Session-Id/);
   assert.match(client, /X-Stabilize-Browser-Id/);
   assert.match(client, /X-Stabilize-Conversation-Id/);
-  assert.match(client, /if \(response\.ok\) rotateConversationId\(\)/);
+  assert.match(client, /if \(response\.ok\) \{[\s\S]*rotateConversationId\(\)/);
   assert.match(client, /response\.status === 409/);
   assert.match(client, /message text isn’t recorded/);
 
