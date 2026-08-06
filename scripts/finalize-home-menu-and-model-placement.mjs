@@ -140,6 +140,21 @@ await update("src/paid-worker.js", (source) => {
     );
   }
 
+  const blockSavedNoticePattern =
+    /\n\s*if \(url\.searchParams\.get\("model"\) === "saved"\) \{\s*return "Your AI model choice was saved\.";\s*\}/;
+  const inlineSavedNoticePattern =
+    /\n\s*if \(url\.searchParams\.get\("model"\) === "saved"\) return "Your AI model choice was saved\.";/;
+  text = text
+    .replace(blockSavedNoticePattern, "")
+    .replace(inlineSavedNoticePattern, "");
+
+  if (
+    text.includes("Your AI model choice was saved.") ||
+    /url\.searchParams\.get\("model"\) === "saved"/.test(text)
+  ) {
+    throw new Error("The model-saved confirmation notice is still present");
+  }
+
   requireText(
     text,
     "const composerModelPicker = composerModelPickerMarkup(",
@@ -155,5 +170,5 @@ await update("src/paid-worker.js", (source) => {
 });
 
 console.log(
-  "Kept Home in the hamburger menu, moved chat-action proxies outside it, and removed duplicate model selection from that menu.",
+  "Kept Home in the hamburger menu, moved chat-action proxies outside it, removed duplicate model selection, and suppressed the model-saved notice.",
 );
