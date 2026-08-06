@@ -32,15 +32,13 @@ A reported next step means the user answered `yes`. `partly` and `no` contribute
 
 The dashboard then presents one operating decision for the week. Its conservative rules prioritize sufficient sample, response collection, reliability, reported usefulness, real cost inputs, and recurring sustainability—in that order. Only one product variable should be changed before the next review.
 
-## Private dashboard setup
+## Private dashboard access
 
-Set a private Worker secret with at least 24 characters:
+Production stores only the SHA-256 fingerprint of a high-entropy dashboard password in `IMPACT_ADMIN_PASSWORD_SHA256`. The raw password is delivered out of band and is never committed to GitHub or stored in Worker configuration. The existing `AUTH_SECRET` signs the seven-day, HTTP-only dashboard cookie, so changing either the password fingerprint or `AUTH_SECRET` invalidates old sessions.
 
-```bash
-npx wrangler secret put IMPACT_ADMIN_SECRET
-```
+Use a randomly generated password with at least 192 bits of entropy. A human-chosen password must not be used with an unsalted public fingerprint. To rotate access, generate a new random password, replace `IMPACT_ADMIN_PASSWORD_SHA256` with its lowercase SHA-256 hex fingerprint, deploy, and distribute the new raw password privately. Colons or hyphens may be inserted between fingerprint groups for readability.
 
-Without that secret, outcome collection still works, but the dashboard returns a setup page instead of exposing data.
+`IMPACT_ADMIN_SECRET` remains available only as a local-development fallback. It is not required for production.
 
 Set these non-secret variables in `wrangler.jsonc` when real operating data is available:
 
