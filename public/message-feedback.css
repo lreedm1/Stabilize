@@ -14,7 +14,7 @@
 
 .message-feedback-prompt {
   margin-right: 0.15rem;
-  color: rgba(31, 59, 46, 0.78);
+  color: var(--text);
   font-weight: 650;
 }
 
@@ -33,6 +33,7 @@
   min-width: 2rem;
   min-height: 2rem;
   padding: 0.22rem 0.48rem;
+  background: rgba(255, 253, 247, 0.9);
   line-height: 1;
 }
 
