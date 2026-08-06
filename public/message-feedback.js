@@ -4,7 +4,6 @@ const SESSION_KEY = "stabilize:impact-session:v1";
 const MAX_COMMENT_CHARS = 500;
 const previousFetch = window.fetch.bind(window);
 const completedTurns = [];
-const submittedState = new Map();
 
 const POSITIVE_REASONS = [
   ["clear_answer", "Clear answer"],
@@ -90,10 +89,10 @@ window.fetch = async (input, init) => {
   return response;
 };
 
-function postFeedback(turn, rating, reason = "", comment = "") {
+async function postFeedback(turn, rating, reason = "", comment = "") {
   const browserId = readBrowserId();
   const sessionId = readSessionId();
-  if (!turn?.turnId || !browserId || !sessionId) return Promise.resolve(undefined);
+  if (!turn?.turnId || !browserId || !sessionId) return undefined;
 
   const payload = {
     eventId: randomId(),
@@ -105,12 +104,24 @@ function postFeedback(turn, rating, reason = "", comment = "") {
     comment: String(comment || "").trim().slice(0, MAX_COMMENT_CHARS),
   };
 
-  return previousFetch(FEEDBACK_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    keepalive: true,
-  }).catch(() => undefined);
+  const request = () =>
+    previousFetch(FEEDBACK_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    });
+
+  try {
+    let response = await request();
+    if (response.status === 409) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      response = await request();
+    }
+    return response;
+  } catch {
+    return undefined;
+  }
 }
 
 function feedbackButton(label, value, ariaLabel) {
@@ -247,7 +258,6 @@ function renderMessageFeedback(article, turn) {
       privacy,
     );
 
-    submittedState.set(turn.turnId, rating);
     void postFeedback(turn, rating).then((response) => {
       setStatus(response?.ok ? "Thanks — feedback saved." : "Feedback could not be saved.");
     });
