@@ -462,6 +462,22 @@ export class ImpactAnalytics extends DurableObject {
         )
         .one().count,
     );
+    const recentFeedbackComments = this.ctx.storage.sql
+      .exec(
+        `SELECT occurred_at, rating, reason, comment
+         FROM message_feedback
+         WHERE occurred_at >= ? AND comment IS NOT NULL AND comment <> ''
+         ORDER BY occurred_at DESC
+         LIMIT 20`,
+        since,
+      )
+      .toArray()
+      .map((row) => ({
+        occurredAt: Number(row.occurred_at || 0),
+        rating: boundedText(row.rating, 16),
+        reason: boundedText(row.reason, 64) || null,
+        comment: cleanComment(row.comment),
+      }));
 
     const reach = this.ctx.storage.sql
       .exec(
@@ -559,6 +575,7 @@ export class ImpactAnalytics extends DurableObject {
       feedbackStates,
       feedbackReasons,
       feedbackComments,
+      recentFeedbackComments,
       feedbackResponseRate: rate(feedbackResponses, feedbackShown),
       helpfulResponseRate: rate(helpfulResponses, feedbackResponses),
       chats,
