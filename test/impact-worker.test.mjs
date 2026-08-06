@@ -107,6 +107,7 @@ function messageFeedbackEvent(
 test("verified outcomes and response feedback appear in the private dashboard", async () => {
   const sessionId = crypto.randomUUID();
   const browserId = crypto.randomUUID();
+  const conversationId = crypto.randomUUID();
   const ctx = executionContext();
   const chat = await worker.fetch(
     new Request("https://stabilize.test/api/chat", {
@@ -116,6 +117,7 @@ test("verified outcomes and response feedback appear in the private dashboard", 
         Accept: "application/x-ndjson, application/json",
         "X-Stabilize-Session-Id": sessionId,
         "X-Stabilize-Browser-Id": browserId,
+        "X-Stabilize-Conversation-Id": conversationId,
       },
       body: JSON.stringify({ message: "Help me choose one task for today." }),
     }),
@@ -216,7 +218,7 @@ test("verified outcomes and response feedback appear in the private dashboard", 
   assert.match(html, /Eligible checks shown/);
   assert.match(html, /Reports received/);
   assert.match(html, /Reported next-step rate/);
-  assert.match(html, /Chats started/);
+  assert.match(html, /Conversations started/);
   assert.match(html, /Second-message rate/);
   assert.match(html, /Helpful response rate/);
   assert.match(html, /Feedback response rate/);
@@ -395,6 +397,7 @@ test("canonical and file privacy routes receive the outcome and feedback disclos
     assert.match(html, /id="outcome-measurement"/);
     assert.match(html, /Did you choose a next step/);
     assert.match(html, /prior conversation helped the user move forward/);
+    assert.match(html, /random browser, tab, and conversation identifiers/);
     assert.match(html, /response-quality/);
     assert.match(html, /does not\s+place the user's message/);
   }
