@@ -58,6 +58,7 @@ const POLICY_SCRIPTS = [
   "scripts/add-conversation-outcomes.mjs",
   "scripts/add-daily-usage-metrics.mjs",
   "scripts/inline-followups-with-feedback.mjs",
+  "scripts/finalize-inline-followup-tests.mjs",
 ];
 const POLICY_TARGETS = [
   "scripts/favicon-assets/favicon.ico.b64",
@@ -101,6 +102,7 @@ const POLICY_TARGETS = [
   "test/session-memory.test.mjs",
   "test/prompt-submit.test.mjs",
   "test/outcome-followup.test.mjs",
+  "test/impact-worker.test.mjs",
   "test/streaming-response.test.mjs",
   "test/product.test.mjs",
   "test/main-box-text-color.test.mjs",
