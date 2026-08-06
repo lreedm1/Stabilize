@@ -44,7 +44,11 @@ test("each completed assistant response receives private inline feedback", async
   );
   assert.match(
     css,
-    /\.message-feedback-choice\s*\{[\s\S]*?background: rgba\(255, 253, 247, 0\.9\);/,
+    /\.message-feedback-choice\s*\{[\s\S]*?border: 0;[\s\S]*?background: transparent;[\s\S]*?box-shadow: none;/,
+  );
+  assert.match(
+    css,
+    /\.message-feedback-choice:hover,[\s\S]*?\.message-feedback-choice\[aria-pressed="true"\]\s*\{[\s\S]*?background: transparent;/,
   );
   assert.match(css, /@media \(max-width: 560px\)/);
   assert.match(events, /message-feedback\.css/);
