@@ -51,6 +51,7 @@ const POLICY_SCRIPTS = [
   "scripts/add-composer-chat-sections.mjs",
   "scripts/align-composer-chat-section-tests.mjs",
   "scripts/restore-gray-reading-box.mjs",
+  "scripts/unify-public-page-theme.mjs",
 ];
 const POLICY_TARGETS = [
   "scripts/favicon-assets/favicon.ico.b64",
@@ -70,7 +71,9 @@ const POLICY_TARGETS = [
   "public/styles.css",
   "public/seo.css",
   "public/product.css",
+  "public/photo-tuning.css",
   "public/main-box-white.css",
+  "public/guides.css",
   "public/about.html",
   "public/floor-first.html",
   "public/how-it-works.html",
