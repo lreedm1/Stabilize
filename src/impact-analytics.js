@@ -4,7 +4,12 @@ const DAY_MS = 24 * 60 * 60 * 1_000;
 const DEFAULT_RETENTION_DAYS = 180;
 const MAX_EVENTS_PER_SESSION_HOUR = 80;
 const NEXT_STEP_EVENT = "next_step_reported";
-const NEXT_STEP_VALUES = new Set(["shown", "yes", "partly", "no"]);
+const CONVERSATION_HELP_EVENT = "conversation_help_reported";
+const STRUCTURED_EVENT_VALUES = new Set(["shown", "yes", "partly", "no"]);
+const STRUCTURED_EVENT_TYPES = new Set([
+  NEXT_STEP_EVENT,
+  CONVERSATION_HELP_EVENT,
+]);
 const MESSAGE_FEEDBACK_RATINGS = new Set(["shown", "up", "down"]);
 const MESSAGE_FEEDBACK_REASONS = new Set([
   "clear_answer",
@@ -59,6 +64,20 @@ function countBy(rows, keyName = "event_value") {
     counts[key] = Number(row.count) || 0;
   }
   return counts;
+}
+
+function totalStates(states) {
+  return Object.values(states || {}).reduce(
+    (sum, value) => sum + Number(value || 0),
+    0,
+  );
+}
+
+function answeredStates(states) {
+  return ["yes", "partly", "no"].reduce(
+    (sum, key) => sum + Number(states?.[key] || 0),
+    0,
+  );
 }
 
 function retentionMs(env) {
@@ -236,8 +255,8 @@ export class ImpactAnalytics extends DurableObject {
     const turnId = boundedText(record?.turnId, 64);
     if (
       !eventId ||
-      eventType !== NEXT_STEP_EVENT ||
-      !NEXT_STEP_VALUES.has(eventValue) ||
+      !STRUCTURED_EVENT_TYPES.has(eventType) ||
+      !STRUCTURED_EVENT_VALUES.has(eventValue) ||
       !sessionHash ||
       !browserHash ||
       !turnId
@@ -246,7 +265,10 @@ export class ImpactAnalytics extends DurableObject {
     }
 
     const occurredAt = timestamp(record?.occurredAt);
-    if (this.recentSessionEventCount(sessionHash, occurredAt) >= MAX_EVENTS_PER_SESSION_HOUR) {
+    if (
+      this.recentSessionEventCount(sessionHash, occurredAt) >=
+      MAX_EVENTS_PER_SESSION_HOUR
+    ) {
       return { accepted: false, reason: "rate" };
     }
 
@@ -261,13 +283,13 @@ export class ImpactAnalytics extends DurableObject {
          WHERE turn_id = ? AND event_type = ?
          LIMIT 1`,
         turnId,
-        NEXT_STEP_EVENT,
+        eventType,
       )
       .toArray()[0];
 
     if (existing) {
-      // One row holds the current state for an eligible response. A late
-      // `shown` retry may not overwrite a user answer, and the first answer wins.
+      // One row holds the current state for each verified prompt. A late
+      // `shown` retry may not overwrite an answer, and the first answer wins.
       if (existing.event_value !== "shown" || eventValue === "shown") {
         return { accepted: true, duplicate: true, verifiedTurn: true };
       }
@@ -295,7 +317,7 @@ export class ImpactAnalytics extends DurableObject {
       sessionHash,
       browserHash,
       turnId,
-      NEXT_STEP_EVENT,
+      eventType,
       eventValue,
       boundedText(record?.promptVersion, 32) || null,
     );
@@ -325,7 +347,10 @@ export class ImpactAnalytics extends DurableObject {
     }
 
     const occurredAt = timestamp(record?.occurredAt);
-    if (this.recentSessionEventCount(sessionHash, occurredAt) >= MAX_EVENTS_PER_SESSION_HOUR) {
+    if (
+      this.recentSessionEventCount(sessionHash, occurredAt) >=
+      MAX_EVENTS_PER_SESSION_HOUR
+    ) {
       return { accepted: false, reason: "rate" };
     }
     if (!this.verifiedChat(turnId, sessionHash, browserHash)) {
@@ -390,14 +415,8 @@ export class ImpactAnalytics extends DurableObject {
     return { accepted: true, verifiedTurn: true };
   }
 
-  async summary(options = {}) {
-    const now = timestamp(options?.now);
-    const since = Math.max(
-      now - 90 * DAY_MS,
-      timestamp(options?.since, now - 30 * DAY_MS),
-    );
-
-    const outcomeStates = countBy(
+  eventStates(since, eventType) {
+    return countBy(
       this.ctx.storage.sql
         .exec(
           `SELECT event_value, COUNT(*) AS count
@@ -407,19 +426,34 @@ export class ImpactAnalytics extends DurableObject {
              AND event_type = ?
            GROUP BY event_value`,
           since,
-          NEXT_STEP_EVENT,
+          eventType,
         )
         .toArray(),
     );
-    const prompts = Object.values(outcomeStates).reduce(
-      (sum, value) => sum + Number(value || 0),
-      0,
+  }
+
+  async summary(options = {}) {
+    const now = timestamp(options?.now);
+    const since = Math.max(
+      now - 90 * DAY_MS,
+      timestamp(options?.since, now - 30 * DAY_MS),
     );
-    const responses = ["yes", "partly", "no"].reduce(
-      (sum, key) => sum + Number(outcomeStates[key] || 0),
-      0,
-    );
+
+    const outcomeStates = this.eventStates(since, NEXT_STEP_EVENT);
+    const prompts = totalStates(outcomeStates);
+    const responses = answeredStates(outcomeStates);
     const resolved = Number(outcomeStates.yes || 0);
+
+    const conversationStates = this.eventStates(
+      since,
+      CONVERSATION_HELP_EVENT,
+    );
+    const conversationPrompts = totalStates(conversationStates);
+    const conversationResponses = answeredStates(conversationStates);
+    const conversationHelped =
+      Number(conversationStates.yes || 0) +
+      Number(conversationStates.partly || 0);
+    const conversationYes = Number(conversationStates.yes || 0);
 
     const feedbackStates = countBy(
       this.ctx.storage.sql
@@ -433,11 +467,9 @@ export class ImpactAnalytics extends DurableObject {
         .toArray(),
       "rating",
     );
-    const feedbackShown = Object.values(feedbackStates).reduce(
-      (sum, value) => sum + Number(value || 0),
-      0,
-    );
-    const feedbackResponses = Number(feedbackStates.up || 0) + Number(feedbackStates.down || 0);
+    const feedbackShown = totalStates(feedbackStates);
+    const feedbackResponses =
+      Number(feedbackStates.up || 0) + Number(feedbackStates.down || 0);
     const helpfulResponses = Number(feedbackStates.up || 0);
     const unhelpfulResponses = Number(feedbackStates.down || 0);
     const feedbackReasons = countBy(
@@ -568,6 +600,20 @@ export class ImpactAnalytics extends DurableObject {
       reportedResolutionRate: rate(resolved, responses),
       sessions: Number(reach.sessions || 0),
       browsers: Number(reach.browsers || 0),
+      conversationPrompts,
+      conversationResponses,
+      conversationHelped,
+      conversationYes,
+      conversationStates,
+      conversationResponseRate: rate(
+        conversationResponses,
+        conversationPrompts,
+      ),
+      conversationHelpRate: rate(
+        conversationHelped,
+        conversationResponses,
+      ),
+      conversationYesRate: rate(conversationYes, conversationResponses),
       feedbackShown,
       feedbackResponses,
       helpfulResponses,
@@ -590,7 +636,8 @@ export class ImpactAnalytics extends DurableObject {
       returningBrowserRate: rate(returningBrowsers, chatBrowsers),
       responseMsTotal,
       timedChats,
-      averageResponseMs: timedChats > 0 ? Math.round(responseMsTotal / timedChats) : null,
+      averageResponseMs:
+        timedChats > 0 ? Math.round(responseMsTotal / timedChats) : null,
       estimatedCostMicros,
       estimatedCostPerResolutionMicros:
         resolved > 0 && estimatedCostMicros > 0
