@@ -15,7 +15,7 @@ The impact layer distributes writes across 16 SQLite-backed Durable Object shard
 
 The store contains structured outcome state, broad route and completion metadata, configured cost metadata, optional response-feedback reason codes and comments, and one-way HMAC hashes of random browser, tab, and conversation identifiers. It never stores the user’s message or the assistant’s reply in impact analytics. The browser identifier rotates after 30 days, the tab identifier ends with the tab, and the conversation identifier rotates after New conversation succeeds. Records expire after the configured retention period, which defaults to 180 days.
 
-Immediate-danger, medical-emergency, and safety-unclear routes do not receive ordinary follow-up actions. Ordinary follow-up actions are also omitted unless the model reply contains a relevant domain and an explicit action cue, or the selected route is one of the small allow-listed support routes. Every submitted event must match a server-created chat turn with the same hashed browser and tab identifiers. Writes are same-origin, allow-listed, idempotent, and rate-limited.
+Immediate-danger, medical-emergency, and safety-unclear routes do not receive ordinary follow-up actions. Other responses receive follow-up actions only when the model reply contains both a relevant domain and an explicit action cue. Every submitted event must match a server-created chat turn with the same hashed browser and tab identifiers. Writes are same-origin, allow-listed, idempotent, and rate-limited.
 
 ## Dashboard
 
