@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   verify-mobile-background:
-    name: Verify static mobile background path
+    name: Verify fast static mobile path
     runs-on: ubuntu-latest
     timeout-minutes: 12
 
@@ -64,7 +64,7 @@ jobs:
 
           publish_status \
             pending \
-            "Waiting for the static mobile background release"
+            "Waiting for the fast static mobile release"
 
           for attempt in {1..36}; do
             cache_key="${GITHUB_SHA}-${attempt}"
@@ -88,6 +88,14 @@ jobs:
                   "https://stabilize.info/background-loader.js?v=${asset_version}&release=${cache_key}" \
                   || true
               )"
+              static_headers="$(
+                curl --fail --max-time 20 --silent --show-error \
+                  --dump-header - \
+                  --output /dev/null \
+                  "https://stabilize.info/styles.css?static-delivery=${cache_key}" \
+                  | tr -d '\r' \
+                  || true
+              )"
 
               if grep -Fq "background-loader.js?v=${asset_version}" <<<"$app" \
                 && ! grep -Fq 'from "./terrain.js"' <<<"$app" \
@@ -95,21 +103,27 @@ jobs:
                 && grep -Fq '(max-width: 980px) and (orientation: portrait)' <<<"$loader" \
                 && grep -Fq '(hover: none) and (pointer: coarse)' <<<"$loader" \
                 && grep -Fq 'navigator?.connection?.saveData' <<<"$loader" \
-                && grep -Fq 'requestIdleCallback' <<<"$loader"; then
-                echo "Production serves the guarded, deferred graphics bootstrap."
+                && grep -Fq 'requestIdleCallback' <<<"$loader" \
+                && grep -Fq 'imagesrcset="' <<<"$html" \
+                && grep -Fq 'imagesizes="100vw"' <<<"$html" \
+                && grep -Fq 'href="/scenes/mobile-golden-alpine-v3-720.webp"' <<<"$html" \
+                && grep -Fqi 'strict-transport-security: max-age=31536000; includeSubDomains' <<<"$static_headers" \
+                && grep -Fqi 'etag:' <<<"$static_headers" \
+                && grep -Eqi '^cf-cache-status: (HIT|MISS|REVALIDATED|EXPIRED|UPDATING|BYPASS)$' <<<"$static_headers"; then
+                echo "Production serves responsive preloading and direct cached static assets."
                 publish_status \
                   success \
-                  "Static mobile background release is live"
+                  "Fast static mobile release is live"
                 exit 0
               fi
             fi
 
-            echo "Mobile background attempt ${attempt}: ${asset_version} is not live yet."
+            echo "Mobile performance attempt ${attempt}: the fast static release is not live yet."
             sleep 10
           done
 
           publish_status \
             failure \
-            "Production did not serve the static mobile background release"
-          echo "::error::Production never served the guarded background loader for ${asset_version}."
+            "Production did not serve the fast static mobile release"
+          echo "::error::Production never served the responsive preload and direct cached static path."
           exit 1
