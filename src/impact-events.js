@@ -12,7 +12,7 @@ import {
   schedule,
 } from "./impact-shards.js";
 
-const IMPACT_ASSET_VERSION = "20260806-feedback-2";
+const IMPACT_ASSET_VERSION = "20260806-feedback-3";
 const IMPACT_PROMPT_VERSION = "next-step-v1";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -153,11 +153,15 @@ export async function chatResponse(request, env, ctx) {
   const turnId = crypto.randomUUID();
   const sessionId = request.headers.get("x-stabilize-session-id") || "";
   const browserId = request.headers.get("x-stabilize-browser-id") || "";
-  const [sessionHash, browserHash, authSession] = await Promise.all([
-    hashIdentifier(env, "impact-session", sessionId),
-    hashIdentifier(env, "impact-browser", browserId),
-    readAuthSession(request, env),
-  ]);
+  const conversationId =
+    request.headers.get("x-stabilize-conversation-id") || "";
+  const [sessionHash, browserHash, conversationHash, authSession] =
+    await Promise.all([
+      hashIdentifier(env, "impact-session", sessionId),
+      hashIdentifier(env, "impact-browser", browserId),
+      hashIdentifier(env, "impact-conversation", conversationId),
+      readAuthSession(request, env),
+    ]);
 
   const response = await worker.fetch(request, env, ctx);
   const store = impactStub(env, browserHash);
@@ -176,6 +180,7 @@ export async function chatResponse(request, env, ctx) {
         occurredAt: startedAt,
         sessionHash,
         browserHash,
+        conversationHash,
         accountType: authSession ? "signed_in" : "guest",
         model: safeToken(env?.OPENAI_MODEL, 128) || "unknown",
         estimatedCostMicros: boundedNumber(
@@ -283,9 +288,10 @@ export async function enhancePrivacyPage(response, request) {
       </p>
       <p>
         The impact store also keeps broad route, completion, configured cost, and timing
-        metadata, plus one-way hashes of random browser and tab identifiers. It does not
-        place the user's message or the assistant's reply in impact analytics. The browser
-        identifier rotates after 30 days, the tab identifier ends with the tab, and impact
+        metadata, plus one-way hashes of random browser, tab, and conversation identifiers.
+        It does not place the user's message or the assistant's reply in impact analytics.
+        The browser identifier rotates after 30 days, the tab identifier ends with the tab,
+        and the conversation identifier rotates after New conversation succeeds. Impact
         and response-feedback records are designed to expire after 180 days. The private
         dashboard is for aggregate product and sustainability review, not individual monitoring.
       </p>
