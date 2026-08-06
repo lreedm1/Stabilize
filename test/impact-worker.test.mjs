@@ -3,6 +3,8 @@ import { env } from "cloudflare:test";
 import { test } from "vitest";
 import worker from "../src/impact-worker.js";
 
+const TEST_ADMIN_PASSWORD =
+  "impact-test-dashboard-password-with-adequate-entropy";
 const TEST_ENV = {
   ...env,
   DEMO_MODE: "true",
@@ -10,7 +12,8 @@ const TEST_ENV = {
   OPENAI_REASONING_EFFORT: "medium",
   AUTH_SECRET: "impact-test-auth-secret-with-more-than-thirty-two-characters",
   PUBLIC_ORIGIN: "https://stabilize.test",
-  IMPACT_ADMIN_SECRET: "impact-test-dashboard-secret-with-adequate-length",
+  IMPACT_ADMIN_PASSWORD_SHA256:
+    "8641cac79ab3e694c764020bcfd03d43fcb736ec8ac85080d05d9bd6fcf946dd",
   IMPACT_RETENTION_DAYS: "180",
   IMPACT_ESTIMATED_CHAT_COST_MICROS: "10000",
   IMPACT_MONTHLY_RECURRING_REVENUE_CENTS: "50000",
@@ -81,6 +84,21 @@ test("one verified event row advances from shown to yes and appears in the six-n
     assert.equal(response.status, 202);
   }
 
+  const rejectedLogin = await worker.fetch(
+    new Request("https://stabilize.test/admin/impact/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Origin: "https://stabilize.test",
+      },
+      body: new URLSearchParams({ password: "wrong-password" }),
+    }),
+    TEST_ENV,
+    {},
+  );
+  assert.equal(rejectedLogin.status, 401);
+  assert.equal(rejectedLogin.headers.get("set-cookie"), null);
+
   const login = await worker.fetch(
     new Request("https://stabilize.test/admin/impact/login", {
       method: "POST",
@@ -88,7 +106,7 @@ test("one verified event row advances from shown to yes and appears in the six-n
         "Content-Type": "application/x-www-form-urlencoded",
         Origin: "https://stabilize.test",
       },
-      body: new URLSearchParams({ password: TEST_ENV.IMPACT_ADMIN_SECRET }),
+      body: new URLSearchParams({ password: TEST_ADMIN_PASSWORD }),
     }),
     TEST_ENV,
     {},
@@ -114,6 +132,7 @@ test("one verified event row advances from shown to yes and appears in the six-n
   assert.match(html, /2\.00×/);
   assert.equal((html.match(/class="tile"/g) || []).length, 6);
   assert.doesNotMatch(html, /Help me choose one task/);
+  assert.doesNotMatch(html, new RegExp(TEST_ADMIN_PASSWORD));
 });
 
 test("impact events are rejected when they do not match a server-created turn", async () => {
