@@ -90,13 +90,45 @@ await update("public/_headers", (source) => {
 });
 
 await update("test/domain.test.mjs", (source) => {
-  const legacy = "  assert.equal(config.assets.run_worker_first, true);";
-  const replacement = `  assert.deepEqual(config.assets.run_worker_first, [
+  const legacyDestructure =
+    "  const [configText, router, page, sitemap, robots, workflow] = await Promise.all([";
+  const staticDestructure =
+    "  const [configText, router, page, sitemap, robots, workflow, staticHeaders] =\n    await Promise.all([";
+  const workflowRead =
+    '    repositoryFile(".github/workflows/deploy-cloudflare.yml"),\n';
+  const staticHeaderRead =
+    `${workflowRead}    repositoryFile("public/_headers"),\n`;
+  const legacyWorkerFirst =
+    "  assert.equal(config.assets.run_worker_first, true);";
+  const selectiveWorkerFirst = `  assert.deepEqual(config.assets.run_worker_first, [
 ${STATIC_ROUTE_PATTERNS.map((pattern) => `    "${pattern}"`).join(",\n")}
   ]);`;
-  if (source.includes(replacement)) return source;
-  requireText(source, legacy, "the Worker-first domain assertion");
-  return source.replace(legacy, replacement);
+  const staticHstsAssertion = `  assert.match(
+    staticHeaders,
+    /Strict-Transport-Security:\\s*max-age=31536000; includeSubDomains/,
+  );`;
+
+  let updated = source;
+  if (!updated.includes(staticDestructure)) {
+    requireText(updated, legacyDestructure, "the domain-test file list");
+    updated = updated.replace(legacyDestructure, staticDestructure);
+  }
+  if (!updated.includes('repositoryFile("public/_headers")')) {
+    requireText(updated, workflowRead, "the deployment workflow test input");
+    updated = updated.replace(workflowRead, staticHeaderRead);
+  }
+  if (!updated.includes(selectiveWorkerFirst)) {
+    requireText(updated, legacyWorkerFirst, "the Worker-first domain assertion");
+    updated = updated.replace(legacyWorkerFirst, selectiveWorkerFirst);
+  }
+  if (!updated.includes(staticHstsAssertion)) {
+    requireText(updated, "  assert.deepEqual(config.routes, [", "the domain route assertion");
+    updated = updated.replace(
+      "  assert.deepEqual(config.routes, [",
+      `${staticHstsAssertion}\n  assert.deepEqual(config.routes, [`,
+    );
+  }
+  return updated;
 });
 
 await update("test/mobile-quality.test.mjs", (source) => {
