@@ -135,6 +135,57 @@ test("one verified event row advances from shown to yes and appears in the six-n
   assert.doesNotMatch(html, new RegExp(TEST_ADMIN_PASSWORD));
 });
 
+test("opaque-origin iOS login works without allowing cross-site form posts", async () => {
+  const opaqueLogin = await worker.fetch(
+    new Request("https://stabilize.test/admin/impact/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Origin: "null",
+        "Sec-Fetch-Site": "none",
+      },
+      body: new URLSearchParams({ password: TEST_ADMIN_PASSWORD }),
+    }),
+    TEST_ENV,
+    {},
+  );
+  assert.equal(opaqueLogin.status, 303);
+  assert.match(
+    opaqueLogin.headers.get("set-cookie") || "",
+    /^stabilize_impact_admin=/,
+  );
+
+  const crossSite = await worker.fetch(
+    new Request("https://stabilize.test/admin/impact/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Origin: "https://attacker.example",
+        "Sec-Fetch-Site": "cross-site",
+      },
+      body: new URLSearchParams({ password: TEST_ADMIN_PASSWORD }),
+    }),
+    TEST_ENV,
+    {},
+  );
+  assert.equal(crossSite.status, 403);
+
+  const opaqueCrossSite = await worker.fetch(
+    new Request("https://stabilize.test/admin/impact/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Origin: "null",
+        "Sec-Fetch-Site": "cross-site",
+      },
+      body: new URLSearchParams({ password: TEST_ADMIN_PASSWORD }),
+    }),
+    TEST_ENV,
+    {},
+  );
+  assert.equal(opaqueCrossSite.status, 403);
+});
+
 test("impact events are rejected when they do not match a server-created turn", async () => {
   const response = await worker.fetch(
     nextStepEvent(
