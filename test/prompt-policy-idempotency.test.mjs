@@ -50,6 +50,7 @@ const POLICY_SCRIPTS = [
   "scripts/finalize-home-menu-and-model-placement.mjs",
   "scripts/add-composer-chat-sections.mjs",
   "scripts/align-composer-chat-section-tests.mjs",
+  "scripts/restore-gray-reading-box.mjs",
 ];
 const POLICY_TARGETS = [
   "scripts/favicon-assets/favicon.ico.b64",
@@ -69,6 +70,7 @@ const POLICY_TARGETS = [
   "public/styles.css",
   "public/seo.css",
   "public/product.css",
+  "public/main-box-white.css",
   "public/about.html",
   "public/floor-first.html",
   "public/how-it-works.html",
@@ -85,6 +87,7 @@ const POLICY_TARGETS = [
   "test/outcome-followup.test.mjs",
   "test/streaming-response.test.mjs",
   "test/product.test.mjs",
+  "test/main-box-text-color.test.mjs",
   "test/ui.test.mjs",
   "wrangler.jsonc",
 ];
