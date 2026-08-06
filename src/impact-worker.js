@@ -26,6 +26,8 @@ export {
   SessionMemory,
 };
 
+const PRIVACY_PATHS = new Set(["/privacy", "/privacy/", "/privacy.html"]);
+
 const impactWorker = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -50,7 +52,7 @@ const impactWorker = {
       if (url.pathname === "/" || url.pathname === "/index.html") {
         return enhanceHomePage(response, request);
       }
-      if (url.pathname === "/privacy.html") {
+      if (PRIVACY_PATHS.has(url.pathname)) {
         return enhancePrivacyPage(response, request);
       }
       return response;
