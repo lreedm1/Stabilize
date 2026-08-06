@@ -97,7 +97,9 @@ export function jsonResponse(body, status = 200, extra = {}) {
 export function sameOriginRequest(request) {
   const url = new URL(request.url);
   const origin = request.headers.get("origin");
-  if (origin && origin !== url.origin) return false;
+  // Some iOS in-app browsers submit same-site forms from an opaque origin.
+  // Fetch Metadata must still classify the request as same-origin or top-level.
+  if (origin && origin !== "null" && origin !== url.origin) return false;
   const fetchSite = request.headers.get("sec-fetch-site");
   return !fetchSite || fetchSite === "same-origin" || fetchSite === "none";
 }
