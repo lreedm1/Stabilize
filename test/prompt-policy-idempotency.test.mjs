@@ -57,6 +57,7 @@ const POLICY_SCRIPTS = [
   "scripts/add-engagement-feedback.mjs",
   "scripts/add-conversation-outcomes.mjs",
   "scripts/add-daily-usage-metrics.mjs",
+  "scripts/inline-followups-with-feedback.mjs",
 ];
 const POLICY_TARGETS = [
   "scripts/favicon-assets/favicon.ico.b64",
@@ -75,6 +76,9 @@ const POLICY_TARGETS = [
   "src/impact-shards.js",
   "src/impact-dashboard.js",
   "public/app.js",
+  "public/impact.js",
+  "public/message-feedback.js",
+  "public/message-feedback.css",
   "public/billing-client.js",
   "public/billing.css",
   "public/styles.css",
