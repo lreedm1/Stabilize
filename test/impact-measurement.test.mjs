@@ -46,6 +46,8 @@ test("orderly impact keeps verified next-step and whole-conversation events", ()
   assert.match(client, /URGENT_ROUTES/);
   assert.match(client, /X-Stabilize-Session-Id/);
   assert.match(client, /X-Stabilize-Browser-Id/);
+  assert.match(client, /X-Stabilize-Conversation-Id/);
+  assert.match(client, /if \(response\.ok\) rotateConversationId\(\)/);
   assert.match(client, /response\.status === 409/);
   assert.match(client, /message text isn’t recorded/);
 
@@ -56,6 +58,7 @@ test("orderly impact keeps verified next-step and whole-conversation events", ()
   assert.doesNotMatch(client, /outcome_selected/);
 
   assert.match(events, /const EVENT_SCHEMAS =/);
+  assert.match(events, /hashIdentifier\(env, "impact-conversation"/);
   assert.match(events, /id=\"outcome-measurement\"/);
   assert.match(styles, /\.impact-outcome-card/);
   assert.match(styles, /\.impact-conversation-card/);
@@ -83,6 +86,18 @@ test("each structured outcome advances from shown to a first answer", () => {
   assert.match(analytics, /MAX_EVENTS_PER_SESSION_HOUR/);
 });
 
+test("conversation starts and follow-ups use a rotating hashed boundary", () => {
+  assert.match(analytics, /conversation_hash TEXT/);
+  assert.match(analytics, /PRAGMA table_info\(chat_turns\)/);
+  assert.match(analytics, /ALTER TABLE chat_turns ADD COLUMN conversation_hash TEXT/);
+  assert.match(analytics, /COALESCE\(conversation_hash, session_hash\)/);
+  assert.match(analytics, /multiTurnConversations/);
+  assert.match(analytics, /secondMessageRate: rate\(multiTurnConversations, conversations\)/);
+  assert.match(shards, /multiTurnConversations/);
+  assert.match(shards, /merged\.conversations/);
+  assert.doesNotMatch(shards, /multiTurnSessions|chatSessions/);
+});
+
 test("the private dashboard covers outcomes, engagement, quality, reliability, and cost", () => {
   assert.equal((dashboard.match(/<div class=\"tile\">/g) || []).length, 17);
   for (const label of [
@@ -92,7 +107,7 @@ test("the private dashboard covers outcomes, engagement, quality, reliability, a
     "Reported next-step rate",
     "Est. cost / reported next step",
     "Self-funding ratio",
-    "Chats started",
+    "Conversations started",
     "Second-message rate",
     "Helpful response rate",
     "Feedback response rate",
