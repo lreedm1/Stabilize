@@ -49,6 +49,23 @@ await update("test/ui.test.mjs", (source) => {
   return source.replace(legacyAssertion, loaderAssertion);
 });
 
+for (const path of [
+  "test/outcome-followup.test.mjs",
+  "test/private-chat.test.mjs",
+]) {
+  await update(path, (source) => {
+    const currentAssertion = `app\\.js\\?v=${ASSET_VERSION}`;
+    if (source.includes(currentAssertion)) return source;
+
+    const text = source.replace(
+      /app\\\.js\\\?v=[A-Za-z0-9._-]+/g,
+      currentAssertion,
+    );
+    requireText(text, currentAssertion, `${path} application asset assertion`);
+    return text;
+  });
+}
+
 console.log(
   "Deferred interactive backgrounds and kept mobile clients on the static image path.",
 );
