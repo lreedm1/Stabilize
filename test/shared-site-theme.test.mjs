@@ -101,7 +101,11 @@ test("all public Stabilize pages share the chat background and reading colors", 
 
   assert.match(
     guides,
-    /body::before\s*\{[\s\S]*position:[\s\S]*background-image:[\s\S]*lake-valley-landscape/,
+    /body::before,[\s\S]*body::after \{[\s\S]*position:\s*fixed;/,
+  );
+  assert.match(
+    guides,
+    /body::before\s*\{[\s\S]*background-image:[\s\S]*lake-valley-landscape/,
   );
   assert.match(
     guides,
