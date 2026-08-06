@@ -105,11 +105,11 @@ jobs:
 
             if [[ "$home_status" == "200" && "$script_status" == "200" && "$styles_status" == "200" && "$privacy_status" == "200" ]] && \
               [[ "$dashboard_status" == "401" || "$dashboard_status" == "503" ]] && \
-              grep -Fq 'Did this answer what you needed?' "$script" && \
-              grep -Fq 'proportionality_answered' "$script" && \
+              grep -Fq 'Did you choose a next step?' "$script" && \
+              grep -Fq 'next_step_reported' "$script" && \
               grep -Fq '.impact-outcome-card' "$styles" && \
               grep -Fq 'id="outcome-measurement"' "$privacy" && \
-              grep -Fq 'structured selections' "$privacy" && \
+              grep -Fq 'one optional question' "$privacy" && \
               grep -Fq 'Stabilize impact dashboard' "$dashboard"; then
               exit 0
             fi
