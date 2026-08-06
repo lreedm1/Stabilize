@@ -1,0 +1,125 @@
+.message-feedback {
+  margin-top: 0.85rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(68, 92, 78, 0.18);
+  font-size: 0.86rem;
+}
+
+.message-feedback-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.message-feedback-prompt {
+  margin-right: 0.15rem;
+  color: rgba(31, 59, 46, 0.78);
+  font-weight: 650;
+}
+
+.message-feedback-choice,
+.message-feedback-reason,
+.message-feedback-submit {
+  font: inherit;
+  color: #173f31;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(49, 91, 69, 0.24);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.message-feedback-choice {
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0.22rem 0.48rem;
+  line-height: 1;
+}
+
+.message-feedback-choice:hover,
+.message-feedback-reason:hover,
+.message-feedback-submit:hover,
+.message-feedback-choice[aria-pressed="true"],
+.message-feedback-reason[aria-pressed="true"] {
+  background: rgba(230, 243, 235, 0.96);
+  border-color: rgba(31, 111, 84, 0.58);
+}
+
+.message-feedback-choice:focus-visible,
+.message-feedback-reason:focus-visible,
+.message-feedback-submit:focus-visible,
+.message-feedback-details textarea:focus-visible {
+  outline: 3px solid rgba(31, 111, 84, 0.28);
+  outline-offset: 2px;
+}
+
+.message-feedback-followup {
+  margin-top: 0.65rem;
+}
+
+.message-feedback-followup[hidden] {
+  display: none;
+}
+
+.message-feedback-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+}
+
+.message-feedback-reason {
+  padding: 0.36rem 0.62rem;
+}
+
+.message-feedback-details {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.5rem;
+  margin-top: 0.62rem;
+}
+
+.message-feedback-details label {
+  display: grid;
+  gap: 0.28rem;
+  color: rgba(31, 59, 46, 0.76);
+}
+
+.message-feedback-details textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 3.25rem;
+  resize: vertical;
+  font: inherit;
+  color: #173f31;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(49, 91, 69, 0.24);
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+}
+
+.message-feedback-submit {
+  padding: 0.5rem 0.75rem;
+  font-weight: 650;
+}
+
+.message-feedback-status,
+.message-feedback-privacy {
+  margin: 0.42rem 0 0;
+  color: rgba(31, 59, 46, 0.68);
+  line-height: 1.4;
+}
+
+.message-feedback-privacy a {
+  color: inherit;
+}
+
+@media (max-width: 560px) {
+  .message-feedback-details {
+    grid-template-columns: 1fr;
+  }
+
+  .message-feedback-submit {
+    justify-self: start;
+  }
+}
