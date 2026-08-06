@@ -10,6 +10,14 @@ function requireText(value, expected, label) {
   }
 }
 
+const oldConversationTile =
+  '<div class="tile"><span>Chats started</span><strong>${formatInteger(summary.chats)}</strong></div>';
+const newConversationTile =
+  '<div class="tile"><span>Conversations started</span><strong>${formatInteger(summary.conversations)}</strong></div>';
+if (after.includes(oldConversationTile)) {
+  after = after.replace(oldConversationTile, newConversationTile);
+}
+
 if (!after.includes("summary.conversationHelpRate < 0.7")) {
   const marker = `function weeklyDecision(summary, finance) {\n`;
   requireText(after, marker, "the weekly decision function");
@@ -26,6 +34,10 @@ if (!after.includes("<span>Conversation help rate</span>")) {
     marker,
     `<div class="tile"><span>Written comments</span><strong>\${formatInteger(summary.feedbackComments)}</strong></div>\n<div class="tile"><span>Conversation help rate</span><strong>\${formatPercent(summary.conversationHelpRate)}</strong></div>\n<div class="tile"><span>Conversation feedback rate</span><strong>\${formatPercent(summary.conversationResponseRate)}</strong></div>\n</section>`,
   );
+}
+
+if (!after.includes(newConversationTile)) {
+  throw new Error("Conversation outcome update could not create the conversations-started tile");
 }
 
 if (after !== before) await writeFile(path, after);
