@@ -24,7 +24,7 @@ const [
   readFile("wrangler.jsonc", "utf8"),
 ]);
 
-test("orderly impact keeps verified next-step and whole-conversation events", () => {
+test("orderly impact keeps verified inline next-step and whole-conversation events", () => {
   assert.match(worker, /\/api\/impact-event/);
   assert.match(worker, /\/api\/message-feedback/);
   assert.match(worker, /\/admin\/impact/);
@@ -35,8 +35,13 @@ test("orderly impact keeps verified next-step and whole-conversation events", ()
   assert.match(events, /impact\.js\?v=/);
   assert.match(events, /message-feedback\.js\?v=/);
 
-  assert.match(client, /Did you choose a next step\?/);
+  assert.doesNotMatch(client, /Did you choose a next step\?/);
   assert.match(client, /"next_step_reported"/);
+  assert.match(client, /FOLLOWUP_ACTION_EVENT/);
+  assert.match(client, /function modelReplyNeedsFollowups\(text, route\)/);
+  assert.match(client, /new CustomEvent\(FOLLOWUP_ACTION_EVENT/);
+  assert.match(client, /postNextStep\(turn, "shown"\)/);
+  assert.match(client, /postNextStep\(turn, "yes"\)/);
   assert.match(client, /Did this conversation help you move forward\?/);
   assert.match(client, /"conversation_help_reported"/);
   assert.match(client, /newConversationRequest\(input\)/);
@@ -51,7 +56,6 @@ test("orderly impact keeps verified next-step and whole-conversation events", ()
   assert.match(client, /X-Stabilize-Conversation-Id/);
   assert.match(client, /if \(response\.ok\) \{[\s\S]*rotateConversationId\(\)/);
   assert.match(client, /response\.status === 409/);
-  assert.match(client, /message text isn’t recorded/);
 
   assert.doesNotMatch(client, /What are you leaving with\?/);
   assert.doesNotMatch(client, /Did Stabilize respond at the right level\?/);
@@ -62,7 +66,7 @@ test("orderly impact keeps verified next-step and whole-conversation events", ()
   assert.match(events, /const EVENT_SCHEMAS =/);
   assert.match(events, /hashIdentifier\(env, "impact-conversation"/);
   assert.match(events, /id=\"outcome-measurement\"/);
-  assert.match(styles, /\.impact-outcome-card/);
+  assert.match(events, /up to three optional action buttons beside/);
   assert.match(styles, /\.impact-conversation-card/);
   assert.doesNotMatch(
     `${worker}\n${events}\n${shards}\n${dashboard}`,
