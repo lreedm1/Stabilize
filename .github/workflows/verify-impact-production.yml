@@ -26,7 +26,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          payload="$(printf '{"state":"pending","context":"verification/impact","description":"Waiting for live outcome-measurement checks","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          payload="$(printf '{"state":"pending","context":"verification/impact","description":"Waiting for live inline-feedback checks","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           curl --fail-with-body --silent --show-error \
             --request POST \
             --header "Accept: application/vnd.github+json" \
@@ -39,19 +39,23 @@ jobs:
         shell: bash
         run: |
           home="$(mktemp)"
-          script="$(mktemp)"
-          styles="$(mktemp)"
+          impact_script="$(mktemp)"
+          impact_styles="$(mktemp)"
+          feedback_script="$(mktemp)"
+          feedback_styles="$(mktemp)"
           privacy="$(mktemp)"
           dashboard="$(mktemp)"
           cleanup() {
-            rm -f "$home" "$script" "$styles" "$privacy" "$dashboard"
+            rm -f "$home" "$impact_script" "$impact_styles" "$feedback_script" "$feedback_styles" "$privacy" "$dashboard"
           }
           trap cleanup EXIT
 
           for attempt in {1..30}; do
             : > "$home"
-            : > "$script"
-            : > "$styles"
+            : > "$impact_script"
+            : > "$impact_styles"
+            : > "$feedback_script"
+            : > "$feedback_styles"
             : > "$privacy"
             : > "$dashboard"
 
@@ -62,27 +66,50 @@ jobs:
                 --write-out "%{http_code}" \
                 "https://stabilize.info/?deployment=${GITHUB_SHA}" || true
             )"
-            script_path="$(grep -oE 'src="/impact\.js\?v=[^"]+"' "$home" | head -n 1 | sed -E 's/^src="//; s/"$//' || true)"
-            styles_path="$(grep -oE 'href="/impact\.css\?v=[^"]+"' "$home" | head -n 1 | sed -E 's/^href="//; s/"$//' || true)"
+            impact_script_path="$(grep -oE 'src="/impact\.js\?v=[^"]+"' "$home" | head -n 1 | sed -E 's/^src="//; s/"$//' || true)"
+            impact_styles_path="$(grep -oE 'href="/impact\.css\?v=[^"]+"' "$home" | head -n 1 | sed -E 's/^href="//; s/"$//' || true)"
+            feedback_script_path="$(grep -oE 'src="/message-feedback\.js\?v=[^"]+"' "$home" | head -n 1 | sed -E 's/^src="//; s/"$//' || true)"
+            feedback_styles_path="$(grep -oE 'href="/message-feedback\.css\?v=[^"]+"' "$home" | head -n 1 | sed -E 's/^href="//; s/"$//' || true)"
 
-            script_status="000"
-            styles_status="000"
-            if [[ -n "$script_path" ]]; then
-              script_status="$(
+            impact_script_status="000"
+            impact_styles_status="000"
+            feedback_script_status="000"
+            feedback_styles_status="000"
+
+            if [[ -n "$impact_script_path" ]]; then
+              impact_script_status="$(
                 curl --max-time 20 --compressed --silent --show-error \
                   --header "Cache-Control: no-cache" \
-                  --output "$script" \
+                  --output "$impact_script" \
                   --write-out "%{http_code}" \
-                  "https://stabilize.info${script_path}" || true
+                  "https://stabilize.info${impact_script_path}" || true
               )"
             fi
-            if [[ -n "$styles_path" ]]; then
-              styles_status="$(
+            if [[ -n "$impact_styles_path" ]]; then
+              impact_styles_status="$(
                 curl --max-time 20 --compressed --silent --show-error \
                   --header "Cache-Control: no-cache" \
-                  --output "$styles" \
+                  --output "$impact_styles" \
                   --write-out "%{http_code}" \
-                  "https://stabilize.info${styles_path}" || true
+                  "https://stabilize.info${impact_styles_path}" || true
+              )"
+            fi
+            if [[ -n "$feedback_script_path" ]]; then
+              feedback_script_status="$(
+                curl --max-time 20 --compressed --silent --show-error \
+                  --header "Cache-Control: no-cache" \
+                  --output "$feedback_script" \
+                  --write-out "%{http_code}" \
+                  "https://stabilize.info${feedback_script_path}" || true
+              )"
+            fi
+            if [[ -n "$feedback_styles_path" ]]; then
+              feedback_styles_status="$(
+                curl --max-time 20 --compressed --silent --show-error \
+                  --header "Cache-Control: no-cache" \
+                  --output "$feedback_styles" \
+                  --write-out "%{http_code}" \
+                  "https://stabilize.info${feedback_styles_path}" || true
               )"
             fi
 
@@ -101,15 +128,21 @@ jobs:
                 "https://stabilize.info/admin/impact?deployment=${GITHUB_SHA}" || true
             )"
 
-            echo "Impact check attempt ${attempt}: home=${home_status}, script=${script_status}, styles=${styles_status}, privacy=${privacy_status}, dashboard=${dashboard_status}"
+            echo "Impact check attempt ${attempt}: home=${home_status}, impact_js=${impact_script_status}, impact_css=${impact_styles_status}, feedback_js=${feedback_script_status}, feedback_css=${feedback_styles_status}, privacy=${privacy_status}, dashboard=${dashboard_status}"
 
-            if [[ "$home_status" == "200" && "$script_status" == "200" && "$styles_status" == "200" && "$privacy_status" == "200" ]] && \
+            if [[ "$home_status" == "200" && "$impact_script_status" == "200" && "$impact_styles_status" == "200" && "$feedback_script_status" == "200" && "$feedback_styles_status" == "200" && "$privacy_status" == "200" ]] && \
               [[ "$dashboard_status" == "401" || "$dashboard_status" == "503" ]] && \
-              grep -Fq 'Did you choose a next step?' "$script" && \
-              grep -Fq 'next_step_reported' "$script" && \
-              grep -Fq '.impact-outcome-card' "$styles" && \
+              grep -Fq 'stabilize:followup-actions' "$impact_script" && \
+              grep -Fq 'modelReplyNeedsFollowups' "$impact_script" && \
+              ! grep -Fq 'Did you choose a next step?' "$impact_script" && \
+              grep -Fq 'next_step_reported' "$impact_script" && \
+              grep -Fq 'message-feedback-actions' "$feedback_script" && \
+              ! grep -Fq 'Was this helpful?' "$feedback_script" && \
+              grep -Fq '.outcome-tray' "$feedback_styles" && \
+              grep -Fq 'display: none !important' "$feedback_styles" && \
+              grep -Fq '.message-feedback-action' "$feedback_styles" && \
               grep -Fq 'id="outcome-measurement"' "$privacy" && \
-              grep -Fq 'one optional question' "$privacy" && \
+              grep -Fq 'up to three optional action buttons beside' "$privacy" && \
               grep -Fq 'Stabilize impact dashboard' "$dashboard"; then
               exit 0
             fi
@@ -117,7 +150,7 @@ jobs:
             sleep 10
           done
 
-          echo "::error::Production did not expose the expected outcome assets, privacy disclosure, and protected dashboard route."
+          echo "::error::Production did not expose the expected inline follow-up assets, privacy disclosure, and protected dashboard route."
           exit 1
 
       - name: Publish impact verification result
@@ -129,10 +162,10 @@ jobs:
         run: |
           if [[ "$JOB_STATUS" == "success" ]]; then
             state="success"
-            description="Impact assets, privacy, and dashboard checks passed"
+            description="Inline feedback, privacy, and dashboard checks passed"
           else
             state="failure"
-            description="Impact assets, privacy, or dashboard checks failed"
+            description="Inline feedback, privacy, or dashboard checks failed"
           fi
           payload="$(printf '{"state":"%s","context":"verification/impact","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           curl --fail-with-body --silent --show-error \
