@@ -6,7 +6,7 @@ const productTestPath = "test/product.test.mjs";
 const marker = "/* compact horizontal outcome buttons */";
 const assetVersion = "20260804-compact-outcomes-2";
 const mainBoxStylesheet =
-  '    <link rel="stylesheet" href="/main-box-white.css?v=20260805-1" />';
+  '    <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />';
 
 const compactStyles = `
 
@@ -85,6 +85,10 @@ if (!nextPage.includes('href="/main-box-white.css')) {
     `$1\n${mainBoxStylesheet}`,
   );
 }
+nextPage = nextPage.replace(
+  /\/main-box-white\.css\?v=[A-Za-z0-9._-]+/g,
+  "/main-box-white.css?v=20260805-2",
+);
 if (!nextPage.includes(mainBoxStylesheet.trim())) {
   throw new Error("Could not link the main-box text stylesheet");
 }
@@ -109,5 +113,5 @@ if (nextProductTest !== productTestSource) {
 }
 
 console.log(
-  "Compacted follow-up prompts, linked white main-box text, and cache-busted the product stylesheet.",
+  "Compacted follow-up prompts, linked the gray main reading box, and cache-busted the product stylesheet.",
 );
