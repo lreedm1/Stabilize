@@ -11,6 +11,7 @@ import {
   enhancePrivacyPage,
   impactEventResponse,
 } from "./impact-events.js";
+import { messageFeedbackResponse } from "./message-feedback.js";
 import { jsonResponse, pageHeaders } from "./impact-shards.js";
 import {
   adminImpactResponse,
@@ -34,6 +35,9 @@ const impactWorker = {
     try {
       if (url.pathname === "/api/impact-event") {
         return await impactEventResponse(request, env);
+      }
+      if (url.pathname === "/api/message-feedback") {
+        return await messageFeedbackResponse(request, env);
       }
       if (url.pathname === "/admin/impact/login") {
         return await adminLoginResponse(request, env);
