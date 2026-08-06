@@ -11,7 +11,7 @@
 .impact-conversation-card {
   position: fixed;
   right: max(16px, env(safe-area-inset-right));
-  bottom: max(16px, env(safe-area-inset-bottom));
+  bottom: calc(92px + env(safe-area-inset-bottom));
   z-index: 1200;
   box-sizing: border-box;
   width: min(360px, calc(100vw - 32px));
@@ -124,7 +124,7 @@
 
   .impact-conversation-card {
     right: 10px;
-    bottom: max(10px, env(safe-area-inset-bottom));
+    bottom: calc(86px + env(safe-area-inset-bottom));
     width: calc(100vw - 20px);
   }
 
