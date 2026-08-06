@@ -12,7 +12,7 @@ import {
   schedule,
 } from "./impact-shards.js";
 
-const IMPACT_ASSET_VERSION = "20260805-2";
+const IMPACT_ASSET_VERSION = "20260806-feedback-1";
 const IMPACT_PROMPT_VERSION = "next-step-v1";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -220,10 +220,22 @@ export async function enhanceHomePage(response, request) {
       `    <link rel="stylesheet" href="/impact.css?v=${IMPACT_ASSET_VERSION}" />\n  </head>`,
     );
   }
+  if (!html.includes('href="/message-feedback.css')) {
+    html = html.replace(
+      "</head>",
+      `    <link rel="stylesheet" href="/message-feedback.css?v=${IMPACT_ASSET_VERSION}" />\n  </head>`,
+    );
+  }
   if (!html.includes('src="/impact.js')) {
     html = html.replace(
       "</body>",
       `    <script type="module" src="/impact.js?v=${IMPACT_ASSET_VERSION}"></script>\n  </body>`,
+    );
+  }
+  if (!html.includes('src="/message-feedback.js')) {
+    html = html.replace(
+      "</body>",
+      `    <script type="module" src="/message-feedback.js?v=${IMPACT_ASSET_VERSION}"></script>\n  </body>`,
     );
   }
 
@@ -248,17 +260,22 @@ export async function enhancePrivacyPage(response, request) {
     "Privacy page exceeded the enhancement limit.",
   );
   if (!html.includes('id="outcome-measurement"')) {
-    const section = `<h2 id="outcome-measurement">Outcome measurement</h2>
+    const section = `<h2 id="outcome-measurement">Outcome and response measurement</h2>
       <p>
-        On the web, Stabilize may ask one optional question after an eligible,
-        non-emergency response: “Did you choose a next step?” One structured state
-        is kept for that response: shown, yes, partly, or no. The impact store also
-        keeps broad route, completion, configured cost, and timing metadata, plus
-        one-way hashes of random browser and tab identifiers. It does not place the
-        user’s message or the assistant’s reply in impact analytics. The browser
-        identifier rotates after 30 days, the tab identifier ends with the tab, and
-        impact records are designed to expire after 180 days. The private dashboard
-        is for aggregate product and sustainability review, not individual monitoring.
+        On the web, Stabilize may ask optional structured questions after a response.
+        The outcome check records only shown, yes, partly, or no. The response-quality
+        control records whether a response was shown, marked helpful, or marked not
+        helpful, plus an optional reason code. A user may also submit up to 500
+        characters of optional details; those details are stored privately and may be
+        reviewed to improve Stabilize. Do not include private or identifying information.
+      </p>
+      <p>
+        The impact store also keeps broad route, completion, configured cost, and timing
+        metadata, plus one-way hashes of random browser and tab identifiers. It does not
+        place the user's message or the assistant's reply in impact analytics. The browser
+        identifier rotates after 30 days, the tab identifier ends with the tab, and impact
+        and response-feedback records are designed to expire after 180 days. The private
+        dashboard is for aggregate product and sustainability review, not individual monitoring.
       </p>
 
       `;
