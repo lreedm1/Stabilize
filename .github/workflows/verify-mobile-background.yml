@@ -1,0 +1,114 @@
+name: Verify mobile static background release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: verify-mobile-background-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  verify-mobile-background:
+    name: Verify static mobile background path
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Verify the exact mobile performance release is live
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+
+          asset_version="$(
+            sed -n 's/^const ASSET_VERSION = "\([^"]*\)";$/\1/p' \
+              scripts/defer-mobile-background.mjs \
+              | head -n 1
+          )"
+          if [[ -z "$asset_version" ]]; then
+            echo "::error::Could not read the mobile background asset version."
+            exit 1
+          fi
+
+          publish_status() {
+            local state="$1"
+            local description="$2"
+            local payload
+            payload="$(printf '{"state":"%s","context":"verification/mobile-static-background","description":"%s","target_url":"%s/%s/actions/runs/%s"}' \
+              "$state" \
+              "$description" \
+              "$GITHUB_SERVER_URL" \
+              "$GITHUB_REPOSITORY" \
+              "$GITHUB_RUN_ID")"
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --data "$payload" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+          }
+
+          publish_status \
+            pending \
+            "Waiting for the static mobile background release"
+
+          for attempt in {1..36}; do
+            cache_key="${GITHUB_SHA}-${attempt}"
+            html="$(
+              curl --fail --max-time 20 --silent --show-error \
+                --header "Cache-Control: no-cache" \
+                "https://stabilize.info/?mobile-background-release=${cache_key}" \
+                || true
+            )"
+
+            if grep -Fq "/app.js?v=${asset_version}" <<<"$html"; then
+              app="$(
+                curl --fail --max-time 20 --silent --show-error \
+                  --header "Cache-Control: no-cache" \
+                  "https://stabilize.info/app.js?v=${asset_version}&release=${cache_key}" \
+                  || true
+              )"
+              loader="$(
+                curl --fail --max-time 20 --silent --show-error \
+                  --header "Cache-Control: no-cache" \
+                  "https://stabilize.info/background-loader.js?v=${asset_version}&release=${cache_key}" \
+                  || true
+              )"
+
+              if grep -Fq "background-loader.js?v=${asset_version}" <<<"$app" \
+                && ! grep -Fq 'from "./terrain.js"' <<<"$app" \
+                && grep -Fq 'import("./terrain.js")' <<<"$loader" \
+                && grep -Fq '(max-width: 980px) and (orientation: portrait)' <<<"$loader" \
+                && grep -Fq '(hover: none) and (pointer: coarse)' <<<"$loader" \
+                && grep -Fq 'requestIdleCallback' <<<"$loader"; then
+                echo "Production serves the guarded, deferred graphics bootstrap."
+                publish_status \
+                  success \
+                  "Static mobile background release is live"
+                exit 0
+              fi
+            fi
+
+            echo "Mobile background attempt ${attempt}: ${asset_version} is not live yet."
+            sleep 10
+          done
+
+          publish_status \
+            failure \
+            "Production did not serve the static mobile background release"
+          echo "::error::Production never served the guarded background loader for ${asset_version}."
+          exit 1
