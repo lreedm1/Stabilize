@@ -1,36 +1,33 @@
 # Orderly impact measurement
 
-Stabilize uses an intentionally small operating loop:
+Stabilize uses a small, privacy-bounded operating loop:
 
-1. Ask one optional question after an eligible, non-emergency response: **“Did you choose a next step?”**
-2. Keep one structured event state for that response: `shown`, `yes`, `partly`, or `no`.
-3. Review six dashboard numbers.
-4. Make one bounded product decision for the week.
+1. When the model reply itself indicates that a few follow-up actions would materially reduce effort, show up to three optional action buttons beside the response-feedback icons.
+2. Keep one structured next-step event state for that response: `shown` when those actions appear and `yes` when one is selected.
+3. Ask a separate optional whole-conversation question only after New conversation succeeds.
+4. Review engagement, helpfulness, outcomes, reliability, and cost before making one bounded product change.
 
-The optimization target is reported next steps per dollar, subject to safety, privacy, trust, and reliability guardrails.
+The optimization target is useful next steps per dollar, subject to safety, privacy, trust, and reliability guardrails.
 
 ## What is stored
 
-The impact layer distributes writes across 16 SQLite-backed Durable Object shards rather than routing the whole site through one global object. Each eligible response has at most one `next_step_reported` row. The row begins as `shown` and is updated to `yes`, `partly`, or `no` when the user answers. A late retry cannot overwrite an answer.
+The impact layer distributes writes across 16 SQLite-backed Durable Object shards rather than routing the whole site through one global object. Each response can have at most one `next_step_reported` row. The row begins as `shown` only when model-relevant follow-up actions are surfaced and advances to `yes` when the user selects one. A late retry cannot overwrite an answer. Historical `partly` and `no` values remain supported for compatibility, but the inline action interface does not ask a separate Yes / Partly / No next-step survey.
 
-The store contains only structured outcome state, broad route and completion metadata, configured cost metadata, and one-way HMAC hashes of random browser and tab identifiers. It never stores the user’s message or the assistant’s reply. The browser identifier rotates after 30 days; the tab identifier ends with the tab. Records expire after the configured retention period, which defaults to 180 days.
+The store contains structured outcome state, broad route and completion metadata, configured cost metadata, optional response-feedback reason codes and comments, and one-way HMAC hashes of random browser, tab, and conversation identifiers. It never stores the user’s message or the assistant’s reply in impact analytics. The browser identifier rotates after 30 days, the tab identifier ends with the tab, and the conversation identifier rotates after New conversation succeeds. Records expire after the configured retention period, which defaults to 180 days.
 
-Immediate-danger, medical-emergency, and safety-unclear routes do not receive the ordinary outcome question. The question is optional and includes a Skip control. Every submitted event must match a server-created chat turn with the same hashed browser and tab identifiers. Writes are same-origin, allow-listed, idempotent, and rate-limited.
+Immediate-danger, medical-emergency, and safety-unclear routes do not receive ordinary follow-up actions. Ordinary follow-up actions are also omitted unless the model reply contains a relevant domain and an explicit action cue, or the selected route is one of the small allow-listed support routes. Every submitted event must match a server-created chat turn with the same hashed browser and tab identifiers. Writes are same-origin, allow-listed, idempotent, and rate-limited.
 
-## Six dashboard numbers
+## Dashboard
 
-The protected `/admin/impact` dashboard shows only:
+The protected `/admin/impact` dashboard covers:
 
-1. Eligible checks shown
-2. Reports received
-3. Response rate
-4. Reported next-step rate
-5. Estimated cost per reported next step
-6. Self-funding ratio
+- eligible next-step actions shown, selected actions, response rate, and estimated cost per reported next step
+- conversations started, second-message rate, and returning-browser rate
+- response-feedback rate, helpful-response rate, reason counts, and recent private comments
+- whole-conversation feedback and help rates
+- response failures, average response time, daily usage, estimated cost per helpful response, and self-funding ratio
 
-A reported next step means the user answered `yes`. `partly` and `no` contribute to the response count but are not counted as resolved. Nonresponse remains unknown rather than being labeled failure.
-
-The dashboard then presents one operating decision for the week. Its conservative rules prioritize sufficient sample, response collection, reliability, reported usefulness, real cost inputs, and recurring sustainability—in that order. Only one product variable should be changed before the next review.
+A reported next step means the user selected one of the optional follow-up actions. Nonselection remains unknown rather than being labeled failure. The weekly decision panel prioritizes sufficient sample, response collection, reliability, reported usefulness, real cost inputs, and recurring sustainability—in that order. Only one product variable should be changed before the next review.
 
 ## Private dashboard access
 
