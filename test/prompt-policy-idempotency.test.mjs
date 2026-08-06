@@ -55,6 +55,7 @@ const POLICY_SCRIPTS = [
   "scripts/unify-impact-dashboard-theme.mjs",
   "scripts/add-admin-menu-button.mjs",
   "scripts/add-engagement-feedback.mjs",
+  "scripts/add-conversation-outcomes.mjs",
   "scripts/add-daily-usage-metrics.mjs",
 ];
 const POLICY_TARGETS = [
