@@ -58,6 +58,7 @@ const POLICY_SCRIPTS = [
   "scripts/add-conversation-outcomes.mjs",
   "scripts/add-daily-usage-metrics.mjs",
   "scripts/inline-followups-with-feedback.mjs",
+  "scripts/enforce-model-only-followups.mjs",
   "scripts/finalize-inline-followup-tests.mjs",
 ];
 const POLICY_TARGETS = [
