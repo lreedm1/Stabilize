@@ -37,7 +37,10 @@ test("the main page keeps Home, Info, account, and Admin in menu order", () => {
   assert.doesNotMatch(html, /What is happening right now\?/);
 
   const menuPanelIndex = html.indexOf('class="menu-panel"');
-  const menuPanelEnd = html.indexOf("</details>", menuPanelIndex);
+  const menuPanelEnd = html.indexOf(
+    "\n            </div>\n          </details>",
+    menuPanelIndex,
+  );
   const menuLinksIndex = html.indexOf('class="menu-links"', menuPanelIndex);
   const homeIndex = html.indexOf('<a href="/">Home</a>', menuLinksIndex);
   const aboutIndex = html.indexOf('<a href="/about.html">About</a>', menuLinksIndex);
