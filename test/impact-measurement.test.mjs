@@ -88,6 +88,20 @@ test("the private dashboard has six numbers and one weekly decision", () => {
   assert.match(dashboard, /Guardrails that cannot be traded away/);
 });
 
+test("production dashboard access uses a public hash without committing the password", () => {
+  const config = JSON.parse(wrangler);
+  const configuredHash = config.vars.IMPACT_ADMIN_PASSWORD_SHA256;
+
+  assert.match(configuredHash, /^(?:[0-9a-f]{8}:){7}[0-9a-f]{8}$/);
+  assert.match(configuredHash.replaceAll(":", ""), /^[0-9a-f]{64}$/);
+  assert.match(dashboard, /IMPACT_ADMIN_PASSWORD_SHA256/);
+  assert.match(dashboard, /crypto\.subtle\.digest\(\s*"SHA-256"/);
+  assert.match(dashboard, /adminSigningSecret/);
+  assert.match(dashboard, /env\?\.AUTH_SECRET/);
+  assert.doesNotMatch(wrangler, /STB-/);
+  assert.doesNotMatch(dashboard, /c1926162cf30c39dcab9b52f41993fa981623d4120619aed82b56cb52e19de60/);
+});
+
 test("the private dashboard shares the Stabilize background and reading palette", () => {
   assert.equal(
     (
