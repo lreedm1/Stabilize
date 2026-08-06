@@ -12,12 +12,20 @@ import {
   schedule,
 } from "./impact-shards.js";
 
-const IMPACT_ASSET_VERSION = "20260806-feedback-1";
+const IMPACT_ASSET_VERSION = "20260806-feedback-2";
 const IMPACT_PROMPT_VERSION = "next-step-v1";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const EVENT_TYPE = "next_step_reported";
-const EVENT_VALUES = new Set(["shown", "yes", "partly", "no"]);
+const EVENT_SCHEMAS = {
+  next_step_reported: {
+    promptVersion: "next-step-v1",
+    values: new Set(["shown", "yes", "partly", "no"]),
+  },
+  conversation_help_reported: {
+    promptVersion: "conversation-help-v1",
+    values: new Set(["shown", "yes", "partly", "no"]),
+  },
+};
 
 function cleanEventPayload(body) {
   const eventId = String(body?.eventId || "");
@@ -27,15 +35,16 @@ function cleanEventPayload(body) {
   const eventType = String(body?.event || "");
   const eventValue = String(body?.value || "");
   const promptVersion = String(body?.promptVersion || "");
+  const schema = EVENT_SCHEMAS[eventType];
 
   if (
     !UUID_PATTERN.test(eventId) ||
     !UUID_PATTERN.test(sessionId) ||
     !UUID_PATTERN.test(browserId) ||
     !UUID_PATTERN.test(turnId) ||
-    eventType !== EVENT_TYPE ||
-    !EVENT_VALUES.has(eventValue) ||
-    promptVersion !== IMPACT_PROMPT_VERSION
+    !schema ||
+    !schema.values.has(eventValue) ||
+    promptVersion !== schema.promptVersion
   ) {
     return null;
   }
@@ -263,11 +272,14 @@ export async function enhancePrivacyPage(response, request) {
     const section = `<h2 id="outcome-measurement">Outcome and response measurement</h2>
       <p>
         On the web, Stabilize may ask optional structured questions after a response.
-        The outcome check records only shown, yes, partly, or no. The response-quality
-        control records whether a response was shown, marked helpful, or marked not
-        helpful, plus an optional reason code. A user may also submit up to 500
-        characters of optional details; those details are stored privately and may be
-        reviewed to improve Stabilize. Do not include private or identifying information.
+        The outcome check asks “Did you choose a next step?” and records only shown,
+        yes, partly, or no. After New conversation is selected, a separate non-blocking
+        check may ask whether the prior conversation helped the user move forward and
+        records the same four structured states. The response-quality control records
+        whether a response was shown, marked helpful, or marked not helpful, plus an
+        optional reason code. A user may also submit up to 500 characters of optional
+        details; those details are stored privately and may be reviewed to improve
+        Stabilize. Do not include private or identifying information.
       </p>
       <p>
         The impact store also keeps broad route, completion, configured cost, and timing
