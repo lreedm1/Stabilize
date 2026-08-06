@@ -3,6 +3,7 @@ const NEXT_STEP_PROMPT_VERSION = "next-step-v1";
 const CONVERSATION_PROMPT_VERSION = "conversation-help-v1";
 const BROWSER_KEY = "stabilize:impact-browser:v1";
 const SESSION_KEY = "stabilize:impact-session:v1";
+const CONVERSATION_KEY = "stabilize:impact-conversation:v1";
 const BROWSER_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1_000;
 const URGENT_ROUTES = new Set([
   "IMMEDIATE_DANGER",
@@ -61,17 +62,47 @@ function sessionId() {
   }
 }
 
+function conversationId() {
+  try {
+    const existing = sessionStorage.getItem(CONVERSATION_KEY);
+    if (existing) return existing;
+    const created = randomId();
+    sessionStorage.setItem(CONVERSATION_KEY, created);
+    return created;
+  } catch {
+    return randomId();
+  }
+}
+
 const impactBrowserId = browserId();
 const impactSessionId = sessionId();
+let impactConversationId = conversationId();
 
-function chatRequest(input) {
+function rotateConversationId() {
+  impactConversationId = randomId();
+  try {
+    sessionStorage.setItem(CONVERSATION_KEY, impactConversationId);
+  } catch {
+    // The page-local value still separates future turns after a reset.
+  }
+}
+
+function sameOriginPathRequest(input, pathname) {
   try {
     const value = input instanceof Request ? input.url : input;
     const url = new URL(String(value), window.location.href);
-    return url.origin === window.location.origin && url.pathname === "/api/chat";
+    return url.origin === window.location.origin && url.pathname === pathname;
   } catch {
     return false;
   }
+}
+
+function chatRequest(input) {
+  return sameOriginPathRequest(input, "/api/chat");
+}
+
+function newConversationRequest(input) {
+  return sameOriginPathRequest(input, "/api/conversation/new");
 }
 
 function withImpactHeaders(input, init = {}) {
@@ -85,6 +116,7 @@ function withImpactHeaders(input, init = {}) {
   }
   headers.set("X-Stabilize-Session-Id", impactSessionId);
   headers.set("X-Stabilize-Browser-Id", impactBrowserId);
+  headers.set("X-Stabilize-Conversation-Id", impactConversationId);
 
   if (input instanceof Request) {
     return [new Request(input, { ...init, headers }), undefined];
@@ -137,6 +169,11 @@ async function inspectChatResponse(response, turn) {
 }
 
 window.fetch = async (input, init) => {
+  if (newConversationRequest(input)) {
+    const response = await originalFetch(input, init);
+    if (response.ok) rotateConversationId();
+    return response;
+  }
   if (!chatRequest(input)) return originalFetch(input, init);
 
   const [nextInput, nextInit] = withImpactHeaders(input, init);
