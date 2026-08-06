@@ -64,6 +64,29 @@ test("New conversation triggers optional whole-chat feedback without gating rese
   assert.match(events, /separate non-blocking/);
 });
 
+test("engagement uses a rotating privacy-hashed conversation identifier", async () => {
+  const [client, events, analytics, shards] = await Promise.all([
+    source(files.outcomeClient),
+    source(files.events),
+    source(files.analytics),
+    source(files.shards),
+  ]);
+
+  assert.match(client, /CONVERSATION_KEY/);
+  assert.match(client, /X-Stabilize-Conversation-Id/);
+  assert.match(client, /newConversationRequest\(input\)/);
+  assert.match(client, /if \(response\.ok\) rotateConversationId\(\)/);
+  assert.match(events, /hashIdentifier\(env, "impact-conversation"/);
+  assert.match(events, /conversationHash/);
+  assert.match(analytics, /conversation_hash TEXT/);
+  assert.match(analytics, /PRAGMA table_info\(chat_turns\)/);
+  assert.match(analytics, /ALTER TABLE chat_turns ADD COLUMN conversation_hash TEXT/);
+  assert.match(analytics, /COALESCE\(conversation_hash, session_hash\)/);
+  assert.match(analytics, /multiTurnConversations/);
+  assert.match(shards, /multiTurnConversations/);
+  assert.doesNotMatch(shards, /multiTurnSessions/);
+});
+
 test("message feedback is verified against the recorded chat turn", async () => {
   const [endpoint, worker, analytics] = await Promise.all([
     source(files.endpoint),
@@ -104,7 +127,7 @@ test("the private dashboard exposes engagement, quality, and comment review", as
     assert.match(shards, new RegExp(field));
   }
 
-  assert.match(dashboard, /Chats started/);
+  assert.match(dashboard, /Conversations started/);
   assert.match(dashboard, /Second-message rate/);
   assert.match(dashboard, /Helpful response rate/);
   assert.match(dashboard, /Feedback response rate/);
