@@ -38,6 +38,14 @@ test("each completed assistant response receives private inline feedback", async
   assert.doesNotMatch(client, /assistant(?:Message|Reply|Text)\s*:/);
 
   assert.match(css, /\.message-feedback \{/);
+  assert.match(
+    css,
+    /\.message-feedback-prompt\s*\{[\s\S]*?color: var\(--text\);/,
+  );
+  assert.match(
+    css,
+    /\.message-feedback-choice\s*\{[\s\S]*?background: rgba\(255, 253, 247, 0\.9\);/,
+  );
   assert.match(css, /@media \(max-width: 560px\)/);
   assert.match(events, /message-feedback\.css/);
   assert.match(events, /message-feedback\.js/);
