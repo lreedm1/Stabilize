@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const ASSET_VERSION = "20260805-taller-composer-1";
+const ASSET_VERSION = "20260805-centered-placeholder-1";
 const FAVICON_LINK =
   '    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />';
 const STATIC_PAGES = [
@@ -64,12 +64,12 @@ await update("src/paid-worker.js", (source) => {
   requireText(
     text,
     `/billing.css?v=${ASSET_VERSION}`,
-    "the taller composer stylesheet cache key",
+    "the centered composer stylesheet cache key",
   );
   requireText(
     text,
     `/billing-client.js?v=${ASSET_VERSION}`,
-    "the taller composer client cache key",
+    "the centered composer client cache key",
   );
 
   return text;
@@ -212,13 +212,13 @@ await update("public/billing.css", (source) => {
 
 .composer-dock textarea {
   border-radius: 10px;
-  padding: 5px 10px;
+  padding: 10px;
   font-size: 1rem;
-  line-height: 1.2;
+  line-height: 20px;
 }
 
 .composer-dock textarea::placeholder {
-  line-height: 1.2;
+  line-height: 20px;
 }
 
 .composer-dock #send-button {
@@ -261,5 +261,5 @@ await update("test/paid-worker.test.mjs", (source) => {
 });
 
 console.log(
-  "Made the model tile show the active 5.x version, set the composer to 42px, and added the Stabilize favicon.",
+  "Made the model tile show the active 5.x version, centered the composer text vertically, and added the Stabilize favicon.",
 );
