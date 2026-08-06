@@ -24,18 +24,22 @@ const [
   readFile("wrangler.jsonc", "utf8"),
 ]);
 
-test("orderly impact keeps the outcome question and verified structured events", () => {
+test("orderly impact keeps verified next-step and whole-conversation events", () => {
   assert.match(worker, /\/api\/impact-event/);
   assert.match(worker, /\/api\/message-feedback/);
   assert.match(worker, /\/admin\/impact/);
   assert.match(events, /X-Stabilize-Turn-Id/);
+  assert.match(events, /conversation_help_reported/);
   assert.match(shards, /IMPACT_SHARD_COUNT = 16/);
   assert.doesNotMatch(shards, /global-impact-v1/);
   assert.match(events, /impact\.js\?v=/);
   assert.match(events, /message-feedback\.js\?v=/);
 
   assert.match(client, /Did you choose a next step\?/);
-  assert.match(client, /event: "next_step_reported"/);
+  assert.match(client, /"next_step_reported"/);
+  assert.match(client, /Did this conversation help you move forward\?/);
+  assert.match(client, /"conversation_help_reported"/);
+  assert.match(client, /#new-conversation-button/);
   assert.match(client, /\["Yes", "yes"\]/);
   assert.match(client, /\["Partly", "partly"\]/);
   assert.match(client, /\["No", "no"\]/);
@@ -51,28 +55,36 @@ test("orderly impact keeps the outcome question and verified structured events",
   assert.doesNotMatch(client, /clarity_answered/);
   assert.doesNotMatch(client, /outcome_selected/);
 
-  assert.match(events, /const EVENT_TYPE = "next_step_reported"/);
+  assert.match(events, /const EVENT_SCHEMAS =/);
   assert.match(events, /id=\"outcome-measurement\"/);
   assert.match(styles, /\.impact-outcome-card/);
+  assert.match(styles, /\.impact-conversation-card/);
   assert.doesNotMatch(
     `${worker}\n${events}\n${shards}\n${dashboard}`,
     /userMessage|assistantReply|conversationText/,
   );
 });
 
-test("one outcome row advances from shown to a first answer", () => {
+test("each structured outcome advances from shown to a first answer", () => {
   assert.match(analytics, /const NEXT_STEP_EVENT = "next_step_reported"/);
+  assert.match(
+    analytics,
+    /const CONVERSATION_HELP_EVENT = "conversation_help_reported"/,
+  );
+  assert.match(analytics, /STRUCTURED_EVENT_TYPES/);
   assert.match(analytics, /existing\.event_value !== "shown"/);
   assert.match(analytics, /eventValue === "shown"/);
   assert.match(analytics, /UPDATE impact_events SET/);
   assert.match(analytics, /first answer wins/);
   assert.match(analytics, /reportedResolutionRate/);
+  assert.match(analytics, /conversationHelpRate/);
+  assert.match(analytics, /conversationResponseRate/);
   assert.match(analytics, /estimatedCostPerResolutionMicros/);
   assert.match(analytics, /MAX_EVENTS_PER_SESSION_HOUR/);
 });
 
 test("the private dashboard covers outcomes, engagement, quality, reliability, and cost", () => {
-  assert.equal((dashboard.match(/<div class=\"tile\">/g) || []).length, 15);
+  assert.equal((dashboard.match(/<div class=\"tile\">/g) || []).length, 17);
   for (const label of [
     "Eligible checks shown",
     "Reports received",
@@ -89,6 +101,8 @@ test("the private dashboard covers outcomes, engagement, quality, reliability, a
     "Returning-browser rate",
     "Est. cost / helpful response",
     "Written comments",
+    "Conversation help rate",
+    "Conversation feedback rate",
   ]) {
     assert.match(
       dashboard,
