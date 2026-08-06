@@ -200,8 +200,22 @@ function mergeImpactSummaries(summaries, since, now) {
     outcomeStates: {},
     sessions: 0,
     browsers: 0,
+    feedbackShown: 0,
+    feedbackResponses: 0,
+    helpfulResponses: 0,
+    unhelpfulResponses: 0,
+    feedbackStates: {},
+    feedbackReasons: {},
+    feedbackComments: 0,
     chats: 0,
     completedChats: 0,
+    failedChats: 0,
+    chatSessions: 0,
+    multiTurnSessions: 0,
+    chatBrowsers: 0,
+    returningBrowsers: 0,
+    responseMsTotal: 0,
+    timedChats: 0,
     estimatedCostMicros: 0,
   };
 
@@ -213,13 +227,27 @@ function mergeImpactSummaries(summaries, since, now) {
       "resolved",
       "sessions",
       "browsers",
+      "feedbackShown",
+      "feedbackResponses",
+      "helpfulResponses",
+      "unhelpfulResponses",
+      "feedbackComments",
       "chats",
       "completedChats",
+      "failedChats",
+      "chatSessions",
+      "multiTurnSessions",
+      "chatBrowsers",
+      "returningBrowsers",
+      "responseMsTotal",
+      "timedChats",
       "estimatedCostMicros",
     ]) {
       merged[key] += Number(summary[key] || 0);
     }
     addCounts(merged.outcomeStates, summary.outcomeStates);
+    addCounts(merged.feedbackStates, summary.feedbackStates);
+    addCounts(merged.feedbackReasons, summary.feedbackReasons);
   }
 
   merged.responseRate = metricRate(merged.responses, merged.prompts);
@@ -227,13 +255,37 @@ function mergeImpactSummaries(summaries, since, now) {
     merged.resolved,
     merged.responses,
   );
+  merged.feedbackResponseRate = metricRate(
+    merged.feedbackResponses,
+    merged.feedbackShown,
+  );
+  merged.helpfulResponseRate = metricRate(
+    merged.helpfulResponses,
+    merged.feedbackResponses,
+  );
   merged.chatCompletionRate = metricRate(
     merged.completedChats,
     merged.chats,
   );
+  merged.secondMessageRate = metricRate(
+    merged.multiTurnSessions,
+    merged.chatSessions,
+  );
+  merged.returningBrowserRate = metricRate(
+    merged.returningBrowsers,
+    merged.chatBrowsers,
+  );
+  merged.averageResponseMs =
+    merged.timedChats > 0
+      ? Math.round(merged.responseMsTotal / merged.timedChats)
+      : null;
   merged.estimatedCostPerResolutionMicros =
     merged.resolved > 0 && merged.estimatedCostMicros > 0
       ? Math.round(merged.estimatedCostMicros / merged.resolved)
+      : null;
+  merged.estimatedCostPerHelpfulMicros =
+    merged.helpfulResponses > 0 && merged.estimatedCostMicros > 0
+      ? Math.round(merged.estimatedCostMicros / merged.helpfulResponses)
       : null;
   return merged;
 }
