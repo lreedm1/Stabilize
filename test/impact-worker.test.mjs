@@ -49,7 +49,7 @@ function nextStepEvent(turnId, sessionId, browserId, value) {
   });
 }
 
-test("one verified event row advances from shown to yes and appears in the six-number dashboard", async () => {
+test("one verified event row advances from shown to yes and appears in the dashboard with daily usage", async () => {
   const sessionId = crypto.randomUUID();
   const browserId = crypto.randomUUID();
   const ctx = executionContext();
@@ -128,6 +128,11 @@ test("one verified event row advances from shown to yes and appears in the six-n
   assert.match(html, /Eligible checks shown/);
   assert.match(html, /Reports received/);
   assert.match(html, /Reported next-step rate/);
+  assert.match(html, /Daily usage/);
+  assert.match(html, /Unique browsers and submitted chat messages by UTC day/);
+  assert.match(html, /<strong>1 users<\/strong>/);
+  assert.match(html, /<strong>1 messages<\/strong>/);
+  assert.match(html, /<th>Users<\/th><th>Messages<\/th>/);
   assert.match(html, /One decision this week/);
   assert.match(html, /2\.00×/);
   assert.equal((html.match(/class="tile"/g) || []).length, 6);
