@@ -19,14 +19,14 @@ async function source(path) {
   return readFile(path, "utf8");
 }
 
-test("each completed assistant response receives private inline feedback", async () => {
+test("each completed assistant response receives quiet private feedback", async () => {
   const [client, css, events] = await Promise.all([
     source(files.client),
     source(files.css),
     source(files.events),
   ]);
 
-  assert.match(client, /Was this helpful\?/);
+  assert.doesNotMatch(client, /Was this helpful\?/);
   assert.match(client, /Mark this response helpful/);
   assert.match(client, /Mark this response not helpful/);
   assert.match(client, /message-feedback-reasons/);
@@ -40,10 +40,6 @@ test("each completed assistant response receives private inline feedback", async
   assert.match(css, /\.message-feedback \{/);
   assert.match(
     css,
-    /\.message-feedback-prompt\s*\{[\s\S]*?color: inherit;/,
-  );
-  assert.match(
-    css,
     /\.message-feedback-choice\s*\{[\s\S]*?-webkit-appearance: none !important;[\s\S]*?background-color: transparent !important;[\s\S]*?background-image: none !important;[\s\S]*?box-shadow: none !important;[\s\S]*?font-size: 0;/,
   );
   assert.match(css, /\.message-feedback-choice::before/);
@@ -52,15 +48,44 @@ test("each completed assistant response receives private inline feedback", async
     css,
     /\.message-feedback-choice\[data-value="down"\]::before\s*\{[\s\S]*?transform: rotate\(180deg\);/,
   );
-  assert.match(
-    css,
-    /\.message-feedback-choice:hover,[\s\S]*?\.message-feedback-choice\[aria-pressed="true"\]\s*\{[\s\S]*?background-color: transparent !important;/,
-  );
   assert.match(css, /@media \(max-width: 560px\)/);
   assert.match(events, /message-feedback\.css/);
   assert.match(events, /message-feedback\.js/);
   assert.match(events, /optional details; those details are stored privately/);
-  assert.match(events, /Did you choose a next step/);
+});
+
+test("model-relevant follow-ups move beside the feedback icons", async () => {
+  const [feedbackClient, impactClient, css, events] = await Promise.all([
+    source(files.client),
+    source(files.outcomeClient),
+    source(files.css),
+    source(files.events),
+  ]);
+
+  assert.match(impactClient, /FOLLOWUP_ACTION_EVENT/);
+  assert.match(impactClient, /function modelReplyNeedsFollowups\(text, route\)/);
+  assert.match(impactClient, /FOLLOWUP_REPLY_PATTERNS/);
+  assert.match(impactClient, /FOLLOWUP_CUE_PATTERN/);
+  assert.match(impactClient, /new CustomEvent\(FOLLOWUP_ACTION_EVENT/);
+  assert.match(impactClient, /buttons: followupButtons/);
+  assert.match(impactClient, /postNextStep\(turn, "shown"\)/);
+  assert.match(impactClient, /postNextStep\(turn, "yes"\)/);
+  assert.doesNotMatch(impactClient, /Did you choose a next step\?/);
+
+  assert.match(feedbackClient, /pendingFollowupActions = new Map\(\)/);
+  assert.match(feedbackClient, /followupActionHosts = new Map\(\)/);
+  assert.match(feedbackClient, /function flushFollowupActions\(turnId\)/);
+  assert.match(feedbackClient, /className = "message-feedback-actions"/);
+  assert.match(feedbackClient, /className = "message-feedback-action"/);
+  assert.match(feedbackClient, /row\.append\(up, down, actions\)/);
+
+  assert.match(
+    css,
+    /\.outcome-tray\s*\{[\s\S]*?display: none !important;/,
+  );
+  assert.match(css, /\.message-feedback-actions \{/);
+  assert.match(css, /\.message-feedback-action \{/);
+  assert.match(events, /up to three optional action buttons beside/);
 });
 
 test("New conversation triggers optional whole-chat feedback only after reset succeeds", async () => {
