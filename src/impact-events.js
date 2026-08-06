@@ -12,12 +12,20 @@ import {
   schedule,
 } from "./impact-shards.js";
 
-const IMPACT_ASSET_VERSION = "20260805-2";
+const IMPACT_ASSET_VERSION = "20260806-feedback-3";
 const IMPACT_PROMPT_VERSION = "next-step-v1";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const EVENT_TYPE = "next_step_reported";
-const EVENT_VALUES = new Set(["shown", "yes", "partly", "no"]);
+const EVENT_SCHEMAS = {
+  next_step_reported: {
+    promptVersion: "next-step-v1",
+    values: new Set(["shown", "yes", "partly", "no"]),
+  },
+  conversation_help_reported: {
+    promptVersion: "conversation-help-v1",
+    values: new Set(["shown", "yes", "partly", "no"]),
+  },
+};
 
 function cleanEventPayload(body) {
   const eventId = String(body?.eventId || "");
@@ -27,15 +35,16 @@ function cleanEventPayload(body) {
   const eventType = String(body?.event || "");
   const eventValue = String(body?.value || "");
   const promptVersion = String(body?.promptVersion || "");
+  const schema = EVENT_SCHEMAS[eventType];
 
   if (
     !UUID_PATTERN.test(eventId) ||
     !UUID_PATTERN.test(sessionId) ||
     !UUID_PATTERN.test(browserId) ||
     !UUID_PATTERN.test(turnId) ||
-    eventType !== EVENT_TYPE ||
-    !EVENT_VALUES.has(eventValue) ||
-    promptVersion !== IMPACT_PROMPT_VERSION
+    !schema ||
+    !schema.values.has(eventValue) ||
+    promptVersion !== schema.promptVersion
   ) {
     return null;
   }
@@ -144,11 +153,15 @@ export async function chatResponse(request, env, ctx) {
   const turnId = crypto.randomUUID();
   const sessionId = request.headers.get("x-stabilize-session-id") || "";
   const browserId = request.headers.get("x-stabilize-browser-id") || "";
-  const [sessionHash, browserHash, authSession] = await Promise.all([
-    hashIdentifier(env, "impact-session", sessionId),
-    hashIdentifier(env, "impact-browser", browserId),
-    readAuthSession(request, env),
-  ]);
+  const conversationId =
+    request.headers.get("x-stabilize-conversation-id") || "";
+  const [sessionHash, browserHash, conversationHash, authSession] =
+    await Promise.all([
+      hashIdentifier(env, "impact-session", sessionId),
+      hashIdentifier(env, "impact-browser", browserId),
+      hashIdentifier(env, "impact-conversation", conversationId),
+      readAuthSession(request, env),
+    ]);
 
   const response = await worker.fetch(request, env, ctx);
   const store = impactStub(env, browserHash);
@@ -167,6 +180,7 @@ export async function chatResponse(request, env, ctx) {
         occurredAt: startedAt,
         sessionHash,
         browserHash,
+        conversationHash,
         accountType: authSession ? "signed_in" : "guest",
         model: safeToken(env?.OPENAI_MODEL, 128) || "unknown",
         estimatedCostMicros: boundedNumber(
@@ -220,10 +234,22 @@ export async function enhanceHomePage(response, request) {
       `    <link rel="stylesheet" href="/impact.css?v=${IMPACT_ASSET_VERSION}" />\n  </head>`,
     );
   }
+  if (!html.includes('href="/message-feedback.css')) {
+    html = html.replace(
+      "</head>",
+      `    <link rel="stylesheet" href="/message-feedback.css?v=${IMPACT_ASSET_VERSION}" />\n  </head>`,
+    );
+  }
   if (!html.includes('src="/impact.js')) {
     html = html.replace(
       "</body>",
       `    <script type="module" src="/impact.js?v=${IMPACT_ASSET_VERSION}"></script>\n  </body>`,
+    );
+  }
+  if (!html.includes('src="/message-feedback.js')) {
+    html = html.replace(
+      "</body>",
+      `    <script type="module" src="/message-feedback.js?v=${IMPACT_ASSET_VERSION}"></script>\n  </body>`,
     );
   }
 
@@ -248,17 +274,26 @@ export async function enhancePrivacyPage(response, request) {
     "Privacy page exceeded the enhancement limit.",
   );
   if (!html.includes('id="outcome-measurement"')) {
-    const section = `<h2 id="outcome-measurement">Outcome measurement</h2>
+    const section = `<h2 id="outcome-measurement">Outcome and response measurement</h2>
       <p>
-        On the web, Stabilize may ask one optional question after an eligible,
-        non-emergency response: “Did you choose a next step?” One structured state
-        is kept for that response: shown, yes, partly, or no. The impact store also
-        keeps broad route, completion, configured cost, and timing metadata, plus
-        one-way hashes of random browser and tab identifiers. It does not place the
-        user’s message or the assistant’s reply in impact analytics. The browser
-        identifier rotates after 30 days, the tab identifier ends with the tab, and
-        impact records are designed to expire after 180 days. The private dashboard
-        is for aggregate product and sustainability review, not individual monitoring.
+        On the web, Stabilize may ask optional structured questions after a response.
+        The outcome check asks “Did you choose a next step?” and records only shown,
+        yes, partly, or no. After New conversation is selected, a separate non-blocking
+        check may ask whether the prior conversation helped the user move forward and
+        records the same four structured states. The response-quality control records
+        whether a response was shown, marked helpful, or marked not helpful, plus an
+        optional reason code. A user may also submit up to 500 characters of optional
+        details; those details are stored privately and may be reviewed to improve
+        Stabilize. Do not include private or identifying information.
+      </p>
+      <p>
+        The impact store also keeps broad route, completion, configured cost, and timing
+        metadata, plus one-way hashes of random browser, tab, and conversation identifiers.
+        It does not place the user's message or the assistant's reply in impact analytics.
+        The browser identifier rotates after 30 days, the tab identifier ends with the tab,
+        and the conversation identifier rotates after New conversation succeeds. Impact
+        and response-feedback records are designed to expire after 180 days. The private
+        dashboard is for aggregate product and sustainability review, not individual monitoring.
       </p>
 
       `;

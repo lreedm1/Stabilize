@@ -54,6 +54,9 @@ const POLICY_SCRIPTS = [
   "scripts/unify-public-page-theme.mjs",
   "scripts/unify-impact-dashboard-theme.mjs",
   "scripts/add-admin-menu-button.mjs",
+  "scripts/add-engagement-feedback.mjs",
+  "scripts/add-conversation-outcomes.mjs",
+  "scripts/add-daily-usage-metrics.mjs",
 ];
 const POLICY_TARGETS = [
   "scripts/favicon-assets/favicon.ico.b64",
@@ -67,6 +70,9 @@ const POLICY_TARGETS = [
   "src/paid-worker.js",
   "src/billing.js",
   "src/reasoning-policy.js",
+  "src/impact-events.js",
+  "src/impact-analytics.js",
+  "src/impact-shards.js",
   "src/impact-dashboard.js",
   "public/app.js",
   "public/billing-client.js",

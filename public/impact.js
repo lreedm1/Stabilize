@@ -1,7 +1,9 @@
 const IMPACT_ENDPOINT = "/api/impact-event";
-const PROMPT_VERSION = "next-step-v1";
+const NEXT_STEP_PROMPT_VERSION = "next-step-v1";
+const CONVERSATION_PROMPT_VERSION = "conversation-help-v1";
 const BROWSER_KEY = "stabilize:impact-browser:v1";
 const SESSION_KEY = "stabilize:impact-session:v1";
+const CONVERSATION_KEY = "stabilize:impact-conversation:v1";
 const BROWSER_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1_000;
 const URGENT_ROUTES = new Set([
   "IMMEDIATE_DANGER",
@@ -10,7 +12,9 @@ const URGENT_ROUTES = new Set([
 ]);
 const originalFetch = window.fetch.bind(window);
 const enhancedTurns = new Set();
+const conversationPromptedTurns = new Set();
 let latestTurn = null;
+let activeConversationCard = null;
 
 function randomId() {
   return crypto.randomUUID();
@@ -58,17 +62,47 @@ function sessionId() {
   }
 }
 
+function conversationId() {
+  try {
+    const existing = sessionStorage.getItem(CONVERSATION_KEY);
+    if (existing) return existing;
+    const created = randomId();
+    sessionStorage.setItem(CONVERSATION_KEY, created);
+    return created;
+  } catch {
+    return randomId();
+  }
+}
+
 const impactBrowserId = browserId();
 const impactSessionId = sessionId();
+let impactConversationId = conversationId();
 
-function chatRequest(input) {
+function rotateConversationId() {
+  impactConversationId = randomId();
+  try {
+    sessionStorage.setItem(CONVERSATION_KEY, impactConversationId);
+  } catch {
+    // The page-local value still separates future turns after a reset.
+  }
+}
+
+function sameOriginPathRequest(input, pathname) {
   try {
     const value = input instanceof Request ? input.url : input;
     const url = new URL(String(value), window.location.href);
-    return url.origin === window.location.origin && url.pathname === "/api/chat";
+    return url.origin === window.location.origin && url.pathname === pathname;
   } catch {
     return false;
   }
+}
+
+function chatRequest(input) {
+  return sameOriginPathRequest(input, "/api/chat");
+}
+
+function newConversationRequest(input) {
+  return sameOriginPathRequest(input, "/api/conversation/new");
 }
 
 function withImpactHeaders(input, init = {}) {
@@ -82,6 +116,7 @@ function withImpactHeaders(input, init = {}) {
   }
   headers.set("X-Stabilize-Session-Id", impactSessionId);
   headers.set("X-Stabilize-Browser-Id", impactBrowserId);
+  headers.set("X-Stabilize-Conversation-Id", impactConversationId);
 
   if (input instanceof Request) {
     return [new Request(input, { ...init, headers }), undefined];
@@ -134,6 +169,15 @@ async function inspectChatResponse(response, turn) {
 }
 
 window.fetch = async (input, init) => {
+  if (newConversationRequest(input)) {
+    const previousTurn = latestTurn;
+    const response = await originalFetch(input, init);
+    if (response.ok) {
+      rotateConversationId();
+      setTimeout(() => renderConversationFeedback(previousTurn), 0);
+    }
+    return response;
+  }
   if (!chatRequest(input)) return originalFetch(input, init);
 
   const [nextInput, nextInit] = withImpactHeaders(input, init);
@@ -158,16 +202,16 @@ function potentiallyResolving(text) {
   return true;
 }
 
-async function postNextStep(turn, value) {
+async function postImpactState(turn, event, value, promptVersion) {
   if (!turn?.turnId) return undefined;
   const payload = {
     eventId: randomId(),
     sessionId: impactSessionId,
     browserId: impactBrowserId,
     turnId: turn.turnId,
-    event: "next_step_reported",
+    event,
     value,
-    promptVersion: PROMPT_VERSION,
+    promptVersion,
   };
 
   const request = () =>
@@ -190,6 +234,24 @@ async function postNextStep(turn, value) {
   } catch {
     return undefined;
   }
+}
+
+function postNextStep(turn, value) {
+  return postImpactState(
+    turn,
+    "next_step_reported",
+    value,
+    NEXT_STEP_PROMPT_VERSION,
+  );
+}
+
+function postConversationHelp(turn, value) {
+  return postImpactState(
+    turn,
+    "conversation_help_reported",
+    value,
+    CONVERSATION_PROMPT_VERSION,
+  );
 }
 
 function button(label, value, className = "impact-choice") {
@@ -310,6 +372,70 @@ function enhanceOutcomeCheck(check) {
 
   check.replaceChildren(question, actions, privacy, dismiss);
   void postNextStep(turn, "shown");
+}
+
+function removeConversationCard(card = activeConversationCard) {
+  if (!(card instanceof HTMLElement)) return;
+  if (card === activeConversationCard) activeConversationCard = null;
+  card.remove();
+}
+
+function renderConversationFeedback(turn) {
+  if (
+    !turn?.turnId ||
+    !turn.completed ||
+    conversationPromptedTurns.has(turn.turnId) ||
+    URGENT_ROUTES.has(turn.route)
+  ) {
+    return;
+  }
+  conversationPromptedTurns.add(turn.turnId);
+  removeConversationCard();
+
+  const card = document.createElement("section");
+  card.className = "impact-conversation-card";
+  card.setAttribute("aria-label", "Conversation feedback");
+  card.setAttribute("aria-live", "polite");
+
+  const question = document.createElement("p");
+  question.className = "impact-conversation-question";
+  question.textContent = "Did this conversation help you move forward?";
+
+  const actions = document.createElement("div");
+  actions.className = "impact-actions impact-conversation-actions";
+  for (const [label, value] of [
+    ["Yes", "yes"],
+    ["Partly", "partly"],
+    ["No", "no"],
+  ]) {
+    const choice = button(label, value);
+    choice.addEventListener("click", () => {
+      for (const sibling of actions.querySelectorAll("button")) {
+        sibling.disabled = true;
+      }
+      void postConversationHelp(turn, value);
+      card.replaceChildren();
+      const thanks = document.createElement("p");
+      thanks.className = "impact-thanks";
+      thanks.textContent = "Thanks — conversation feedback saved.";
+      card.appendChild(thanks);
+      setTimeout(() => removeConversationCard(card), 1_200);
+    });
+    actions.appendChild(choice);
+  }
+
+  const note = document.createElement("p");
+  note.className = "impact-privacy-note";
+  note.textContent = "Optional and separate from your new conversation.";
+
+  const dismiss = button("Skip", "skip", "impact-skip");
+  dismiss.setAttribute("aria-label", "Dismiss conversation feedback");
+  dismiss.addEventListener("click", () => removeConversationCard(card));
+
+  card.append(question, actions, note, dismiss);
+  document.body.appendChild(card);
+  activeConversationCard = card;
+  void postConversationHelp(turn, "shown");
 }
 
 function queueOutcomeEnhancement() {

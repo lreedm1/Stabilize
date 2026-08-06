@@ -4,7 +4,30 @@ const DAY_MS = 24 * 60 * 60 * 1_000;
 const DEFAULT_RETENTION_DAYS = 180;
 const MAX_EVENTS_PER_SESSION_HOUR = 80;
 const NEXT_STEP_EVENT = "next_step_reported";
-const NEXT_STEP_VALUES = new Set(["shown", "yes", "partly", "no"]);
+const CONVERSATION_HELP_EVENT = "conversation_help_reported";
+const STRUCTURED_EVENT_VALUES = new Set(["shown", "yes", "partly", "no"]);
+const STRUCTURED_EVENT_TYPES = new Set([
+  NEXT_STEP_EVENT,
+  CONVERSATION_HELP_EVENT,
+]);
+const MESSAGE_FEEDBACK_RATINGS = new Set(["shown", "up", "down"]);
+const MESSAGE_FEEDBACK_REASONS = new Set([
+  "clear_answer",
+  "useful_next_step",
+  "felt_relevant",
+  "helped_me_decide",
+  "helped_me_feel_steadier",
+  "did_not_answer",
+  "misunderstood_me",
+  "too_generic",
+  "too_long",
+  "inaccurate",
+  "repetitive",
+  "unsafe_or_concerning",
+  "technical_problem",
+  "other",
+]);
+const MAX_COMMENT_CHARS = 500;
 
 function boundedInteger(value, minimum, maximum, fallback = 0) {
   const number = Number(value);
@@ -14,6 +37,14 @@ function boundedInteger(value, minimum, maximum, fallback = 0) {
 
 function boundedText(value, limit = 128) {
   return String(value || "").trim().slice(0, limit);
+}
+
+function cleanComment(value) {
+  return String(value || "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .trim()
+    .slice(0, MAX_COMMENT_CHARS);
 }
 
 function timestamp(value, fallback = Date.now()) {
@@ -33,6 +64,20 @@ function countBy(rows, keyName = "event_value") {
     counts[key] = Number(row.count) || 0;
   }
   return counts;
+}
+
+function totalStates(states) {
+  return Object.values(states || {}).reduce(
+    (sum, value) => sum + Number(value || 0),
+    0,
+  );
+}
+
+function answeredStates(states) {
+  return ["yes", "partly", "no"].reduce(
+    (sum, key) => sum + Number(states?.[key] || 0),
+    0,
+  );
 }
 
 function retentionMs(env) {
@@ -69,6 +114,8 @@ export class ImpactAnalytics extends DurableObject {
           ON chat_turns (occurred_at);
         CREATE INDEX IF NOT EXISTS chat_turns_session
           ON chat_turns (session_hash, occurred_at);
+        CREATE INDEX IF NOT EXISTS chat_turns_browser
+          ON chat_turns (browser_hash, occurred_at);
 
         CREATE TABLE IF NOT EXISTS impact_events (
           event_id TEXT PRIMARY KEY,
@@ -91,6 +138,24 @@ export class ImpactAnalytics extends DurableObject {
           ON impact_events (turn_id, event_type);
         CREATE INDEX IF NOT EXISTS impact_events_session
           ON impact_events (session_hash, occurred_at);
+
+        CREATE TABLE IF NOT EXISTS message_feedback (
+          turn_id TEXT PRIMARY KEY,
+          event_id TEXT NOT NULL,
+          occurred_at INTEGER NOT NULL,
+          session_hash TEXT NOT NULL,
+          browser_hash TEXT NOT NULL,
+          rating TEXT NOT NULL,
+          reason TEXT,
+          comment TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS message_feedback_occurred_at
+          ON message_feedback (occurred_at);
+        CREATE INDEX IF NOT EXISTS message_feedback_session
+          ON message_feedback (session_hash, occurred_at);
+        CREATE INDEX IF NOT EXISTS message_feedback_rating
+          ON message_feedback (rating, occurred_at);
       `);
     });
   }
@@ -148,6 +213,39 @@ export class ImpactAnalytics extends DurableObject {
     return true;
   }
 
+  recentSessionEventCount(sessionHash, occurredAt) {
+    return Number(
+      this.ctx.storage.sql
+        .exec(
+          `SELECT
+             (SELECT COUNT(*) FROM impact_events
+              WHERE session_hash = ? AND occurred_at >= ?) +
+             (SELECT COUNT(*) FROM message_feedback
+              WHERE session_hash = ? AND occurred_at >= ?) AS count`,
+          sessionHash,
+          occurredAt - 60 * 60 * 1_000,
+          sessionHash,
+          occurredAt - 60 * 60 * 1_000,
+        )
+        .one().count,
+    );
+  }
+
+  verifiedChat(turnId, sessionHash, browserHash) {
+    const chat = this.ctx.storage.sql
+      .exec(
+        `SELECT session_hash, browser_hash
+         FROM chat_turns WHERE turn_id = ?`,
+        turnId,
+      )
+      .toArray()[0];
+    return Boolean(
+      chat &&
+        chat.session_hash === sessionHash &&
+        chat.browser_hash === browserHash,
+    );
+  }
+
   async recordEvent(record) {
     const eventId = boundedText(record?.eventId, 64);
     const eventType = boundedText(record?.eventType, 64);
@@ -157,8 +255,8 @@ export class ImpactAnalytics extends DurableObject {
     const turnId = boundedText(record?.turnId, 64);
     if (
       !eventId ||
-      eventType !== NEXT_STEP_EVENT ||
-      !NEXT_STEP_VALUES.has(eventValue) ||
+      !STRUCTURED_EVENT_TYPES.has(eventType) ||
+      !STRUCTURED_EVENT_VALUES.has(eventValue) ||
       !sessionHash ||
       !browserHash ||
       !turnId
@@ -167,33 +265,14 @@ export class ImpactAnalytics extends DurableObject {
     }
 
     const occurredAt = timestamp(record?.occurredAt);
-    const recentCount = Number(
-      this.ctx.storage.sql
-        .exec(
-          `SELECT COUNT(*) AS count
-           FROM impact_events
-           WHERE session_hash = ? AND occurred_at >= ?`,
-          sessionHash,
-          occurredAt - 60 * 60 * 1_000,
-        )
-        .one().count,
-    );
-    if (recentCount >= MAX_EVENTS_PER_SESSION_HOUR) {
+    if (
+      this.recentSessionEventCount(sessionHash, occurredAt) >=
+      MAX_EVENTS_PER_SESSION_HOUR
+    ) {
       return { accepted: false, reason: "rate" };
     }
 
-    const chat = this.ctx.storage.sql
-      .exec(
-        `SELECT session_hash, browser_hash
-         FROM chat_turns WHERE turn_id = ?`,
-        turnId,
-      )
-      .toArray()[0];
-    if (
-      !chat ||
-      chat.session_hash !== sessionHash ||
-      chat.browser_hash !== browserHash
-    ) {
+    if (!this.verifiedChat(turnId, sessionHash, browserHash)) {
       return { accepted: false, reason: "turn" };
     }
 
@@ -204,13 +283,13 @@ export class ImpactAnalytics extends DurableObject {
          WHERE turn_id = ? AND event_type = ?
          LIMIT 1`,
         turnId,
-        NEXT_STEP_EVENT,
+        eventType,
       )
       .toArray()[0];
 
     if (existing) {
-      // One row holds the current state for an eligible response. A late
-      // `shown` retry may not overwrite a user answer, and the first answer wins.
+      // One row holds the current state for each verified prompt. A late
+      // `shown` retry may not overwrite an answer, and the first answer wins.
       if (existing.event_value !== "shown" || eventValue === "shown") {
         return { accepted: true, duplicate: true, verifiedTurn: true };
       }
@@ -238,7 +317,7 @@ export class ImpactAnalytics extends DurableObject {
       sessionHash,
       browserHash,
       turnId,
-      NEXT_STEP_EVENT,
+      eventType,
       eventValue,
       boundedText(record?.promptVersion, 32) || null,
     );
@@ -246,14 +325,98 @@ export class ImpactAnalytics extends DurableObject {
     return { accepted: true, verifiedTurn: true };
   }
 
-  async summary(options = {}) {
-    const now = timestamp(options?.now);
-    const since = Math.max(
-      now - 90 * DAY_MS,
-      timestamp(options?.since, now - 30 * DAY_MS),
-    );
+  async recordMessageFeedback(record) {
+    const eventId = boundedText(record?.eventId, 64);
+    const sessionHash = boundedText(record?.sessionHash, 128);
+    const browserHash = boundedText(record?.browserHash, 128);
+    const turnId = boundedText(record?.turnId, 64);
+    const rating = boundedText(record?.rating, 16);
+    const reason = boundedText(record?.reason, 64);
+    const comment = cleanComment(record?.comment);
 
-    const outcomeStates = countBy(
+    if (
+      !eventId ||
+      !sessionHash ||
+      !browserHash ||
+      !turnId ||
+      !MESSAGE_FEEDBACK_RATINGS.has(rating) ||
+      (reason && !MESSAGE_FEEDBACK_REASONS.has(reason)) ||
+      (rating === "shown" && (reason || comment))
+    ) {
+      return { accepted: false, reason: "invalid" };
+    }
+
+    const occurredAt = timestamp(record?.occurredAt);
+    if (
+      this.recentSessionEventCount(sessionHash, occurredAt) >=
+      MAX_EVENTS_PER_SESSION_HOUR
+    ) {
+      return { accepted: false, reason: "rate" };
+    }
+    if (!this.verifiedChat(turnId, sessionHash, browserHash)) {
+      return { accepted: false, reason: "turn" };
+    }
+
+    const existing = this.ctx.storage.sql
+      .exec(
+        `SELECT event_id, rating, reason, comment
+         FROM message_feedback WHERE turn_id = ?`,
+        turnId,
+      )
+      .toArray()[0];
+
+    if (existing) {
+      if (rating === "shown" && existing.rating !== "shown") {
+        return { accepted: true, duplicate: true, verifiedTurn: true };
+      }
+
+      const nextRating = rating === "shown" ? existing.rating : rating;
+      const ratingChanged = nextRating !== existing.rating;
+      const nextReason = reason || (ratingChanged ? null : existing.reason);
+      const nextComment = comment || existing.comment;
+      const unchanged =
+        nextRating === existing.rating &&
+        (nextReason || null) === (existing.reason || null) &&
+        (nextComment || null) === (existing.comment || null);
+      if (unchanged) {
+        return { accepted: true, duplicate: true, verifiedTurn: true };
+      }
+
+      this.ctx.storage.sql.exec(
+        `UPDATE message_feedback SET
+           event_id = ?, occurred_at = ?, rating = ?, reason = ?, comment = ?
+         WHERE turn_id = ?`,
+        eventId,
+        occurredAt,
+        nextRating,
+        nextReason || null,
+        nextComment || null,
+        turnId,
+      );
+      await this.scheduleRetention(occurredAt);
+      return { accepted: true, updated: true, verifiedTurn: true };
+    }
+
+    this.ctx.storage.sql.exec(
+      `INSERT INTO message_feedback (
+         turn_id, event_id, occurred_at, session_hash, browser_hash,
+         rating, reason, comment
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      turnId,
+      eventId,
+      occurredAt,
+      sessionHash,
+      browserHash,
+      rating,
+      reason || null,
+      comment || null,
+    );
+    await this.scheduleRetention(occurredAt);
+    return { accepted: true, verifiedTurn: true };
+  }
+
+  eventStates(since, eventType) {
+    return countBy(
       this.ctx.storage.sql
         .exec(
           `SELECT event_value, COUNT(*) AS count
@@ -263,19 +426,90 @@ export class ImpactAnalytics extends DurableObject {
              AND event_type = ?
            GROUP BY event_value`,
           since,
-          NEXT_STEP_EVENT,
+          eventType,
         )
         .toArray(),
     );
-    const prompts = Object.values(outcomeStates).reduce(
-      (sum, value) => sum + Number(value || 0),
-      0,
+  }
+
+  async summary(options = {}) {
+    const now = timestamp(options?.now);
+    const since = Math.max(
+      now - 90 * DAY_MS,
+      timestamp(options?.since, now - 30 * DAY_MS),
     );
-    const responses = ["yes", "partly", "no"].reduce(
-      (sum, key) => sum + Number(outcomeStates[key] || 0),
-      0,
-    );
+
+    const outcomeStates = this.eventStates(since, NEXT_STEP_EVENT);
+    const prompts = totalStates(outcomeStates);
+    const responses = answeredStates(outcomeStates);
     const resolved = Number(outcomeStates.yes || 0);
+
+    const conversationStates = this.eventStates(
+      since,
+      CONVERSATION_HELP_EVENT,
+    );
+    const conversationPrompts = totalStates(conversationStates);
+    const conversationResponses = answeredStates(conversationStates);
+    const conversationHelped =
+      Number(conversationStates.yes || 0) +
+      Number(conversationStates.partly || 0);
+    const conversationYes = Number(conversationStates.yes || 0);
+
+    const feedbackStates = countBy(
+      this.ctx.storage.sql
+        .exec(
+          `SELECT rating, COUNT(*) AS count
+           FROM message_feedback
+           WHERE occurred_at >= ?
+           GROUP BY rating`,
+          since,
+        )
+        .toArray(),
+      "rating",
+    );
+    const feedbackShown = totalStates(feedbackStates);
+    const feedbackResponses =
+      Number(feedbackStates.up || 0) + Number(feedbackStates.down || 0);
+    const helpfulResponses = Number(feedbackStates.up || 0);
+    const unhelpfulResponses = Number(feedbackStates.down || 0);
+    const feedbackReasons = countBy(
+      this.ctx.storage.sql
+        .exec(
+          `SELECT reason, COUNT(*) AS count
+           FROM message_feedback
+           WHERE occurred_at >= ? AND reason IS NOT NULL
+           GROUP BY reason`,
+          since,
+        )
+        .toArray(),
+      "reason",
+    );
+    const feedbackComments = Number(
+      this.ctx.storage.sql
+        .exec(
+          `SELECT COUNT(*) AS count
+           FROM message_feedback
+           WHERE occurred_at >= ? AND comment IS NOT NULL AND comment <> ''`,
+          since,
+        )
+        .one().count,
+    );
+    const recentFeedbackComments = this.ctx.storage.sql
+      .exec(
+        `SELECT occurred_at, rating, reason, comment
+         FROM message_feedback
+         WHERE occurred_at >= ? AND comment IS NOT NULL AND comment <> ''
+         ORDER BY occurred_at DESC
+         LIMIT 20`,
+        since,
+      )
+      .toArray()
+      .map((row) => ({
+        occurredAt: Number(row.occurred_at || 0),
+        rating: boundedText(row.rating, 16),
+        reason: boundedText(row.reason, 64) || null,
+        comment: cleanComment(row.comment),
+      }));
 
     const reach = this.ctx.storage.sql
       .exec(
@@ -290,10 +524,42 @@ export class ImpactAnalytics extends DurableObject {
       )
       .one();
 
+    const chatSessionRows = this.ctx.storage.sql
+      .exec(
+        `SELECT session_hash, COUNT(*) AS count
+         FROM chat_turns
+         WHERE occurred_at >= ?
+         GROUP BY session_hash`,
+        since,
+      )
+      .toArray();
+    const chatSessions = chatSessionRows.length;
+    const multiTurnSessions = chatSessionRows.filter(
+      (row) => Number(row.count || 0) >= 2,
+    ).length;
+
+    const chatBrowserRows = this.ctx.storage.sql
+      .exec(
+        `SELECT browser_hash,
+                COUNT(DISTINCT CAST(occurred_at / ? AS INTEGER)) AS active_days
+         FROM chat_turns
+         WHERE occurred_at >= ?
+         GROUP BY browser_hash`,
+        DAY_MS,
+        since,
+      )
+      .toArray();
+    const chatBrowsers = chatBrowserRows.length;
+    const returningBrowsers = chatBrowserRows.filter(
+      (row) => Number(row.active_days || 0) >= 2,
+    ).length;
+
     const chatCounts = this.ctx.storage.sql
       .exec(
         `SELECT status, COUNT(*) AS count,
-                COALESCE(SUM(estimated_cost_micros), 0) AS estimated_cost_micros
+                COALESCE(SUM(estimated_cost_micros), 0) AS estimated_cost_micros,
+                COALESCE(SUM(total_response_ms), 0) AS response_ms_total,
+                SUM(CASE WHEN total_response_ms IS NOT NULL THEN 1 ELSE 0 END) AS timed_chats
          FROM chat_turns
          WHERE occurred_at >= ?
          GROUP BY status`,
@@ -307,8 +573,19 @@ export class ImpactAnalytics extends DurableObject {
     const completedChats = chatCounts
       .filter((row) => row.status === "completed")
       .reduce((sum, row) => sum + Number(row.count || 0), 0);
+    const failedChats = chatCounts
+      .filter((row) => row.status === "error")
+      .reduce((sum, row) => sum + Number(row.count || 0), 0);
     const estimatedCostMicros = chatCounts.reduce(
       (sum, row) => sum + Number(row.estimated_cost_micros || 0),
+      0,
+    );
+    const responseMsTotal = chatCounts.reduce(
+      (sum, row) => sum + Number(row.response_ms_total || 0),
+      0,
+    );
+    const timedChats = chatCounts.reduce(
+      (sum, row) => sum + Number(row.timed_chats || 0),
       0,
     );
 
@@ -323,13 +600,52 @@ export class ImpactAnalytics extends DurableObject {
       reportedResolutionRate: rate(resolved, responses),
       sessions: Number(reach.sessions || 0),
       browsers: Number(reach.browsers || 0),
+      conversationPrompts,
+      conversationResponses,
+      conversationHelped,
+      conversationYes,
+      conversationStates,
+      conversationResponseRate: rate(
+        conversationResponses,
+        conversationPrompts,
+      ),
+      conversationHelpRate: rate(
+        conversationHelped,
+        conversationResponses,
+      ),
+      conversationYesRate: rate(conversationYes, conversationResponses),
+      feedbackShown,
+      feedbackResponses,
+      helpfulResponses,
+      unhelpfulResponses,
+      feedbackStates,
+      feedbackReasons,
+      feedbackComments,
+      recentFeedbackComments,
+      feedbackResponseRate: rate(feedbackResponses, feedbackShown),
+      helpfulResponseRate: rate(helpfulResponses, feedbackResponses),
       chats,
       completedChats,
+      failedChats,
       chatCompletionRate: rate(completedChats, chats),
+      chatSessions,
+      multiTurnSessions,
+      secondMessageRate: rate(multiTurnSessions, chatSessions),
+      chatBrowsers,
+      returningBrowsers,
+      returningBrowserRate: rate(returningBrowsers, chatBrowsers),
+      responseMsTotal,
+      timedChats,
+      averageResponseMs:
+        timedChats > 0 ? Math.round(responseMsTotal / timedChats) : null,
       estimatedCostMicros,
       estimatedCostPerResolutionMicros:
         resolved > 0 && estimatedCostMicros > 0
           ? Math.round(estimatedCostMicros / resolved)
+          : null,
+      estimatedCostPerHelpfulMicros:
+        helpfulResponses > 0 && estimatedCostMicros > 0
+          ? Math.round(estimatedCostMicros / helpfulResponses)
           : null,
     };
   }
@@ -338,6 +654,10 @@ export class ImpactAnalytics extends DurableObject {
     const cutoff = Date.now() - retentionMs(this.env);
     this.ctx.storage.sql.exec(
       "DELETE FROM impact_events WHERE occurred_at < ?",
+      cutoff,
+    );
+    this.ctx.storage.sql.exec(
+      "DELETE FROM message_feedback WHERE occurred_at < ?",
       cutoff,
     );
     this.ctx.storage.sql.exec(
@@ -350,6 +670,7 @@ export class ImpactAnalytics extends DurableObject {
         .exec(
           `SELECT
              (SELECT COUNT(*) FROM impact_events) +
+             (SELECT COUNT(*) FROM message_feedback) +
              (SELECT COUNT(*) FROM chat_turns) AS count`,
         )
         .one().count,

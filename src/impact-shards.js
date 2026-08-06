@@ -200,8 +200,28 @@ function mergeImpactSummaries(summaries, since, now) {
     outcomeStates: {},
     sessions: 0,
     browsers: 0,
+    conversationPrompts: 0,
+    conversationResponses: 0,
+    conversationHelped: 0,
+    conversationYes: 0,
+    conversationStates: {},
+    feedbackShown: 0,
+    feedbackResponses: 0,
+    helpfulResponses: 0,
+    unhelpfulResponses: 0,
+    feedbackStates: {},
+    feedbackReasons: {},
+    feedbackComments: 0,
+    recentFeedbackComments: [],
     chats: 0,
     completedChats: 0,
+    failedChats: 0,
+    conversations: 0,
+    multiTurnConversations: 0,
+    chatBrowsers: 0,
+    returningBrowsers: 0,
+    responseMsTotal: 0,
+    timedChats: 0,
     estimatedCostMicros: 0,
   };
 
@@ -213,27 +233,94 @@ function mergeImpactSummaries(summaries, since, now) {
       "resolved",
       "sessions",
       "browsers",
+      "conversationPrompts",
+      "conversationResponses",
+      "conversationHelped",
+      "conversationYes",
+      "feedbackShown",
+      "feedbackResponses",
+      "helpfulResponses",
+      "unhelpfulResponses",
+      "feedbackComments",
       "chats",
       "completedChats",
+      "failedChats",
+      "conversations",
+      "multiTurnConversations",
+      "chatBrowsers",
+      "returningBrowsers",
+      "responseMsTotal",
+      "timedChats",
       "estimatedCostMicros",
     ]) {
       merged[key] += Number(summary[key] || 0);
     }
     addCounts(merged.outcomeStates, summary.outcomeStates);
+    addCounts(merged.conversationStates, summary.conversationStates);
+    addCounts(merged.feedbackStates, summary.feedbackStates);
+    addCounts(merged.feedbackReasons, summary.feedbackReasons);
+    for (const comment of summary.recentFeedbackComments || []) {
+      merged.recentFeedbackComments.push({
+        occurredAt: Number(comment?.occurredAt || 0),
+        rating: String(comment?.rating || "").slice(0, 16),
+        reason: String(comment?.reason || "").slice(0, 64) || null,
+        comment: String(comment?.comment || "").slice(0, 500),
+      });
+    }
   }
 
+  merged.recentFeedbackComments = merged.recentFeedbackComments
+    .filter((entry) => entry.occurredAt > 0 && entry.comment)
+    .sort((left, right) => right.occurredAt - left.occurredAt)
+    .slice(0, 20);
   merged.responseRate = metricRate(merged.responses, merged.prompts);
   merged.reportedResolutionRate = metricRate(
     merged.resolved,
     merged.responses,
   );
+  merged.conversationResponseRate = metricRate(
+    merged.conversationResponses,
+    merged.conversationPrompts,
+  );
+  merged.conversationHelpRate = metricRate(
+    merged.conversationHelped,
+    merged.conversationResponses,
+  );
+  merged.conversationYesRate = metricRate(
+    merged.conversationYes,
+    merged.conversationResponses,
+  );
+  merged.feedbackResponseRate = metricRate(
+    merged.feedbackResponses,
+    merged.feedbackShown,
+  );
+  merged.helpfulResponseRate = metricRate(
+    merged.helpfulResponses,
+    merged.feedbackResponses,
+  );
   merged.chatCompletionRate = metricRate(
     merged.completedChats,
     merged.chats,
   );
+  merged.secondMessageRate = metricRate(
+    merged.multiTurnConversations,
+    merged.conversations,
+  );
+  merged.returningBrowserRate = metricRate(
+    merged.returningBrowsers,
+    merged.chatBrowsers,
+  );
+  merged.averageResponseMs =
+    merged.timedChats > 0
+      ? Math.round(merged.responseMsTotal / merged.timedChats)
+      : null;
   merged.estimatedCostPerResolutionMicros =
     merged.resolved > 0 && merged.estimatedCostMicros > 0
       ? Math.round(merged.estimatedCostMicros / merged.resolved)
+      : null;
+  merged.estimatedCostPerHelpfulMicros =
+    merged.helpfulResponses > 0 && merged.estimatedCostMicros > 0
+      ? Math.round(merged.estimatedCostMicros / merged.helpfulResponses)
       : null;
   return merged;
 }
