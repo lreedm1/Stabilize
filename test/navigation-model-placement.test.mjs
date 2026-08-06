@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { renderPage } from "../src/page.js";
 
-test("Home lives in the hamburger menu without chat actions or duplicate model choice", async () => {
+test("Home lives in the hamburger menu without chat actions, duplicate model choice, or a save notice", async () => {
   const [pageSource, workerSource, seoStyles, packageSource] = await Promise.all([
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
     readFile(new URL("../src/paid-worker.js", import.meta.url), "utf8"),
@@ -52,6 +52,11 @@ test("Home lives in the hamburger menu without chat actions or duplicate model c
     /const composerModelPicker = composerModelPickerMarkup\(/,
   );
   assert.match(workerSource, /if \(markup\) \{/);
+  assert.doesNotMatch(workerSource, /Your AI model choice was saved\./);
+  assert.doesNotMatch(
+    workerSource,
+    /url\.searchParams\.get\("model"\) === "saved"/,
+  );
   assert.match(
     packageSource,
     /node scripts\/finalize-home-menu-and-model-placement\.mjs/,
