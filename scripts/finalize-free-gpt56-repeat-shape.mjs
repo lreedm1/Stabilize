@@ -5,6 +5,7 @@ const FREE_POLICY_SCRIPTS = [
   "scripts/apply-free-gpt56-client.mjs",
   "scripts/align-free-gpt56-tests.mjs",
   "scripts/finalize-free-gpt56-ui-compat.mjs",
+  "scripts/finalize-free-gpt56-worker-tests.mjs",
   "scripts/enforce-free-gpt56-instant.mjs",
   "scripts/restore-free-model-selection-compat.mjs",
   "scripts/restore-model-fallback-compat.mjs",
