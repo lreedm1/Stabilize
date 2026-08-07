@@ -36,6 +36,10 @@ await update("src/paid-worker.js", (source) => {
     '<a class="billing-primary billing-link" href="/auth/google">Sign in</a>',
     '<a class="billing-primary billing-link" href="/auth/google">Sign in to choose a model</a>',
   );
+  text = text.replaceAll(
+    '<details class="composer-model-picker composer-quick-menu">',
+    '<details class="composer-model-picker">',
+  );
   text = text.replaceAll(OLD_RESET_COPY, RESET_COPY);
   if (text.includes("Your AI model choice was saved.")) {
     throw new Error("The suppressed model-saved notice was restored");
@@ -44,6 +48,11 @@ await update("src/paid-worker.js", (source) => {
     text,
     'href="/auth/google">Sign in to choose a model',
     "the guest model sign-in action",
+  );
+  requireText(
+    text,
+    '<details class="composer-model-picker">',
+    "the compatible composer model-picker class",
   );
   requireText(text, RESET_COPY, "the explicit UTC reset copy");
   return text;
@@ -84,8 +93,8 @@ await update(
         "  assert.match(workerSource, /freeLimit[\\s\\S]*GPT-5\\.6 Instant messages/);",
       )
       .replace(
-        '  assert.match(workerSource, /class="composer-model-picker"/);',
         '  assert.match(workerSource, /class="composer-model-picker(?:\\s|\\")/);',
+        '  assert.match(workerSource, /class="composer-model-picker"/);',
       ),
   { optional: true },
 );
