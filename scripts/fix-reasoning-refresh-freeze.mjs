@@ -188,16 +188,18 @@ await update("public/app.js", (source) => {
 await update("src/index.js", (source) => {
   let text = source;
 
-  const inputPattern = /^([ \t]*)input: messages,\n\1store: true,/gm;
-  text = text.replace(inputPattern, (_match, indent) =>
-    [
-      `${indent}input: messages,`,
-      `${indent}...(turnReasoningEffort === "none"`,
-      `${indent}  ? { max_output_tokens: 500 }`,
-      `${indent}  : {}),`,
-      `${indent}store: true,`,
-    ].join("\n"),
-  );
+  if (!text.includes("max_output_tokens: 500")) {
+    const reasoningPattern =
+      /^([ \t]*)reasoning: \{ effort: turnReasoningEffort \},$/gm;
+    text = text.replace(reasoningPattern, (_match, indent) =>
+      [
+        `${indent}reasoning: { effort: turnReasoningEffort },`,
+        `${indent}...(turnReasoningEffort === "none"`,
+        `${indent}  ? { max_output_tokens: 500 }`,
+        `${indent}  : {}),`,
+      ].join("\n"),
+    );
+  }
 
   text = text.replace(
     '      await writer.write(streamEvent({ type: "meta", route }));',
@@ -213,7 +215,7 @@ await update("src/index.js", (source) => {
   );
 
   if (countOccurrences(text, "max_output_tokens: 500") !== 2) {
-    throw new Error("Fastest mode must bound both reply-generation paths");
+    throw new Error("Fastest mode must bound both user reply-generation paths");
   }
   requireText(
     text,
