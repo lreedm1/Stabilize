@@ -97,18 +97,21 @@ await update("src/index.js", (source) => {
     text,
     "const turnReasoningEffort = selectReasoningEffort({",
   );
-  if (selectorCount !== 2) {
+  // The first materialization has the JSON and streaming reply paths. Later
+  // passes also retain the hardened non-streaming recovery path, so three is
+  // the correct repeat-run shape.
+  if (![2, 3].includes(selectorCount)) {
     throw new Error(
-      `Adaptive reasoning did not wire both reply paths: selectors=${selectorCount}`,
+      `Adaptive reasoning found an unexpected reply-path count: selectors=${selectorCount}`,
     );
   }
   const payloadCount = countOccurrences(
     text,
     "reasoning: { effort: turnReasoningEffort },",
   );
-  if (payloadCount !== 2) {
+  if (payloadCount !== selectorCount) {
     throw new Error(
-      `Adaptive reasoning did not update both OpenAI payloads: payloads=${payloadCount}`,
+      `Adaptive reasoning declarations and payloads differ: selectors=${selectorCount}, payloads=${payloadCount}`,
     );
   }
   return text;
