@@ -45,15 +45,21 @@ jobs:
             status=$?
             echo "npm test status: ${status}" >> debug-test.log
           fi
+          mkdir -p debug-output/src debug-output/public debug-output/test
+          cp debug-test.log debug-output/
+          cp src/paid-worker.js src/billing.js debug-output/src/ 2>/dev/null || true
+          cp public/billing-client.js public/billing.css debug-output/public/ 2>/dev/null || true
+          cp test/prompt-policy-idempotency.test.mjs test/paid-model-choice.test.mjs test/product.test.mjs test/navigation-model-placement.test.mjs test/composer-chat-sections.test.mjs test/composer-placeholder-alignment.test.mjs debug-output/test/ 2>/dev/null || true
+          cp package.json wrangler.jsonc debug-output/ 2>/dev/null || true
           echo "status=${status}" >> "$GITHUB_OUTPUT"
           exit "$status"
 
-      - name: Upload diagnostic log
+      - name: Upload diagnostic files
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: free-gpt56-debug-${{ github.run_id }}
-          path: debug-test.log
+          path: debug-output
           if-no-files-found: error
           retention-days: 1
 
