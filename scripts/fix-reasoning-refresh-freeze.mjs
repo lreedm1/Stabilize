@@ -217,7 +217,8 @@ await update("src/index.js", (source) => {
   }
   requireText(
     text,
-    'reasoningEffort: String(\n            env.OPENAI_REASONING_EFFORT || "none"',
+    `reasoningEffort: String(
+            env.OPENAI_REASONING_EFFORT || "none"`,
     "the server-confirmed streamed effort",
   );
   return text;
