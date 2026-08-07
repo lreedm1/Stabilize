@@ -203,7 +203,9 @@ function weeklyDecision`;
     'aria-label="Primary engagement and quality metrics"',
   );
 
-  if (!text.includes("<span>Chats started</span>")) {
+  // Later conversation-outcome passes rename the first engagement tile, so
+  // use the durable second-message tile as the insertion sentinel.
+  if (!text.includes("<span>Second-message rate</span>")) {
     const marker = `<div class="tile"><span>Self-funding ratio</span><strong>${"${escapeHtml(selfFundingRatio(finance))}"}</strong></div>\n</section>`;
     requireText(text, marker, "the primary dashboard grid ending");
     const tiles = `<div class="tile"><span>Self-funding ratio</span><strong>${"${escapeHtml(selfFundingRatio(finance))}"}</strong></div>
