@@ -10,6 +10,13 @@ function countOccurrences(text, value) {
   return text.split(value).length - 1;
 }
 
+const ADAPTIVE_SELECTOR = `const turnReasoningEffort = selectReasoningEffort({
+    latestText,
+    route,
+    messages,
+    ceiling: reasoningEffort,
+  });`;
+
 function replaceReasoningExpectation(text, testTitle, effort) {
   const start = text.indexOf(`test("${testTitle}"`);
   if (start < 0) {
@@ -45,6 +52,14 @@ await update("src/index.js", (source) => {
     text = text.replace(importAnchor, importAnchor + importLine);
   }
 
+  // The final instant-thinking pass intentionally materializes the selected
+  // request effort directly. Restore the adaptive intermediate form here so
+  // running the complete generation pipeline again remains repeatable.
+  text = text.replaceAll(
+    "const turnReasoningEffort = reasoningEffort;",
+    ADAPTIVE_SELECTOR,
+  );
+
   const replyAnchor = `  const { apiKey, model, reasoningEffort } = openAIConfig(env);
   const result = await callOpenAI(`;
   const replyReplacement = `  const { apiKey, model, reasoningEffort } = openAIConfig(env);
@@ -78,21 +93,26 @@ await update("src/index.js", (source) => {
     'reasoning: { effort: turnReasoningEffort },',
   );
 
-  if (
-    countOccurrences(
-      text,
-      "const turnReasoningEffort = selectReasoningEffort({",
-    ) !== 2
-  ) {
-    throw new Error("Adaptive reasoning did not wire both reply paths");
+  const selectorCount = countOccurrences(
+    text,
+    "const turnReasoningEffort = selectReasoningEffort({",
+  );
+  // The first materialization has the JSON and streaming reply paths. Later
+  // passes also retain the hardened non-streaming recovery path, so three is
+  // the correct repeat-run shape.
+  if (![2, 3].includes(selectorCount)) {
+    throw new Error(
+      `Adaptive reasoning found an unexpected reply-path count: selectors=${selectorCount}`,
+    );
   }
-  if (
-    countOccurrences(
-      text,
-      "reasoning: { effort: turnReasoningEffort },",
-    ) !== 2
-  ) {
-    throw new Error("Adaptive reasoning did not update both OpenAI payloads");
+  const payloadCount = countOccurrences(
+    text,
+    "reasoning: { effort: turnReasoningEffort },",
+  );
+  if (payloadCount !== selectorCount) {
+    throw new Error(
+      `Adaptive reasoning declarations and payloads differ: selectors=${selectorCount}, payloads=${payloadCount}`,
+    );
   }
   return text;
 });

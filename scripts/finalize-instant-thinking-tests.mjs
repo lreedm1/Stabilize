@@ -1,7 +1,13 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-async function update(path, transform) {
-  const before = await readFile(path, "utf8");
+async function update(path, transform, { optional = false } = {}) {
+  let before;
+  try {
+    before = await readFile(path, "utf8");
+  } catch (error) {
+    if (optional && error?.code === "ENOENT") return;
+    throw error;
+  }
   const after = transform(before);
   if (after !== before) await writeFile(path, after);
 }
@@ -57,52 +63,56 @@ await update("test/worker.test.mjs", (source) => {
   return text;
 });
 
-await update("test/prompt-policy-idempotency.test.mjs", (source) => {
-  let text = source;
-  if (!text.includes('"scripts/prepare-instant-thinking-policy.mjs"')) {
-    const marker = '  "scripts/prepare-openai-policy-pass.mjs",\n';
-    if (!text.includes(marker)) {
-      throw new Error("Could not locate the reasoning-policy preparation fixture");
+await update(
+  "test/prompt-policy-idempotency.test.mjs",
+  (source) => {
+    let text = source;
+    if (!text.includes('"scripts/prepare-instant-thinking-policy.mjs"')) {
+      const marker = '  "scripts/prepare-openai-policy-pass.mjs",\n';
+      if (!text.includes(marker)) {
+        throw new Error("Could not locate the reasoning-policy preparation fixture");
+      }
+      text = text.replace(
+        marker,
+        `${marker}  "scripts/prepare-instant-thinking-policy.mjs",\n`,
+      );
     }
-    text = text.replace(
-      marker,
-      `${marker}  "scripts/prepare-instant-thinking-policy.mjs",\n`,
-    );
-  }
 
-  if (!text.includes('"scripts/finalize-instant-thinking-tests.mjs"')) {
-    const marker = '  "scripts/add-instant-thinking-menu.mjs",\n';
-    if (!text.includes(marker)) {
-      throw new Error("Could not locate the instant-thinking fixture");
+    if (!text.includes('"scripts/finalize-instant-thinking-tests.mjs"')) {
+      const marker = '  "scripts/add-instant-thinking-menu.mjs",\n';
+      if (!text.includes(marker)) {
+        throw new Error("Could not locate the instant-thinking fixture");
+      }
+      text = text.replace(
+        marker,
+        `${marker}  "scripts/finalize-instant-thinking-tests.mjs",\n`,
+      );
     }
-    text = text.replace(
-      marker,
-      `${marker}  "scripts/finalize-instant-thinking-tests.mjs",\n`,
-    );
-  }
 
-  if (!text.includes('"test/openai-streaming-worker.test.mjs"')) {
-    const marker = '  "test/worker.test.mjs",\n';
-    if (!text.includes(marker)) {
-      throw new Error("Could not locate the Worker fixture target");
+    if (!text.includes('"test/openai-streaming-worker.test.mjs"')) {
+      const marker = '  "test/worker.test.mjs",\n';
+      if (!text.includes(marker)) {
+        throw new Error("Could not locate the Worker fixture target");
+      }
+      text = text.replace(
+        marker,
+        `${marker}  "test/openai-streaming-worker.test.mjs",\n`,
+      );
     }
-    text = text.replace(
-      marker,
-      `${marker}  "test/openai-streaming-worker.test.mjs",\n`,
-    );
-  }
 
-  if (!text.includes('"test/model-catalog-usage.test.mjs"')) {
-    const marker = '  "test/model-usage-worker.test.mjs",\n';
-    if (!text.includes(marker)) {
-      throw new Error("Could not locate the model-usage fixture target");
+    if (!text.includes('"test/model-catalog-usage.test.mjs"')) {
+      const marker = '  "test/model-usage-worker.test.mjs",\n';
+      if (!text.includes(marker)) {
+        throw new Error("Could not locate the model-usage fixture target");
+      }
+      text = text.replace(
+        marker,
+        `${marker}  "test/model-catalog-usage.test.mjs",\n`,
+      );
     }
-    text = text.replace(
-      marker,
-      `${marker}  "test/model-catalog-usage.test.mjs",\n`,
-    );
-  }
-  return text;
-});
+    return text;
+  },
+  { optional: true },
+);
 
 console.log("Finalized exact instant-thinking behavior and fixtures.");
