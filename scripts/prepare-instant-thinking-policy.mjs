@@ -26,10 +26,19 @@ const adaptiveSelector = `const turnReasoningEffort = selectReasoningEffort({
     messages,
     ceiling: reasoningEffort,
   });`;
-const workerAfter = workerBefore.replaceAll(
+let workerAfter = workerBefore.replaceAll(
   "const turnReasoningEffort = reasoningEffort;",
   adaptiveSelector,
 );
+
+// The final fastest-response pass adds this no-reasoning output cap after all
+// legacy OpenAI-shape generators. Remove it temporarily on later passes so the
+// older low-verbosity materializer sees the exact intermediate shape it owns.
+workerAfter = workerAfter.replace(
+  /^[ \t]*\.\.\.\(turnReasoningEffort === "none"\n[ \t]*\? \{ max_output_tokens: 500 \}\n[ \t]*: \{\}\),\n/gm,
+  "",
+);
+
 if (workerAfter !== workerBefore) {
   await writeFile(workerPath, workerAfter);
 }
