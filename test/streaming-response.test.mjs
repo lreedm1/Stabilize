@@ -25,9 +25,9 @@ test("model replies stream through NDJSON while fixed routes remain deterministi
     ).length,
     2,
   );
-  assert.doesNotMatch(
+  assert.match(
     workerSource,
-    /reasoning:\s*\{ effort: reasoningEffort \}/,
+    /async function generateFallbackReply[\s\S]*?reasoning:\s*\{ effort: reasoningEffort \}[\s\S]*?async function writeReplyDeltas/,
   );
   assert.match(
     workerSource,
@@ -43,7 +43,12 @@ test("model replies stream through NDJSON while fixed routes remain deterministi
   assert.match(clientSource, /contentType\.includes\("application\/x-ndjson"\)/);
   assert.match(clientSource, /renderStreamingOutput\(article, accumulated\)/);
   assert.match(clientSource, /finalizeStreamingOutput\(/);
-  assert.match(clientSource, /const pendingOutput = showOutput\(copy\.thinking/);
+  assert.match(clientSource, /function pendingReplyCopy\(/);
+  assert.match(clientSource, /copy\.responding/);
+  assert.match(
+    clientSource,
+    /const pendingOutput = showOutput\(pendingReplyCopy\(\)/,
+  );
 
   assert.match(packageSource, /apply-streaming-policy\.mjs/);
   assert.match(packageSource, /use-supported-openai-model\.mjs/);
