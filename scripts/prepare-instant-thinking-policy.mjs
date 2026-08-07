@@ -43,6 +43,19 @@ if (workerAfter !== workerBefore) {
   await writeFile(workerPath, workerAfter);
 }
 
+// The legacy streaming generator verifies the original pending-status call.
+// Restore that build-stage expression before it runs; the final pass changes
+// it back to the effort-aware Responding/Thinking copy.
+const appPath = "public/app.js";
+const appBefore = await readFile(appPath, "utf8");
+const appAfter = appBefore.replaceAll(
+  'const pendingOutput = showOutput(pendingReplyCopy(), "thinking-output", "thinking");',
+  'const pendingOutput = showOutput(copy.thinking, "thinking-output", "thinking");',
+);
+if (appAfter !== appBefore) {
+  await writeFile(appPath, appAfter);
+}
+
 // The legacy instant-thinking generator verifies its original cache key.
 // Restore that temporary build-stage URL before it runs. The final refresh
 // safety pass replaces it with the current cache-busted asset URL.
