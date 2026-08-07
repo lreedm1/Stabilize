@@ -291,6 +291,18 @@ await update(
 );
 
 await update(
+  "test/outcome-followup.test.mjs",
+  (source) => {
+    const text = source.replace(/\n{3,}\}\);\n?$/u, "\n\n});\n");
+    if (/\n{3,}\}\);\n?$/u.test(text)) {
+      throw new Error("Outcome follow-up test still accumulates blank lines");
+    }
+    return text;
+  },
+  { optional: true },
+);
+
+await update(
   "test/prompt-policy-idempotency.test.mjs",
   (source) => {
     let text = source;
