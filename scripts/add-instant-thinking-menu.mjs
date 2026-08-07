@@ -51,14 +51,27 @@ await update("src/billing.js", (source) => {
 await update("src/index.js", (source) => {
   let text = source;
 
-  if (!text.includes("function requestedReasoningEffort(body)")) {
+  if (!text.includes('  "max",\n]);')) {
+    const marker = '  "xhigh",\n]);';
+    requireText(text, marker, "the reasoning-effort allow list");
+    text = text.replace(marker, '  "xhigh",\n  "max",\n]);');
+  }
+
+  if (!text.includes("function requestedReasoningEffort(body, model)")) {
     const marker = "function openAIConfig(env) {";
     requireText(text, marker, "the OpenAI configuration helper");
-    const helpers = `function requestedReasoningEffort(body) {
+    const helpers = `function requestedReasoningEffort(body, model) {
   const effort = String(body?.reasoningEffort || "none")
     .trim()
     .toLowerCase();
-  return OPENAI_REASONING_EFFORTS.has(effort) ? effort : "none";
+  if (!OPENAI_REASONING_EFFORTS.has(effort)) return "none";
+  if (
+    effort === "max" &&
+    !/^gpt-5\\.6(?:-|$)/i.test(String(model || ""))
+  ) {
+    return "xhigh";
+  }
+  return effort;
 }
 
 function reasoningEnvironment(env, effort) {
@@ -81,12 +94,15 @@ function reasoningEnvironment(env, effort) {
   );
 
   const bodyMarker = "  const body = await readBoundedJson(request);";
-  if (!text.includes("requestedReasoningEffort(body));")) {
+  if (!text.includes("requestedReasoningEffort(body, env.OPENAI_MODEL)")) {
     requireText(text, bodyMarker, "the chat request body");
     text = text.replace(
       bodyMarker,
       `${bodyMarker}
-  env = reasoningEnvironment(env, requestedReasoningEffort(body));`,
+  env = reasoningEnvironment(
+    env,
+    requestedReasoningEffort(body, env.OPENAI_MODEL),
+  );`,
     );
   }
 
@@ -95,10 +111,12 @@ function reasoningEnvironment(env, effort) {
     "const turnReasoningEffort = reasoningEffort;",
   );
 
-  requireText(text, "function requestedReasoningEffort(body)", "the request effort validator");
+  requireText(text, "function requestedReasoningEffort(body, model)", "the request effort validator");
   requireText(text, "function reasoningEnvironment(env, effort)", "the request effort environment");
-  requireText(text, "env = reasoningEnvironment(env, requestedReasoningEffort(body));", "the per-request effort override");
+  requireText(text, "requestedReasoningEffort(body, env.OPENAI_MODEL)", "the model-aware effort override");
   requireText(text, 'env.OPENAI_REASONING_EFFORT || "none"', "the instant fallback");
+  requireText(text, '  "max",\n]);', "maximum reasoning support");
+  requireText(text, 'return "xhigh";', "the GPT-5.4 maximum fallback");
   const directEffortCount =
     text.split("const turnReasoningEffort = reasoningEffort;").length - 1;
   if (directEffortCount !== 2) {
@@ -218,19 +236,24 @@ test("only GPT-5.4 and Current remain selectable, with instant responses by defa
 
   assert.match(billingSource, /"gpt-5\\.4\\|GPT-5\\.4"/);
   assert.match(billingSource, /"gpt-5\\.6-sol\\|Current"/);
-  assert.match(indexSource, /function requestedReasoningEffort\\(body\\)/);
-  assert.match(indexSource, /env = reasoningEnvironment\\(env, requestedReasoningEffort\\(body\\)\\)/);
+  assert.match(indexSource, /function requestedReasoningEffort\\(body, model\\)/);
+  assert.match(indexSource, /requestedReasoningEffort\\(body, env\\.OPENAI_MODEL\\)/);
+  assert.match(indexSource, /effort === "max"/);
+  assert.match(indexSource, /return "xhigh"/);
   assert.equal(
     (indexSource.match(/const turnReasoningEffort = reasoningEffort;/g) || []).length,
     2,
   );
   assert.match(pageSource, /reasoning-choice\\.js\\?v=20260807-instant-thinking-1/);
 
-  for (const effort of ["none", "low", "medium", "high", "xhigh"]) {
+  for (const effort of ["none", "low", "medium", "high", "xhigh", "max"]) {
     assert.match(reasoningClient, new RegExp(\`value: "\${effort}"\`));
   }
   assert.match(reasoningClient, /Respond instantly/);
+  assert.match(reasoningClient, /Think maximum \\(Current only\\)/);
   assert.match(reasoningClient, /Free at every level/);
+  assert.match(reasoningClient, /CURRENT_MODEL_PATTERN/);
+  assert.match(reasoningClient, /maximum\\.disabled = !enabled/);
   assert.match(reasoningClient, /body\\.reasoningEffort = reasoningEffort/);
   assert.match(packageSource, /add-instant-thinking-menu\\.mjs/);
 });
