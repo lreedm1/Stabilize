@@ -78,10 +78,15 @@ await update(
 await update(
   "test/paid-model-choice.test.mjs",
   (source) =>
-    source.replace(
-      "  assert.match(workerSource, /50 free GPT-5.6 Instant messages/);",
-      "  assert.match(workerSource, /freeLimit[\\s\\S]*GPT-5\\.6 Instant messages/);",
-    ),
+    source
+      .replace(
+        "  assert.match(workerSource, /50 free GPT-5.6 Instant messages/);",
+        "  assert.match(workerSource, /freeLimit[\\s\\S]*GPT-5\\.6 Instant messages/);",
+      )
+      .replace(
+        '  assert.match(workerSource, /class="composer-model-picker"/);',
+        '  assert.match(workerSource, /class="composer-model-picker(?:\\s|\\")/);',
+      ),
   { optional: true },
 );
 
