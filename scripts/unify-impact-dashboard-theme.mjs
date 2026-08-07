@@ -58,7 +58,18 @@ if (text.includes(dashboardStart)) {
     "the dashboard visual theme",
   );
 } else {
-  requireText(text, dashboardCss, "the unified dashboard visual theme");
+  // Later product passes legitimately extend the dashboard CSS with daily
+  // usage and feedback panels. Verify the shared visual contract rather than
+  // requiring the original theme block to remain byte-for-byte unchanged.
+  for (const [expected, label] of [
+    [":root{color-scheme:dark}", "the dark dashboard color scheme"],
+    [".shell{width:min(1040px", "the dashboard shell"],
+    [".tile,.panel,.note{border:var(--stabilize-reading-border)", "the shared panel surface"],
+    [".decision{width:100%;min-width:0;max-width:none", "the aligned decision panel"],
+    ["@media(max-width:520px)", "the mobile dashboard layout"],
+  ]) {
+    requireText(text, expected, label);
+  }
 }
 
 const themeLinkCount = (text.match(
