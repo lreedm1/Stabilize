@@ -21,7 +21,10 @@ function requireText(value, expected, label) {
 await update(
   "test/model-usage-worker.test.mjs",
   (source) => {
-    let text = source.replace(
+    const marker = `    if (body.reasoning?.effort === "none") {
+      providerRequests.push({`;
+    if (source.includes(marker)) return source;
+    const text = source.replace(
       `    providerRequests.push({
       model: body.model,
       effort: body.reasoning?.effort,
@@ -33,11 +36,7 @@ await update(
       });
     }`,
     );
-    requireText(
-      text,
-      'if (body.reasoning?.effort === "none")',
-      "the user-reply provider filter",
-    );
+    requireText(text, marker, "the user-reply provider filter");
     return text;
   },
   { optional: true },
@@ -46,17 +45,16 @@ await update(
 await update(
   "test/paid-worker.test.mjs",
   (source) => {
-    let text = source.replace(
+    const marker = `    if (body.reasoning?.effort === "none") {
+      providerModels.push(body.model);`;
+    if (source.includes(marker)) return source;
+    const text = source.replace(
       "    providerModels.push(body.model);",
       `    if (body.reasoning?.effort === "none") {
       providerModels.push(body.model);
     }`,
     );
-    requireText(
-      text,
-      'if (body.reasoning?.effort === "none")',
-      "the paid-worker user-reply provider filter",
-    );
+    requireText(text, marker, "the paid-worker user-reply provider filter");
     return text;
   },
   { optional: true },
