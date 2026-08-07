@@ -65,6 +65,21 @@ await update(
 );
 
 await update(
+  "docs/STRIPE_MODEL_CHOICE_SETUP.md",
+  (source) =>
+    source
+      .replaceAll(
+        "Free accounts receive 20 non-default-model messages per UTC day.",
+        "Free accounts receive 50 free GPT-5.6 Instant messages per UTC day, then continue on GPT-5.4.",
+      )
+      .replaceAll(
+        "`FREE_DAILY_MODEL_MESSAGE_LIMIT=20`",
+        "`FREE_DAILY_MODEL_MESSAGE_LIMIT=50`",
+      ),
+  { optional: true },
+);
+
+await update(
   "test/composer-chat-sections.test.mjs",
   (source) =>
     source.replace(
