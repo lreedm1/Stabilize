@@ -80,6 +80,28 @@ await update("test/prompt-policy-idempotency.test.mjs", (source) => {
       `${marker}  "scripts/finalize-instant-thinking-tests.mjs",\n`,
     );
   }
+
+  if (!text.includes('"test/openai-streaming-worker.test.mjs"')) {
+    const marker = '  "test/worker.test.mjs",\n';
+    if (!text.includes(marker)) {
+      throw new Error("Could not locate the Worker fixture target");
+    }
+    text = text.replace(
+      marker,
+      `${marker}  "test/openai-streaming-worker.test.mjs",\n`,
+    );
+  }
+
+  if (!text.includes('"test/model-catalog-usage.test.mjs"')) {
+    const marker = '  "test/model-usage-worker.test.mjs",\n';
+    if (!text.includes(marker)) {
+      throw new Error("Could not locate the model-usage fixture target");
+    }
+    text = text.replace(
+      marker,
+      `${marker}  "test/model-catalog-usage.test.mjs",\n`,
+    );
+  }
   return text;
 });
 
