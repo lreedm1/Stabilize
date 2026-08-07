@@ -51,27 +51,24 @@ await update("src/billing.js", (source) => {
 await update("src/index.js", (source) => {
   let text = source;
 
-  if (!text.includes('  "max",\n]);')) {
-    const marker = '  "xhigh",\n]);';
-    requireText(text, marker, "the reasoning-effort allow list");
-    text = text.replace(marker, '  "xhigh",\n  "max",\n]);');
-  }
+  requireText(text, '  "max",\n]);', "the generated maximum reasoning option");
+  requireText(
+    text,
+    "function effectiveReasoningEffort(model, requestedEffort)",
+    "the generated model-specific reasoning policy",
+  );
 
-  if (!text.includes("function requestedReasoningEffort(body, model)")) {
+  if (!text.includes("function requestedReasoningEffort(body, model, fallbackEffort)")) {
     const marker = "function openAIConfig(env) {";
     requireText(text, marker, "the OpenAI configuration helper");
-    const helpers = `function requestedReasoningEffort(body, model) {
-  const effort = String(body?.reasoningEffort || "none")
+    const helpers = `function requestedReasoningEffort(body, model, fallbackEffort) {
+  const effort = String(
+    body?.reasoningEffort || fallbackEffort || "none",
+  )
     .trim()
     .toLowerCase();
   if (!OPENAI_REASONING_EFFORTS.has(effort)) return "none";
-  if (
-    effort === "max" &&
-    !/^gpt-5\\.6(?:-|$)/i.test(String(model || ""))
-  ) {
-    return "xhigh";
-  }
-  return effort;
+  return effectiveReasoningEffort(String(model || ""), effort);
 }
 
 function reasoningEnvironment(env, effort) {
@@ -88,20 +85,24 @@ function reasoningEnvironment(env, effort) {
     text = text.replace(marker, helpers + marker);
   }
 
-  text = text.replace(
-    /const reasoningEffort = String\(env\.OPENAI_REASONING_EFFORT \|\| "[^"]+"\);/,
-    'const reasoningEffort = String(env.OPENAI_REASONING_EFFORT || "none");',
+  text = text.replaceAll(
+    'env.OPENAI_REASONING_EFFORT || "max"',
+    'env.OPENAI_REASONING_EFFORT || "none"',
   );
 
   const bodyMarker = "  const body = await readBoundedJson(request);";
-  if (!text.includes("requestedReasoningEffort(body, env.OPENAI_MODEL)")) {
+  if (!text.includes("requestedReasoningEffort(\n      body,")) {
     requireText(text, bodyMarker, "the chat request body");
     text = text.replace(
       bodyMarker,
       `${bodyMarker}
   env = reasoningEnvironment(
     env,
-    requestedReasoningEffort(body, env.OPENAI_MODEL),
+    requestedReasoningEffort(
+      body,
+      env.OPENAI_MODEL,
+      env.OPENAI_REASONING_EFFORT,
+    ),
   );`,
     );
   }
@@ -111,12 +112,19 @@ function reasoningEnvironment(env, effort) {
     "const turnReasoningEffort = reasoningEffort;",
   );
 
-  requireText(text, "function requestedReasoningEffort(body, model)", "the request effort validator");
+  requireText(
+    text,
+    "function requestedReasoningEffort(body, model, fallbackEffort)",
+    "the request effort validator",
+  );
   requireText(text, "function reasoningEnvironment(env, effort)", "the request effort environment");
-  requireText(text, "requestedReasoningEffort(body, env.OPENAI_MODEL)", "the model-aware effort override");
-  requireText(text, 'env.OPENAI_REASONING_EFFORT || "none"', "the instant fallback");
-  requireText(text, '  "max",\n]);', "maximum reasoning support");
-  requireText(text, 'return "xhigh";', "the GPT-5.4 maximum fallback");
+  requireText(text, "env.OPENAI_REASONING_EFFORT,\n    ),", "the configured instant fallback");
+  requireText(text, 'env.OPENAI_REASONING_EFFORT || "none"', "the instant configuration default");
+  requireText(
+    text,
+    'return effectiveReasoningEffort(String(model || ""), effort);',
+    "the model-aware effort selection",
+  );
   const directEffortCount =
     text.split("const turnReasoningEffort = reasoningEffort;").length - 1;
   if (directEffortCount !== 2) {
@@ -236,10 +244,8 @@ test("only GPT-5.4 and Current remain selectable, with instant responses by defa
 
   assert.match(billingSource, /"gpt-5\\.4\\|GPT-5\\.4"/);
   assert.match(billingSource, /"gpt-5\\.6-sol\\|Current"/);
-  assert.match(indexSource, /function requestedReasoningEffort\\(body, model\\)/);
-  assert.match(indexSource, /requestedReasoningEffort\\(body, env\\.OPENAI_MODEL\\)/);
-  assert.match(indexSource, /effort === "max"/);
-  assert.match(indexSource, /return "xhigh"/);
+  assert.match(indexSource, /function requestedReasoningEffort\\(body, model, fallbackEffort\\)/);
+  assert.match(indexSource, /effectiveReasoningEffort\\(String\\(model/);
   assert.equal(
     (indexSource.match(/const turnReasoningEffort = reasoningEffort;/g) || []).length,
     2,
@@ -261,17 +267,10 @@ test("only GPT-5.4 and Current remain selectable, with instant responses by defa
 
 await update("test/model-catalog-usage.test.mjs", () => modelCatalogTest);
 
-await update("test/worker.test.mjs", (source) =>
-  source.replace(
-    '      effort: "medium",\n      context: "current_turn",',
-    '      effort: "none",\n      context: "current_turn",',
-  ),
-);
-
 await update("test/openai-streaming-worker.test.mjs", (source) =>
   source.replace(
     'assert.deepEqual(request.reasoning, { effort: "medium" });',
-    'assert.deepEqual(request.reasoning, { effort: "none" });',
+    'assert.deepEqual(request.reasoning, { effort: "xhigh" });',
   ),
 );
 
