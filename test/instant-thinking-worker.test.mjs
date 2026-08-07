@@ -2,14 +2,14 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
 
-function createEnv() {
+function createEnv(model = "gpt-5.4") {
   return {
     ASSETS: {
       fetch: async () => new Response("asset", { status: 200 }),
     },
     DEMO_MODE: "false",
     OPENAI_API_KEY: "test-openai-key",
-    OPENAI_MODEL: "gpt-5.4",
+    OPENAI_MODEL: model,
     OPENAI_REASONING_EFFORT: "none",
     PUBLIC_ORIGIN: "https://stabilize.test",
   };
@@ -43,7 +43,7 @@ function providerStream(answer) {
   });
 }
 
-async function sendWithEffort(reasoningEffort) {
+async function sendWithEffort(reasoningEffort, model = "gpt-5.4") {
   return worker.fetch(
     new Request("https://stabilize.test/api/chat", {
       method: "POST",
@@ -56,37 +56,66 @@ async function sendWithEffort(reasoningEffort) {
         reasoningEffort,
       }),
     }),
-    createEnv(),
+    createEnv(model),
   );
 }
 
-test("the selected free thinking level is used exactly for every reply", async () => {
+async function collectProviderEfforts(efforts, model) {
   const originalFetch = globalThis.fetch;
-  const expectedEfforts = ["none", "low", "medium", "high", "xhigh"];
   const observed = [];
 
   globalThis.fetch = async (_input, init) => {
     const request = JSON.parse(init.body);
-    observed.push(request.reasoning?.effort);
-    assert.equal(request.model, "gpt-5.4");
+    observed.push({
+      effort: request.reasoning?.effort,
+      model: request.model,
+    });
     assert.equal(request.stream, true);
     return providerStream("Use the more reversible option first.");
   };
 
   try {
-    for (const effort of expectedEfforts) {
-      const response = await sendWithEffort(effort);
+    for (const effort of efforts) {
+      const response = await sendWithEffort(effort, model);
       assert.equal(response.status, 200);
       assert.match(response.headers.get("content-type") || "", /application\/x-ndjson/i);
       assert.match(await response.text(), /"type":"done"/);
     }
-    assert.deepEqual(observed, expectedEfforts);
+    return observed;
   } finally {
     globalThis.fetch = originalFetch;
   }
+}
+
+test("GPT-5.4 uses every supported free thinking level exactly", async () => {
+  const expectedEfforts = ["none", "low", "medium", "high", "xhigh"];
+  const observed = await collectProviderEfforts(expectedEfforts, "gpt-5.4");
+  assert.deepEqual(
+    observed,
+    expectedEfforts.map((effort) => ({ effort, model: "gpt-5.4" })),
+  );
 });
 
-test("missing or unsupported thinking values fall back to Respond instantly", async () => {
+test("Current adds free maximum thinking", async () => {
+  const expectedEfforts = [
+    "none",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ];
+  const observed = await collectProviderEfforts(
+    expectedEfforts,
+    "gpt-5.6-sol",
+  );
+  assert.deepEqual(
+    observed,
+    expectedEfforts.map((effort) => ({ effort, model: "gpt-5.6-sol" })),
+  );
+});
+
+test("invalid values use instant and GPT-5.4 safely maps maximum to xhigh", async () => {
   const originalFetch = globalThis.fetch;
   const observed = [];
 
@@ -98,11 +127,11 @@ test("missing or unsupported thinking values fall back to Respond instantly", as
 
   try {
     for (const effort of [undefined, "unsupported", "max"]) {
-      const response = await sendWithEffort(effort);
+      const response = await sendWithEffort(effort, "gpt-5.4");
       assert.equal(response.status, 200);
       await response.text();
     }
-    assert.deepEqual(observed, ["none", "none", "none"]);
+    assert.deepEqual(observed, ["none", "none", "xhigh"]);
   } finally {
     globalThis.fetch = originalFetch;
   }
