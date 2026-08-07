@@ -113,6 +113,45 @@ await update(
 );
 
 await update(
+  "test/streaming-response.test.mjs",
+  (source) => {
+    let text = source;
+    const staleAssertion = `  assert.doesNotMatch(
+    workerSource,
+    /reasoning:\\s*\\{ effort: reasoningEffort \\}/,
+  );`;
+    const fallbackAssertion = `  assert.match(
+    workerSource,
+    /async function generateFallbackReply[\\s\\S]*?reasoning:\\s*\\{ effort: reasoningEffort \\}[\\s\\S]*?async function writeReplyDeltas/,
+  );`;
+    if (text.includes(staleAssertion)) {
+      text = text.replace(staleAssertion, fallbackAssertion);
+    }
+
+    text = text.replace(
+      `  assert.match(clientSource, /const pendingOutput = showOutput\\(copy\\.thinking/);`,
+      `  assert.match(clientSource, /function pendingReplyCopy\\(/);
+  assert.match(clientSource, /copy\\.responding/);
+  assert.match(
+    clientSource,
+    /const pendingOutput = showOutput\\(pendingReplyCopy\\(\\)/,
+  );`,
+    );
+
+    requireText(
+      text,
+      "async function generateFallbackReply[\\s\\S]*?reasoning:",
+      "the selected-effort fallback assertion",
+    );
+    if (text.includes("assert.doesNotMatch(\n    workerSource,\n    /reasoning:")) {
+      throw new Error("Streaming regression test still rejects selected fallback effort");
+    }
+    return text;
+  },
+  { optional: true },
+);
+
+await update(
   "test/prompt-policy-idempotency.test.mjs",
   (source) => {
     let text = source;
