@@ -26,12 +26,47 @@ const adaptiveSelector = `const turnReasoningEffort = selectReasoningEffort({
     messages,
     ceiling: reasoningEffort,
   });`;
-const workerAfter = workerBefore.replaceAll(
+let workerAfter = workerBefore.replaceAll(
   "const turnReasoningEffort = reasoningEffort;",
   adaptiveSelector,
 );
+
+// The final fastest-response pass adds this no-reasoning output cap after all
+// legacy OpenAI-shape generators. Remove it temporarily on later passes so the
+// older low-verbosity materializer sees the exact intermediate shape it owns.
+workerAfter = workerAfter.replace(
+  /^[ \t]*\.\.\.\(turnReasoningEffort === "none"\n[ \t]*\? \{ max_output_tokens: 500 \}\n[ \t]*: \{\}\),\n/gm,
+  "",
+);
+
 if (workerAfter !== workerBefore) {
   await writeFile(workerPath, workerAfter);
 }
 
-console.log("Prepared legacy reasoning policies for instant finalization.");
+// The legacy streaming generator verifies the original pending-status call.
+// Restore that build-stage expression before it runs; the final pass changes
+// it back to the effort-aware Responding/Thinking copy.
+const appPath = "public/app.js";
+const appBefore = await readFile(appPath, "utf8");
+const appAfter = appBefore.replaceAll(
+  'const pendingOutput = showOutput(pendingReplyCopy(), "thinking-output", "thinking");',
+  'const pendingOutput = showOutput(copy.thinking, "thinking-output", "thinking");',
+);
+if (appAfter !== appBefore) {
+  await writeFile(appPath, appAfter);
+}
+
+// The legacy instant-thinking generator verifies its original cache key.
+// Restore that temporary build-stage URL before it runs. The final refresh
+// safety pass replaces it with the current cache-busted asset URL.
+const pagePath = "src/page.js";
+const pageBefore = await readFile(pagePath, "utf8");
+const pageAfter = pageBefore.replace(
+  /reasoning-choice\.js\?v=[^"']+/,
+  "reasoning-choice.js?v=20260807-instant-thinking-1",
+);
+if (pageAfter !== pageBefore) {
+  await writeFile(pagePath, pageAfter);
+}
+
+console.log("Prepared legacy reasoning policies for fastest-response finalization.");

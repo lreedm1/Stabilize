@@ -171,13 +171,18 @@ await update("test/worker.test.mjs", (source) => {
       "Adaptive reasoning did not align the lightweight-turn tests",
     );
   }
-  if (
-    !text.includes(
-      'assert.deepEqual(providerBody.reasoning, { effort: "xhigh" });',
-    )
-  ) {
+
+  // The final Current-model pass upgrades the strongest assertion from xhigh
+  // to max. Accept either state so running the complete generation pipeline a
+  // second time remains a no-op instead of blocking deployment.
+  const strongestExpectationPresent = ["xhigh", "max"].some((effort) =>
+    text.includes(
+      `assert.deepEqual(providerBody.reasoning, { effort: "${effort}" });`,
+    ),
+  );
+  if (!strongestExpectationPresent) {
     throw new Error(
-      "Adaptive reasoning did not add the complex-decision test",
+      "Adaptive reasoning did not retain the complex-decision test",
     );
   }
   return text;
