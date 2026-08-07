@@ -1,5 +1,18 @@
 import { readFile, writeFile } from "node:fs/promises";
 
+const FREE_POLICY_SCRIPTS = [
+  "scripts/apply-free-gpt56-config.mjs",
+  "scripts/apply-free-gpt56-client.mjs",
+  "scripts/align-free-gpt56-tests.mjs",
+  "scripts/finalize-free-gpt56-ui-compat.mjs",
+  "scripts/enforce-free-gpt56-instant.mjs",
+  "scripts/restore-free-model-selection-compat.mjs",
+  "scripts/restore-model-fallback-compat.mjs",
+  "scripts/restore-paid-worker-fallback-compat.mjs",
+  "scripts/finalize-free-gpt56-idempotency.mjs",
+  "scripts/finalize-free-gpt56-repeat-shape.mjs",
+];
+
 async function update(path, transform, { optional = false } = {}) {
   let before;
   try {
@@ -98,11 +111,17 @@ await update("src/paid-worker.js", (source) => {
 await update(
   "test/prompt-policy-idempotency.test.mjs",
   (source) => {
-    const path = "scripts/finalize-free-gpt56-repeat-shape.mjs";
-    if (source.includes(`"${path}"`)) return source;
-    const marker = '  "scripts/finalize-free-gpt56-idempotency.mjs",\n';
-    requireText(source, marker, "the free idempotency fixture");
-    return source.replace(marker, `${marker}  "${path}",\n`);
+    let text = source;
+    for (const path of FREE_POLICY_SCRIPTS) {
+      text = text.replaceAll(`  "${path}",\n`, "");
+    }
+    const marker = '  "scripts/fix-fastest-response-worker.mjs",\n';
+    requireText(text, marker, "the final pre-free-policy fixture");
+    const canonical = FREE_POLICY_SCRIPTS.map(
+      (path) => `  "${path}",`,
+    ).join("\n");
+    text = text.replace(marker, `${marker}${canonical}\n`);
+    return text;
   },
   { optional: true },
 );
