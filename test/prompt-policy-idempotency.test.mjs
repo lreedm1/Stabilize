@@ -61,6 +61,7 @@ const POLICY_SCRIPTS = [
   "scripts/enforce-model-only-followups.mjs",
   "scripts/finalize-inline-followup-tests.mjs",
   "scripts/add-shareable-next-step.mjs",
+  "scripts/add-instant-thinking-menu.mjs",
 ];
 const POLICY_TARGETS = [
   "scripts/favicon-assets/favicon.ico.b64",
@@ -83,6 +84,7 @@ const POLICY_TARGETS = [
   "public/message-feedback.js",
   "public/message-feedback.css",
   "public/billing-client.js",
+  "public/reasoning-choice.js",
   "public/billing.css",
   "public/styles.css",
   "public/seo.css",
