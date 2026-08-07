@@ -1,0 +1,56 @@
+name: Debug free GPT-5.6 branch
+
+on:
+  push:
+    branches:
+      - fix/free-gpt56-first-50
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Capture install and test output
+        id: tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          : > debug-test.log
+          npm ci >> debug-test.log 2>&1
+          status=$?
+          echo "npm ci status: ${status}" >> debug-test.log
+          if [[ "$status" -eq 0 ]]; then
+            npm test >> debug-test.log 2>&1
+            status=$?
+            echo "npm test status: ${status}" >> debug-test.log
+          fi
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Upload diagnostic log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: free-gpt56-debug-${{ github.run_id }}
+          path: debug-test.log
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Enforce result
+        if: always() && steps.tests.outcome == 'failure'
+        run: exit 1
