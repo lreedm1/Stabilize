@@ -1,0 +1,45 @@
+name: Build Wisconsin Statutes Full Text Artifact (Temporary)
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - tools/build_wi_statutes_full_text.py
+      - .github/workflows/build-wi-statutes-artifact-pr.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.head_ref == 'artifact/wi-statutes-full-text-20260807'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out temporary branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install parser dependency
+        run: python -m pip install --disable-pip-version-check pyarrow==18.1.0
+
+      - name: Build complete Wisconsin statute text corpus
+        run: |
+          set -euo pipefail
+          python tools/build_wi_statutes_full_text.py --output-dir output
+          gzip -9 -k output/Wisconsin_Statutes_Full_Substantive_Text_v2026.07.txt
+          ls -lh output
+
+      - name: Upload completed corpus
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wisconsin-Statutes-Full-Substantive-Text-v2026.07
+          path: output/
+          if-no-files-found: error
+          retention-days: 3
