@@ -34,4 +34,17 @@ if (workerAfter !== workerBefore) {
   await writeFile(workerPath, workerAfter);
 }
 
-console.log("Prepared legacy reasoning policies for instant finalization.");
+// The legacy instant-thinking generator verifies its original cache key.
+// Restore that temporary build-stage URL before it runs. The final refresh
+// safety pass replaces it with the current cache-busted asset URL.
+const pagePath = "src/page.js";
+const pageBefore = await readFile(pagePath, "utf8");
+const pageAfter = pageBefore.replace(
+  /reasoning-choice\.js\?v=[^"']+/,
+  "reasoning-choice.js?v=20260807-instant-thinking-1",
+);
+if (pageAfter !== pageBefore) {
+  await writeFile(pagePath, pageAfter);
+}
+
+console.log("Prepared legacy reasoning policies for fastest-response finalization.");
