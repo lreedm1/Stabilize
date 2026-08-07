@@ -26,7 +26,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          payload="$(printf '{"state":"pending","context":"verification/impact","description":"Waiting for live instant, thinking, sharing, and impact checks","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          payload="$(printf '{"state":"pending","context":"verification/impact","description":"Waiting for live refresh-safe instant, thinking, sharing, and impact checks","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           curl --fail-with-body --silent --show-error \
             --request POST \
             --header "Accept: application/vnd.github+json" \
@@ -146,13 +146,16 @@ jobs:
             if [[ "$home_status" == "200" && "$impact_script_status" == "200" && "$impact_styles_status" == "200" && "$feedback_script_status" == "200" && "$feedback_styles_status" == "200" && "$reasoning_script_status" == "200" && "$privacy_status" == "200" ]] && \
               [[ "$dashboard_status" == "401" || "$dashboard_status" == "503" ]] && \
               grep -Fq 'Stabilize helps you turn an overloaded moment into one safe, practical next step.' "$home" && \
-              grep -Fq 'reasoning-choice.js?v=20260807-instant-thinking-1' "$home" && \
+              grep -Fq 'reasoning-choice.js?v=20260807-instant-thinking-2' "$home" && \
               grep -Fq 'Respond instantly' "$reasoning_script" && \
               grep -Fq 'Think briefly' "$reasoning_script" && \
               grep -Fq 'Think deeply' "$reasoning_script" && \
               grep -Fq 'Think longest' "$reasoning_script" && \
               grep -Fq 'Free at every level' "$reasoning_script" && \
               grep -Fq 'body.reasoningEffort = reasoningEffort' "$reasoning_script" && \
+              grep -Fq 'DOMContentLoaded' "$reasoning_script" && \
+              grep -Fq 'current.textContent !== nextText' "$reasoning_script" && \
+              ! grep -Fq 'new MutationObserver' "$reasoning_script" && \
               grep -Fq 'stabilize:followup-actions' "$impact_script" && \
               grep -Fq 'modelReplyNeedsFollowups' "$impact_script" && \
               ! grep -Fq 'Did you choose a next step?' "$impact_script" && \
@@ -176,7 +179,7 @@ jobs:
             sleep 10
           done
 
-          echo "::error::Production did not expose the expected instant/thinking controls, promise, inline feedback, shareable next-step controls, privacy disclosure, and protected dashboard route."
+          echo "::error::Production did not expose the expected refresh-safe instant/thinking controls, promise, inline feedback, shareable next-step controls, privacy disclosure, and protected dashboard route."
           exit 1
 
       - name: Publish impact verification result
@@ -188,7 +191,7 @@ jobs:
         run: |
           if [[ "$JOB_STATUS" == "success" ]]; then
             state="success"
-            description="Instant, thinking, sharing, privacy, and dashboard checks passed"
+            description="Refresh-safe instant, thinking, sharing, privacy, and dashboard checks passed"
           else
             state="failure"
             description="Instant, thinking, sharing, privacy, or dashboard checks failed"
