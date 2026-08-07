@@ -96,7 +96,9 @@ await update("public/billing-client.js", (source) => {
     if (select instanceof HTMLSelectElement) select.value = defaultModel;
   }
   for (const current of document.querySelectorAll(".composer-model-current")) {
-    if (current instanceof HTMLElement) current.textContent = "5.4";
+    if (current instanceof HTMLElement) {
+      current.textContent = compactModelTileLabel(defaultModel);
+    }
   }
 }
 
@@ -124,6 +126,7 @@ await update("public/billing-client.js", (source) => {
     "Stabilize switched to GPT-5.4 automatically",
     'usage.selectedModel === "gpt-5.6-sol"',
     "X-Stabilize-Model-Usage-Limit",
+    "current.textContent = compactModelTileLabel(defaultModel);",
   ]) {
     requireText(text, expected, expected);
   }
