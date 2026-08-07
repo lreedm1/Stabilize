@@ -20,11 +20,25 @@ function requireText(value, expected, label) {
 
 await update("src/paid-worker.js", (source) => {
   let text = source;
-  const helperStart = text.indexOf("function responseWithModelUsage(");
-  const paidStart = text.indexOf("async function paidChatResponse(", helperStart);
+  const responseStart = text.indexOf("function responseWithModelUsage(");
+  const requestStart = text.indexOf(
+    "async function requestWithReasoningEffort(",
+  );
+  const helperStart = Math.min(responseStart, requestStart);
+  const helperEndAnchor = Math.max(responseStart, requestStart);
+  const paidStart = text.indexOf(
+    "async function paidChatResponse(",
+    helperEndAnchor,
+  );
   const workerStart = text.indexOf("\nconst worker =", paidStart);
-  if (helperStart < 0 || paidStart <= helperStart || workerStart <= paidStart) {
-    throw new Error("Could not isolate the free routing helper and handler block");
+  if (
+    responseStart < 0 ||
+    requestStart < 0 ||
+    helperStart < 0 ||
+    paidStart <= helperEndAnchor ||
+    workerStart <= paidStart
+  ) {
+    throw new Error("Could not isolate the free routing helpers and handler block");
   }
 
   const helperBlock = text.slice(helperStart, paidStart).trimEnd();
