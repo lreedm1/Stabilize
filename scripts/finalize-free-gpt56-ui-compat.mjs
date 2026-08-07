@@ -1,6 +1,10 @@
 import { readFile, writeFile } from "node:fs/promises";
 
 const ASSET_VERSION = "20260807-free-gpt56-first-50-1";
+const OLD_RESET_COPY =
+  "Stabilize switches to GPT-5.4 after this allowance; it resets at 00:00 UTC.";
+const RESET_COPY =
+  "Stabilize switches to GPT-5.4 after this allowance. The allowance resets at 00:00 UTC.";
 
 async function update(path, transform, { optional = false } = {}) {
   let before;
@@ -32,6 +36,7 @@ await update("src/paid-worker.js", (source) => {
     '<a class="billing-primary billing-link" href="/auth/google">Sign in</a>',
     '<a class="billing-primary billing-link" href="/auth/google">Sign in to choose a model</a>',
   );
+  text = text.replaceAll(OLD_RESET_COPY, RESET_COPY);
   if (text.includes("Your AI model choice was saved.")) {
     throw new Error("The suppressed model-saved notice was restored");
   }
@@ -40,8 +45,15 @@ await update("src/paid-worker.js", (source) => {
     'href="/auth/google">Sign in to choose a model',
     "the guest model sign-in action",
   );
+  requireText(text, RESET_COPY, "the explicit UTC reset copy");
   return text;
 });
+
+await update(
+  "public/billing-client.js",
+  (source) => source.replaceAll(OLD_RESET_COPY, RESET_COPY),
+  { optional: true },
+);
 
 await update(
   "test/composer-chat-sections.test.mjs",
