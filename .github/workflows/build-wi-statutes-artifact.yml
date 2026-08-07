@@ -1,0 +1,234 @@
+name: Build Wisconsin Statutes Full Text Artifact
+
+on:
+  push:
+    branches:
+      - artifact/wi-statutes-full-text-20260807
+    paths:
+      - .github/workflows/build-wi-statutes-artifact.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install parser dependencies
+        run: python -m pip install --disable-pip-version-check pyarrow==18.1.0
+
+      - name: Download and render Wisconsin statutes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import re
+          import time
+          import urllib.request
+          from collections import Counter
+          from pathlib import Path
+
+          import pyarrow.parquet as pq
+
+          SNAPSHOT = "v2026.07"
+          SNAPSHOT_DATE = "2026-07-21"
+          PARQUET = Path("output/us_wi_statutes.parquet")
+          OUT = Path("output/Wisconsin_Statutes_Full_Substantive_Text_v2026.07.txt")
+          REPORT = Path("output/Wisconsin_Statutes_Full_Substantive_Text_v2026.07_manifest.txt")
+          SHA = Path("output/Wisconsin_Statutes_Full_Substantive_Text_v2026.07.sha256")
+
+          urls = [
+              "https://huggingface.co/datasets/vaquill/open-us-law/resolve/main/us_wi_statutes.parquet?download=true",
+              "https://oss-data-us.vaquill.ai/v2026.07/us_wi_statutes.parquet",
+          ]
+
+          headers = {
+              "User-Agent": "Mozilla/5.0 (compatible; Wisconsin-statutes-artifact-builder/1.0)",
+              "Accept": "application/octet-stream,*/*;q=0.8",
+          }
+
+          last_error = None
+          for url in urls:
+              for attempt in range(1, 4):
+                  try:
+                      req = urllib.request.Request(url, headers=headers)
+                      with urllib.request.urlopen(req, timeout=180) as response, PARQUET.open("wb") as dst:
+                          while True:
+                              block = response.read(1024 * 1024)
+                              if not block:
+                                  break
+                              dst.write(block)
+                      if PARQUET.stat().st_size < 1_000_000:
+                          raise RuntimeError(f"downloaded file is unexpectedly small: {PARQUET.stat().st_size} bytes")
+                      print(f"Downloaded {PARQUET.stat().st_size:,} bytes from {url}")
+                      last_error = None
+                      break
+                  except Exception as exc:
+                      last_error = exc
+                      print(f"Download attempt {attempt} failed for {url}: {exc}")
+                      time.sleep(3 * attempt)
+              if last_error is None:
+                  break
+          if last_error is not None:
+              raise RuntimeError(f"All download sources failed: {last_error}")
+
+          table = pq.read_table(PARQUET)
+          rows = table.to_pylist()
+          if len(rows) < 18_000:
+              raise RuntimeError(f"Expected at least 18,000 Wisconsin rows, got {len(rows):,}")
+
+          state_values = {str(r.get("state") or "").lower() for r in rows}
+          if state_values - {"wi"}:
+              raise RuntimeError(f"Unexpected state values: {sorted(state_values)}")
+
+          def clean(value: object) -> str:
+              if value is None:
+                  return ""
+              if isinstance(value, (list, tuple)):
+                  return " / ".join(clean(v) for v in value if clean(v))
+              text = str(value).replace("\r\n", "\n").replace("\r", "\n")
+              return text.strip()
+
+          def natural_key(value: object):
+              text = clean(value).lower()
+              return tuple(int(part) if part.isdigit() else part for part in re.split(r"(\d+)", text))
+
+          # Keep the source order as the final tie-breaker while grouping naturally by chapter and section.
+          indexed_rows = list(enumerate(rows))
+          indexed_rows.sort(
+              key=lambda pair: (
+                  natural_key(pair[1].get("chapter")),
+                  natural_key(pair[1].get("section_number")),
+                  natural_key(pair[1].get("citation")),
+                  pair[0],
+              )
+          )
+
+          statuses = Counter(clean(r.get("act_status")) or "unspecified" for r in rows)
+          chapters = sorted({clean(r.get("chapter")) for r in rows if clean(r.get("chapter"))}, key=natural_key)
+          nonempty_text = sum(bool(clean(r.get("text"))) for r in rows)
+          total_words_reported = sum(int(r.get("word_count") or 0) for r in rows)
+          parquet_sha = hashlib.sha256(PARQUET.read_bytes()).hexdigest()
+
+          header = f"""WISCONSIN STATUTES — FULL SUBSTANTIVE TEXT
+Snapshot: Open US Law {SNAPSHOT} ({SNAPSHOT_DATE})
+Jurisdiction: Wisconsin (WI)
+Records: {len(rows):,}
+Nonempty text records: {nonempty_text:,}
+Distinct chapter identifiers represented: {len(chapters):,}
+Reported word count: {total_words_reported:,}
+
+SCOPE AND RELIABILITY
+=====================
+This file contains the complete substantive text field for every Wisconsin statute
+record in the Open US Law {SNAPSHOT} Wisconsin snapshot, including records marked
+in force, repealed, reserved, transferred, renumbered, omitted, expired, or with
+another source status. No record was intentionally omitted because of status.
+
+This is a dated, third-party structured compilation, not the Wisconsin Legislative
+Reference Bureau's certified electronic statutes. Statutory text is public domain;
+the dataset's normalization and compilation are offered under CC BY 4.0. Verify any
+quotation, deadline, offense, right, duty, or legal conclusion against the current
+official Wisconsin Legislature source before relying on it.
+
+Dataset: https://huggingface.co/datasets/vaquill/open-us-law
+Official statutes: https://docs.legis.wisconsin.gov/statutes/statutes
+Parquet SHA-256: {parquet_sha}
+
+STATUS COUNTS
+=============
+"""
+
+          with OUT.open("w", encoding="utf-8", newline="\n") as f:
+              f.write(header)
+              for status, count in sorted(statuses.items()):
+                  f.write(f"{status}: {count:,}\n")
+              f.write("\nBEGIN FULL STATUTORY CORPUS\n")
+              f.write("=" * 80 + "\n")
+
+              current_chapter = None
+              for sequence, (_original_index, row) in enumerate(indexed_rows, start=1):
+                  chapter = clean(row.get("chapter")) or "UNSPECIFIED"
+                  chapter_name = clean(row.get("chapter_name"))
+                  if chapter != current_chapter:
+                      current_chapter = chapter
+                      f.write("\n\n" + "#" * 80 + "\n")
+                      heading = f"CHAPTER {chapter}"
+                      if chapter_name:
+                          heading += f" — {chapter_name}"
+                      f.write(heading + "\n")
+                      f.write("#" * 80 + "\n")
+
+                  citation = clean(row.get("citation")) or clean(row.get("citation_short")) or clean(row.get("act_id"))
+                  title = clean(row.get("section_title"))
+                  status = clean(row.get("act_status")) or "unspecified"
+                  source_url = clean(row.get("source_url"))
+                  breadcrumb = clean(row.get("breadcrumb")) or clean(row.get("display_path"))
+                  section_number = clean(row.get("section_number"))
+                  body = clean(row.get("text"))
+
+                  f.write("\n" + "-" * 80 + "\n")
+                  f.write(f"RECORD {sequence:,} OF {len(rows):,}\n")
+                  f.write(f"Citation: {citation}\n")
+                  if section_number:
+                      f.write(f"Section number: {section_number}\n")
+                  if title:
+                      f.write(f"Section title: {title}\n")
+                  f.write(f"Status: {status}\n")
+                  if breadcrumb:
+                      f.write(f"Path: {breadcrumb}\n")
+                  if source_url:
+                      f.write(f"Source: {source_url}\n")
+                  f.write("-" * 80 + "\n")
+                  f.write(body if body else "[NO SUBSTANTIVE TEXT PRESENT IN SOURCE RECORD]")
+                  f.write("\n")
+
+              f.write("\n" + "=" * 80 + "\nEND FULL STATUTORY CORPUS\n")
+
+          out_sha = hashlib.sha256(OUT.read_bytes()).hexdigest()
+          SHA.write_text(f"{out_sha}  {OUT.name}\n{parquet_sha}  {PARQUET.name}\n", encoding="utf-8")
+
+          report = {
+              "artifact": OUT.name,
+              "snapshot": SNAPSHOT,
+              "snapshot_date": SNAPSHOT_DATE,
+              "source_dataset": "https://huggingface.co/datasets/vaquill/open-us-law",
+              "official_verification_source": "https://docs.legis.wisconsin.gov/statutes/statutes",
+              "record_count": len(rows),
+              "nonempty_text_record_count": nonempty_text,
+              "distinct_chapter_identifiers": len(chapters),
+              "reported_word_count": total_words_reported,
+              "status_counts": dict(sorted(statuses.items())),
+              "parquet_bytes": PARQUET.stat().st_size,
+              "text_bytes": OUT.stat().st_size,
+              "parquet_sha256": parquet_sha,
+              "text_sha256": out_sha,
+              "columns": table.column_names,
+          }
+          REPORT.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+          print(json.dumps(report, indent=2))
+          PY
+
+          gzip -9 -k output/Wisconsin_Statutes_Full_Substantive_Text_v2026.07.txt
+          ls -lh output
+
+      - name: Upload completed corpus
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wisconsin-Statutes-Full-Substantive-Text-v2026.07
+          path: output/
+          if-no-files-found: error
+          retention-days: 3
