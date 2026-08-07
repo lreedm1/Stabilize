@@ -1,0 +1,254 @@
+name: Build Wisconsin statutes full text
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/build-wi-statutes-full-text.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and validate full-text corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Parquet reader
+        run: python -m pip install --quiet pyarrow
+
+      - name: Download pinned Wisconsin statutes snapshot
+        run: |
+          curl --fail --location --retry 5 --retry-all-errors \
+            --output us_wi_statutes.parquet \
+            https://oss-data-us.vaquill.ai/v2026.07/us_wi_statutes.parquet
+          echo "16fce77c17ef934078c37477815c99d2f2cee1939fcf26ceefe50daca45b4f0d  us_wi_statutes.parquet" | sha256sum --check --strict
+
+      - name: Convert every Wisconsin section to one UTF-8 text corpus
+        run: |
+          python <<'PY'
+          from __future__ import annotations
+
+          import collections
+          import datetime as dt
+          import hashlib
+          import json
+          import re
+          from pathlib import Path
+
+          import pyarrow.parquet as pq
+
+          PARQUET = Path("us_wi_statutes.parquet")
+          OUT = Path("Wisconsin_Statutes_Full_Text_v2026.07.txt")
+          VALIDATION = Path("Wisconsin_Statutes_Full_Text_v2026.07_validation.json")
+          EXPECTED_PARQUET_SHA256 = "16fce77c17ef934078c37477815c99d2f2cee1939fcf26ceefe50daca45b4f0d"
+          EXPECTED_RECORDS = 18_158
+
+          def file_sha256(path: Path) -> str:
+              digest = hashlib.sha256()
+              with path.open("rb") as stream:
+                  for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+          def natural_key(value: object) -> tuple[object, ...]:
+              parts = re.split(r"(\d+)", str(value or ""))
+              return tuple(int(part) if part.isdigit() else part.casefold() for part in parts if part)
+
+          parquet_sha256 = file_sha256(PARQUET)
+          if parquet_sha256 != EXPECTED_PARQUET_SHA256:
+              raise SystemExit(
+                  f"Parquet checksum mismatch: expected {EXPECTED_PARQUET_SHA256}, got {parquet_sha256}"
+              )
+
+          table = pq.read_table(PARQUET)
+          required_columns = {
+              "act_id",
+              "citation",
+              "state",
+              "chapter",
+              "chapter_name",
+              "section_number",
+              "section_title",
+              "act_status",
+              "text",
+              "source_url",
+              "year",
+          }
+          missing_columns = sorted(required_columns.difference(table.column_names))
+          if missing_columns:
+              raise SystemExit(f"Required columns missing: {missing_columns}")
+
+          rows = table.to_pylist()
+          if len(rows) != EXPECTED_RECORDS:
+              raise SystemExit(f"Expected {EXPECTED_RECORDS:,} records; received {len(rows):,}")
+
+          states = {str(row.get("state") or "").casefold() for row in rows}
+          if states != {"wi"}:
+              raise SystemExit(f"Unexpected state values: {sorted(states)}")
+
+          act_ids = [str(row.get("act_id") or "") for row in rows]
+          if any(not act_id for act_id in act_ids):
+              raise SystemExit("One or more records are missing act_id")
+          if len(set(act_ids)) != len(act_ids):
+              duplicates = [item for item, count in collections.Counter(act_ids).items() if count > 1]
+              raise SystemExit(f"Duplicate act_id values found: {duplicates[:20]}")
+
+          rows.sort(
+              key=lambda row: (
+                  natural_key(row.get("chapter")),
+                  natural_key(row.get("section_number")),
+                  str(row.get("act_id") or ""),
+              )
+          )
+
+          generated_utc = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
+          header = f"""WISCONSIN STATUTES — FULL TEXT CORPUS
+          ================================================================
+
+          Snapshot: Open US Law v2026.07
+          Snapshot date: July 21, 2026
+          Generated: {generated_utc}
+          Wisconsin section records: {len(rows):,}
+          Source basis: Wisconsin Legislature statutory pages ingested by Vaquill/Open US Law
+          Source snapshot license: CC BY 4.0; underlying statutory language is public-domain government text
+
+          SCOPE AND LIMITS
+          ----------------
+          This corpus includes every Wisconsin section record in the pinned v2026.07 Wisconsin statutes dataset, including each record's full statutory text and section history as supplied by the source ingest. It does not include case annotations or separate cross-reference notes. Repealed, reserved, expired, and other non-current records remain included when present so the corpus does not silently discard a source record.
+
+          The Wisconsin Legislature's electronic statutes were updated July 1, 2026. Changes effective after that date may appear on official pages as NOTES before a later consolidated edition. This file is a research and search convenience copy, not an official publication or legal advice. Verify legally consequential language, effective dates, and later changes against the official Wisconsin Legislature source URL listed with each record.
+
+          FORMAT
+          ------
+          Records are sorted naturally by chapter and section. The statutory text under each divider is preserved from the source dataset apart from normalizing line endings and trimming outer blank space.
+
+          """
+          # Remove the Python block's indentation while preserving deliberate line breaks.
+          header = "\n".join(line.strip() if line.startswith("          ") else line for line in header.splitlines()) + "\n"
+
+          empty_text_act_ids: list[str] = []
+          status_counts: collections.Counter[str] = collections.Counter()
+          chapter_values: set[str] = set()
+          source_url_missing = 0
+          source_url_values: set[str] = set()
+          source_word_count_total = 0
+
+          with OUT.open("w", encoding="utf-8", newline="\n") as stream:
+              stream.write(header)
+
+              for index, row in enumerate(rows, start=1):
+                  citation = str(row.get("citation") or "").strip()
+                  section_number = str(row.get("section_number") or "").strip()
+                  if not citation:
+                      citation = f"Wis. Stat. § {section_number}" if section_number else str(row["act_id"])
+
+                  chapter = str(row.get("chapter") or "").strip()
+                  chapter_name = str(row.get("chapter_name") or "").strip()
+                  section_title = str(row.get("section_title") or "").strip()
+                  status = str(row.get("act_status") or "unknown").strip() or "unknown"
+                  source_url = str(row.get("source_url") or "").strip()
+                  source_year = str(row.get("year") or "").strip()
+                  text = str(row.get("text") or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+
+                  chapter_values.add(chapter)
+                  status_counts[status] += 1
+                  if source_url:
+                      source_url_values.add(source_url)
+                  else:
+                      source_url_missing += 1
+                  try:
+                      source_word_count_total += int(row.get("word_count") or 0)
+                  except (TypeError, ValueError):
+                      pass
+                  if not text:
+                      empty_text_act_ids.append(str(row["act_id"]))
+                      text = "[No statutory body text was present in this source record.]"
+
+                  chapter_label = f"Chapter {chapter}"
+                  if chapter_name:
+                      chapter_label += f" — {chapter_name}"
+
+                  stream.write("=" * 88 + "\n")
+                  stream.write(f"STATUTE {index:,} OF {len(rows):,}\n")
+                  stream.write(f"Citation: {citation}\n")
+                  stream.write(f"{chapter_label}\n")
+                  if section_title:
+                      stream.write(f"Section title: {section_title}\n")
+                  stream.write(f"Status: {status}\n")
+                  if source_year:
+                      stream.write(f"Source year: {source_year}\n")
+                  stream.write(f"Source record ID: {row['act_id']}\n")
+                  if source_url:
+                      stream.write(f"Official/source URL: {source_url}\n")
+                  stream.write("-" * 88 + "\n")
+                  stream.write(text)
+                  stream.write("\n\n")
+
+          if len(empty_text_act_ids) > 200:
+              raise SystemExit(
+                  f"Too many records lacked body text ({len(empty_text_act_ids):,}); refusing to label output complete"
+              )
+
+          output_sha256 = file_sha256(OUT)
+          validation = {
+              "snapshot": "Open US Law v2026.07",
+              "snapshot_date": "2026-07-21",
+              "generated_utc": generated_utc,
+              "parquet_filename": PARQUET.name,
+              "parquet_bytes": PARQUET.stat().st_size,
+              "parquet_sha256": parquet_sha256,
+              "record_count": len(rows),
+              "unique_act_id_count": len(set(act_ids)),
+              "chapter_count": len({value for value in chapter_values if value}),
+              "status_counts": dict(sorted(status_counts.items())),
+              "records_with_nonempty_text": len(rows) - len(empty_text_act_ids),
+              "records_without_text": len(empty_text_act_ids),
+              "records_without_text_act_ids": empty_text_act_ids,
+              "source_url_missing_count": source_url_missing,
+              "unique_source_url_count": len(source_url_values),
+              "reported_source_word_count_total": source_word_count_total,
+              "output_filename": OUT.name,
+              "output_bytes": OUT.stat().st_size,
+              "output_sha256": output_sha256,
+              "record_divider_count_expected": len(rows),
+              "notes": [
+                  "All source rows are included, regardless of status.",
+                  "Text is source dataset text with only line-ending normalization and outer whitespace trimming.",
+                  "The upstream Wisconsin ingest keeps section history and excludes case annotations and separate cross-reference notes.",
+              ],
+          }
+          VALIDATION.write_text(json.dumps(validation, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+          print(json.dumps(validation, indent=2, sort_keys=True))
+          PY
+
+      - name: Verify text artifact structure
+        run: |
+          test -s Wisconsin_Statutes_Full_Text_v2026.07.txt
+          test -s Wisconsin_Statutes_Full_Text_v2026.07_validation.json
+          test "$(grep -c '^STATUTE .* OF 18,158$' Wisconsin_Statutes_Full_Text_v2026.07.txt)" -eq 18158
+          grep -Fq 'WISCONSIN STATUTES — FULL TEXT CORPUS' Wisconsin_Statutes_Full_Text_v2026.07.txt
+          grep -Fq 'Wis. Stat.' Wisconsin_Statutes_Full_Text_v2026.07.txt
+
+      - name: Upload corpus
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wisconsin_Statutes_Full_Text_v2026.07
+          path: |
+            Wisconsin_Statutes_Full_Text_v2026.07.txt
+            Wisconsin_Statutes_Full_Text_v2026.07_validation.json
+          compression-level: 6
+          if-no-files-found: error
+          retention-days: 1
