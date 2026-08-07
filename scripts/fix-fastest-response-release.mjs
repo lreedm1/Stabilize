@@ -71,7 +71,7 @@ await update("src/impact-analytics.js", (source) => {
     text = text.replace(marker, migration);
   }
 
-  if (!text.includes("const conversationHash = boundedText(record?.conversationHash")) {
+  if (!text.includes("record?.conversationHash")) {
     const marker = `    const sessionHash = boundedText(record?.sessionHash, 128);
     const browserHash = boundedText(record?.browserHash, 128);
     if (!turnId || !sessionHash || !browserHash) return false;`;
@@ -173,7 +173,7 @@ await update("src/impact-analytics.js", (source) => {
 await update("public/app.js", (source) => {
   let text = source;
   const listenerPattern =
-    /^[ \t]*if \(privateChatButton instanceof HTMLButtonElement\) \{\n[ \t]*privateChatButton\.addEventListener\("click", togglePrivateChat\);\n[ \t]*\}\n?/gm;
+    /^[ \t]*if \(privateChatButton instanceof HTMLButtonElement\) \{\n[ \t]*privateChatButton\.addEventListener\("click", togglePrivateChat\);\n[ \t]*\}\n(?:[ \t]*\n)*/gm;
   text = text.replace(listenerPattern, "");
 
   const anchor = `if (newConversationButton instanceof HTMLButtonElement) {
