@@ -1,11 +1,18 @@
 const REASONING_STORAGE_KEY = "stabilize:reasoning-effort:v1";
 const DEFAULT_REASONING_EFFORT = "none";
+const CURRENT_MODEL_PATTERN = /^gpt-5\.6(?:-|$)/i;
 const REASONING_OPTIONS = Object.freeze([
   { value: "none", label: "Respond instantly", shortLabel: "Instant" },
   { value: "low", label: "Think briefly", shortLabel: "Brief" },
   { value: "medium", label: "Think", shortLabel: "Think" },
   { value: "high", label: "Think deeply", shortLabel: "Deep" },
   { value: "xhigh", label: "Think longest", shortLabel: "Longest" },
+  {
+    value: "max",
+    label: "Think maximum (Current only)",
+    shortLabel: "Maximum",
+    currentOnly: true,
+  },
 ]);
 const REASONING_VALUES = new Set(REASONING_OPTIONS.map(({ value }) => value));
 let memoryEffort = DEFAULT_REASONING_EFFORT;
@@ -34,6 +41,21 @@ function storeEffort(value) {
   return memoryEffort;
 }
 
+function selectedModelIds() {
+  return [...document.querySelectorAll('select[name="model"]')]
+    .filter((select) => select instanceof HTMLSelectElement)
+    .map((select) => select.value);
+}
+
+function currentModelSupportsMaximum() {
+  return selectedModelIds().some((model) => CURRENT_MODEL_PATTERN.test(model));
+}
+
+function effortForSelectedModel(value) {
+  const effort = normalizeEffort(value);
+  return effort === "max" && !currentModelSupportsMaximum() ? "xhigh" : effort;
+}
+
 function isChatRequest(input) {
   try {
     const value = input instanceof Request ? input.url : input;
@@ -45,7 +67,7 @@ function isChatRequest(input) {
 }
 
 async function chatRequestWithReasoning(input, init) {
-  const reasoningEffort = readEffort();
+  const reasoningEffort = effortForSelectedModel(readEffort());
 
   if (input instanceof Request) {
     const contentType = input.headers.get("content-type") || "";
@@ -114,7 +136,7 @@ function modelLabelForPicker(picker) {
 }
 
 function updateComposerSummary() {
-  const effort = optionForEffort(readEffort());
+  const effort = optionForEffort(effortForSelectedModel(readEffort()));
   for (const picker of document.querySelectorAll("details.composer-model-picker")) {
     if (!(picker instanceof HTMLDetailsElement)) continue;
     const current = picker.querySelector(".composer-model-current");
@@ -132,8 +154,22 @@ function updateComposerSummary() {
   }
 }
 
+function synchronizeMaximumOptions() {
+  const enabled = currentModelSupportsMaximum();
+  for (const select of document.querySelectorAll("[data-reasoning-choice]")) {
+    if (!(select instanceof HTMLSelectElement)) continue;
+    const maximum = select.querySelector('option[value="max"]');
+    if (maximum instanceof HTMLOptionElement) maximum.disabled = !enabled;
+  }
+  return enabled;
+}
+
 function synchronizeSelectors(effort) {
-  const selected = normalizeEffort(effort);
+  synchronizeMaximumOptions();
+  let selected = normalizeEffort(effort);
+  if (selected === "max" && !currentModelSupportsMaximum()) {
+    selected = storeEffort("xhigh");
+  }
   for (const select of document.querySelectorAll("[data-reasoning-choice]")) {
     if (select instanceof HTMLSelectElement) select.value = selected;
   }
@@ -165,9 +201,10 @@ function thinkingControl(index) {
     const element = document.createElement("option");
     element.value = option.value;
     element.textContent = option.label;
+    if (option.currentOnly) element.dataset.currentOnly = "true";
     select.appendChild(element);
   }
-  select.value = readEffort();
+  select.value = effortForSelectedModel(readEffort());
   select.addEventListener("change", () => {
     synchronizeSelectors(storeEffort(select.value));
   });
@@ -176,7 +213,7 @@ function thinkingControl(index) {
   description.id = `${id}-description`;
   description.className = "thinking-choice-description";
   description.textContent =
-    "Respond instantly is the default. Higher levels may take longer.";
+    "Respond instantly is the default. Higher levels may take longer; Maximum is available with Current.";
 
   wrapper.append(heading, select, description);
   return wrapper;
@@ -208,7 +245,7 @@ document.addEventListener("change", (event) => {
     for (const current of document.querySelectorAll(".composer-model-current")) {
       if (current instanceof HTMLElement) delete current.dataset.baseModelLabel;
     }
-    updateComposerSummary();
+    synchronizeSelectors(readEffort());
   }
 });
 
