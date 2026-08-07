@@ -18,12 +18,48 @@ function requireText(value, expected, label) {
   }
 }
 
+function validateNormalizedShape(text) {
+  const paidStart = text.indexOf("async function paidChatResponse(");
+  const workerStart = text.indexOf("\nconst worker =", paidStart);
+  const responseStart = text.indexOf("function responseWithModelUsage(");
+  const requestStart = text.indexOf(
+    "async function requestWithReasoningEffort(",
+  );
+  if (
+    paidStart < 0 ||
+    workerStart <= paidStart ||
+    responseStart <= paidStart ||
+    responseStart >= workerStart ||
+    requestStart <= paidStart ||
+    requestStart >= workerStart
+  ) {
+    return false;
+  }
+  const paidSection = text.slice(paidStart, workerStart);
+  requireText(
+    paidSection,
+    "function responseWithModelUsage(",
+    "the removable response-header helper",
+  );
+  requireText(
+    paidSection,
+    "async function requestWithReasoningEffort(",
+    "the removable Instant request helper",
+  );
+  return true;
+}
+
 await update("src/paid-worker.js", (source) => {
+  if (validateNormalizedShape(source)) return source;
+
   let text = source;
   const responseStart = text.indexOf("function responseWithModelUsage(");
   const requestStart = text.indexOf(
     "async function requestWithReasoningEffort(",
   );
+  if (responseStart < 0 || requestStart < 0) {
+    throw new Error("Could not find both free routing helpers");
+  }
   const helperStart = Math.min(responseStart, requestStart);
   const helperEndAnchor = Math.max(responseStart, requestStart);
   const paidStart = text.indexOf(
@@ -31,13 +67,7 @@ await update("src/paid-worker.js", (source) => {
     helperEndAnchor,
   );
   const workerStart = text.indexOf("\nconst worker =", paidStart);
-  if (
-    responseStart < 0 ||
-    requestStart < 0 ||
-    helperStart < 0 ||
-    paidStart <= helperEndAnchor ||
-    workerStart <= paidStart
-  ) {
+  if (paidStart <= helperEndAnchor || workerStart <= paidStart) {
     throw new Error("Could not isolate the free routing helpers and handler block");
   }
 
@@ -52,20 +82,9 @@ await update("src/paid-worker.js", (source) => {
     `\n\n${helperBlock}\n` +
     text.slice(updatedWorkerStart);
 
-  const paidSection = text.slice(
-    text.indexOf("async function paidChatResponse("),
-    text.indexOf("\nconst worker ="),
-  );
-  requireText(
-    paidSection,
-    "function responseWithModelUsage(",
-    "the removable response-header helper",
-  );
-  requireText(
-    paidSection,
-    "async function requestWithReasoningEffort(",
-    "the removable Instant request helper",
-  );
+  if (!validateNormalizedShape(text)) {
+    throw new Error("Free routing helpers did not reach the repeatable shape");
+  }
   if (
     text.slice(0, text.indexOf("async function paidChatResponse(")).includes(
       "X-Stabilize-Model-Fallback",
