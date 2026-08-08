@@ -15,7 +15,7 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - a continuous forested lake landscape with a lower-load static mobile path
 - a self-hosted Lexend variable font
 - demo mode that works without an API key
-- optional Google sign-in for cross-device memory; guest chats use bounded browser-tab continuity without entering Stabilize's server-side account memory
+- optional Google sign-in for cross-device memory; guest chats keep eight recent messages plus a 5,000-output-token rolling summary in the current tab without entering Stabilize's server-side account memory
 - no full transcript database; account memory uses a rolling summary with a bounded recent-message buffer
 - automatic signed-in free access to GPT-5.6 Instant for the first 50 completed ordinary messages each UTC day, followed by GPT-5.4
 - an optional subscription for a larger monthly non-default-model allowance and subscriber model choice
@@ -30,7 +30,7 @@ The language model is not the only safety layer. Selected urgent phrases are rou
 
 The checked-in runtime configuration is intended to describe the deployed policy directly:
 
-- **Guest:** ordinary chats use GPT-5.4. A bounded recent transcript stays in the current browser tab and is sent with follow-ups, but it does not use Stabilize account memory.
+- **Guest:** ordinary chats use GPT-5.4. The newest eight messages plus a rolling summary capped at 5,000 model-output tokens stay in the current browser tab and are sent with follow-ups, but they do not use Stabilize account memory.
 - **Signed-in free account:** the first **50** completed ordinary messages in each UTC day use `gpt-5.6-sol` with the no-extra-reasoning **Instant** setting. After that allowance is used, chats continue on GPT-5.4. The allowance resets at `00:00 UTC`.
 - **Subscriber:** the account may choose GPT-5.4 or **Current** (`gpt-5.6-sol`). Up to **200** non-default-model messages are available per UTC month; GPT-5.4 does not consume that monthly allowance.
 - **Thinking level:** the user may choose supported reasoning levels independently of the model allowance. The Worker validates the requested level for the selected model; the maximum level is available only for Current.
@@ -91,7 +91,7 @@ PAID_MONTHLY_MESSAGE_LIMIT=200
 
 `OPENAI_MODEL` is the guest and fallback model. The two `FREE_PLAN_*` values define the automatic signed-in free ladder. `MODEL_CHOICES` defines the subscriber-facing model catalog. The browser may request a supported thinking level; `OPENAI_REASONING_EFFORT` is the safe server fallback when that preference is missing or invalid.
 
-The same deployed OpenAI key also powers low-reasoning memory compaction for signed-in users. Guest and private chats do not enter the Stabilize account-memory or compaction path; their bounded browser context is sent directly with follow-up requests.
+The same deployed OpenAI key also powers low-reasoning memory compaction for signed-in users. Guest and private chats do not enter the Stabilize account-memory or Durable Object compaction path. Guest web chats can use a separate OpenAI summary request whose result returns to and remains in the current browser tab.
 
 1. Use a project-scoped OpenAI API key with appropriate usage and spend limits.
 2. For local development, copy `.dev.vars.example` to `.dev.vars` and place the key there.
@@ -169,7 +169,7 @@ See `SECURITY.md`, `PRIVACY.md`, and `RESPONSIBLE_USE.md`.
 
 ## Privacy behavior
 
-Guest chats create no server-side Stabilize account memory. The web client keeps up to eight recent guest messages in the current tab's session storage, sends that bounded transcript with follow-ups, and clears it on New conversation, sign-in or sign-out transitions, expiry, or tab closure. After Google sign-in, the Worker derives a one-way alias from Google's stable account identifier and uses that alias to address one Durable Object. The signed HttpOnly cookie contains the alias and expiry—not an email, Google token, raw Google identifier, network address, or conversation. The object retains a rolling summary plus at most eight newest messages awaiting compaction and deletes the record 30 days after the last stored exchange. Signed-in users can delete that remembered context immediately from the account menu; a generation token prevents an older in-flight response from recreating it. Billing and model-allowance records remain separate.
+Guest chats create no server-side Stabilize account memory. The web client keeps the newest eight guest messages, a rolling summary capped at 5,000 model-output tokens, and a bounded queue awaiting summary in the current tab's session storage. It sends that bounded context with follow-ups and clears it on New conversation, sign-in or sign-out transitions, expiry, or tab closure. After Google sign-in, the Worker derives a one-way alias from Google's stable account identifier and uses that alias to address one Durable Object. The signed HttpOnly cookie contains the alias and expiry—not an email, Google token, raw Google identifier, network address, or conversation. The object retains a rolling summary plus at most eight newest messages awaiting compaction and deletes the record 30 days after the last stored exchange. Signed-in users can delete that remembered context immediately from the account menu; a generation token prevents an older in-flight response from recreating it. Billing and model-allowance records remain separate.
 
 Signed-in users can start a private chat that bypasses Stabilize account-memory reads and writes for that tab. Private chat does not disable Cloudflare or OpenAI processing and does not change the provider-retention behavior described above.
 

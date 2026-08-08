@@ -8,8 +8,30 @@ function write(path, content) {
   writeFileSync(path, content);
 }
 
+function guestSummaryCompatible(path, source) {
+  const markerByPath = {
+    "src/index.js": "MAX_GUEST_SUMMARY_OUTPUT_TOKENS = 5_000",
+    "public/app.js":
+      'GUEST_THREAD_STORAGE_KEY = "stabilize:guest-thread:v2"',
+    "src/page.js": "20260808-guest-summary-1",
+    "src/copy.js": "guestSummaryPrompt:",
+    "README.md": "5,000-output-token rolling summary",
+    "PRIVACY.md": "5,000 model-output tokens",
+    "public/privacy.html": "5,000 model-output tokens",
+    "test/product.test.mjs": "MAX_GUEST_SUMMARY_CHARS = 30_000",
+    "test/outcome-followup.test.mjs": "20260808-guest-summary-1",
+    "test/priority-latency.test.mjs": "20260808-guest-summary-1",
+    "test/mobile-background-loading.test.mjs":
+      "20260808-guest-summary-1",
+    "test/private-chat.test.mjs": "20260808-guest-summary-1",
+  };
+  const marker = markerByPath[path];
+  return Boolean(marker && source.includes(marker));
+}
+
 function replaceOnce(path, before, after, label = path) {
   const source = read(path);
+  if (guestSummaryCompatible(path, source)) return false;
   if (source.includes(after)) return false;
   if (!source.includes(before)) {
     throw new Error(`Could not locate ${label} in ${path}`);
@@ -20,6 +42,7 @@ function replaceOnce(path, before, after, label = path) {
 
 function replaceAll(path, before, after, label = path) {
   const source = read(path);
+  if (guestSummaryCompatible(path, source)) return false;
   if (!source.includes(before)) {
     if (source.includes(after)) return false;
     throw new Error(`Could not locate ${label} in ${path}`);
@@ -30,6 +53,7 @@ function replaceAll(path, before, after, label = path) {
 
 function replaceBlock(path, startMarker, endMarker, replacement, label = path) {
   const source = read(path);
+  if (guestSummaryCompatible(path, source)) return false;
   if (source.includes(replacement)) return false;
   const start = source.indexOf(startMarker);
   if (start < 0) throw new Error(`Could not locate start of ${label} in ${path}`);

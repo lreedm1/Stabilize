@@ -38,7 +38,11 @@ test("memory deletion and guest tab continuity stay wired through the final pipe
   assert.match(sessionMemory, /expectedGeneration/);
   assert.match(sessionMemory, /deleteAlarm\(\)/);
   assert.match(workerSource, /\/api\/account\/memory/);
-  assert.match(workerSource, /privateChat \|\| signedOut/);
+  assert.match(workerSource, /const signedOut = !accountKey;/);
+  assert.match(
+    workerSource,
+    /signedOut[\s\S]*guestModelInput\(body, latestText\)/,
+  );
   assert.match(pageSource, /data-signed-in/);
   assert.match(pageSource, /delete-memory-button/);
   assert.match(clientScript, /GUEST_THREAD_STORAGE_KEY/);
