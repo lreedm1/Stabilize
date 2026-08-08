@@ -1,0 +1,81 @@
+name: Install uploaded mobile forest video
+
+on:
+  push:
+    branches:
+      - agent/mobile-forest-video
+
+permissions:
+  contents: write
+
+concurrency:
+  group: install-mobile-forest-video
+  cancel-in-progress: true
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/mobile-forest-video
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Enable and apply the uploaded mobile video
+        run: |
+          node scripts/enable-mobile-video.mjs
+          node scripts/apply-mobile-video.mjs
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run complete tests
+        run: npm test
+
+      - name: Validate Worker build
+        run: npm run check
+
+      - name: Remove one-time installer files
+        run: |
+          rm -f scripts/enable-mobile-video.mjs
+          rm -f .github/workflows/enable-mobile-video.yml
+
+      - name: Commit validated mobile video release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f public/scenes/mobile-forest-stream-loop-v1.mp4
+          test "$(wc -c < public/scenes/mobile-forest-stream-loop-v1.mp4)" -eq 602638
+          printf '%s  %s\n' \
+            'e5d824a487d3d423c5a6e70d84b45dbc2cee7afcbd3b618db0446ff002054e16' \
+            'public/scenes/mobile-forest-stream-loop-v1.mp4' \
+            | sha256sum --check --strict
+          grep -Fq 'id="mobile-background-video"' src/page.js
+          grep -Fq 'autoplay' src/page.js
+          grep -Fq 'muted' src/page.js
+          grep -Fq 'loop' src/page.js
+          grep -Fq 'playsinline' src/page.js
+          grep -Fq 'video.defaultMuted = true' public/mobile-quality.js
+          grep -Fq 'video.play()' public/mobile-quality.js
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No mobile-video changes were produced.'
+            exit 1
+          fi
+          git commit -m 'Play the uploaded forest stream on mobile'
+          npm run verify:clean
+          git push origin HEAD:agent/mobile-forest-video
