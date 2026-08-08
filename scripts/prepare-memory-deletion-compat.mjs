@@ -161,12 +161,17 @@ async function alignVersionedClientTests() {
 async function alignNewConversationTest() {
   const path = "test/new-conversation.test.mjs";
   let source = await read(path);
-  source = replaceRequired(
-    source,
-    '    memorySource.indexOf("  async getCompactionSnapshot()", start),',
-    '    memorySource.indexOf("  clearRememberedContent()", start),',
-    "new-conversation method boundary",
-  );
+  const after = 'memorySource.indexOf("clearRememberedContent()")';
+  if (!source.includes(after)) {
+    const next = source.replace(
+      /memorySource\.indexOf\("(?:  )?async getCompactionSnapshot\(\)"(?:, start)?\)/,
+      after,
+    );
+    if (next === source) {
+      throw new Error("Could not locate new-conversation method boundary");
+    }
+    source = next;
+  }
   return write(path, source);
 }
 
