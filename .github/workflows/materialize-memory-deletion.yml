@@ -32,6 +32,18 @@ jobs:
       - name: Install and materialize canonical output
         run: npm ci
 
+      - name: Diagnose a second policy pass
+        shell: bash
+        run: |
+          cp public/app.js /tmp/stabilize-app-first-pass.js
+          npm run apply:prompt-policy
+          if ! cmp --silent /tmp/stabilize-app-first-pass.js public/app.js; then
+            echo "public/app.js changed on the second policy pass:"
+            diff --unified /tmp/stabilize-app-first-pass.js public/app.js || true
+          else
+            echo "public/app.js is stable across a second policy pass."
+          fi
+
       - name: Run the complete test suite
         run: npm test
 
