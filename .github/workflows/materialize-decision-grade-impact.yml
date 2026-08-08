@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  statuses: write
 
 concurrency:
   group: materialize-decision-grade-impact-${{ github.ref }}
@@ -17,6 +18,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+      - name: Mark materialization pending
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          payload="$(printf '{"state":"pending","context":"materialization/decision-grade-impact","description":"Reconciling main, generating, testing, and validating"}')"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+
       - name: Check out decision-grade impact branch
         uses: actions/checkout@v7
         with:
@@ -71,3 +86,26 @@ jobs:
 
       - name: Verify repository stays clean
         run: npm run verify:clean
+
+      - name: Publish materialization result
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [[ "$JOB_STATUS" == "success" ]]; then
+            state="success"
+            description="Main reconciled; generation, tests, build, and clean-tree passed"
+          else
+            state="failure"
+            description="Reconciliation, generation, tests, build, or clean-tree failed"
+          fi
+          payload="$(printf '{"state":"%s","context":"materialization/decision-grade-impact","description":"%s"}' "$state" "$description")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
