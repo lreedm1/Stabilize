@@ -1,0 +1,55 @@
+name: Materialize signed-in context prefetch
+
+on:
+  push:
+    branches:
+      - agent/signed-in-prefetch-latency
+
+permissions:
+  contents: write
+
+concurrency:
+  group: materialize-signed-in-prefetch-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  materialize-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out prefetch branch
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: agent/signed-in-prefetch-latency
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies and materialize policy
+        run: npm ci
+
+      - name: Commit canonical generated output
+        shell: bash
+        run: |
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "Generated output is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Materialize signed-in context prefetch"
+          git push origin HEAD:agent/signed-in-prefetch-latency
+
+      - name: Run tests
+        run: npm test
+
+      - name: Validate Worker build
+        run: npm run check
+
+      - name: Verify repository stays clean
+        run: npm run verify:clean
