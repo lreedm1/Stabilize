@@ -1,0 +1,76 @@
+replaceOnce(
+  "scripts/apply-streaming-policy.mjs",
+  `if (!workerAfter.includes("return streamChatReply(messages, route, env, latestText, stub, ctx);")) {
+  throw new Error("Streaming policy did not replace the chat completion response");
+}`,
+  `const hasExistingStreamingCall =
+  workerAfter.includes("function streamChatReply(") &&
+  workerAfter.includes("return streamChatReply(") &&
+  workerAfter.includes("application/x-ndjson");
+
+if (
+  !workerAfter.includes(
+    "return streamChatReply(messages, route, env, latestText, stub, ctx);",
+  ) &&
+  !hasExistingStreamingCall
+) {
+  throw new Error("Streaming policy did not replace the chat completion response");
+}`,
+  "streaming memory-generation compatibility",
+);
+
+replaceOnce(
+  "scripts/harden-openai-streaming.mjs",
+  `function streamChatReply(messages, route, env, latestText, stub, ctx) {
+`,
+  `function streamChatReply(
+  messages,
+  route,
+  env,
+  latestText,
+  stub,
+  memoryGeneration,
+  ctx,
+) {
+`,
+  "hardened stream memory-generation signature",
+);
+replaceOnce(
+  "scripts/harden-openai-streaming.mjs",
+  `      const recordResult = await recordExchange(stub, {
+        user: latestText,
+        assistant: validated,
+        awaitingSafetyAnswer: false,
+      });
+`,
+  `      const recordResult = await recordExchange(stub, {
+        user: latestText,
+        assistant: validated,
+        awaitingSafetyAnswer: false,
+        expectedGeneration: memoryGeneration,
+      });
+`,
+  "hardened stream stale-write guard",
+);
+replaceOnce(
+  "scripts/harden-openai-streaming.mjs",
+  `function streamChatReply\\(messages, route, env, latestText, stub, ctx\\)`,
+  `function streamChatReply\\([\\s\\S]*?\\)\\s*`,
+  "hardened stream signature matcher",
+);
+
+replaceOnce(
+  "scripts/apply-private-chat.mjs",
+  `  if (!text.includes("awaitingSafetyAnswer: currentAwaitingSafetyAnswer(),\\n        privateChat,")) {
+`,
+  `  if (
+    !text.includes(
+      "awaitingSafetyAnswer: currentAwaitingSafetyAnswer(),\\n        privateChat,",
+    ) &&
+    !(text.includes("function buildChatRequestBody(") &&
+      text.includes("\\n      privateChat,\\n"))
+  ) {
+`,
+  "private-chat bounded request compatibility",
+);
+
