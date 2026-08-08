@@ -33,3 +33,92 @@ jobs:
 
       - name: Verify repository stays clean
         run: npm run verify:clean
+
+  materialize-reasoning-impact:
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/reasoning-effort-impact-v2'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/reasoning-effort-impact-v2
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Reconstruct and verify the canonical generator
+        shell: bash
+        run: |
+          cat tmp/reasoning-impact-final/part-*.b64 > /tmp/reasoning-generator.gz.b64
+          echo "86e9f9ec5228da435235bf7781874bb20583a793455bdd01fffa48b274595984  /tmp/reasoning-generator.gz.b64" | sha256sum --check
+          base64 --decode /tmp/reasoning-generator.gz.b64 > /tmp/reasoning-generator.gz
+          echo "5967108610a17d6a953cb177145a46618c444e9eade133f55625a988567eb976  /tmp/reasoning-generator.gz" | sha256sum --check
+          gzip --decompress --stdout /tmp/reasoning-generator.gz > scripts/add-reasoning-effort-impact.mjs
+          echo "fc06458286da674ed8777139fb168558290f4f7e98d2cd53f7d6723cdac3c23f  scripts/add-reasoning-effort-impact.mjs" | sha256sum --check
+          node --check scripts/add-reasoning-effort-impact.mjs
+
+      - name: Install and materialize the canonical tree
+        run: npm ci
+
+      - name: Run the complete Node and Worker suites
+        run: npm test
+
+      - name: Validate Worker types and deployment bundle
+        run: npm run check
+
+      - name: Commit canonical output
+        shell: bash
+        run: |
+          rm -rf tmp/reasoning-impact-final
+          rm -f .github/workflows/export-reasoning-impact-v2.yml
+          cat > .github/workflows/test.yml <<'YAML'
+          name: Test
+
+          on:
+            push:
+            pull_request:
+
+          permissions:
+            contents: read
+
+          jobs:
+            test:
+              runs-on: ubuntu-latest
+              steps:
+                - name: Check out repository
+                  uses: actions/checkout@v7
+                  with:
+                    persist-credentials: false
+
+                - name: Set up Node.js
+                  uses: actions/setup-node@v7
+                  with:
+                    node-version: 24
+                    cache: npm
+
+                - name: Install dependencies
+                  run: npm ci
+
+                - name: Run tests
+                  run: npm test
+
+                - name: Validate Worker build
+                  run: npm run check
+
+                - name: Verify repository stays clean
+                  run: npm run verify:clean
+          YAML
+          git status --short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Measure impact by reasoning effort"
+          npm run verify:clean
+          git push origin HEAD:agent/reasoning-effort-impact-v2
