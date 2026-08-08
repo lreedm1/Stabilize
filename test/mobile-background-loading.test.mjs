@@ -35,6 +35,14 @@ test("mobile clients keep the static image without loading the graphics module c
   assert.match(loaderSource, /prefers-reduced-motion: reduce/);
   assert.match(loaderSource, /navigator\?\.connection\?\.saveData/);
   assert.match(loaderSource, /requestIdleCallback/);
+  assert.match(loaderSource, /let modulationScheduled = false/);
+  assert.match(loaderSource, /function scheduleTerrainModulation\(\)/);
+  assert.match(loaderSource, /requestAnimationFrame\(runAfterPaint\)/);
+  assert.match(loaderSource, /setTimeout\(applyLatestTerrainValue, 0\)/);
+  assert.match(
+    loaderSource,
+    /export function modulateTerrain\(value\) \{[\s\S]*scheduleTerrainModulation\(\);[\s\S]*return null;/,
+  );
   assert.match(pageSource, /\/app\.js\?v=20260806-static-mobile-background-1/);
   assert.match(
     packageSource,
