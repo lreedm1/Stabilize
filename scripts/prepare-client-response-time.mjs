@@ -1,5 +1,15 @@
 import { readFile, writeFile } from "node:fs/promises";
 
+const shareTestPath = "test/organic-share-loop.test.mjs";
+const shareTest = await readFile(shareTestPath, "utf8");
+const alignedShareTest = shareTest.replace(
+  /20260806-shareable-next-step-1/gu,
+  "20260808-browser-response-time-1",
+);
+if (alignedShareTest !== shareTest) {
+  await writeFile(shareTestPath, alignedShareTest);
+}
+
 const path = "src/impact-dashboard.js";
 const source = await readFile(path, "utf8");
 
