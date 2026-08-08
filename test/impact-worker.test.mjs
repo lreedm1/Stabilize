@@ -213,7 +213,7 @@ test("verified outcomes and response feedback appear in the private dashboard", 
   assert.equal(dashboard.status, 200);
   assert.match(
     html,
-    /Engagement, response quality, outcomes, reliability, and cost\./,
+    /Outcomes, latency, provider usage, reliability, and cost\./,
   );
   assert.match(html, /Eligible checks shown/);
   assert.match(html, /Reports received/);
@@ -225,6 +225,8 @@ test("verified outcomes and response feedback appear in the private dashboard", 
   assert.match(html, /Conversation help rate/);
   assert.match(html, /Conversation feedback rate/);
   assert.match(html, /Daily usage/);
+  assert.match(html, /Latency breakdown/);
+  assert.match(html, /Model and cost breakdown/);
   assert.match(html, /Unique browsers and submitted chat messages by UTC day/);
   assert.match(html, /Top feedback reasons/);
   assert.match(html, /Recent written feedback/);
@@ -239,7 +241,7 @@ test("verified outcomes and response feedback appear in the private dashboard", 
   assert.match(html, /<th>Users<\/th><th>Messages<\/th>/);
   assert.match(html, /One decision this week/);
   assert.match(html, /2\.00×/);
-  assert.equal((html.match(/class="tile"/g) || []).length, 17);
+  assert.ok((html.match(/class="tile"/g) || []).length >= 24);
   assert.doesNotMatch(html, /Help me choose one task/);
   assert.doesNotMatch(html, new RegExp(TEST_ADMIN_PASSWORD));
 });

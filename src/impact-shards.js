@@ -1,3 +1,8 @@
+import {
+  mergeLatencyBreakdowns,
+  summarizeLatencyBreakdowns,
+} from "./impact-latency.js";
+
 const IMPACT_SHARD_COUNT = 16;
 const MAX_EVENT_BODY_BYTES = 4_096;
 const UUID_PATTERN =
@@ -339,13 +344,113 @@ function mergeImpactSummaries(summaries, since, now) {
   return merged;
 }
 
+function mergeDecisionGradeMetrics(merged, summaries) {
+  const latencyHistograms = mergeLatencyBreakdowns(
+    summaries.map((summary) => summary?.latencyHistograms),
+  );
+  const tokenTotals = {
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningTokens: 0,
+    outputTokens: 0,
+  };
+  const breakdown = new Map();
+  const pricingVersions = new Set();
+  let modelChats = 0;
+  let pricedChats = 0;
+  let unknownCostChats = 0;
+
+  for (const summary of summaries) {
+    if (!summary) continue;
+    modelChats += Number(summary.modelChats || 0);
+    pricedChats += Number(summary.pricedChats || 0);
+    unknownCostChats += Number(summary.unknownCostChats || 0);
+    if (summary.pricingVersion) pricingVersions.add(summary.pricingVersion);
+    for (const key of Object.keys(tokenTotals)) {
+      tokenTotals[key] += Number(summary.tokenTotals?.[key] || 0);
+    }
+    for (const row of summary.costBreakdown || []) {
+      const model = String(row?.model || "unknown").slice(0, 128);
+      const serviceTier = String(row?.serviceTier || "unknown").slice(0, 32);
+      const key = model + "|" + serviceTier;
+      const current = breakdown.get(key) || {
+        model,
+        serviceTier,
+        chats: 0,
+        completedChats: 0,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
+        outputTokens: 0,
+        estimatedCostMicros: 0,
+        pricedChats: 0,
+        unknownCostChats: 0,
+      };
+      for (const field of [
+        "chats",
+        "completedChats",
+        "inputTokens",
+        "cachedInputTokens",
+        "cacheWriteTokens",
+        "reasoningTokens",
+        "outputTokens",
+        "estimatedCostMicros",
+        "pricedChats",
+        "unknownCostChats",
+      ]) {
+        current[field] += Number(row?.[field] || 0);
+      }
+      breakdown.set(key, current);
+    }
+  }
+
+  const estimatedCostMicros = Number(merged.estimatedCostMicros || 0);
+  const helpfulConversations = Number(merged.conversationHelped || 0);
+  return {
+    ...merged,
+    latencyHistograms,
+    latency: summarizeLatencyBreakdowns(latencyHistograms),
+    tokenTotals,
+    modelChats,
+    pricedChats,
+    unknownCostChats,
+    pricingCoverageRate: metricRate(pricedChats, modelChats),
+    pricingVersion:
+      pricingVersions.size === 1
+        ? [...pricingVersions][0]
+        : pricingVersions.size > 1
+          ? "mixed"
+          : null,
+    costBreakdown: [...breakdown.values()].sort(
+      (left, right) =>
+        right.estimatedCostMicros - left.estimatedCostMicros ||
+        right.chats - left.chats,
+    ),
+    helpfulConversationsPerDollar:
+      helpfulConversations > 0 && estimatedCostMicros > 0
+        ? helpfulConversations / (estimatedCostMicros / 1_000_000)
+        : null,
+    estimatedCostPerHelpfulConversationMicros:
+      helpfulConversations > 0 && estimatedCostMicros > 0
+        ? Math.round(estimatedCostMicros / helpfulConversations)
+        : null,
+  };
+}
+
 export async function impactSummary(env, options) {
   const stubs = impactStubs(env);
   if (!stubs.length) return null;
   const summaries = await Promise.all(
     stubs.map((stub) => stub.summary(options)),
   );
-  return mergeImpactSummaries(summaries, options.since, options.now);
+  const merged = mergeImpactSummaries(
+    summaries,
+    options.since,
+    options.now,
+  );
+  return mergeDecisionGradeMetrics(merged, summaries);
 }
 
 export function schedule(ctx, promise) {

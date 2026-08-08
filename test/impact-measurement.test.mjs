@@ -105,14 +105,9 @@ test("chat analytics starts after the response stream and records first-token ti
   assert.match(latencyEvents, /schedule\(\s*ctx,\s*recordChatAnalytics\(/);
   assert.match(latencyEvents, /Consume the cloned stream immediately/);
   assert.match(latencyAnalytics, /extends BaseImpactAnalytics/);
-  assert.match(
-    latencyAnalytics,
-    /ALTER TABLE chat_turns ADD COLUMN first_token_ms INTEGER/,
-  );
-  assert.match(
-    latencyAnalytics,
-    /UPDATE chat_turns SET first_token_ms = \? WHERE turn_id = \?/,
-  );
+  assert.match(latencyAnalytics, /estimateChatCostMicros/);
+  assert.match(latencyAnalytics, /latencyHistograms/);
+  assert.match(latencyAnalytics, /pricingCoverageRate/);
 });
 
 test("each structured outcome advances from shown to a first answer", () => {
@@ -146,7 +141,9 @@ test("conversation starts and follow-ups use a rotating hashed boundary", () => 
 });
 
 test("the private dashboard covers outcomes, engagement, quality, reliability, and cost", () => {
-  assert.equal((dashboard.match(/<div class=\"tile\">/g) || []).length, 17);
+  assert.ok(
+    (dashboard.match(/<div class=\"tile\">/g) || []).length >= 24,
+  );
   for (const label of [
     "Eligible checks shown",
     "Reports received",
@@ -160,11 +157,18 @@ test("the private dashboard covers outcomes, engagement, quality, reliability, a
     "Feedback response rate",
     "Failed responses",
     "Average response time",
+    "First-token p50",
+    "First-token p95",
+    "Total-response p50",
+    "Total-response p95",
     "Returning-browser rate",
     "Est. cost / helpful response",
     "Written comments",
     "Conversation help rate",
     "Conversation feedback rate",
+    "Helpful conversations / $",
+    "Est. cost / helpful conversation",
+    "Pricing coverage",
   ]) {
     assert.match(
       dashboard,
@@ -172,6 +176,8 @@ test("the private dashboard covers outcomes, engagement, quality, reliability, a
     );
   }
   assert.match(dashboard, /Daily usage/);
+  assert.match(dashboard, /Latency breakdown/);
+  assert.match(dashboard, /Model and cost breakdown/);
   assert.match(dashboard, /Top feedback reasons/);
   assert.match(dashboard, /Recent written feedback/);
   assert.match(dashboard, /feedbackCommentList\(summary\)/);

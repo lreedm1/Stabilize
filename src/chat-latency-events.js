@@ -12,29 +12,83 @@ import {
 const IMPACT_PROMPT_VERSION = "next-step-v1";
 const MAX_ANALYTICS_RESPONSE_BYTES = 256_000;
 
+function emptyUsage() {
+  return {
+    model: "",
+    requestedServiceTier: "",
+    actualServiceTier: "",
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningTokens: 0,
+    outputTokens: 0,
+  };
+}
+
+function normalizeUsage(value) {
+  if (!value || typeof value !== "object") return null;
+  const model = safeToken(value.model, 128);
+  if (!model) return null;
+  return {
+    model,
+    requestedServiceTier:
+      safeToken(value.requestedServiceTier, 32) || "default",
+    actualServiceTier: safeToken(value.actualServiceTier, 32) || "",
+    inputTokens: boundedNumber(value.inputTokens, 0, 100_000_000, 0),
+    cachedInputTokens: boundedNumber(
+      value.cachedInputTokens,
+      0,
+      100_000_000,
+      0,
+    ),
+    cacheWriteTokens: boundedNumber(
+      value.cacheWriteTokens,
+      0,
+      100_000_000,
+      0,
+    ),
+    reasoningTokens: boundedNumber(
+      value.reasoningTokens,
+      0,
+      100_000_000,
+      0,
+    ),
+    outputTokens: boundedNumber(value.outputTokens, 0, 100_000_000, 0),
+  };
+}
+
 function initialChatResult(response) {
+  const usage = emptyUsage();
+  usage.model =
+    safeToken(response.headers.get("X-Stabilize-Model-Selected"), 128) || "";
   return {
     route: "UNKNOWN",
     status: response.ok ? "completed" : "error",
     firstTokenMs: null,
+    usage,
   };
+}
+
+function observeResponseEvent(event, result, startedAt) {
+  if (event?.route) {
+    result.route = safeToken(event.route, 64) || result.route;
+  }
+  if (
+    event?.type === "delta" &&
+    typeof event.delta === "string" &&
+    result.firstTokenMs === null
+  ) {
+    result.firstTokenMs = Math.max(0, Date.now() - startedAt);
+  }
+  if (event?.type === "error") result.status = "error";
+  const usage = normalizeUsage(event?.analytics);
+  if (usage) result.usage = usage;
 }
 
 function observeNdjsonLine(line, result, startedAt) {
   if (!line.trim()) return;
   try {
-    const event = JSON.parse(line);
-    if (event?.route) {
-      result.route = safeToken(event.route, 64) || result.route;
-    }
-    if (
-      event?.type === "delta" &&
-      typeof event.delta === "string" &&
-      result.firstTokenMs === null
-    ) {
-      result.firstTokenMs = Math.max(0, Date.now() - startedAt);
-    }
-    if (event?.type === "error") result.status = "error";
+    observeResponseEvent(JSON.parse(line), result, startedAt);
   } catch {
     result.status = "error";
   }
@@ -53,19 +107,16 @@ async function parseNdjsonResponse(response, startedAt) {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-
       totalBytes += value.byteLength;
       if (totalBytes > MAX_ANALYTICS_RESPONSE_BYTES) {
         await reader.cancel("Chat response exceeded the analytics limit.");
         throw new Error("Chat response exceeded the analytics limit.");
       }
-
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
       buffer = lines.pop() || "";
       for (const line of lines) observeNdjsonLine(line, result, startedAt);
     }
-
     buffer += decoder.decode();
     if (buffer.trim()) observeNdjsonLine(buffer, result, startedAt);
     return result;
@@ -73,7 +124,7 @@ async function parseNdjsonResponse(response, startedAt) {
     try {
       reader.releaseLock();
     } catch {
-      // The provider or browser may already have closed the cloned stream.
+      // The cloned stream may already be closed.
     }
   }
 }
@@ -86,7 +137,6 @@ async function parseChatResponse(response, startedAt) {
 
   const result = initialChatResult(response);
   if (!contentType.includes("application/json")) return result;
-
   const text = await readBoundedResponseText(
     response,
     MAX_ANALYTICS_RESPONSE_BYTES,
@@ -94,7 +144,7 @@ async function parseChatResponse(response, startedAt) {
   );
   try {
     const body = JSON.parse(text || "{}");
-    result.route = safeToken(body?.route, 64) || result.route;
+    observeResponseEvent(body, result, startedAt);
     if (body?.error) result.status = "error";
   } catch {
     result.status = "error";
@@ -113,12 +163,11 @@ async function recordChatAnalytics({
   browserId,
   conversationId,
 }) {
-  // Consume the cloned stream immediately so analytics never backpressures the
-  // user-facing response. Identity hashing and auth verification run beside it.
   const resultPromise = parseChatResponse(analyticsCopy, startedAt).catch(() => ({
     route: "UNKNOWN",
     status: "error",
     firstTokenMs: null,
+    usage: emptyUsage(),
   }));
 
   const [sessionHash, browserHash, conversationHash, authSession] =
@@ -141,23 +190,28 @@ async function recordChatAnalytics({
     return;
   }
 
+  const accountType = authSession ? "signed_in" : "guest";
+  const memorySource =
+    safeToken(response.headers.get("X-Stabilize-Memory-Source"), 64) ||
+    (authSession ? "unknown" : "guest");
+  const selectedModel =
+    safeToken(response.headers.get("X-Stabilize-Model-Selected"), 128) ||
+    "pending";
+
   await store.startChat({
     turnId,
     occurredAt: startedAt,
     sessionHash,
     browserHash,
     conversationHash,
-    accountType: authSession ? "signed_in" : "guest",
-    model: safeToken(env?.OPENAI_MODEL, 128) || "unknown",
-    estimatedCostMicros: boundedNumber(
-      env?.IMPACT_ESTIMATED_CHAT_COST_MICROS,
-      0,
-      100_000_000,
-      0,
-    ),
+    accountType,
+    memorySource,
+    model: selectedModel,
+    estimatedCostMicros: 0,
   });
 
   const result = await resultPromise;
+  const usage = result.usage || emptyUsage();
   await store.finishChat({
     turnId,
     route: result.route,
@@ -165,6 +219,15 @@ async function recordChatAnalytics({
     httpStatus: response.status,
     firstTokenMs: result.firstTokenMs,
     totalResponseMs: Date.now() - startedAt,
+    memorySource,
+    model: usage.model || selectedModel,
+    requestedServiceTier: usage.requestedServiceTier,
+    actualServiceTier: usage.actualServiceTier,
+    inputTokens: usage.inputTokens,
+    cachedInputTokens: usage.cachedInputTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
+    reasoningTokens: usage.reasoningTokens,
+    outputTokens: usage.outputTokens,
   });
 }
 
@@ -176,8 +239,6 @@ export async function chatResponse(request, env, ctx) {
   const conversationId =
     request.headers.get("x-stabilize-conversation-id") || "";
 
-  // Nothing analytics-related is awaited before the actual chat Worker opens
-  // its response stream.
   const response = await worker.fetch(request, env, ctx);
   const analyticsCopy = response.clone();
   schedule(

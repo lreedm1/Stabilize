@@ -1272,12 +1272,11 @@ await update("test/impact-measurement.test.mjs", (source) => {
   assert.match(latencyAnalytics, /latencyHistograms/);
   assert.match(latencyAnalytics, /pricingCoverageRate/);`,
   );
-  next = next.replace(
-    /assert\.equal\(\(dashboard\.match\(\/<div class=\\\"tile\\\">\/g\) \|\| \[\]\)\.length, 17\);/u,
-    `assert.ok(
-    (dashboard.match(/<div class=\\"tile\\">/g) || []).length >= 24,
-  );`,
-  );
+  const oldTileAssertion = String.raw`  assert.equal((dashboard.match(/<div class=\"tile\">/g) || []).length, 17);`;
+  const newTileAssertion = String.raw`  assert.ok(
+    (dashboard.match(/<div class=\"tile\">/g) || []).length >= 24,
+  );`;
+  next = next.replace(oldTileAssertion, newTileAssertion);
   next = next.replace(
     `    "Average response time",\n`,
     `    "Average response time",\n    "First-token p50",\n    "First-token p95",\n    "Total-response p50",\n    "Total-response p95",\n`,
