@@ -37,16 +37,16 @@ jobs:
         shell: bash
         run: |
           cat > /tmp/guest-summary-chunks.sha256 <<'SUMS'
-          2a09f50ec5f420d619184581666c1b50e4a657b618944847538ad4577c820347  tmp/guest-summary-generator/chunk-00.txt
-          3458b18ecc703ce9a34f87cb11b114344554594a056346721e437b15012a0c4b  tmp/guest-summary-generator/chunk-01.txt
-          58c93a2e0813f92aa16f7ab80e5106222f53c0e0581d86074f58c0f71b1ef35b  tmp/guest-summary-generator/chunk-02.txt
+          b4823615fd64a4005e123f6ca31db669c7ca62fdf3011016de387f66c43e23ba  tmp/guest-summary-generator/chunk-00.txt
+          16a6dd16bf20c3e0635a01e60f4579ee4eb270b9910ffb989d707b0ceb2a5eb8  tmp/guest-summary-generator/chunk-01.txt
+          ee31df57e05f82cde61249bc2895285b815375604f0e2d4c93d9a155ecf33984  tmp/guest-summary-generator/chunk-02.txt
           SUMS
           sha256sum --check /tmp/guest-summary-chunks.sha256
           cat tmp/guest-summary-generator/chunk-*.txt \
             | base64 --decode \
             | gzip --decompress \
             > scripts/add-guest-summary.mjs
-          echo '8ea95e9ce25c99622074acb9d13ec0796fa8ceedfefed26a1fcfdb69e4a8e842  scripts/add-guest-summary.mjs' \
+          echo '4f7fd9e0cfcddbe2dbb8ae29ace55b6a1406dbb53061461785fe86510f886e15  scripts/add-guest-summary.mjs' \
             | sha256sum --check
           node --check scripts/add-guest-summary.mjs
 
