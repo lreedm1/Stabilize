@@ -114,6 +114,8 @@ export function emptyLatencyBreakdowns() {
   return {
     firstToken: emptyMetricBreakdown(),
     totalResponse: emptyMetricBreakdown(),
+    clientFirstVisible: emptyMetricBreakdown(),
+    clientComplete: emptyMetricBreakdown(),
   };
 }
 
@@ -147,6 +149,12 @@ export function addTurnLatency(breakdowns, row = {}) {
   };
   addMetricSample(target.firstToken, row.firstTokenMs, dimensions);
   addMetricSample(target.totalResponse, row.totalResponseMs, dimensions);
+  addMetricSample(
+    target.clientFirstVisible,
+    row.clientFirstVisibleMs,
+    dimensions,
+  );
+  addMetricSample(target.clientComplete, row.clientCompleteMs, dimensions);
   return target;
 }
 
@@ -166,6 +174,11 @@ export function mergeLatencyBreakdowns(breakdownsList = []) {
     if (!breakdowns) continue;
     mergeMetricBreakdown(merged.firstToken, breakdowns.firstToken);
     mergeMetricBreakdown(merged.totalResponse, breakdowns.totalResponse);
+    mergeMetricBreakdown(
+      merged.clientFirstVisible,
+      breakdowns.clientFirstVisible,
+    );
+    mergeMetricBreakdown(merged.clientComplete, breakdowns.clientComplete);
   }
   return merged;
 }
@@ -190,5 +203,9 @@ export function summarizeLatencyBreakdowns(breakdowns) {
   return {
     firstToken: summarizeMetricBreakdown(breakdowns?.firstToken),
     totalResponse: summarizeMetricBreakdown(breakdowns?.totalResponse),
+    clientFirstVisible: summarizeMetricBreakdown(
+      breakdowns?.clientFirstVisible,
+    ),
+    clientComplete: summarizeMetricBreakdown(breakdowns?.clientComplete),
   };
 }

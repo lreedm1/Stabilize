@@ -7,6 +7,7 @@ import worker, {
 import { ImpactAnalytics } from "./impact-analytics-latency.js";
 import { chatResponse } from "./chat-latency-events.js";
 import {
+  clientLatencyResponse,
   enhanceHomePage,
   enhancePrivacyPage,
   impactEventResponse,
@@ -35,6 +36,9 @@ const impactWorker = {
     try {
       if (url.pathname === "/api/impact-event") {
         return await impactEventResponse(request, env);
+      }
+      if (url.pathname === "/api/client-latency") {
+        return await clientLatencyResponse(request, env);
       }
       if (url.pathname === "/api/message-feedback") {
         return await messageFeedbackResponse(request, env);

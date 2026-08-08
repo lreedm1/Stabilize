@@ -408,10 +408,18 @@ function mergeDecisionGradeMetrics(merged, summaries) {
 
   const estimatedCostMicros = Number(merged.estimatedCostMicros || 0);
   const helpfulConversations = Number(merged.conversationHelped || 0);
+  const clientLatencyChats = Number(
+    latencyHistograms.clientComplete?.overall?.count || 0,
+  );
   return {
     ...merged,
     latencyHistograms,
     latency: summarizeLatencyBreakdowns(latencyHistograms),
+    clientLatencyChats,
+    clientTimingCoverageRate: metricRate(
+      clientLatencyChats,
+      Number(merged.completedChats || 0),
+    ),
     tokenTotals,
     modelChats,
     pricedChats,
