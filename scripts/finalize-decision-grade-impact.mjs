@@ -11,6 +11,20 @@ function replaceAllLiteral(source, before, after) {
   return source.includes(before) ? source.split(before).join(after) : source;
 }
 
+function dedupeExactLines(source, exactLines) {
+  const tracked = new Set(exactLines);
+  const seen = new Set();
+  const trailingNewline = source.endsWith("\n");
+  const lines = source.split("\n").filter((line) => {
+    if (!tracked.has(line)) return true;
+    if (seen.has(line)) return false;
+    seen.add(line);
+    return true;
+  });
+  const joined = lines.join("\n");
+  return trailingNewline && !joined.endsWith("\n") ? joined + "\n" : joined;
+}
+
 await update("src/chat-latency-events.js", (source) => {
   const marker =
     "  const resultPromise = parseChatResponse(analyticsCopy, startedAt).catch(() => ({";
@@ -73,6 +87,27 @@ await update("test/priority-latency.test.mjs", (source) =>
     /cachedTokens: usageNumber\\\(inputDetails\\\.cached_tokens\\\)/gu,
     "cachedInputTokens: usageNumber\\(inputDetails\\.cached_tokens\\)",
   ),
+);
+
+await update("test/impact-measurement.test.mjs", (source) =>
+  dedupeExactLines(source, [
+    '    "First-token p50",',
+    '    "First-token p95",',
+    '    "Total-response p50",',
+    '    "Total-response p95",',
+    '    "Helpful conversations / $",',
+    '    "Est. cost / helpful conversation",',
+    '    "Pricing coverage",',
+    "  assert.match(dashboard, /Latency breakdown/);",
+    "  assert.match(dashboard, /Model and cost breakdown/);",
+  ]),
+);
+
+await update("test/impact-worker.test.mjs", (source) =>
+  dedupeExactLines(source, [
+    "  assert.match(html, /Latency breakdown/);",
+    "  assert.match(html, /Model and cost breakdown/);",
+  ]),
 );
 
 await update("package.json", (source) => {
