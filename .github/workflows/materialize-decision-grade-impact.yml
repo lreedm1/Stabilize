@@ -35,6 +35,7 @@ jobs:
       - name: Commit canonical generated output
         shell: bash
         run: |
+          # This temporary branch workflow commits only deterministic generated output.
           if [[ -z "$(git status --porcelain)" ]]; then
             echo "Generated output is already current."
             exit 0
