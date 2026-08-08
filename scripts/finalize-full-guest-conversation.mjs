@@ -42,6 +42,22 @@ function removeLinesContaining(path, marker) {
   return true;
 }
 
+function canonicalizeGuestAppScript(path) {
+  const source = read(path);
+  const canonical =
+    '    <!-- Legacy generator marker: 20260808-guest-summary-1 -->\n' +
+    '    <script type="module" src="/app.js?v=20260808-full-guest-thread-1"></script>';
+  const generatedBlock =
+    /(?:    <!-- Legacy generator marker: 20260808-guest-summary-1 -->\n)*    <script type="module" src="\/app\.js\?v=[^"]+"><\/script>/;
+  if (!generatedBlock.test(source)) {
+    throw new Error("Could not locate the generated app.js module script in src/page.js");
+  }
+  const next = source.replace(generatedBlock, canonical);
+  if (next === source) return false;
+  write(path, next);
+  return true;
+}
+
 // Remove the obsolete v2 guest-summary callback even when an earlier generator
 // has already changed or removed its adjacent helper.
 removeBlock(
@@ -55,6 +71,7 @@ removeBlock(
   "function rollbackLocalUser(content) {",
 );
 removeLinesContaining("public/app.js", "applyGuestSummaryResult(");
+canonicalizeGuestAppScript("src/page.js");
 
 for (const path of [
   "test/mobile-background-loading.test.mjs",
