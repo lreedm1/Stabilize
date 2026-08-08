@@ -53,44 +53,47 @@ function webpInfo(buffer) {
   return { width, height, chunks };
 }
 
-test("mobile uses responsive high-DPI static generated WebPs", async () => {
-  const tiers = [
-    { filename: "mobile-golden-alpine-v3-720.webp", width: 720, height: 1556 },
-    { filename: "mobile-golden-alpine-v3-1080.webp", width: 1080, height: 2334 },
-    { filename: "mobile-golden-alpine-v3-1440.webp", width: 1440, height: 3112 },
-    { filename: "mobile-golden-alpine-v3-2160.webp", width: 2160, height: 4670 },
-  ];
-  const [pageSource, mobileQuality, mobileStyles, ...images] = await Promise.all([
+test("mobile uses the project-owner forest stream as its static portrait background", async () => {
+  const tier = {
+    filename: "mobile-forest-stream-v1-540.webp",
+    width: 540,
+    height: 960,
+  };
+  const [pageSource, mobileStyles, image] = await Promise.all([
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
     readFile(new URL("../public/mobile-woodland-loop.css", import.meta.url), "utf8"),
-    ...tiers.map(({ filename }) => readFile(new URL(`../public/scenes/${filename}`, import.meta.url))),
+    readFile(new URL(
+      "../public/scenes/" + tier.filename,
+      import.meta.url,
+    )),
   ]);
-  const aspectRatios = images.map((image, index) => {
-    const imageInfo = webpInfo(image);
-    assert.deepEqual({ width: imageInfo.width, height: imageInfo.height }, { width: tiers[index].width, height: tiers[index].height });
-    assert.ok(image.byteLength > 50_000);
-    assert.ok(image.byteLength < 25_000_000);
-    assert.equal(imageInfo.chunks.includes("ANIM"), false);
-    return imageInfo.width / imageInfo.height;
-  });
-  assert.ok(Math.max(...aspectRatios) - Math.min(...aspectRatios) < 0.001);
-  assert.ok(tiers.at(-1).width >= 2160);
-  for (const { filename, width } of tiers) {
-    assert.equal([...pageSource.matchAll(new RegExp(`${filename} ${width}w`, "g"))].length, 2);
-  }
+  const imageInfo = webpInfo(image);
+  assert.deepEqual(
+    { width: imageInfo.width, height: imageInfo.height },
+    { width: tier.width, height: tier.height },
+  );
+  assert.equal(image.byteLength, 91_750);
+  assert.equal(imageInfo.chunks.includes("ANIM"), false);
+  assert.equal(
+    [...pageSource.matchAll(new RegExp(tier.filename + " " + tier.width + "w", "g"))].length,
+    2,
+  );
   assert.match(pageSource, /<source[\s\S]*sizes="100vw"[\s\S]*srcset=/);
   assert.match(pageSource, /<link[\s\S]*rel="preload"[\s\S]*imagesrcset=/);
   assert.match(pageSource, /imagesizes="100vw"/);
-  assert.match(pageSource, /href="\/scenes\/mobile-golden-alpine-v3-720\.webp"/);
-  assert.match(pageSource, /mobile-woodland-loop\.css\?v=20260803-14/);
-  assert.doesNotMatch(pageSource, /mobile-golden-alpine-v2\.webp/);
-  assert.doesNotMatch(pageSource, /mobile-woodland-spring-loop/);
+  assert.match(
+    pageSource,
+    /href="\/scenes\/mobile-forest-stream-v1-540\.webp"/,
+  );
+  assert.match(
+    pageSource,
+    /mobile-woodland-loop\.css\?v=20260808-mobile-forest-stream-540-1/,
+  );
+  assert.doesNotMatch(pageSource, /mobile-golden-alpine/);
   assert.match(mobileStyles, /opacity:\s*1/);
   assert.match(mobileStyles, /object-fit:\s*cover/);
   assert.match(mobileStyles, /animation:\s*none/);
   assert.doesNotMatch(mobileStyles, /@keyframes/);
-  assert.doesNotMatch(mobileStyles, /mobile-golden-alpine\.avif/);
 });
 
 test("restored tabs recover from interrupted blank thinking views", async () => {
