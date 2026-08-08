@@ -59,6 +59,9 @@ jobs:
       - name: Validate Worker build
         run: npm run check
 
+      - name: Verify repository stays clean
+        run: npm run verify:clean
+
       - name: Detect GitHub-held Cloudflare credentials
         id: cloudflare
         if: github.event_name != 'pull_request'
