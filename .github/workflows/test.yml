@@ -104,11 +104,26 @@ jobs:
           fs.writeFileSync(path, JSON.stringify(packageJson, null, 2) + "\n");
           NODE
 
-      - name: Materialize and validate the canonical tree
-        run: |
-          npm ci
-          npm test
-          npm run check
+      - name: Install dependencies without lifecycle generation
+        run: npm ci --ignore-scripts
+
+      - name: Apply the current policy and memory generator
+        run: npm run apply:prompt-policy
+
+      - name: Prove generation is idempotent
+        run: npm run apply:prompt-policy
+
+      - name: Run Node regression suites
+        run: npm run test:node
+
+      - name: Run Cloudflare Worker regression suites
+        run: npm run test:worker
+
+      - name: Generate Worker types
+        run: npx wrangler types --include-runtime false
+
+      - name: Validate the Worker deployment bundle
+        run: npx wrangler deploy --dry-run
 
       - name: Commit the canonical output
         shell: bash
