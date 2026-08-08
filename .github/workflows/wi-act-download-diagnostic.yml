@@ -17,18 +17,18 @@ concurrency:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-      - name: Test LegiScan chaptered PDF
+      - name: Test proxy sources
         run: |
           python - <<'PY' > automation/wi-act-download-diagnostic.txt
           import time
           import requests
           urls = [
-              "https://legiscan.com/WI/bill/AB94/2025",
-              "https://legiscan.com/WI/text/AB94/2025",
-              "https://legiscan.com/WI/text/AB94/id/3199083/Wisconsin-2025-AB94-Chaptered.pdf",
+              "https://r.jina.ai/https://docs.legis.wisconsin.gov/document/acts/2025/1.pdf",
+              "https://r.jina.ai/http://docs.legis.wisconsin.gov/document/acts/2025/1.pdf",
+              "https://r.jina.ai/https://legiscan.com/WI/text/AB94/id/3199083/Wisconsin-2025-AB94-Chaptered.pdf",
           ]
           s = requests.Session()
           s.headers["User-Agent"] = "Mozilla/5.0 (compatible; WisconsinActsCompiler/1.0)"
@@ -36,13 +36,14 @@ jobs:
               start = time.monotonic()
               print(f"url={url}")
               try:
-                  r = s.get(url, timeout=(20, 90), allow_redirects=True)
+                  r = s.get(url, timeout=(20, 120), allow_redirects=True)
                   print(f"status={r.status_code}")
                   print(f"final_url={r.url}")
                   print(f"bytes={len(r.content)}")
                   print(f"content_type={r.headers.get('content-type')}")
-                  print(f"pdf={r.content.startswith(b'%PDF-')}")
-                  print(f"contains_chaptered={'Chaptered' in r.text if not r.content.startswith(b'%PDF-') else False}")
+                  print(f"head={r.text[:200]!r}")
+                  print(f"has_act_1={'WISCONSIN ACT 1' in r.text.upper()}")
+                  print(f"has_ab94={'ASSEMBLY BILL 94' in r.text.upper()}")
               except Exception as exc:
                   print(f"error={type(exc).__name__}: {exc}")
               print(f"elapsed={time.monotonic() - start:.3f}")
@@ -52,5 +53,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add automation/wi-act-download-diagnostic.txt
-          git commit -m "Record LegiScan download diagnostic [skip ci]"
+          git commit -m "Record proxy download diagnostic [skip ci]"
           git push origin "HEAD:$GITHUB_REF_NAME"
