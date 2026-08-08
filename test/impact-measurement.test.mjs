@@ -169,11 +169,18 @@ test("the private dashboard covers outcomes, engagement, quality, reliability, a
     "First-token p95",
     "Total-response p50",
     "Total-response p95",
+    "First-token p50",
+    "First-token p95",
+    "Total-response p50",
+    "Total-response p95",
     "Returning-browser rate",
     "Est. cost / helpful response",
     "Written comments",
     "Conversation help rate",
     "Conversation feedback rate",
+    "Helpful conversations / $",
+    "Est. cost / helpful conversation",
+    "Pricing coverage",
     "Helpful conversations / $",
     "Est. cost / helpful conversation",
     "Pricing coverage",
@@ -190,6 +197,8 @@ test("the private dashboard covers outcomes, engagement, quality, reliability, a
     );
   }
   assert.match(dashboard, /Daily usage/);
+  assert.match(dashboard, /Latency breakdown/);
+  assert.match(dashboard, /Model and cost breakdown/);
   assert.match(dashboard, /Latency breakdown/);
   assert.match(dashboard, /Model and cost breakdown/);
   assert.match(dashboard, /Latency breakdown/);

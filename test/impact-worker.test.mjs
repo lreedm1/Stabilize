@@ -231,6 +231,8 @@ test("verified outcomes and response feedback appear in the private dashboard", 
   assert.match(html, /Model and cost breakdown/);
   assert.match(html, /Latency breakdown/);
   assert.match(html, /Model and cost breakdown/);
+  assert.match(html, /Latency breakdown/);
+  assert.match(html, /Model and cost breakdown/);
   assert.match(html, /Unique browsers and submitted chat messages by UTC day/);
   assert.match(html, /Top feedback reasons/);
   assert.match(html, /Recent written feedback/);
