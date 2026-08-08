@@ -213,7 +213,7 @@ test("verified outcomes and response feedback appear in the private dashboard", 
   assert.equal(dashboard.status, 200);
   assert.match(
     html,
-    /Outcomes, latency, provider usage, reliability, and cost\./,
+    /Outcomes, actual browser latency, provider usage, reliability, and cost\./,
   );
   assert.match(html, /Eligible checks shown/);
   assert.match(html, /Reports received/);
@@ -399,7 +399,7 @@ test("canonical and file privacy routes receive the outcome and feedback disclos
     assert.match(html, /id="outcome-measurement"/);
     assert.match(html, /up to three optional action buttons beside/);
     assert.match(html, /prior conversation helped\s+the\s+user move forward/);
-    assert.match(html, /random browser, tab, and conversation identifiers/);
+    assert.match(html, /random browser, tab, and conversation\s+identifiers/);
     assert.match(html, /response-quality/);
     assert.match(html, /does not\s+place the user's message/);
   }
