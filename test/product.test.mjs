@@ -53,11 +53,14 @@ test("the homepage gives a short product promise", async () => {
   ]);
 
   assert.match(pageSource, /Get unstuck\./);
-  assert.match(pageSource, /Get one clear next step/);
+  assert.match(pageSource, /page\.promise/);
   assert.match(pageSource, /Guest chats aren't remembered/);
   assert.doesNotMatch(pageSource, /data-example-message=/);
   assert.doesNotMatch(pageSource, /example-starts/);
-  assert.match(pageSource, /href="\/product\.css"/);
+  assert.match(
+    pageSource,
+    /href="\/product\.css\?v=20260804-compact-outcomes-2"/,
+  );
   assert.match(pageSource, /href="\/photo-tuning\.css\?v=20260802-8"/);
   assert.doesNotMatch(pageSource, /how-it-works-strip/);
   assert.doesNotMatch(pageSource, /Not a therapist or companion bot/);
@@ -177,7 +180,7 @@ test("ordinary replies offer useful model follow-up actions", async () => {
   assert.match(pageSource, /Make it smaller/);
   assert.match(pageSource, /Another option/);
   assert.match(pageSource, /Help me start now/);
-  assert.match(clientScript, /function appendOutcomeCheck/);
+  assert.match(clientScript, /function renderOutcomeCheck/);
   assert.match(clientScript, /ROUTES_WITHOUT_OUTCOME_CHECK/);
   assert.match(clientScript, /result\.awaitingSafetyAnswer !== true|needsSafetyAnswer/);
   assert.match(clientScript, /buildOutcomeActionPrompt/);

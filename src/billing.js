@@ -50,12 +50,11 @@ function validOrigin(value) {
 }
 
 export function modelChoices(env = {}) {
-  const fallbackModel = boundedText(env.OPENAI_MODEL || "gpt-5.6-sol", 128);
+  const fallbackModel = boundedText(env.OPENAI_MODEL || "gpt-5.4", 128);
   const configured = String(env.MODEL_CHOICES || "").trim();
   const source = configured || [
-    `${fallbackModel}|Stabilize default`,
-    "gpt-5.1|GPT-5.1",
-    "gpt-5-mini|GPT-5 mini",
+    "gpt-5.4|GPT-5.4",
+    "gpt-5.6-sol|Current",
   ].join(",");
 
   const seen = new Set();
@@ -86,6 +85,23 @@ export function monthlyModelMessageLimit(env = {}) {
   const parsed = Number(env.PAID_MONTHLY_MESSAGE_LIMIT || 200);
   if (!Number.isSafeInteger(parsed) || parsed < 1) return 200;
   return Math.min(parsed, 10_000);
+}
+
+export function freeDailyModelMessageLimit(env = {}) {
+  const parsed = Number(
+    env.FREE_DAILY_MODEL_MESSAGE_LIMIT || 50,
+  );
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    return 50;
+  }
+  return Math.min(parsed, 1_000);
+}
+
+export function dailyUsagePeriod(now = new Date()) {
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(now.getUTCDate()).padStart(2, "0");
+  return year + "-" + month + "-" + day;
 }
 
 export function usagePeriod(now = new Date()) {

@@ -39,9 +39,8 @@ export function renderPage(options = {}) {
     ? "Not emergency care."
     : page.chat.supportNote;
   const canonicalUrl = "https://stabilize.info/";
-  const seoTitle = "Stabilize — Get One Clear Next Step";
-  const seoDescription =
-    "Free, floor-first AI support for overloaded moments. Describe what is happening and get one clear next step.";
+  const seoTitle = "Stabilize — One Safe, Practical Next Step";
+  const seoDescription = page.promise;
   const structuredData = JSON.stringify({
     "@context": "https://schema.org",
     "@type": "WebApplication",
@@ -65,6 +64,22 @@ export function renderPage(options = {}) {
     : googleSignInAvailable
       ? `<a class="google-sign-in header-google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>`
       : "";
+  const privateChatControl = signedIn
+    ? `<div class="private-chat-control">
+          <button
+            id="private-chat-button"
+            class="private-chat-button"
+            type="button"
+            aria-pressed="false"
+          >${escapeHtml(client.privateChatButton)}</button>
+          <p class="private-chat-menu-note">${escapeHtml(client.privateChatMenuNote)}</p>
+        </div>`
+    : "";
+  const privateChatStatus = signedIn
+    ? `<p id="private-chat-status" class="private-chat-status" role="status" hidden>
+          ${escapeHtml(client.privateChatStatus)}
+        </p>`
+    : "";
 
   return `<!doctype html>
 <html lang="${escapeHtml(page.language)}">
@@ -74,6 +89,17 @@ export function renderPage(options = {}) {
     <meta name="description" content="${escapeHtml(seoDescription)}" />
     <meta name="robots" content="index,follow,max-image-preview:large" />
     <meta name="theme-color" content="#173f31" />
+    <link rel="shortcut icon" href="/stabilize-tab-20260805.ico" type="image/x-icon" />
+    <link rel="icon" href="/stabilize-tab-20260805.ico" type="image/x-icon" sizes="16x16 32x32 48x48" />
+    <link rel="icon" href="/stabilize-tab-20260805-16.png" type="image/png" sizes="16x16" />
+    <link rel="icon" href="/stabilize-tab-20260805-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/stabilize-app-20260805-180.png" sizes="180x180" />
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#173f31" />
+    <link rel="manifest" href="/site.webmanifest?v=20260805-8" />
+    <meta name="application-name" content="STABILIZE" />
+    <meta name="apple-mobile-web-app-title" content="STABILIZE" />
+    <script src="/favicon-refresh.js?v=20260805-8" defer></script>
+
     <link rel="canonical" href="${canonicalUrl}" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Stabilize" />
@@ -95,14 +121,22 @@ export function renderPage(options = {}) {
     <link
       rel="preload"
       as="image"
-      href="/scenes/mobile-golden-alpine-v3-1440.webp"
+      href="/scenes/mobile-golden-alpine-v3-720.webp"
+      imagesrcset="
+        /scenes/mobile-golden-alpine-v3-720.webp 720w,
+        /scenes/mobile-golden-alpine-v3-1080.webp 1080w,
+        /scenes/mobile-golden-alpine-v3-1440.webp 1440w,
+        /scenes/mobile-golden-alpine-v3-2160.webp 2160w
+      "
+      imagesizes="100vw"
       media="(max-width: 980px) and (orientation: portrait)"
       type="image/webp"
       fetchpriority="high"
     />
     <link rel="stylesheet" href="/styles.css" />
-    <link rel="stylesheet" href="/seo.css" />
-    <link rel="stylesheet" href="/product.css" />
+    <link rel="stylesheet" href="/seo.css?v=20260804-private-chat-1" />
+    <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
+    <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
     <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260803-14" />
   </head>
@@ -158,6 +192,7 @@ export function renderPage(options = {}) {
             </summary>
             <div class="menu-panel">
               <nav class="menu-links" aria-label="Site pages">
+                <a href="/">Home</a>
                 <a href="/about.html">About</a>
                 <a href="/sustainability.html">Sustainability</a>
                 <a href="/how-it-works.html">How it works</a>
@@ -165,22 +200,30 @@ export function renderPage(options = {}) {
                 <a href="/safety.html">Safety and limits</a>
                 <a href="/privacy.html">Privacy</a>
               </nav>
+              <details class="menu-info-disclosure">
+                <summary>${escapeHtml(page.chat.infoLabel)}</summary>
+                <p>${escapeHtml(page.chat.infoDetails)}</p>
+              </details>
               <div class="menu-account" aria-label="${escapeHtml(page.auth.label)}">
                 ${authControl}
               </div>
+              <a class="menu-admin-link" href="/admin/impact" aria-label="Open admin dashboard" rel="nofollow">Admin</a>
             </div>
           </details>
-          <a class="home-button" href="/" aria-label="Home">
-            <svg class="home-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M3.5 10.75 12 3.75l8.5 7v8.5a1 1 0 0 1-1 1h-5v-6.5h-5v6.5h-5a1 1 0 0 1-1-1z"></path>
-            </svg>
-            <span>Home</span>
-          </a>
         </nav>
         <div class="header-actions">
           ${headerAuthControl ? `<nav class="auth-actions header-auth-actions" aria-label="${escapeHtml(page.auth.label)}">${headerAuthControl}</nav>` : ""}
         </div>
       </header>
+
+      <div class="chat-action-proxies" hidden aria-hidden="true">
+        <button
+          id="new-conversation-button"
+          class="new-conversation-button"
+          type="button"
+        >${escapeHtml(page.chat.newConversationButton)}</button>
+        ${privateChatControl}
+      </div>
 
       ${notice ? `<p class="auth-notice" role="status">${escapeHtml(notice)}</p>` : ""}
 
@@ -198,23 +241,24 @@ export function renderPage(options = {}) {
 
           <section id="seo-intro" class="seo-intro product-intro" aria-labelledby="seo-heading">
             <h1 id="seo-heading">Get unstuck.</h1>
-            <p class="product-promise">Tell Stabilize what is happening. Get one clear next step.</p>
+            <p class="product-promise">${escapeHtml(page.promise)}</p>
 
             <div
               class="landing-meta"
               data-support-note="${escapeHtml(page.chat.supportNote)}"
             >
               <p class="privacy-signal">Guest chats aren't remembered. ${escapeHtml(emergencyBoundary)}</p>
-              <details class="info-disclosure">
-                <summary>${escapeHtml(page.chat.infoLabel)}</summary>
-                <div class="info-popover">
-                  <p>${escapeHtml(page.chat.infoDetails)}</p>
-                </div>
-              </details>
             </div>
           </section>
 
           <div class="composer-dock">
+            ${privateChatStatus}
+            <section
+              id="outcome-tray"
+              class="outcome-tray"
+              aria-live="polite"
+              hidden
+            ></section>
             <form id="chat-form" class="chat-form">
               <label class="sr-only" for="message-input">${escapeHtml(page.chat.inputLabel)}</label>
               <textarea
@@ -235,7 +279,8 @@ export function renderPage(options = {}) {
     <template id="client-copy">${copyData}</template>
     <template id="product-copy">${productCopyData}</template>
     <script src="/mobile-quality.js?v=20260802-8"></script>
-    <script type="module" src="/app.js?v=20260803-max-reasoning-slim-runtime-1"></script>
+    <script type="module" src="/app.js?v=20260806-static-mobile-background-1"></script>
+    <script type="module" src="/reasoning-choice.js?v=20260807-instant-thinking-2-fastest-1"></script>
   </body>
 </html>`;
 }

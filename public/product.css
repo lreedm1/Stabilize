@@ -63,13 +63,25 @@
   font-weight: 720;
 }
 
-.outcome-check {
-  margin-top: 1.1rem;
-  border-top: 1px solid var(--line);
-  padding-top: 0.9rem;
+.outcome-tray {
+  width: min(760px, 100%);
+  margin: 0 auto 9px;
 }
 
-.assistant-output .outcome-question {
+.outcome-tray[hidden] {
+  display: none;
+}
+
+.outcome-check {
+  border: 1px solid rgba(31, 111, 84, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 253, 247, 0.82);
+  box-shadow: 0 6px 18px rgba(7, 31, 21, 0.12);
+  padding: 10px 12px;
+  backdrop-filter: blur(10px);
+}
+
+.outcome-question {
   color: var(--muted);
   font-size: 0.8rem;
   font-weight: 680;
@@ -236,4 +248,51 @@
   .example-start-grid .example-start:nth-child(n + 3) {
     display: none;
   }
+}
+
+
+/* compact horizontal outcome buttons */
+.outcome-tray {
+  width: min(760px, 100%);
+  margin: 0 auto 7px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.outcome-tray::-webkit-scrollbar {
+  display: none;
+}
+
+.outcome-check {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  backdrop-filter: none;
+}
+
+.outcome-question {
+  display: none;
+}
+
+.outcome-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 6px;
+  margin: 0;
+  width: max-content;
+  min-width: 100%;
+}
+
+.outcome-button {
+  width: auto;
+  min-height: 30px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.69rem;
+  line-height: 1.1;
+  white-space: nowrap;
 }

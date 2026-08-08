@@ -18,7 +18,26 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": true
+    "run_worker_first": [
+      "/*",
+      "!/*.css",
+      "!/*.js",
+      "!/*.mjs",
+      "!/*.map",
+      "!/*.ico",
+      "!/*.png",
+      "!/*.jpg",
+      "!/*.jpeg",
+      "!/*.gif",
+      "!/*.webp",
+      "!/*.avif",
+      "!/*.svg",
+      "!/*.woff",
+      "!/*.woff2",
+      "!/site.webmanifest",
+      "!/fonts/*",
+      "!/scenes/*"
+    ]
   },
   "durable_objects": {
     "bindings": [

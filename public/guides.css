@@ -6,21 +6,72 @@
   src: url("/fonts/lexend-latin-wght-normal.woff2") format("woff2");
 }
 
+:root {
+  color-scheme: dark;
+  --stabilize-reading-text: #fffef8;
+  --stabilize-reading-surface: rgba(42, 47, 46, 0.68);
+  --stabilize-reading-border: 1px solid rgba(255, 255, 255, 0.42);
+  --stabilize-reading-shadow: 0 10px 30px rgba(4, 13, 10, 0.24);
+  --stabilize-reading-filter: blur(10px) saturate(0.82);
+  --stabilize-reading-text-shadow: 0 2px 8px rgba(3, 20, 14, 0.86);
+  --stabilize-code-surface: rgba(5, 25, 18, 0.72);
+  --stabilize-accent: #1f6f54;
+  --stabilize-accent-dark: #164b39;
+}
+
 * {
   box-sizing: border-box;
 }
 
+html {
+  min-height: 100%;
+  background: #173f31;
+}
+
 body {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
-  background: #f4f2ec;
-  color: #14251c;
+  overflow-x: hidden;
+  background: #173f31;
+  color: var(--stabilize-reading-text);
   font-family: "Lexend", system-ui, sans-serif;
   line-height: 1.65;
+}
+
+body::before,
+body::after {
+  position: fixed;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+}
+
+body::before {
+  z-index: 0;
+  background-image: url("/scenes/lake-valley-landscape-1280.webp");
+  background-image: image-set(
+    url("/scenes/lake-valley-landscape-1280.webp") 1x,
+    url("/scenes/lake-valley-landscape-2560.webp") 2x
+  );
+  background-position: 50% 50%;
+  background-repeat: no-repeat;
+  background-size: cover;
+  filter: saturate(1.24) contrast(1.035) brightness(0.98);
+}
+
+body::after {
+  z-index: 1;
+  background: linear-gradient(180deg, rgba(15, 77, 43, 0.025), rgba(5, 55, 29, 0.1)), radial-gradient(circle at 50% 48%, rgba(42, 119, 62, 0.08), transparent 58%);
 }
 
 header,
 main,
 footer {
+  position: relative;
+  z-index: 2;
   width: min(780px, calc(100% - 36px));
   margin-inline: auto;
 }
@@ -30,14 +81,15 @@ header {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 22px 0;
+  padding: max(22px, env(safe-area-inset-top)) 0 22px;
 }
 
 .brand {
-  color: #164b39;
+  color: var(--stabilize-reading-text);
   font-size: 1.2rem;
   font-weight: 760;
   text-decoration: none;
+  text-shadow: var(--stabilize-reading-text-shadow);
 }
 
 nav {
@@ -48,17 +100,41 @@ nav {
 
 nav a,
 footer a {
-  color: #1f6f54;
+  color: var(--stabilize-reading-text);
   font-size: 0.85rem;
   font-weight: 650;
+  text-shadow: var(--stabilize-reading-text-shadow);
+  text-underline-offset: 0.18em;
+}
+
+a:focus-visible,
+button:focus-visible {
+  outline: 3px solid rgba(255, 254, 248, 0.72);
+  outline-offset: 3px;
 }
 
 main {
-  background: #fffaf0;
-  border: 1px solid #d5ddd7;
+  border: var(--stabilize-reading-border);
   border-radius: 20px;
-  box-shadow: 0 12px 34px rgba(20, 37, 28, 0.08);
+  background: var(--stabilize-reading-surface);
+  box-shadow: var(--stabilize-reading-shadow);
+  color: var(--stabilize-reading-text);
   padding: clamp(24px, 6vw, 54px);
+  -webkit-backdrop-filter: var(--stabilize-reading-filter);
+  backdrop-filter: var(--stabilize-reading-filter);
+}
+
+main h1,
+main h2,
+main h3,
+main p,
+main li,
+main strong,
+main a,
+main blockquote,
+main label {
+  color: var(--stabilize-reading-text);
+  text-shadow: var(--stabilize-reading-text-shadow);
 }
 
 h1 {
@@ -76,32 +152,58 @@ h2 {
 
 h3 {
   margin: 0 0 8px;
-  color: #14251c;
   font-size: 1.05rem;
   line-height: 1.3;
 }
 
 p,
 li {
-  color: #3f5549;
+  color: var(--stabilize-reading-text);
 }
 
 li + li {
   margin-top: 0.45rem;
 }
 
-strong {
-  color: #14251c;
-}
-
 .lede {
   font-size: 1.08rem;
 }
 
+pre,
+code {
+  border-radius: 8px;
+  background: var(--stabilize-code-surface);
+  color: var(--stabilize-reading-text);
+  text-shadow: none;
+}
+
+code {
+  padding: 0.1em 0.32em;
+}
+
+pre {
+  overflow-x: auto;
+  padding: 14px;
+}
+
+pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.notice,
+.plan-card {
+  border: var(--stabilize-reading-border);
+  background: var(--stabilize-reading-surface);
+  box-shadow: 0 7px 22px rgba(4, 13, 10, 0.18);
+  color: var(--stabilize-reading-text);
+  -webkit-backdrop-filter: var(--stabilize-reading-filter);
+  backdrop-filter: var(--stabilize-reading-filter);
+}
+
 .notice {
-  border-left: 4px solid #1f6f54;
+  border-left: 4px solid rgba(255, 254, 248, 0.84);
   border-radius: 0 10px 10px 0;
-  background: #e5f0e9;
   padding: 14px 16px;
 }
 
@@ -113,9 +215,7 @@ strong {
 }
 
 .plan-card {
-  border: 1px solid #d5ddd7;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.56);
   padding: 17px;
 }
 
@@ -135,31 +235,34 @@ strong {
 .cta {
   display: inline-block;
   margin: 0;
-  border: 1px solid #1f6f54;
+  border: 1px solid rgba(255, 254, 248, 0.78);
   border-radius: 12px;
-  background: #1f6f54;
-  color: white;
+  background: var(--stabilize-accent);
+  color: var(--stabilize-reading-text);
   cursor: pointer;
   padding: 12px 17px;
   font: inherit;
   font-weight: 720;
   line-height: 1.25;
   text-decoration: none;
+  text-shadow: 0 1px 5px rgba(3, 20, 14, 0.72);
 }
 
 .cta:hover,
 .cta:focus-visible {
-  background: #195b45;
+  background: var(--stabilize-accent-dark);
 }
 
 .cta.secondary {
-  background: transparent;
-  color: #1f6f54;
+  background: var(--stabilize-reading-surface);
+  color: var(--stabilize-reading-text);
+  -webkit-backdrop-filter: var(--stabilize-reading-filter);
+  backdrop-filter: var(--stabilize-reading-filter);
 }
 
 .cta.secondary:hover,
 .cta.secondary:focus-visible {
-  background: #e5f0e9;
+  background: rgba(42, 47, 46, 0.84);
 }
 
 .support-form {
@@ -169,14 +272,27 @@ strong {
 .fine-print {
   max-width: 64ch;
   margin-top: 10px;
-  color: #607268;
+  color: var(--stabilize-reading-text);
   font-size: 0.78rem;
 }
 
 footer {
-  padding: 25px 0 45px;
-  color: #607268;
+  padding: 25px 0 max(45px, env(safe-area-inset-bottom));
+  color: var(--stabilize-reading-text);
   font-size: 0.8rem;
+  text-shadow: var(--stabilize-reading-text-shadow);
+}
+
+@media (max-width: 980px) and (orientation: portrait) {
+  body::before {
+    background-image: url("/scenes/mobile-golden-alpine-v3-720.webp");
+    background-image: image-set(
+      url("/scenes/mobile-golden-alpine-v3-720.webp") 1x,
+      url("/scenes/mobile-golden-alpine-v3-1440.webp") 2x
+    );
+    background-position: 50% 50%;
+    filter: none;
+  }
 }
 
 @media (max-width: 760px) {
@@ -203,5 +319,16 @@ footer {
   .cta-row .cta {
     width: 100%;
     text-align: center;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  main,
+  .notice,
+  .plan-card,
+  .cta.secondary {
+    background: rgba(42, 47, 46, 0.94);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }

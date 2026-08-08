@@ -77,6 +77,37 @@ test("Durable Object bounds timestamped recent messages", async () => {
   assert.ok(context.recent.every((message) => Number.isFinite(message.createdAt)));
 });
 
+test("starting a new conversation preserves condensed memory and clears thread state", async () => {
+  const stub = env.SESSIONS.getByName("session-memory-new-conversation");
+
+  await stub.recordExchange({
+    user: "I prefer short plans.",
+    assistant: "I will keep plans short.",
+    awaitingSafetyAnswer: false,
+  });
+  const snapshot = await stub.getCompactionSnapshot();
+  assert.equal(
+    await stub.applySummary(
+      "The user prefers short plans.",
+      snapshot.summaryVersion,
+      snapshot.throughSequence,
+    ),
+    true,
+  );
+  await stub.recordExchange({
+    user: "Current thread context.",
+    assistant: "Current thread reply.",
+    awaitingSafetyAnswer: true,
+  });
+
+  assert.deepEqual(await stub.startNewConversation(), { started: true });
+  const context = await stub.readContext();
+  assert.match(context.summary, /The user prefers short plans.$/);
+  assert.deepEqual(context.recent, []);
+  assert.equal(context.awaitingSafetyAnswer, false);
+  assert.equal(context.turnCount, 2);
+});
+
 test("the retention alarm still erases an expired session", async () => {
   const stub = env.SESSIONS.getByName("session-memory-retention-alarm");
 

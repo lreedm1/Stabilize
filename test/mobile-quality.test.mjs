@@ -77,10 +77,12 @@ test("mobile uses responsive high-DPI static generated WebPs", async () => {
   assert.ok(Math.max(...aspectRatios) - Math.min(...aspectRatios) < 0.001);
   assert.ok(tiers.at(-1).width >= 2160);
   for (const { filename, width } of tiers) {
-    assert.equal([...pageSource.matchAll(new RegExp(`${filename} ${width}w`, "g"))].length, 1);
+    assert.equal([...pageSource.matchAll(new RegExp(`${filename} ${width}w`, "g"))].length, 2);
   }
   assert.match(pageSource, /<source[\s\S]*sizes="100vw"[\s\S]*srcset=/);
-  assert.match(pageSource, /href="\/scenes\/mobile-golden-alpine-v3-1440\.webp"/);
+  assert.match(pageSource, /<link[\s\S]*rel="preload"[\s\S]*imagesrcset=/);
+  assert.match(pageSource, /imagesizes="100vw"/);
+  assert.match(pageSource, /href="\/scenes\/mobile-golden-alpine-v3-720\.webp"/);
   assert.match(pageSource, /mobile-woodland-loop\.css\?v=20260803-14/);
   assert.doesNotMatch(pageSource, /mobile-golden-alpine-v2\.webp/);
   assert.doesNotMatch(pageSource, /mobile-woodland-spring-loop/);

@@ -223,6 +223,7 @@ function mergeImpactSummaries(summaries, since, now) {
     responseMsTotal: 0,
     timedChats: 0,
     estimatedCostMicros: 0,
+    dailyUsageByDate: {},
   };
 
   for (const summary of summaries) {
@@ -259,6 +260,14 @@ function mergeImpactSummaries(summaries, since, now) {
     addCounts(merged.conversationStates, summary.conversationStates);
     addCounts(merged.feedbackStates, summary.feedbackStates);
     addCounts(merged.feedbackReasons, summary.feedbackReasons);
+    for (const day of summary.dailyUsage || []) {
+      const date = String(day?.date || "");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      const current = merged.dailyUsageByDate[date] || { users: 0, messages: 0 };
+      current.users += Number(day.users || 0);
+      current.messages += Number(day.messages || 0);
+      merged.dailyUsageByDate[date] = current;
+    }
     for (const comment of summary.recentFeedbackComments || []) {
       merged.recentFeedbackComments.push({
         occurredAt: Number(comment?.occurredAt || 0),
@@ -268,6 +277,11 @@ function mergeImpactSummaries(summaries, since, now) {
       });
     }
   }
+
+  merged.dailyUsage = Object.entries(merged.dailyUsageByDate)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([date, values]) => ({ date, ...values }));
+  delete merged.dailyUsageByDate;
 
   merged.recentFeedbackComments = merged.recentFeedbackComments
     .filter((entry) => entry.occurredAt > 0 && entry.comment)

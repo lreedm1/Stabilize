@@ -2,7 +2,7 @@ const REASONING_STORAGE_KEY = "stabilize:reasoning-effort:v1";
 const DEFAULT_REASONING_EFFORT = "none";
 const CURRENT_MODEL_PATTERN = /^gpt-5\.6(?:-|$)/i;
 const REASONING_OPTIONS = Object.freeze([
-  { value: "none", label: "Respond instantly", shortLabel: "Instant" },
+  { value: "none", label: "Fastest response", shortLabel: "Fastest" },
   { value: "low", label: "Think briefly", shortLabel: "Brief" },
   { value: "medium", label: "Think", shortLabel: "Think" },
   { value: "high", label: "Think deeply", shortLabel: "Deep" },
@@ -39,6 +39,14 @@ function storeEffort(value) {
     // A page-local preference still works when persistent storage is unavailable.
   }
   return memoryEffort;
+}
+
+function publishReasoningEffort(value) {
+  const effort = normalizeEffort(value);
+  if (document.documentElement.dataset.reasoningEffort !== effort) {
+    document.documentElement.dataset.reasoningEffort = effort;
+  }
+  return effort;
 }
 
 function selectedModelIds() {
@@ -143,13 +151,16 @@ function updateComposerSummary() {
     const summary = picker.querySelector("summary");
     if (!(current instanceof HTMLElement)) continue;
     const modelLabel = modelLabelForPicker(picker);
+    const nextText = `${modelLabel} · ${effort.shortLabel}`;
+    const nextAriaLabel =
+      `Choose AI model and thinking level. Current: ${modelLabel}, ${effort.label}.`;
     current.dataset.baseModelLabel = modelLabel;
-    current.textContent = `${modelLabel} · ${effort.shortLabel}`;
-    if (summary instanceof HTMLElement) {
-      summary.setAttribute(
-        "aria-label",
-        `Choose AI model and thinking level. Current: ${modelLabel}, ${effort.label}.`,
-      );
+    if (current.textContent !== nextText) current.textContent = nextText;
+    if (
+      summary instanceof HTMLElement &&
+      summary.getAttribute("aria-label") !== nextAriaLabel
+    ) {
+      summary.setAttribute("aria-label", nextAriaLabel);
     }
   }
 }
@@ -159,7 +170,12 @@ function synchronizeMaximumOptions() {
   for (const select of document.querySelectorAll("[data-reasoning-choice]")) {
     if (!(select instanceof HTMLSelectElement)) continue;
     const maximum = select.querySelector('option[value="max"]');
-    if (maximum instanceof HTMLOptionElement) maximum.disabled = !enabled;
+    if (
+      maximum instanceof HTMLOptionElement &&
+      maximum.disabled !== !enabled
+    ) {
+      maximum.disabled = !enabled;
+    }
   }
   return enabled;
 }
@@ -170,8 +186,14 @@ function synchronizeSelectors(effort) {
   if (selected === "max" && !currentModelSupportsMaximum()) {
     selected = storeEffort("xhigh");
   }
+  selected = publishReasoningEffort(selected);
   for (const select of document.querySelectorAll("[data-reasoning-choice]")) {
-    if (select instanceof HTMLSelectElement) select.value = selected;
+    if (
+      select instanceof HTMLSelectElement &&
+      select.value !== selected
+    ) {
+      select.value = selected;
+    }
   }
   updateComposerSummary();
 }
@@ -213,7 +235,7 @@ function thinkingControl(index) {
   description.id = `${id}-description`;
   description.className = "thinking-choice-description";
   description.textContent =
-    "Respond instantly is the default. Higher levels may take longer; Maximum is available with Current.";
+    "Fastest response disables extra reasoning. Network and model startup can still take a moment; higher levels take longer. Maximum is available with Current.";
 
   wrapper.append(heading, select, description);
   return wrapper;
@@ -255,6 +277,16 @@ window.addEventListener("storage", (event) => {
   }
 });
 
-const observer = new MutationObserver(mountThinkingControls);
-observer.observe(document.documentElement, { childList: true, subtree: true });
-mountThinkingControls();
+function initializeThinkingControls() {
+  mountThinkingControls();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener(
+    "DOMContentLoaded",
+    initializeThinkingControls,
+    { once: true },
+  );
+} else {
+  initializeThinkingControls();
+}

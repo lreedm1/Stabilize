@@ -4,62 +4,56 @@ import { readFile } from "node:fs/promises";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("GPT-5.4 is the default and lower and higher tiers remain selectable", async () => {
-  const [
-    configText,
-    indexSource,
-    workerSource,
-    clientSource,
-    policySource,
-    defaultPolicySource,
-  ] = await Promise.all([
-    read("wrangler.jsonc"),
-    read("src/index.js"),
-    read("src/paid-worker.js"),
-    read("public/billing-client.js"),
-    read("scripts/fix-live-model-usage-and-catalog.mjs"),
-    read("scripts/set-gpt54-default.mjs"),
-  ]);
+test("only GPT-5.4 and Current remain selectable, with instant responses by default", async () => {
+  const [configText, billingSource, indexSource, pageSource, reasoningClient, packageSource] =
+    await Promise.all([
+      read("wrangler.jsonc"),
+      read("src/billing.js"),
+      read("src/index.js"),
+      read("src/page.js"),
+      read("public/reasoning-choice.js"),
+      read("package.json"),
+    ]);
   const config = JSON.parse(configText);
 
   assert.equal(config.vars.OPENAI_MODEL, "gpt-5.4");
-  assert.equal(config.vars.FREE_DAILY_MODEL_MESSAGE_LIMIT, "20");
+  assert.equal(config.vars.OPENAI_REASONING_EFFORT, "none");
   assert.equal(
     config.vars.MODEL_CHOICES,
-    [
-      "gpt-5.4|GPT-5.4 (default)",
-      "gpt-5-mini|GPT-5 mini",
-      "gpt-5.1|GPT-5.1",
-      "gpt-5.6-luna|GPT-5.6 Luna",
-      "gpt-5.6-terra|GPT-5.6 Terra",
-      "gpt-5.6-sol|GPT-5.6 Sol",
-    ].join(","),
+    "gpt-5.4|GPT-5.4,gpt-5.6-sol|Current",
   );
-  assert.doesNotMatch(config.vars.MODEL_CHOICES, /gpt-5\.1-mini/);
+  assert.deepEqual(
+    config.vars.MODEL_CHOICES.split(",").map((entry) => entry.split("|")[0]),
+    ["gpt-5.4", "gpt-5.6-sol"],
+  );
+  assert.doesNotMatch(
+    config.vars.MODEL_CHOICES,
+    /gpt-5-mini|gpt-5\.1|luna|terra/i,
+  );
 
-  assert.match(indexSource, /const model = String\(env\.OPENAI_MODEL \|\| "gpt-5\.4"\)/);
-  assert.doesNotMatch(indexSource, /configuredModel === "gpt-5\.6-sol"/);
+  assert.match(billingSource, /"gpt-5\.4\|GPT-5\.4"/);
+  assert.match(billingSource, /"gpt-5\.6-sol\|Current"/);
+  assert.match(indexSource, /function requestedReasoningEffort\(body, model, fallbackEffort\)/);
+  assert.match(indexSource, /effectiveReasoningEffort\(String\(model/);
+  assert.equal(
+    (indexSource.match(/const turnReasoningEffort = reasoningEffort;/g) || []).length,
+    2,
+  );
+  assert.match(pageSource, /reasoning-choice\.js\?v=20260807-instant-thinking-2-fastest-1/);
 
-  assert.match(workerSource, /env\.OPENAI_MODEL \|\| "gpt-5\.4"/);
-  assert.match(workerSource, /data-model-usage="true"/);
-  assert.match(workerSource, /X-Stabilize-Model-Usage-Tier/);
-  assert.match(workerSource, /X-Stabilize-Model-Usage-Used/);
-  assert.match(workerSource, /X-Stabilize-Model-Usage-Limit/);
-  assert.match(workerSource, /X-Stabilize-Model-Usage-Period/);
-  assert.match(workerSource, /X-Stabilize-Model-Selected/);
-  assert.match(workerSource, /contentType\.includes\("application\/json"\)/);
-
-  assert.match(clientSource, /function modelUsageFromResponse\(/);
-  assert.match(clientSource, /function updateModelUsageDisplay\(/);
-  assert.match(clientSource, /chatRequestPath\(args\[0\]\) === "\/api\/chat"/);
-  assert.match(clientSource, /free model-select messages used today/);
-  assert.match(clientSource, /subscriber model messages used this UTC month/);
-
-  assert.match(policySource, /gpt-5\.6-luna\|GPT-5\.6 Luna/);
-  assert.match(policySource, /gpt-5\.6-terra\|GPT-5\.6 Terra/);
-  assert.match(policySource, /gpt-5\.6-sol\|GPT-5\.6 Sol/);
-  assert.match(policySource, /enabled live usage counters/);
-  assert.match(defaultPolicySource, /const DEFAULT_MODEL = "gpt-5\.4"/);
-  assert.match(defaultPolicySource, /gpt-5-mini\|GPT-5 mini/);
-  assert.match(defaultPolicySource, /Set GPT-5\.4 as the default model/);
+  for (const effort of ["none", "low", "medium", "high", "xhigh", "max"]) {
+    assert.match(reasoningClient, new RegExp(`value: "${effort}"`));
+  }
+  assert.match(reasoningClient, /Fastest response/);
+  assert.match(reasoningClient, /documentElement\.dataset\.reasoningEffort/);
+  assert.match(reasoningClient, /Network and model startup can still take a moment/);
+  assert.match(reasoningClient, /Think maximum \(Current only\)/);
+  assert.match(reasoningClient, /Free at every level/);
+  assert.match(reasoningClient, /CURRENT_MODEL_PATTERN/);
+  assert.match(reasoningClient, /maximum\.disabled = !enabled/);
+  assert.match(reasoningClient, /body\.reasoningEffort = reasoningEffort/);
+  assert.doesNotMatch(reasoningClient, /new MutationObserver/);
+  assert.match(reasoningClient, /DOMContentLoaded/);
+  assert.match(reasoningClient, /current\.textContent !== nextText/);
+  assert.match(packageSource, /add-instant-thinking-menu\.mjs/);
 });

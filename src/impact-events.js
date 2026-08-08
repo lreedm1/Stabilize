@@ -12,7 +12,7 @@ import {
   schedule,
 } from "./impact-shards.js";
 
-const IMPACT_ASSET_VERSION = "20260806-feedback-5";
+const IMPACT_ASSET_VERSION = "20260806-shareable-next-step-1";
 const IMPACT_PROMPT_VERSION = "next-step-v1";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -276,15 +276,19 @@ export async function enhancePrivacyPage(response, request) {
   if (!html.includes('id="outcome-measurement"')) {
     const section = `<h2 id="outcome-measurement">Outcome and response measurement</h2>
       <p>
-        On the web, Stabilize may ask optional structured questions after a response.
-        The outcome check asks “Did you choose a next step?” and records only shown,
-        yes, partly, or no. After New conversation is selected, a separate non-blocking
-        check may ask whether the prior conversation helped the user move forward and
-        records the same four structured states. The response-quality control records
-        whether a response was shown, marked helpful, or marked not helpful, plus an
-        optional reason code. A user may also submit up to 500 characters of optional
-        details; those details are stored privately and may be reviewed to improve
-        Stabilize. Do not include private or identifying information.
+        When the model's reply indicates that a few follow-up actions would materially
+        reduce effort, Stabilize may show up to three optional action buttons beside the
+        response-feedback controls. Impact analytics record only whether those actions
+        were shown and whether one was selected. After New conversation succeeds, a
+        separate non-blocking check may ask whether the prior conversation helped the
+        user move forward and records only shown, yes, partly, or no. The response-quality
+        control records whether a response was shown, marked helpful, or marked not
+        helpful, plus an optional reason code. A user may also submit up to 500 characters
+        of optional details; those details are stored privately and may be reviewed to
+        improve Stabilize. The optional copy/share editor stays in the browser;
+        only text the user enters into that field is passed to the clipboard or the
+        operating-system share sheet, and it is not sent to impact analytics. Do not
+        include private or identifying information.
       </p>
       <p>
         The impact store also keeps broad route, completion, configured cost, and timing

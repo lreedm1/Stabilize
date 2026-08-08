@@ -40,7 +40,7 @@ test("signed-in private chat stays out of the hamburger menu and disables memory
     /id="private-chat-button"/,
   );
   assert.match(pageSource, /id="private-chat-status"[\s\S]*hidden/);
-  assert.match(pageSource, /app\.js\?v=20260804-private-chat-1/);
+  assert.match(pageSource, /app\.js\?v=20260806-static-mobile-background-1/);
 
   assert.match(clientSource, /PRIVATE_CHAT_STORAGE_KEY/);
   assert.match(clientSource, /function togglePrivateChat\(\)/);
@@ -69,6 +69,19 @@ test("signed-in private chat stays out of the hamburger menu and disables memory
   );
   assert.match(clientSource, /record\.privateChat !== privateChat/);
   assert.match(clientSource, /clearPrivateChatPreference\(\)/);
+  const privateListenerCount = (
+    clientSource.match(
+      /privateChatButton\.addEventListener\("click", togglePrivateChat\)/g,
+    ) || []
+  ).length;
+  assert.equal(privateListenerCount, 1);
+  const pendingStart = clientSource.indexOf("function setPending(value)");
+  const pendingEnd = clientSource.indexOf("\nfunction ", pendingStart + 1);
+  assert.ok(pendingStart >= 0 && pendingEnd > pendingStart);
+  assert.doesNotMatch(
+    clientSource.slice(pendingStart, pendingEnd),
+    /addEventListener/,
+  );
 
   assert.match(
     workerSource,

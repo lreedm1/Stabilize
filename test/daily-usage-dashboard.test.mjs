@@ -31,8 +31,11 @@ test("daily usage merges across privacy shards and appears in the dashboard", ()
 
 test("the daily usage generator is repeatable and runs after dashboard theming", () => {
   const config = JSON.parse(packageJson);
-  assert.match(config.scripts["apply:prompt-policy"], /unify-impact-dashboard-theme\.mjs/);
-  assert.match(config.scripts["apply:prompt-policy"], /add-daily-usage-metrics\.mjs$/);
+  const pipeline = config.scripts["apply:prompt-policy"];
+  const themeIndex = pipeline.indexOf("unify-impact-dashboard-theme.mjs");
+  const usageIndex = pipeline.indexOf("add-daily-usage-metrics.mjs");
+  assert.ok(themeIndex >= 0, "Missing dashboard theming pass");
+  assert.ok(usageIndex > themeIndex, "Daily usage must run after dashboard theming");
   assert.match(generator, /if \(!text\.includes\("function dailyUsageRows"\)\)/);
   assert.match(generator, /if \(!text\.includes\('class="panel usage"'\)\)/);
   assert.match(generator, /if \(!text\.includes\("\.usage-heading\{"\)\)/);

@@ -31,16 +31,16 @@ test("model choices are bounded, deduplicated, and include the default", () => {
   ]);
 });
 
-test("free model choice gets 20 messages per UTC day while subscribers remain monthly", () => {
+test("free accounts get 50 GPT-5.6 messages per UTC day while subscribers remain monthly", () => {
   const instant = new Date("2026-08-05T23:59:59.000Z");
-  assert.equal(freeDailyModelMessageLimit({}), 20);
+  assert.equal(freeDailyModelMessageLimit({}), 50);
   assert.equal(
     freeDailyModelMessageLimit({ FREE_DAILY_MODEL_MESSAGE_LIMIT: "35" }),
     35,
   );
   assert.equal(
     freeDailyModelMessageLimit({ FREE_DAILY_MODEL_MESSAGE_LIMIT: "invalid" }),
-    20,
+    50,
   );
   assert.equal(monthlyModelMessageLimit({}), 200);
   assert.equal(dailyUsagePeriod(instant), "2026-08-05");
