@@ -111,21 +111,29 @@ await update("test/priority-latency.test.mjs", (source) => {
 });
 
 const interactiveRequestRecord = `    providerRequests.push({ model: body.model, effort: body.reasoning.effort });`;
-const filteredInteractiveRequestRecord = `    if (body.service_tier === "fast") {
+const oldFilteredInteractiveRequestRecord = `    if (body.service_tier === "fast") {
+      providerRequests.push({ model: body.model, effort: body.reasoning.effort });
+    }`;
+const filteredInteractiveRequestRecord = `    if (body.text?.verbosity === "low") {
       providerRequests.push({ model: body.model, effort: body.reasoning.effort });
     }`;
 for (const path of [
   "test/model-usage-worker.test.mjs",
   "test/paid-worker.test.mjs",
 ]) {
-  await update(path, (source) =>
-    source.includes(filteredInteractiveRequestRecord)
-      ? source
-      : source.replaceAll(
-          interactiveRequestRecord,
-          filteredInteractiveRequestRecord,
-        ),
-  );
+  await update(path, (source) => {
+    if (source.includes(filteredInteractiveRequestRecord)) return source;
+    if (source.includes(oldFilteredInteractiveRequestRecord)) {
+      return source.replaceAll(
+        oldFilteredInteractiveRequestRecord,
+        filteredInteractiveRequestRecord,
+      );
+    }
+    return source.replaceAll(
+      interactiveRequestRecord,
+      filteredInteractiveRequestRecord,
+    );
+  });
 }
 
 await update("test/sustainability.test.mjs", (source) =>
