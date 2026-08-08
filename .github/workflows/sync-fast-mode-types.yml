@@ -1,0 +1,41 @@
+name: Synchronize Fast mode environment types
+
+on:
+  push:
+    branches:
+      - agent/fast-mode-latency
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-fast-mode-types-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync-types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: agent/fast-mode-latency
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx wrangler types --include-runtime false
+      - name: Commit generated types
+        shell: bash
+        run: |
+          if [[ -z "$(git status --porcelain -- worker-configuration.d.ts)" ]]; then
+            echo "Generated environment types are current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add worker-configuration.d.ts
+          git commit -m "Update Fast mode environment types"
+          git push origin HEAD:agent/fast-mode-latency
