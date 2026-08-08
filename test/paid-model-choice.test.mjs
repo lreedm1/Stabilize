@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("automatic free model routing and subscriber choice share a resilient left-side picker", async () => {
+test("fast signed-in routing and subscriber choice share a resilient left-side picker", async () => {
   const [
     workerSource,
     accountSource,
@@ -59,7 +59,7 @@ test("automatic free model routing and subscriber choice share a resilient left-
   const chatEnd = workerSource.indexOf("function responseWithModelUsage", chatStart);
   assert.ok(chatStart >= 0 && chatEnd > chatStart, "paid chat handler is missing");
   const paidChat = workerSource.slice(chatStart, chatEnd);
-  assert.match(paidChat, /stub\.prepareChat\(chatPreparationOptions\(env\)\)/);
+  assert.match(paidChat, /stub\.prepareChat\(chatPreparationOptions\(env, body\)\)/);
   assert.match(paidChat, /const \[preparation, memory\] = await Promise\.all/);
   assert.match(paidChat, /modelEnvironment\(env, preparation\.model\)/);
   assert.match(paidChat, /preparedChatResponse\(/);
@@ -129,7 +129,7 @@ test("automatic free model routing and subscriber choice share a resilient left-
   const packageJson = JSON.parse(packageSource);
   assert.equal(
     packageJson.scripts["apply:prompt-policy"],
-    "node scripts/apply-priority-latency.mjs",
+    "node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs",
   );
   assert.match(
     wranglerSource,

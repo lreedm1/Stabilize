@@ -180,7 +180,20 @@ function modelUsageCopy(usage) {
     : usage.used +
         " of " +
         usage.limit +
-        " free GPT-5.6 Instant messages used today. Stabilize switches to GPT-5.4 after this allowance. The allowance resets at 00:00 UTC.";
+        " free Current thinking messages used today. Fastest response uses GPT-5.4 and does not count. The allowance resets at 00:00 UTC.";
+}
+
+function updateSelectedModelDisplay(model) {
+  const value = String(model || "");
+  if (!value) return;
+  const label = value === "gpt-5.6-sol"
+    ? "5.6"
+    : value === "gpt-5.4"
+      ? "5.4"
+      : compactModelTileLabel(value);
+  for (const current of document.querySelectorAll(".composer-model-current")) {
+    if (current instanceof HTMLElement) current.textContent = label;
+  }
 }
 
 function updateModelUsageDisplay(usage) {
@@ -213,6 +226,9 @@ function updateModelUsageDisplay(usage) {
 globalThis.fetch = async (...args) => {
   const response = await stabilizeNativeFetch(...args);
   if (chatRequestPath(args[0]) === "/api/chat") {
+    updateSelectedModelDisplay(
+      response.headers.get("X-Stabilize-Model-Selected"),
+    );
     const usage = modelUsageFromResponse(response);
     if (usage) updateModelUsageDisplay(usage);
   }
@@ -242,7 +258,7 @@ function showModelFallbackNotice(defaultModel, limit = 50) {
   notice.textContent =
     "You used today’s " +
     limit +
-    " GPT-5.6 Instant messages. Stabilize switched to GPT-5.4 automatically; your message was still sent.";
+    " Current thinking messages. Stabilize used GPT-5.4 for this message; it was still sent.";
   for (const select of document.querySelectorAll(
     '#model-choice, #composer-model-choice',
   )) {

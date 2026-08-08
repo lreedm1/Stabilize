@@ -14,6 +14,7 @@ const BASE_ENV = {
   OPENAI_API_KEY: "test-openai-key",
   OPENAI_MODEL: "gpt-5.4",
   OPENAI_REASONING_EFFORT: "none",
+  OPENAI_SERVICE_TIER: "fast",
   MODEL_CHOICES: "gpt-5.4|GPT-5.4,gpt-5.6-sol|Current",
   FREE_PLAN_PRIMARY_MODEL: "gpt-5.6-sol",
   FREE_PLAN_FALLBACK_MODEL: "gpt-5.4",
@@ -47,18 +48,14 @@ function responseWithText(text) {
         type: "message",
         role: "assistant",
         content: [
-          {
-            type: "output_text",
-            text,
-            annotations: [],
-          },
+          { type: "output_text", text, annotations: [] },
         ],
       },
     ],
   });
 }
 
-function chatRequest(cookie, message) {
+function chatRequest(cookie, message, reasoningEffort = "none") {
   return new Request("https://stabilize.info/api/chat", {
     method: "POST",
     headers: {
@@ -67,60 +64,60 @@ function chatRequest(cookie, message) {
       Cookie: cookie,
       Origin: "https://stabilize.info",
     },
-    body: JSON.stringify({ message, reasoningEffort: "high" }),
+    body: JSON.stringify({ message, reasoningEffort }),
   });
 }
 
-test("free usage automatically runs GPT-5.6 twice and GPT-5.4 afterward", async () => {
-  const user = await identity("automatic-free-model-user");
-  await user.billing.setSelectedModel("gpt-5.4");
-
+test("signed-in instant is unmetered GPT-5.4 while thinking uses Current then falls back", async () => {
+  const user = await identity("fast-signed-in-model-user");
   const originalFetch = globalThis.fetch;
   const providerRequests = [];
   globalThis.fetch = async (_input, init) => {
     const body = JSON.parse(init.body);
-    if (body.reasoning?.effort === "none") {
-      providerRequests.push({
-        model: body.model,
-        effort: body.reasoning.effort,
-      });
-    }
+    providerRequests.push({ model: body.model, effort: body.reasoning.effort });
     return responseWithText("Use the smallest reversible step.");
   };
 
   try {
+    const instant = await worker.fetch(
+      chatRequest(user.cookie, "Give me one quick step."),
+      BASE_ENV,
+      {},
+    );
+    assert.equal(instant.status, 200);
+    assert.equal(instant.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");
+    assert.equal(instant.headers.get("X-Stabilize-Model-Usage-Tier"), null);
+    assert.match(instant.headers.get("Server-Timing") || "", /stabilize-billing/);
+    assert.equal((await instant.json()).reply, "Use the smallest reversible step.");
+    assert.equal((await user.billing.readState()).freeUsageCount, 0);
+
     for (const expectedUsed of [1, 2]) {
       const response = await worker.fetch(
-        chatRequest(user.cookie, `Give me step ${expectedUsed}.`),
+        chatRequest(user.cookie, `Think through step ${expectedUsed}.`, "high"),
         BASE_ENV,
         {},
       );
       assert.equal(response.status, 200);
       assert.equal(response.headers.get("X-Stabilize-Model-Selected"), "gpt-5.6-sol");
-      assert.equal(
-        response.headers.get("X-Stabilize-Model-Usage-Used"),
-        String(expectedUsed),
-      );
+      assert.equal(response.headers.get("X-Stabilize-Model-Usage-Used"), String(expectedUsed));
       assert.equal(response.headers.get("X-Stabilize-Model-Usage-Limit"), "2");
       assert.equal((await response.json()).reply, "Use the smallest reversible step.");
     }
 
     const fallback = await worker.fetch(
-      chatRequest(user.cookie, "Give me one more step."),
+      chatRequest(user.cookie, "Think through one more step.", "high"),
       BASE_ENV,
       {},
     );
     assert.equal(fallback.status, 200);
     assert.equal(fallback.headers.get("X-Stabilize-Model-Fallback"), "daily-limit");
     assert.equal(fallback.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");
-    assert.equal(fallback.headers.get("X-Stabilize-Model-Usage-Used"), "2");
     assert.equal((await fallback.json()).reply, "Use the smallest reversible step.");
-    const fallbackState = await user.billing.readState();
-    assert.equal(fallbackState.selectedModel, BASE_ENV.OPENAI_MODEL);
 
     assert.deepEqual(providerRequests, [
-      { model: "gpt-5.6-sol", effort: "none" },
-      { model: "gpt-5.6-sol", effort: "none" },
+      { model: "gpt-5.4", effort: "none" },
+      { model: "gpt-5.6-sol", effort: "high" },
+      { model: "gpt-5.6-sol", effort: "high" },
       { model: "gpt-5.4", effort: "none" },
     ]);
     const state = await user.billing.readState();
@@ -131,8 +128,8 @@ test("free usage automatically runs GPT-5.6 twice and GPT-5.4 afterward", async 
   }
 });
 
-test("the free homepage presents the automatic 5.6 to 5.4 ladder", async () => {
-  const user = await identity("automatic-free-model-page-user");
+test("the free homepage presents GPT-5.4 fastest response and the Current thinking allowance", async () => {
+  const user = await identity("fast-signed-in-model-page-user");
   const page = await worker.fetch(
     new Request("https://stabilize.info/", {
       headers: { Cookie: user.cookie },
@@ -142,7 +139,8 @@ test("the free homepage presents the automatic 5.6 to 5.4 ladder", async () => {
   );
   assert.equal(page.status, 200);
   const html = await page.text();
-  assert.match(html, /0 of 2 free GPT-5\.6 Instant messages used today/);
-  assert.match(html, /GPT-5\.4 takes over afterward/);
+  assert.match(html, /0 of 2 free Current thinking messages used today/);
+  assert.match(html, /Fastest response uses GPT-5.4/);
+  assert.match(html, /<span class="composer-model-current">5\.4<\/span>/);
   assert.doesNotMatch(html, /id="composer-model-choice" name="model"/);
 });

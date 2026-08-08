@@ -178,14 +178,13 @@ test("the homepage places the current model picker left of the message form", as
   );
 });
 
-test("a free signed-in user automatically gets GPT-5.6 before GPT-5.4 fallback", async () => {
+test("a free signed-in user gets GPT-5.4 instantly and Current when thinking", async () => {
   const user = await identity("free-daily-model-user");
-  await user.billing.setSelectedModel("gpt-5.4");
-
   const limitedEnv = {
     ...TEST_ENV,
     OPENAI_MODEL: "gpt-5.4",
     OPENAI_REASONING_EFFORT: "none",
+    OPENAI_SERVICE_TIER: "fast",
     MODEL_CHOICES: "gpt-5.4|GPT-5.4,gpt-5.6-sol|Current",
     FREE_PLAN_PRIMARY_MODEL: "gpt-5.6-sol",
     FREE_PLAN_FALLBACK_MODEL: "gpt-5.4",
@@ -199,43 +198,18 @@ test("a free signed-in user automatically gets GPT-5.6 before GPT-5.4 fallback",
     {},
   );
   assert.equal(page.status, 200);
-  assert.match(
-    await page.text(),
-    /0 of 2 free GPT-5\.6 Instant messages used today/,
-  );
+  assert.match(await page.text(), /0 of 2 free Current thinking messages used today/);
 
   const originalFetch = globalThis.fetch;
-  const providerModels = [];
+  const providerRequests = [];
   globalThis.fetch = async (_input, init) => {
     const body = JSON.parse(init.body);
-    if (body.reasoning?.effort === "none") {
-      providerModels.push(body.model);
-    }
+    providerRequests.push({ model: body.model, effort: body.reasoning.effort });
     return responseWithText("Use the smallest reversible step.");
   };
 
   try {
-    for (let index = 0; index < 2; index += 1) {
-      const response = await worker.fetch(
-        new Request("https://stabilize.info/api/chat", {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            Cookie: user.cookie,
-            Origin: "https://stabilize.info",
-          },
-          body: JSON.stringify({ message: `Give me step ${index + 1}.` }),
-        }),
-        limitedEnv,
-        {},
-      );
-      assert.equal(response.status, 200);
-      assert.equal(response.headers.get("X-Stabilize-Model-Selected"), "gpt-5.6-sol");
-      assert.equal((await response.json()).reply, "Use the smallest reversible step.");
-    }
-
-    const fallback = await worker.fetch(
+    const instant = await worker.fetch(
       new Request("https://stabilize.info/api/chat", {
         method: "POST",
         headers: {
@@ -244,27 +218,39 @@ test("a free signed-in user automatically gets GPT-5.6 before GPT-5.4 fallback",
           Cookie: user.cookie,
           Origin: "https://stabilize.info",
         },
-        body: JSON.stringify({ message: "Give me one more step." }),
+        body: JSON.stringify({ message: "Give me a quick step." }),
       }),
       limitedEnv,
       {},
     );
-    assert.equal(fallback.status, 200);
-    assert.equal(fallback.headers.get("X-Stabilize-Model-Fallback"), "daily-limit");
-    assert.equal(
-      fallback.headers.get("X-Stabilize-Model-Selected"),
-      limitedEnv.OPENAI_MODEL,
-    );
-    assert.equal((await fallback.json()).reply, "Use the smallest reversible step.");
-    assert.deepEqual(providerModels, [
-      "gpt-5.6-sol",
-      "gpt-5.6-sol",
-      limitedEnv.OPENAI_MODEL,
-    ]);
+    assert.equal(instant.status, 200);
+    assert.equal(instant.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");
+    assert.equal((await user.billing.readState()).freeUsageCount, 0);
 
-    const state = await user.billing.readState();
-    assert.equal(state.freeUsageCount, 2);
-    assert.equal(state.paidUsageCount, 0);
+    const thinking = await worker.fetch(
+      new Request("https://stabilize.info/api/chat", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Cookie: user.cookie,
+          Origin: "https://stabilize.info",
+        },
+        body: JSON.stringify({
+          message: "Think through this step.",
+          reasoningEffort: "high",
+        }),
+      }),
+      limitedEnv,
+      {},
+    );
+    assert.equal(thinking.status, 200);
+    assert.equal(thinking.headers.get("X-Stabilize-Model-Selected"), "gpt-5.6-sol");
+    assert.equal(thinking.headers.get("X-Stabilize-Model-Usage-Used"), "1");
+    assert.deepEqual(providerRequests, [
+      { model: "gpt-5.4", effort: "none" },
+      { model: "gpt-5.6-sol", effort: "high" },
+    ]);
   } finally {
     globalThis.fetch = originalFetch;
   }

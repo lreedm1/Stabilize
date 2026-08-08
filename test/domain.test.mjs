@@ -102,7 +102,7 @@ test("repository and public descriptions match the current model policy", async 
 
   for (const description of [readme, setupGuide, about, sustainability]) {
     assert.match(description, /50|Fifty/);
-    assert.match(description, /GPT-5\.6 Instant/);
+    assert.match(description, /Current/);
     assert.match(description, /GPT-5\.4/);
     assert.match(description, /200/);
     assert.doesNotMatch(description, /20 (?:messages|non-default-model)/i);
@@ -112,8 +112,8 @@ test("repository and public descriptions match the current model policy", async 
   assert.match(readme, /FREE_PLAN_PRIMARY_MODEL=gpt-5\.6-sol/);
   assert.match(readme, /FREE_PLAN_FALLBACK_MODEL=gpt-5\.4/);
   assert.match(setupGuide, /fixed urgent routes and failed provider requests do not consume/i);
-  assert.match(about, /Signed-in free accounts automatically receive 50 GPT-5\.6 Instant/);
-  assert.match(sustainability, /free GPT-5\.6 Instant → GPT-5\.4 ladder intact/);
+  assert.match(about, /Signed-in free accounts use GPT-5\.4 for Fastest response and receive 50 Current thinking/);
+  assert.match(sustainability, /free GPT-5\.4 fastest-response and Current-thinking policy intact/);
 });
 
 test("all public guide pages use stabilize.info canonicals and remain indexable", async () => {
@@ -167,7 +167,7 @@ test("the About page preserves the origin while stating evidence and sustainabil
   assert.match(about, /has not been clinically validated/i);
   assert.match(about, /preserve agency/i);
   assert.match(about, /Impact requires sustainability/i);
-  assert.match(about, /50 GPT-5\.6 Instant\s+messages per UTC day/i);
+  assert.match(about, /50 Current thinking\s+messages per UTC day/i);
   assert.match(about, /current paid model-allowance subscription\s+enables subscriber model choice/i);
   assert.match(about, /not emergency care/i);
   assert.match(enhancer, /href=\"\/about\.html\"/);
