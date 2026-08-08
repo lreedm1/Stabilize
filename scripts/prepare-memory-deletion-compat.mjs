@@ -68,10 +68,10 @@ async function alignIdempotencyCoverage() {
 async function alignStreamingMaterializers() {
   const policyPath = "scripts/apply-streaming-policy.mjs";
   let policy = await read(policyPath);
-  const oldPolicyCheck = `if (!workerAfter.includes("return streamChatReply(messages, route, env, latestText, stub, ctx);")) {
+  const oldPolicyCheck = String.raw`if (!workerAfter.includes("return streamChatReply(messages, route, env, latestText, stub, ctx);")) {
   throw new Error("Streaming policy did not replace the chat completion response");
 }`;
-  const newPolicyCheck = `const generationFencedStreamCompletion = \`    return streamChatReply(
+  const newPolicyCheck = String.raw`const generationFencedStreamCompletion = \`    return streamChatReply(
       messages,
       route,
       env,
@@ -115,13 +115,13 @@ if (
 async function makeMemoryMaterializerCacheAgnostic() {
   const path = "scripts/apply-memory-deletion.mjs";
   let source = await read(path);
-  const oldBlock = `  source = replaceRequired(
+  const oldBlock = String.raw`  source = replaceRequired(
     source,
     \`<script type="module" src="/app.js?v=20260806-static-mobile-background-1"></script>\`,
     \`<script type="module" src="/app.js?v=20260807-memory-deletion-1"></script>\`,
     "memory deletion app cache bust",
   );`;
-  const newBlock = `  if (!source.includes('src="/app.js?v=20260807-memory-deletion-1"')) {
+  const newBlock = String.raw`  if (!source.includes('src="/app.js?v=20260807-memory-deletion-1"')) {
     const next = source.replace(
       /<script type="module" src="\\/app\\.js\\?v=[^"]+"><\\/script>/,
       \`<script type="module" src="/app.js?v=20260807-memory-deletion-1"></script>\`,
@@ -141,13 +141,13 @@ async function makeMemoryMaterializerCacheAgnostic() {
 }
 
 async function alignVersionedClientTests() {
-  const replacements = [
-    ["test/mobile-background-loading.test.mjs", 1],
-    ["test/outcome-followup.test.mjs", 1],
-    ["test/private-chat.test.mjs", 1],
+  const paths = [
+    "test/mobile-background-loading.test.mjs",
+    "test/outcome-followup.test.mjs",
+    "test/private-chat.test.mjs",
   ];
 
-  for (const [path] of replacements) {
+  for (const path of paths) {
     let source = await read(path);
     source = source.replaceAll(
       "20260806-static-mobile-background-1",
@@ -174,16 +174,16 @@ async function alignStreamingTest() {
   let source = await read(path);
   source = replaceRequired(
     source,
-    "assert.match(workerSource, /await recordExchange\\(stub/);",
-    "assert.match(workerSource, /await recordExchange\\(\\s*stub/);",
+    'assert.match(workerSource, /await recordExchange\\(stub/);',
+    'assert.match(workerSource, /await recordExchange\\(\\s*stub/);',
     "multiline recordExchange assertion",
   );
   source = replaceRequired(
     source,
-    "    /return streamChatReply\\(messages, route, env, latestText, stub, ctx\\);/,
-",
-    "    /return streamChatReply\\([\\s\\S]*?messages,[\\s\\S]*?route,[\\s\\S]*?env,[\\s\\S]*?latestText,[\\s\\S]*?stub,[\\s\\S]*?ctx,[\\s\\S]*?memory\\.generation,[\\s\\S]*?\\);/,
-",
+    String.raw`    /return streamChatReply\(messages, route, env, latestText, stub, ctx\);/,
+`,
+    String.raw`    /return streamChatReply\([\s\S]*?messages,[\s\S]*?route,[\s\S]*?env,[\s\S]*?latestText,[\s\S]*?stub,[\s\S]*?ctx,[\s\S]*?memory\.generation,[\s\S]*?\);/,
+`,
     "generation-fenced stream assertion",
   );
   return write(path, source);
@@ -202,29 +202,29 @@ async function alignDeletionUiTests() {
 
   const uiPath = "test/ui.test.mjs";
   let ui = await read(uiPath);
-  const oldUiTest = `test("the site does not expose a remembered-context deletion control", async () => {
+  const oldUiTest = String.raw`test("the site does not expose a remembered-context deletion control", async () => {
   const [clientScript, styles, pageSource] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
     readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
   ]);
 
-  assert.doesNotMatch(clientScript, /forgetMemory|\\/api\\/session/);
+  assert.doesNotMatch(clientScript, /forgetMemory|\/api\/session/);
   assert.doesNotMatch(styles, /forget-memory/);
   assert.doesNotMatch(pageSource, /forget-memory|forgetMemory/);
 });`;
-  const newUiTest = `test("signed-in users can delete remembered context without legacy session controls", async () => {
+  const newUiTest = String.raw`test("signed-in users can delete remembered context without legacy session controls", async () => {
   const [clientScript, styles, pageSource] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
     readFile(new URL("../public/product.css", import.meta.url), "utf8"),
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
   ]);
 
-  assert.match(clientScript, /fetch\\("\\/api\\/account\\/memory"/);
+  assert.match(clientScript, /fetch\("\/api\/account\/memory"/);
   assert.match(clientScript, /method: "DELETE"/);
-  assert.match(styles, /\\.memory-delete-control\\s*\\{/);
+  assert.match(styles, /\.memory-delete-control\s*\{/);
   assert.match(pageSource, /id="delete-memory-button"/);
-  assert.doesNotMatch(clientScript, /forgetMemory|\\/api\\/session/);
+  assert.doesNotMatch(clientScript, /forgetMemory|\/api\/session/);
   assert.doesNotMatch(styles, /forget-memory/);
   assert.doesNotMatch(pageSource, /forget-memory|forgetMemory/);
 });`;
