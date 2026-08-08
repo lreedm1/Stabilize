@@ -94,6 +94,13 @@ export class SessionMemory extends DurableObject {
           updated_at INTEGER NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS memory_control (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          generation INTEGER NOT NULL DEFAULT 0
+        );
+
+        INSERT OR IGNORE INTO memory_control (id, generation) VALUES (1, 0);
+
         CREATE TABLE IF NOT EXISTS recent_messages (
           sequence INTEGER PRIMARY KEY AUTOINCREMENT,
           role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
@@ -102,6 +109,13 @@ export class SessionMemory extends DurableObject {
         );
       `);
     });
+  }
+
+  currentGeneration() {
+    const row = this.ctx.storage.sql
+      .exec("SELECT generation FROM memory_control WHERE id = 1")
+      .one();
+    return Number(row.generation) || 0;
   }
 
   async readContext() {
@@ -143,19 +157,42 @@ export class SessionMemory extends DurableObject {
     };
   }
 
+  async readContextForRequest() {
+    return {
+      ...(await this.readContext()),
+      generation: this.currentGeneration(),
+    };
+  }
+
   async recordExchange(exchange) {
     const user = boundedText(exchange?.user, MAX_STORED_MESSAGE_CHARS);
     const assistant = boundedText(exchange?.assistant, MAX_STORED_MESSAGE_CHARS);
     if (!user || !assistant) throw new Error("Invalid memory exchange");
 
+    const activeGeneration = this.currentGeneration();
+    const suppliedGeneration = Number(exchange?.expectedGeneration);
+    const expectedGeneration =
+      Number.isSafeInteger(suppliedGeneration) && suppliedGeneration >= 0
+        ? suppliedGeneration
+        : activeGeneration;
     const awaitingSafetyAnswer = exchange?.awaitingSafetyAnswer === true ? 1 : 0;
     const now = Date.now();
 
-    // Schedule expiry before writing so a transient alarm failure cannot leave
-    // newly written sensitive context without a retention deadline.
-    await this.ctx.storage.setAlarm(now + SESSION_RETENTION_MS);
+    const writeResult = this.ctx.storage.transactionSync(() => {
+      const generation = this.currentGeneration();
+      if (generation !== expectedGeneration) {
+        const state = this.ctx.storage.sql
+          .exec("SELECT turn_count FROM memory_state WHERE id = 1")
+          .toArray()[0];
+        return {
+          recorded: false,
+          stale: true,
+          shouldCompact: false,
+          turnCount: Number(state?.turn_count) || 0,
+          generation,
+        };
+      }
 
-    this.ctx.storage.transactionSync(() => {
       this.ctx.storage.sql.exec(
         `INSERT INTO memory_state (
            id, summary, summary_version, turn_count,
@@ -190,19 +227,38 @@ export class SessionMemory extends DurableObject {
          )`,
         MAX_RECENT_MESSAGES,
       );
+
+      const state = this.ctx.storage.sql
+        .exec("SELECT turn_count FROM memory_state WHERE id = 1")
+        .one();
+      const recentCount = this.ctx.storage.sql
+        .exec("SELECT COUNT(*) AS count FROM recent_messages")
+        .one().count;
+      return {
+        recorded: true,
+        stale: false,
+        shouldCompact: Number(recentCount) >= 2,
+        turnCount: Number(state.turn_count) || 0,
+        generation,
+      };
     });
 
-    const state = this.ctx.storage.sql
-      .exec("SELECT turn_count FROM memory_state WHERE id = 1")
-      .one();
-    const recentCount = this.ctx.storage.sql
-      .exec("SELECT COUNT(*) AS count FROM recent_messages")
-      .one().count;
+    if (!writeResult.recorded) return writeResult;
 
-    return {
-      shouldCompact: Number(recentCount) >= 2,
-      turnCount: Number(state.turn_count) || 0,
-    };
+    try {
+      await this.ctx.storage.setAlarm(now + SESSION_RETENTION_MS);
+    } catch (error) {
+      this.ctx.storage.transactionSync(() => {
+        this.ctx.storage.sql.exec("DELETE FROM recent_messages");
+        this.ctx.storage.sql.exec("DELETE FROM memory_state");
+        this.ctx.storage.sql.exec(
+          "UPDATE memory_control SET generation = generation + 1 WHERE id = 1",
+        );
+      });
+      throw error;
+    }
+
+    return writeResult;
   }
 
   async startNewConversation() {
@@ -213,9 +269,26 @@ export class SessionMemory extends DurableObject {
          SET awaiting_safety_answer = 0
          WHERE id = 1`,
       );
+      this.ctx.storage.sql.exec(
+        "UPDATE memory_control SET generation = generation + 1 WHERE id = 1",
+      );
     });
 
     return { started: true };
+  }
+
+  async deleteRememberedContext() {
+    const generation = this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec("DELETE FROM recent_messages");
+      this.ctx.storage.sql.exec("DELETE FROM memory_state");
+      this.ctx.storage.sql.exec(
+        "UPDATE memory_control SET generation = generation + 1 WHERE id = 1",
+      );
+      return this.currentGeneration();
+    });
+    await this.ctx.storage.deleteAlarm();
+
+    return { deleted: true, generation };
   }
 
   async getCompactionSnapshot() {
@@ -244,6 +317,7 @@ export class SessionMemory extends DurableObject {
     if (messages.length < 2) return null;
 
     return {
+      generation: this.currentGeneration(),
       summary: boundedText(state.summary, MAX_SUMMARY_CHARS),
       summaryUpdatedAt: validTimestamp(state.updated_at),
       summaryVersion: Number(state.summary_version) || 0,
@@ -256,10 +330,20 @@ export class SessionMemory extends DurableObject {
     };
   }
 
-  async applySummary(summary, expectedVersion, throughSequence) {
+  async applySummary(
+    summary,
+    expectedVersion,
+    throughSequence,
+    expectedGeneration = null,
+  ) {
     const cleanSummary = boundedText(summary, MAX_SUMMARY_CHARS);
     const version = Number(expectedVersion);
     const sequence = Number(throughSequence);
+    const suppliedGeneration = Number(expectedGeneration);
+    const generation =
+      Number.isSafeInteger(suppliedGeneration) && suppliedGeneration >= 0
+        ? suppliedGeneration
+        : this.currentGeneration();
     if (
       !cleanSummary ||
       !Number.isSafeInteger(version) ||
@@ -271,6 +355,7 @@ export class SessionMemory extends DurableObject {
     }
 
     return this.ctx.storage.transactionSync(() => {
+      if (this.currentGeneration() !== generation) return false;
       const state = this.ctx.storage.sql
         .exec("SELECT summary_version FROM memory_state WHERE id = 1")
         .toArray()[0];
@@ -295,6 +380,9 @@ export class SessionMemory extends DurableObject {
     this.ctx.storage.transactionSync(() => {
       this.ctx.storage.sql.exec("DELETE FROM recent_messages");
       this.ctx.storage.sql.exec("DELETE FROM memory_state");
+      this.ctx.storage.sql.exec(
+        "UPDATE memory_control SET generation = generation + 1 WHERE id = 1",
+      );
     });
   }
 }

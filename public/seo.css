@@ -473,3 +473,38 @@
   outline: 3px solid rgba(46, 101, 80, 0.24);
   outline-offset: 2px;
 }
+
+/* Signed-in remembered-context controls */
+.auth-account-controls {
+  display: grid;
+  gap: 8px;
+}
+
+.memory-delete-button {
+  cursor: pointer;
+}
+
+.memory-delete-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.memory-delete-status {
+  margin: 0;
+  border-radius: 8px;
+  background: rgba(46, 101, 80, 0.09);
+  color: var(--muted);
+  padding: 7px 8px;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.memory-delete-status.is-error {
+  background: rgba(127, 29, 29, 0.09);
+  color: #7f1d1d;
+}
+
+.memory-delete-status[hidden] {
+  display: none;
+}

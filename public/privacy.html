@@ -38,21 +38,22 @@
       <p><strong>Privacy and memory</strong></p>
       <h1>What the current prototype remembers</h1>
       <p class="lede">
-        Stabilize does not create its own server-side conversation history for guest chats. The
-        current web tab temporarily keeps only the latest assistant reply, and the native iOS app
-        does not intentionally save a prompt or reply on the device. OpenAI provider storage still
-        applies as described below.
+        Stabilize does not create server-side account memory for guest chats. The current web
+        tab keeps a bounded guest transcript so follow-up messages can use earlier context, while
+        the native iOS app does not intentionally save a prompt or reply on the device. OpenAI
+        provider storage still applies as described below.
       </p>
 
       <h2>Guest web use</h2>
       <p>
-        When you use Stabilize on the web without signing in, the application does not retain a
-        server-side conversation history for later guest sessions. The latest assistant reply and
-        minimal display state are stored in session storage for the current browser tab for up to
-        24 hours so a result can survive a refresh or ordinary navigation.
-        The user's prompt is not included in that tab-scoped record. It is cleared when the tab closes, when you sign out,
-        or when the record expires. Messages still travel through Cloudflare and, for ordinary AI
-        replies, are processed and stored by OpenAI under the provider behavior below.
+        When you use Stabilize on the web without signing in, the application does not retain an
+        account-linked server-side conversation history. A bounded transcript of up to eight recent
+        user and assistant messages is stored in session storage for the current browser tab for up
+        to 24 hours. It is used to restore the tab after a refresh and is included with later guest
+        messages so the model can follow the conversation. New conversation, signing in or out,
+        expiry, or closing the tab clears that browser record. The transcript still travels through
+        Cloudflare and, for ordinary AI replies, is processed and stored by OpenAI under the provider
+        behavior below each time it is sent.
       </p>
 
       <h2>Native iOS app</h2>
@@ -79,7 +80,11 @@
         Google sign-in is optional on the website and is used only to associate a one-way account
         alias with a rolling summary and a small recent-message buffer. The current implementation
         is designed to delete that remembered Stabilize context 30 days after the last stored
-        exchange. This local retention limit does not shorten the separate OpenAI storage period.
+        exchange. A signed-in user can also choose <strong>Delete remembered context</strong> in
+        the account menu to immediately clear the rolling summary, recent-message buffer, pending
+        safety-answer state, and retention alarm. A generation check prevents an older in-flight
+        response from recreating the deleted memory. Billing and usage records are separate. This
+        local deletion does not shorten the separate OpenAI storage period.
       </p>
 
       <h2>Private chat</h2>
@@ -164,9 +169,10 @@
       <h2>Questions and deletion requests</h2>
       <p>
         See <a href="/support.html">Support</a> for contact information. Stabilize cannot identify a
-        particular guest chat as an account history for deletion. Signed-in web requests can cover
-        account-linked records controlled by Stabilize. A local deletion, Private chat setting, or
-        consent revocation does not recall processing already completed by a provider or shorten
+        particular guest tab as an account history for server-side deletion; use New conversation
+        or close the tab to clear its browser transcript. Signed-in users can delete Stabilize's
+        remembered context directly from the account menu. That control does not delete billing or
+        model-allowance records, recall processing already completed by a provider, or shorten
         OpenAI's stored Responses retention period.
       </p>
 
@@ -178,7 +184,7 @@
       <a class="cta" href="/">Return to Stabilize</a>
     </main>
     <footer>
-      Last reviewed August 4, 2026. See the repository privacy documentation for implementation-level detail.
+      Last reviewed August 7, 2026. See the repository privacy documentation for implementation-level detail.
     </footer>
   </body>
 </html>

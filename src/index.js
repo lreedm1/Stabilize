@@ -187,6 +187,7 @@ export function emptyMemoryContext() {
     awaitingSafetyAnswer: false,
     turnCount: 0,
     updatedAt: null,
+    generation: 0,
   };
 }
 
@@ -197,18 +198,27 @@ export function accountMemoryStub(env, accountKey) {
 }
 
 export async function readMemoryContext(stub) {
-  if (!stub || typeof stub.readContext !== "function") {
-    return emptyMemoryContext();
-  }
+  if (!stub) return emptyMemoryContext();
+
+  const readMethod =
+    typeof stub.readContextForRequest === "function"
+      ? "readContextForRequest"
+      : typeof stub.readContext === "function"
+        ? "readContext"
+        : null;
+  if (!readMethod) return emptyMemoryContext();
 
   try {
-    const context = await stub.readContext();
+    const context = await stub[readMethod]();
+    const generation = Number(context?.generation);
     return {
       summary: String(context?.summary || "").trim().slice(0, MAX_SUMMARY_CHARS),
       recent: normalizeMessages(context?.recent),
       awaitingSafetyAnswer: context?.awaitingSafetyAnswer === true,
       turnCount: Number(context?.turnCount) || 0,
       updatedAt: Number(context?.updatedAt) || null,
+      generation:
+        Number.isSafeInteger(generation) && generation >= 0 ? generation : 0,
     };
   } catch (error) {
     console.error(
@@ -995,7 +1005,15 @@ async function writeReplyDeltas(writer, text) {
   }
 }
 
-function streamChatReply(messages, route, env, latestText, stub, ctx) {
+function streamChatReply(
+  messages,
+  route,
+  env,
+  latestText,
+  stub,
+  memoryGeneration,
+  ctx,
+) {
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
 
@@ -1083,6 +1101,7 @@ function streamChatReply(messages, route, env, latestText, stub, ctx) {
         user: latestText,
         assistant: validated,
         awaitingSafetyAnswer: false,
+        expectedGeneration: memoryGeneration,
       });
       if (recordResult?.shouldCompact && stub && ctx) {
         schedule(ctx, compactSession(stub, env));
@@ -1237,6 +1256,7 @@ async function compactSession(stub, env) {
       summary,
       snapshot.summaryVersion,
       snapshot.throughSequence,
+      snapshot.generation,
     );
   } catch (error) {
     console.error(
@@ -1275,6 +1295,7 @@ async function recordFixedRoute(
   stub,
   route,
   fixed,
+  expectedGeneration,
 ) {
   await recordExchange(stub, {
     user:
@@ -1282,6 +1303,7 @@ async function recordFixedRoute(
       "[A deterministic support route triggered a fixed response.]",
     assistant: fixed.reply,
     awaitingSafetyAnswer: fixed.awaitingSafetyAnswer === true,
+    expectedGeneration,
   });
 }
 
@@ -1378,9 +1400,115 @@ export async function handlePreparedChat(
   });
 }
 
+async function handleDeleteMemory(env, accountKey) {
+  if (!accountKey) {
+    return jsonResponse({ error: COPY.api.signInRequired }, 401);
+  }
+
+  const stub = accountMemoryStub(env, accountKey);
+  if (!stub || typeof stub.deleteRememberedContext !== "function") {
+    return jsonResponse({ error: COPY.api.memoryUnavailable }, 503);
+  }
+
+  const result = await stub.deleteRememberedContext();
+  return jsonResponse({
+    ok: true,
+    deleted: result?.deleted === true,
+    generation: Number(result?.generation) || 0,
+  });
+}
+
 async function handleChat(request, env, ctx, accountKey) {
   const body = await readBoundedJson(request);
-  return handlePreparedChat(request, env, ctx, accountKey, body);
+  env = reasoningEnvironment(
+    env,
+    requestedReasoningEffort(
+      body,
+      env.OPENAI_MODEL,
+      env.OPENAI_REASONING_EFFORT,
+    ),
+  );
+  const privateChat = body?.privateChat === true;
+  const signedOut = !accountKey;
+  const latestText = latestUserText(body);
+  if (!latestText) throw new HttpError(400, COPY.api.messageRequired);
+  if (latestText.length > MAX_MESSAGE_CHARS) {
+    throw new HttpError(400, COPY.api.messageTooLong);
+  }
+
+  const stub = privateChat ? null : accountMemoryStub(env, accountKey);
+  const memory = await readMemoryContext(stub);
+  const clientAwaiting = body?.awaitingSafetyAnswer === true;
+  let route = classifyInput(latestText, {
+    awaitingSafetyAnswer: clientAwaiting,
+  });
+  let fixed = fixedReplyForRoute(route);
+
+  if (fixed) {
+    const task = recordFixedRoute(
+      stub,
+      route,
+      fixed,
+      memory.generation,
+    );
+    if (!schedule(ctx, task)) await task;
+    return jsonResponse({ route, ...fixed });
+  }
+
+  route = classifyInput(latestText, {
+    awaitingSafetyAnswer: clientAwaiting || memory.awaitingSafetyAnswer,
+  });
+  fixed = fixedReplyForRoute(route);
+
+  if (fixed) {
+    const task = recordFixedRoute(
+      stub,
+      route,
+      fixed,
+      memory.generation,
+    );
+    if (!schedule(ctx, task)) await task;
+    return jsonResponse({ route, ...fixed });
+  }
+
+  const messages = privateChat || signedOut
+    ? privateModelInput(body?.messages, latestText)
+    : modelInput(memory, latestText);
+  if (!messages.length) throw new HttpError(400, COPY.api.invalidConversation);
+
+  const acceptsStreaming = (request.headers.get("accept") || "")
+    .toLowerCase()
+    .includes("application/x-ndjson");
+  if (acceptsStreaming) {
+    return streamChatReply(
+      messages,
+      route,
+      env,
+      latestText,
+      stub,
+      memory.generation,
+      ctx,
+    );
+  }
+
+  const reply = await generateReply(messages, route, env, latestText);
+  const result = await recordExchange(stub, {
+    user: latestText,
+    assistant: reply,
+    awaitingSafetyAnswer: false,
+    expectedGeneration: memory.generation,
+  });
+
+  if (result?.shouldCompact && stub && ctx) {
+    schedule(ctx, compactSession(stub, env));
+  }
+
+  return jsonResponse({
+    route,
+    reply,
+    showEmergency: false,
+    awaitingSafetyAnswer: false,
+  });
 }
 
 export async function preparedChatResponse(
@@ -1541,6 +1669,17 @@ const worker = {
           },
           configured ? 200 : 503,
         );
+      }
+
+      if (url.pathname === "/api/account/memory") {
+        if (request.method !== "DELETE") {
+          return jsonResponse({ error: COPY.api.methodNotAllowed }, 405);
+        }
+        if (!sameOriginOrNonBrowser(request)) {
+          return jsonResponse({ error: COPY.api.crossOriginRequest }, 403);
+        }
+        const authSession = await readAuthSession(request, env);
+        return await handleDeleteMemory(env, authSession?.accountKey);
       }
 
       if (url.pathname === "/api/conversation/new") {

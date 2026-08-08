@@ -129,7 +129,7 @@ test("automatic free model routing and subscriber choice share a resilient left-
   const packageJson = JSON.parse(packageSource);
   assert.equal(
     packageJson.scripts["apply:prompt-policy"],
-    "node scripts/apply-priority-latency.mjs",
+    "node scripts/apply-priority-latency.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs",
   );
   assert.match(
     wranglerSource,

@@ -263,7 +263,14 @@ if (workerAfter.includes(oldChatCompletion)) {
   workerAfter = workerAfter.replace(oldChatCompletion, newChatCompletion);
 }
 
-if (!workerAfter.includes("return streamChatReply(messages, route, env, latestText, stub, ctx);")) {
+if (
+  !workerAfter.includes(
+    "return streamChatReply(messages, route, env, latestText, stub, ctx);",
+  ) &&
+  !workerAfter.includes(
+    "return streamChatReply(messages, route, env, latestText, stub, memory.generation, ctx);",
+  )
+) {
   throw new Error("Streaming policy did not replace the chat completion response");
 }
 

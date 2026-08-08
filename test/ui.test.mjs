@@ -61,16 +61,21 @@ test("thinking is replaced with the latest Markdown reply", async () => {
   assert.doesNotMatch(clientScript, /innerHTML\s*=/);
 });
 
-test("the site does not expose a remembered-context deletion control", async () => {
-  const [clientScript, styles, pageSource] = await Promise.all([
+test("signed-in users can delete remembered context", async () => {
+  const [clientScript, pageSource, workerSource] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/index.js", import.meta.url), "utf8"),
   ]);
 
-  assert.doesNotMatch(clientScript, /forgetMemory|\/api\/session/);
-  assert.doesNotMatch(styles, /forget-memory/);
-  assert.doesNotMatch(pageSource, /forget-memory|forgetMemory/);
+  assert.match(pageSource, /id="delete-memory-button"/);
+  assert.match(pageSource, /id="memory-delete-status"/);
+  assert.match(clientScript, /fetch\("\/api\/account\/memory"/);
+  assert.match(clientScript, /method: "DELETE"/);
+  assert.match(clientScript, /deleteMemoryConfirm/);
+  assert.match(workerSource, /url\.pathname === "\/api\/account\/memory"/);
+  assert.match(workerSource, /sameOriginOrNonBrowser\(request\)/);
+  assert.match(workerSource, /deleteRememberedContext/);
 });
 
 test("the terrain background is token-modulated and motion-aware", async () => {

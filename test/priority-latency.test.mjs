@@ -73,6 +73,6 @@ test("streaming paints plain text at most once per frame and renders Markdown on
     /function finalizeStreamingOutput[\s\S]*?renderMarkdown\(reply\)/,
   );
   assert.match(styles, /\.streaming-text\{white-space:pre-wrap/);
-  assert.match(page, /app\.js\?v=20260807-priority-latency-1/);
+  assert.match(page, /app\.js\?v=20260808-memory-controls-1/);
   assert.match(page, /styles\.css\?v=20260807-priority-latency-1/);
 });

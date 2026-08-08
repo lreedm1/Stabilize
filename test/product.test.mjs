@@ -54,7 +54,7 @@ test("the homepage gives a short product promise", async () => {
 
   assert.match(pageSource, /Get unstuck\./);
   assert.match(pageSource, /page\.promise/);
-  assert.match(pageSource, /Guest chats aren't remembered/);
+  assert.match(pageSource, /Guest chats stay in this browser tab only/);
   assert.doesNotMatch(pageSource, /data-example-message=/);
   assert.doesNotMatch(pageSource, /example-starts/);
   assert.match(
@@ -147,26 +147,26 @@ test("the homepage has no predefined prompt buttons", async () => {
   assert.match(clientScript, /form\.addEventListener\("submit"/);
 });
 
-test("the latest assistant answer persists within the current tab", async () => {
+test("guest conversations persist only within the current tab", async () => {
   const [clientScript, privacyPage] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
     readFile(new URL("../public/privacy.html", import.meta.url), "utf8"),
   ]);
 
-  assert.match(clientScript, /LAST_ANSWER_STORAGE_KEY/);
+  assert.match(clientScript, /GUEST_THREAD_STORAGE_KEY/);
+  assert.match(clientScript, /MAX_GUEST_THREAD_MESSAGES = 8/);
   assert.match(clientScript, /sessionStorage\.setItem/);
   assert.match(clientScript, /sessionStorage\.getItem/);
   assert.match(clientScript, /sessionStorage\.removeItem/);
-  assert.match(
-    clientScript,
-    /persistLatestAnswer\(reply, route, needsSafetyAnswer\)/,
-  );
-  assert.match(clientScript, /restorePersistedAnswer\(\);/);
-  assert.match(clientScript, /form\[action="\/auth\/logout"\]/);
+  assert.match(clientScript, /activeLocalThreadMessages\(\)/);
+  assert.match(clientScript, /privateChat \|\| !signedIn/);
+  assert.match(clientScript, /restoreGuestConversation\(\)/);
+  assert.match(clientScript, /MAX_CHAT_REQUEST_BYTES = 28_000/);
+  assert.match(clientScript, /new TextEncoder\(\)\.encode\(serialized\)\.byteLength/);
   assert.doesNotMatch(clientScript, /localStorage/);
-  assert.match(privacyPage, /latest assistant reply/i);
+  assert.match(privacyPage, /up to eight recent/i);
   assert.match(privacyPage, /current browser tab/i);
-  assert.match(privacyPage, /user's prompt is not included/i);
+  assert.match(privacyPage, /included with later guest\s+messages/i);
 });
 
 test("ordinary replies offer useful model follow-up actions", async () => {
