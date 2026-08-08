@@ -4,14 +4,11 @@ on:
   push:
     branches:
       - agent/memory-deletion-guest-session
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 concurrency:
-  group: materialize-memory-controls
-  cancel-in-progress: true
+  group: materialize-memory-controls-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
