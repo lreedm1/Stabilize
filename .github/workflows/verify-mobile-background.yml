@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   verify-mobile-background:
-    name: Verify fast static mobile path
+    name: Verify exact mobile background release
     runs-on: ubuntu-latest
     timeout-minutes: 12
 
@@ -26,22 +26,39 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Verify the exact mobile performance release is live
+      - name: Verify the exact mobile background release is live
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -u
+          set -euo pipefail
 
-          asset_version="$(
-            sed -n 's/^const ASSET_VERSION = "\([^"]*\)";$/\1/p' \
-              scripts/defer-mobile-background.mjs \
+          expected_app_path="$(
+            grep -oE '/app\.js\?v=[A-Za-z0-9._-]+' src/page.js \
+              | tail -n 1
+          )"
+          expected_loader_path="/$(
+            grep -oE 'background-loader\.js\?v=[A-Za-z0-9._-]+' public/app.js \
               | head -n 1
           )"
-          if [[ -z "$asset_version" ]]; then
-            echo "::error::Could not read the mobile background asset version."
+          expected_loader_import=".${expected_loader_path}"
+          expected_mobile_asset="$(
+            sed -n 's/^const MOBILE_ASSET = "\([^"]*\)";$/\1/p' \
+              scripts/use-mobile-forest-stream.mjs \
+              | head -n 1
+          )"
+          expected_mobile_file="public${expected_mobile_asset}"
+
+          if [[ -z "$expected_app_path" \
+            || -z "$expected_loader_path" \
+            || -z "$expected_mobile_asset" \
+            || ! -f "$expected_mobile_file" ]]; then
+            echo "::error::Could not derive the expected application, loader, and mobile image from the checked-out release."
             exit 1
           fi
+
+          expected_mobile_sha="$(sha256sum "$expected_mobile_file" | awk '{print $1}')"
+          expected_mobile_bytes="$(wc -c < "$expected_mobile_file" | tr -d '[:space:]')"
 
           publish_status() {
             local state="$1"
@@ -62,68 +79,110 @@ jobs:
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
           }
 
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+
           publish_status \
             pending \
-            "Waiting for the fast static mobile release"
+            "Waiting for the exact forest-stream mobile release"
 
           for attempt in {1..36}; do
             cache_key="${GITHUB_SHA}-${attempt}"
-            html="$(
-              curl --fail --max-time 20 --silent --show-error \
+
+            html_status="$(
+              curl --max-time 20 --silent --show-error \
                 --header "Cache-Control: no-cache" \
+                --output "$tmpdir/live.html" \
+                --write-out "%{http_code}" \
                 "https://stabilize.info/?mobile-background-release=${cache_key}" \
                 || true
             )"
+            app_status="$(
+              curl --max-time 20 --silent --show-error \
+                --header "Cache-Control: no-cache" \
+                --output "$tmpdir/app.js" \
+                --write-out "%{http_code}" \
+                "https://stabilize.info${expected_app_path}&release=${cache_key}" \
+                || true
+            )"
+            loader_status="$(
+              curl --max-time 20 --silent --show-error \
+                --header "Cache-Control: no-cache" \
+                --output "$tmpdir/background-loader.js" \
+                --write-out "%{http_code}" \
+                "https://stabilize.info${expected_loader_path}&release=${cache_key}" \
+                || true
+            )"
+            mobile_status="$(
+              curl --max-time 20 --silent --show-error \
+                --header "Cache-Control: no-cache" \
+                --dump-header "$tmpdir/mobile.headers" \
+                --output "$tmpdir/mobile.webp" \
+                --write-out "%{http_code}" \
+                "https://stabilize.info${expected_mobile_asset}?release=${cache_key}" \
+                || true
+            )"
 
-            if grep -Fq "/app.js?v=${asset_version}" <<<"$html"; then
-              app="$(
-                curl --fail --max-time 20 --silent --show-error \
-                  --header "Cache-Control: no-cache" \
-                  "https://stabilize.info/app.js?v=${asset_version}&release=${cache_key}" \
-                  || true
-              )"
-              loader="$(
-                curl --fail --max-time 20 --silent --show-error \
-                  --header "Cache-Control: no-cache" \
-                  "https://stabilize.info/background-loader.js?v=${asset_version}&release=${cache_key}" \
-                  || true
-              )"
-              static_headers="$(
-                curl --fail --max-time 20 --silent --show-error \
-                  --dump-header - \
-                  --output /dev/null \
-                  "https://stabilize.info/styles.css?static-delivery=${cache_key}" \
-                  | tr -d '\r' \
-                  || true
-              )"
+            live_app_path="$(
+              grep -oE '/app\.js\?v=[A-Za-z0-9._-]+' "$tmpdir/live.html" \
+                | tail -n 1 \
+                || true
+            )"
+            live_mobile_assets="$(
+              grep -oE '/scenes/mobile-[^" ]+\.webp' "$tmpdir/live.html" \
+                | sort -u \
+                | paste -sd, - \
+                || true
+            )"
+            mobile_ref_count="$(
+              (grep -oF "$expected_mobile_asset" "$tmpdir/live.html" || true) \
+                | wc -l \
+                | tr -d '[:space:]'
+            )"
+            live_mobile_bytes="$(wc -c < "$tmpdir/mobile.webp" | tr -d '[:space:]')"
+            live_mobile_sha="$(sha256sum "$tmpdir/mobile.webp" | awk '{print $1}')"
+            live_mobile_type="$(
+              awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' \
+                "$tmpdir/mobile.headers" \
+                | tail -n 1
+            )"
 
-              if grep -Fq "background-loader.js?v=${asset_version}" <<<"$app" \
-                && ! grep -Fq 'from "./terrain.js"' <<<"$app" \
-                && grep -Fq 'import("./terrain.js")' <<<"$loader" \
-                && grep -Fq '(max-width: 980px) and (orientation: portrait)' <<<"$loader" \
-                && grep -Fq '(hover: none) and (pointer: coarse)' <<<"$loader" \
-                && grep -Fq 'navigator?.connection?.saveData' <<<"$loader" \
-                && grep -Fq 'requestIdleCallback' <<<"$loader" \
-                && grep -Fq 'imagesrcset="' <<<"$html" \
-                && grep -Fq 'imagesizes="100vw"' <<<"$html" \
-                && grep -Fq 'href="/scenes/mobile-forest-stream-v1-540.webp"' <<<"$html" \
-                && grep -Fqi 'strict-transport-security: max-age=31536000; includeSubDomains' <<<"$static_headers" \
-                && grep -Fqi 'etag:' <<<"$static_headers" \
-                && grep -Eqi '^cf-cache-status: (HIT|MISS|REVALIDATED|EXPIRED|UPDATING|BYPASS)$' <<<"$static_headers"; then
-                echo "Production serves responsive preloading and direct cached static assets."
-                publish_status \
-                  success \
-                  "Fast static mobile release is live"
-                exit 0
-              fi
+            echo "Mobile release attempt ${attempt}: html=${html_status:-000} app=${app_status:-000} loader=${loader_status:-000} image=${mobile_status:-000}; live-app=${live_app_path:-missing}; live-mobile=${live_mobile_assets:-missing}; image-bytes=${live_mobile_bytes:-0}; image-sha=${live_mobile_sha:0:12}."
+
+            if [[ "$html_status" == "200" \
+              && "$app_status" == "200" \
+              && "$loader_status" == "200" \
+              && "$mobile_status" == "200" \
+              && "$live_app_path" == "$expected_app_path" \
+              && "$mobile_ref_count" -ge 2 \
+              && "$live_mobile_bytes" == "$expected_mobile_bytes" \
+              && "$live_mobile_sha" == "$expected_mobile_sha" ]] \
+              && grep -Fq 'imagesrcset="' "$tmpdir/live.html" \
+              && grep -Fq 'imagesizes="100vw"' "$tmpdir/live.html" \
+              && grep -Fq "href=\"${expected_mobile_asset}\"" "$tmpdir/live.html" \
+              && grep -Fq "${expected_mobile_asset} 540w" "$tmpdir/live.html" \
+              && grep -Fq "from \"${expected_loader_import}\"" "$tmpdir/app.js" \
+              && ! grep -Fq 'from "./terrain.js"' "$tmpdir/app.js" \
+              && grep -Fq 'import("./terrain.js")' "$tmpdir/background-loader.js" \
+              && grep -Fq '(max-width: 980px) and (orientation: portrait)' "$tmpdir/background-loader.js" \
+              && grep -Fq '(hover: none) and (pointer: coarse)' "$tmpdir/background-loader.js" \
+              && grep -Fq 'navigator?.connection?.saveData' "$tmpdir/background-loader.js" \
+              && grep -Fq 'requestIdleCallback' "$tmpdir/background-loader.js" \
+              && [[ "$live_mobile_type" == image/webp* ]] \
+              && grep -Fqi 'strict-transport-security: max-age=31536000; includeSubDomains' "$tmpdir/mobile.headers" \
+              && grep -Fqi 'etag:' "$tmpdir/mobile.headers"; then
+              echo "Production serves the exact forest-stream image and the expected static mobile rendering path."
+              publish_status \
+                success \
+                "Exact forest-stream mobile release is live"
+              exit 0
             fi
 
-            echo "Mobile performance attempt ${attempt}: the fast static release is not live yet."
             sleep 10
           done
 
           publish_status \
             failure \
-            "Production did not serve the fast static mobile release"
-          echo "::error::Production never served the responsive preload and direct cached static path."
+            "Exact forest-stream mobile release is not live"
+          echo "::error::Production never served the checked-out page, loader path, and exact forest-stream image bytes together."
           exit 1
