@@ -68,6 +68,8 @@ jobs:
           done < .luna-delete-paths
           rm -f .luna-delete-paths
           rm -rf .github/luna-routing-payload
+          node .github/luna-routing-fix.mjs
+          rm -f .github/luna-routing-fix.mjs
 
       - name: Install dependencies and materialize policy
         run: npm ci
