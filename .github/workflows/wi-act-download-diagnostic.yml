@@ -1,0 +1,41 @@
+name: Diagnose Wisconsin Act download
+
+on:
+  push:
+    branches:
+      - agent/compile-wisconsin-acts-2025
+    paths:
+      - .github/workflows/wi-act-download-diagnostic.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test official Act PDF
+        run: |
+          python - <<'PY' > automation/wi-act-download-diagnostic.txt
+          import time
+          import requests
+          url = "https://docs.legis.wisconsin.gov/document/acts/2025/1.pdf"
+          start = time.monotonic()
+          try:
+              r = requests.get(url, timeout=(20, 90))
+              print(f"status={r.status_code}")
+              print(f"bytes={len(r.content)}")
+              print(f"content_type={r.headers.get('content-type')}")
+              print(f"pdf={r.content.startswith(b'%PDF-')}")
+          except Exception as exc:
+              print(f"error={type(exc).__name__}: {exc}")
+          print(f"elapsed={time.monotonic() - start:.3f}")
+          PY
+          cat automation/wi-act-download-diagnostic.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add automation/wi-act-download-diagnostic.txt
+          git commit -m "Record Wisconsin Act download diagnostic [skip ci]"
+          git push origin "HEAD:$GITHUB_REF_NAME"
