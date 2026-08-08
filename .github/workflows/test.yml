@@ -33,3 +33,24 @@ jobs:
 
       - name: Verify repository stays clean
         run: npm run verify:clean
+
+  export-luna-worktree:
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/luna-adaptive-routing'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/luna-adaptive-routing
+          persist-credentials: false
+
+      - name: Remove Git metadata
+        run: rm -rf .git
+
+      - name: Upload worktree
+        uses: actions/upload-artifact@v4
+        with:
+          name: luna-routing-worktree
+          path: .
+          include-hidden-files: true
+          retention-days: 1
