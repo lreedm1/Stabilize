@@ -115,12 +115,6 @@ if (
 async function makeMemoryMaterializerCacheAgnostic() {
   const path = "scripts/apply-memory-deletion.mjs";
   let source = await read(path);
-  const oldBlock = String.raw`  source = replaceRequired(
-    source,
-    \`<script type="module" src="/app.js?v=20260806-static-mobile-background-1"></script>\`,
-    \`<script type="module" src="/app.js?v=20260807-memory-deletion-1"></script>\`,
-    "memory deletion app cache bust",
-  );`;
   const newBlock = String.raw`  if (!source.includes('src="/app.js?v=20260807-memory-deletion-1"')) {
     const next = source.replace(
       /<script type="module" src="\\/app\\.js\\?v=[^"]+"><\\/script>/,
@@ -131,12 +125,19 @@ async function makeMemoryMaterializerCacheAgnostic() {
     }
     source = next;
   }`;
-  source = replaceRequired(
-    source,
-    oldBlock,
-    newBlock,
-    "cache-agnostic memory deletion materializer",
-  );
+
+  if (!source.includes("if (!source.includes('src=\"/app.js?v=20260807-memory-deletion-1\"'))")) {
+    const marker = '    "memory deletion app cache bust",\n  );';
+    const markerIndex = source.indexOf(marker);
+    const blockStart = source.lastIndexOf("  source = replaceRequired(", markerIndex);
+    if (markerIndex < 0 || blockStart < 0) {
+      throw new Error("Could not locate cache-agnostic memory deletion materializer");
+    }
+    source = `${source.slice(0, blockStart)}${newBlock}${source.slice(
+      markerIndex + marker.length,
+    )}`;
+  }
+
   return write(path, source);
 }
 
