@@ -45,11 +45,15 @@ const MAX_PERSISTED_REPLY_CHARS = 12_000;
 const PRIVATE_CHAT_STORAGE_KEY = "stabilize:private-chat:v1";
 const MAX_PRIVATE_THREAD_MESSAGES = 6;
 const MAX_PRIVATE_THREAD_MESSAGE_CHARS = 3_000;
-const GUEST_THREAD_STORAGE_KEY = "stabilize:guest-thread:v1";
+const GUEST_THREAD_STORAGE_KEY = "stabilize:guest-thread:v2";
+const LEGACY_GUEST_THREAD_STORAGE_KEY = "stabilize:guest-thread:v1";
 const GUEST_THREAD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_GUEST_THREAD_MESSAGES = 8;
 const MAX_GUEST_THREAD_MESSAGE_CHARS = 2_500;
-const MAX_CHAT_REQUEST_BYTES = 28_000;
+const MAX_GUEST_SUMMARY_CHARS = 30_000;
+const MAX_GUEST_SUMMARY_QUEUE_MESSAGES = 128;
+const MAX_GUEST_SUMMARY_BATCH_MESSAGES = 12;
+const MAX_CHAT_REQUEST_BYTES = 240_000;
 
 chatLog.setAttribute("aria-atomic", "false");
 chatLog.setAttribute("aria-label", "Current conversation");
@@ -146,6 +150,10 @@ let activeAssistantOutput = null;
 let privateChat = false;
 let privateThreadMessages = [];
 let guestThreadMessages = [];
+let guestThreadSummary = "";
+let guestSummaryMessages = [];
+let pendingLocalThreadSnapshot = null;
+let activeGuestSummaryBatch = [];
 
 function buildOutcomeActionPrompt(instruction, previousReply) {
   const request = String(instruction || "").trim();
@@ -390,12 +398,22 @@ function appendPrivateThreadMessage(role, content) {
 function clearGuestThreadStorage() {
   try {
     sessionStorage.removeItem(GUEST_THREAD_STORAGE_KEY);
+    sessionStorage.removeItem(LEGACY_GUEST_THREAD_STORAGE_KEY);
   } catch {
     // Storage can be unavailable in hardened or private browser contexts.
   }
 }
 
-function normalizeGuestThread(messages) {
+function cloneThreadMessages(messages) {
+  return Array.isArray(messages)
+    ? messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+      }))
+    : [];
+}
+
+function normalizeGuestMessages(messages, limit = Number.POSITIVE_INFINITY) {
   if (!Array.isArray(messages)) return [];
   const cleaned = messages
     .filter(
@@ -408,8 +426,7 @@ function normalizeGuestThread(messages) {
         .trim()
         .slice(0, MAX_GUEST_THREAD_MESSAGE_CHARS),
     }))
-    .filter((message) => message.content)
-    .slice(-MAX_GUEST_THREAD_MESSAGES);
+    .filter((message) => message.content);
 
   const alternating = [];
   for (const message of cleaned) {
@@ -423,11 +440,35 @@ function normalizeGuestThread(messages) {
       alternating.push({ ...message });
     }
   }
-  return alternating.slice(-MAX_GUEST_THREAD_MESSAGES);
+
+  return Number.isFinite(limit) ? alternating.slice(-limit) : alternating;
+}
+
+function normalizeGuestThread(messages) {
+  return normalizeGuestMessages(messages, MAX_GUEST_THREAD_MESSAGES);
+}
+
+function normalizeGuestSummary(value) {
+  return String(value || "").trim().slice(0, MAX_GUEST_SUMMARY_CHARS);
+}
+
+function normalizeGuestSummaryQueue(messages) {
+  return normalizeGuestMessages(
+    messages,
+    MAX_GUEST_SUMMARY_QUEUE_MESSAGES,
+  );
+}
+
+function guestThreadIsEmpty() {
+  return (
+    !guestThreadSummary &&
+    guestSummaryMessages.length === 0 &&
+    guestThreadMessages.length === 0
+  );
 }
 
 function persistGuestThread() {
-  if (signedIn || privateChat || guestThreadMessages.length === 0) {
+  if (signedIn || privateChat || guestThreadIsEmpty()) {
     clearGuestThreadStorage();
     return;
   }
@@ -435,48 +476,66 @@ function persistGuestThread() {
     sessionStorage.setItem(
       GUEST_THREAD_STORAGE_KEY,
       JSON.stringify({
-        v: 1,
+        v: 2,
         savedAt: Date.now(),
+        summary: guestThreadSummary,
+        summaryMessages: guestSummaryMessages,
         messages: guestThreadMessages,
       }),
     );
+    sessionStorage.removeItem(LEGACY_GUEST_THREAD_STORAGE_KEY);
   } catch {
-    // The current page still keeps the bounded thread in memory.
+    // The current page still keeps the bounded context in memory.
   }
 }
 
 function initializeGuestThread() {
   if (signedIn || privateChat) {
     guestThreadMessages = [];
+    guestThreadSummary = "";
+    guestSummaryMessages = [];
     clearGuestThreadStorage();
     return;
   }
 
   try {
-    const record = JSON.parse(
-      sessionStorage.getItem(GUEST_THREAD_STORAGE_KEY) || "null",
-    );
+    const currentRaw = sessionStorage.getItem(GUEST_THREAD_STORAGE_KEY);
+    const legacyRaw = sessionStorage.getItem(LEGACY_GUEST_THREAD_STORAGE_KEY);
+    const record = JSON.parse(currentRaw || legacyRaw || "null");
     const age = Date.now() - Number(record?.savedAt);
     if (
-      record?.v !== 1 ||
+      ![1, 2].includes(record?.v) ||
       !Number.isFinite(age) ||
       age < 0 ||
       age > GUEST_THREAD_MAX_AGE_MS
     ) {
-      guestThreadMessages = [];
-      clearGuestThreadStorage();
+      resetGuestThread();
       return;
     }
+
     guestThreadMessages = normalizeGuestThread(record.messages);
-    if (guestThreadMessages.length === 0) clearGuestThreadStorage();
+    guestThreadSummary =
+      record.v === 2 ? normalizeGuestSummary(record.summary) : "";
+    guestSummaryMessages =
+      record.v === 2
+        ? normalizeGuestSummaryQueue(record.summaryMessages)
+        : [];
+
+    if (guestThreadIsEmpty()) clearGuestThreadStorage();
+    else persistGuestThread();
   } catch {
-    guestThreadMessages = [];
-    clearGuestThreadStorage();
+    resetGuestThread();
   }
 }
 
 function resetGuestThread() {
   guestThreadMessages = [];
+  guestThreadSummary = "";
+  guestSummaryMessages = [];
+  activeGuestSummaryBatch = [];
+  if (pendingLocalThreadSnapshot?.type === "guest") {
+    pendingLocalThreadSnapshot = null;
+  }
   clearGuestThreadStorage();
 }
 
@@ -488,10 +547,22 @@ function appendGuestThreadMessage(role, content) {
     .trim()
     .slice(0, MAX_GUEST_THREAD_MESSAGE_CHARS);
   if (!clean) return;
-  guestThreadMessages = normalizeGuestThread([
+
+  const combined = normalizeGuestMessages([
     ...guestThreadMessages,
     { role, content: clean },
   ]);
+  const overflowCount = Math.max(
+    0,
+    combined.length - MAX_GUEST_THREAD_MESSAGES,
+  );
+  if (overflowCount > 0) {
+    guestSummaryMessages = normalizeGuestSummaryQueue([
+      ...guestSummaryMessages,
+      ...combined.slice(0, overflowCount),
+    ]);
+  }
+  guestThreadMessages = combined.slice(-MAX_GUEST_THREAD_MESSAGES);
   persistGuestThread();
 }
 
@@ -509,18 +580,94 @@ function appendLocalThreadMessage(role, content) {
   }
 }
 
+function beginLocalThreadSnapshot() {
+  activeGuestSummaryBatch = [];
+  if (privateChat) {
+    pendingLocalThreadSnapshot = {
+      type: "private",
+      messages: cloneThreadMessages(privateThreadMessages),
+    };
+    return;
+  }
+  if (!signedIn) {
+    pendingLocalThreadSnapshot = {
+      type: "guest",
+      summary: guestThreadSummary,
+      summaryMessages: cloneThreadMessages(guestSummaryMessages),
+      messages: cloneThreadMessages(guestThreadMessages),
+    };
+    return;
+  }
+  pendingLocalThreadSnapshot = null;
+}
+
+function commitLocalThreadSnapshot() {
+  pendingLocalThreadSnapshot = null;
+  activeGuestSummaryBatch = [];
+}
+
+function sameThreadMessages(left, right) {
+  return (
+    left.length === right.length &&
+    left.every(
+      (message, index) =>
+        message.role === right[index]?.role &&
+        message.content === right[index]?.content,
+    )
+  );
+}
+
+function applyGuestSummaryResult(result) {
+  if (signedIn || privateChat || result?.guestSummaryUpdated !== true) return;
+  const summary = normalizeGuestSummary(result.guestSummary);
+  if (!summary || activeGuestSummaryBatch.length === 0) return;
+
+  const currentPrefix = guestSummaryMessages.slice(
+    0,
+    activeGuestSummaryBatch.length,
+  );
+  if (!sameThreadMessages(currentPrefix, activeGuestSummaryBatch)) return;
+
+  guestThreadSummary = summary;
+  guestSummaryMessages = guestSummaryMessages.slice(
+    activeGuestSummaryBatch.length,
+  );
+  persistGuestThread();
+}
+
 function rollbackLocalUser(content) {
+  if (pendingLocalThreadSnapshot?.type === "private" && privateChat) {
+    privateThreadMessages = cloneThreadMessages(
+      pendingLocalThreadSnapshot.messages,
+    );
+    commitLocalThreadSnapshot();
+    return;
+  }
+  if (pendingLocalThreadSnapshot?.type === "guest" && !signedIn && !privateChat) {
+    guestThreadSummary = normalizeGuestSummary(
+      pendingLocalThreadSnapshot.summary,
+    );
+    guestSummaryMessages = normalizeGuestSummaryQueue(
+      pendingLocalThreadSnapshot.summaryMessages,
+    );
+    guestThreadMessages = normalizeGuestThread(
+      pendingLocalThreadSnapshot.messages,
+    );
+    commitLocalThreadSnapshot();
+    persistGuestThread();
+    return;
+  }
+
   const clean = String(content || "").trim();
   const thread = activeLocalThreadMessages();
   const latest = thread.at(-1);
   if (latest?.role !== "user" || latest.content !== clean) return;
-
-  if (privateChat) {
-    privateThreadMessages.pop();
-  } else if (!signedIn) {
+  if (privateChat) privateThreadMessages.pop();
+  else if (!signedIn) {
     guestThreadMessages.pop();
     persistGuestThread();
   }
+  activeGuestSummaryBatch = [];
 }
 
 function restoreGuestConversation() {
@@ -875,15 +1022,35 @@ function buildChatRequestBody(clean) {
     messages.pop();
   }
 
+  const isGuest = !signedIn && !privateChat;
+  const guestSummary = isGuest && guestThreadSummary
+    ? guestThreadSummary
+    : undefined;
+  let guestSummaryMessages = isGuest
+    ? cloneThreadMessages(
+        guestSummaryMessagesForRequest(),
+      )
+    : undefined;
+
   const build = () =>
     JSON.stringify({
       message: clean,
       awaitingSafetyAnswer: currentAwaitingSafetyAnswer(),
       privateChat,
       messages,
+      guestSummary,
+      guestSummaryMessages,
     });
 
   let serialized = build();
+  while (
+    Array.isArray(guestSummaryMessages) &&
+    guestSummaryMessages.length > 0 &&
+    new TextEncoder().encode(serialized).byteLength > MAX_CHAT_REQUEST_BYTES
+  ) {
+    guestSummaryMessages.pop();
+    serialized = build();
+  }
   while (
     Array.isArray(messages) &&
     messages.length > 0 &&
@@ -892,7 +1059,13 @@ function buildChatRequestBody(clean) {
     messages.shift();
     serialized = build();
   }
+
+  activeGuestSummaryBatch = cloneThreadMessages(guestSummaryMessages);
   return serialized;
+}
+
+function guestSummaryMessagesForRequest() {
+  return guestSummaryMessages.slice(0, MAX_GUEST_SUMMARY_BATCH_MESSAGES);
 }
 
 async function sendMessage(text) {
@@ -910,6 +1083,7 @@ async function sendMessage(text) {
   appendUserOutput(visibleUserText);
   setPending(true);
   const pendingOutput = showOutput(pendingReplyCopy(), "thinking-output", "thinking");
+  beginLocalThreadSnapshot();
   appendLocalThreadMessage("user", clean);
 
   try {
@@ -934,7 +1108,9 @@ async function sendMessage(text) {
       modulateTerrain(reply);
       awaitingSafetyAnswer = needsSafetyAnswer;
       awaitingSafetyAnswerSince = needsSafetyAnswer ? Date.now() : null;
+      applyGuestSummaryResult(result);
       persistLatestAnswer(reply, route, needsSafetyAnswer);
+      commitLocalThreadSnapshot();
       lastSubmittedText = "";
       return;
     }
@@ -961,7 +1137,9 @@ async function sendMessage(text) {
     modulateTerrain(reply);
     awaitingSafetyAnswer = needsSafetyAnswer;
     awaitingSafetyAnswerSince = needsSafetyAnswer ? Date.now() : null;
+    applyGuestSummaryResult(result);
     persistLatestAnswer(reply, route, needsSafetyAnswer);
+    commitLocalThreadSnapshot();
     lastSubmittedText = "";
   } catch (error) {
     cancelStreamingOutputRender();

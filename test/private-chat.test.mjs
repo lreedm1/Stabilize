@@ -40,7 +40,7 @@ test("signed-in private chat stays out of the hamburger menu and disables memory
     /id="private-chat-button"/,
   );
   assert.match(pageSource, /id="private-chat-status"[\s\S]*hidden/);
-  assert.match(pageSource, /app\.js\?v=20260808-memory-controls-1/);
+  assert.match(pageSource, /app\.js\?v=20260808-guest-summary-1/);
 
   assert.match(clientSource, /PRIVATE_CHAT_STORAGE_KEY/);
   assert.match(clientSource, /function togglePrivateChat\(\)/);

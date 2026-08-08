@@ -18,11 +18,14 @@ import { SessionMemory } from "./session-memory.js";
 
 export { SessionMemory };
 
-const MAX_BODY_BYTES = 32_000;
+const MAX_BODY_BYTES = 256_000;
 const MAX_MESSAGE_CHARS = 4_000;
 const MAX_MESSAGES = 12;
 const MAX_SUMMARY_CHARS = 1_000;
 const MAX_SUMMARY_OUTPUT_TOKENS = 320;
+const MAX_GUEST_SUMMARY_CHARS = 30_000;
+const MAX_GUEST_SUMMARY_MESSAGES = 12;
+const MAX_GUEST_SUMMARY_OUTPUT_TOKENS = 5_000;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const OPENAI_REASONING_EFFORTS = new Set([
   "none",
@@ -327,6 +330,55 @@ function privateModelInput(messages, latestText) {
     ...normalized,
     { role: "user", content: latestText },
   ]);
+}
+
+function normalizeGuestSummary(value) {
+  return String(value || "").trim().slice(0, MAX_GUEST_SUMMARY_CHARS);
+}
+
+function normalizeGuestSummaryMessages(messages) {
+  return normalizeMessages(messages).slice(-MAX_GUEST_SUMMARY_MESSAGES);
+}
+
+function guestSummaryMessageBlock(messages) {
+  const normalized = normalizeGuestSummaryMessages(messages);
+  if (!normalized.length) return "";
+  return normalized
+    .map(
+      (message) =>
+        (message.role === "assistant" ? "ASSISTANT" : "USER") +
+        ": " +
+        message.content,
+    )
+    .join("\n\n");
+}
+
+function guestModelInput(body, latestText) {
+  const messages = [];
+  const summary = normalizeGuestSummary(body?.guestSummary);
+  if (summary) {
+    messages.push({
+      role: "user",
+      content:
+        COPY.model.memoryPrefix +
+        "\nGUEST ROLLING SUMMARY (older messages):\n" +
+        summary,
+    });
+  }
+
+  const olderMessages = guestSummaryMessageBlock(body?.guestSummaryMessages);
+  if (olderMessages) {
+    messages.push({
+      role: "user",
+      content:
+        COPY.model.memoryPrefix +
+        "\nOLDER GUEST MESSAGES AWAITING SUMMARY:\n" +
+        olderMessages,
+    });
+  }
+
+  messages.push(...privateModelInput(body?.messages, latestText));
+  return messages;
 }
 
 function modelInput(memory, latestText) {
@@ -1013,6 +1065,7 @@ function streamChatReply(
   stub,
   memoryGeneration,
   ctx,
+  guestSummaryPromise = null,
 ) {
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -1107,6 +1160,9 @@ function streamChatReply(
         schedule(ctx, compactSession(stub, env));
       }
 
+      const guestSummaryResult = guestSummaryPromise
+        ? await guestSummaryPromise
+        : null;
       await writer.write(
         streamEvent({
           type: "done",
@@ -1114,6 +1170,7 @@ function streamChatReply(
           reply: validated,
           showEmergency: false,
           awaitingSafetyAnswer: false,
+          ...guestSummaryFields(guestSummaryResult),
         }),
       );
     } catch (error) {
@@ -1212,14 +1269,22 @@ async function generateReply(messages, route, env, latestText) {
   return reply;
 }
 
-function sanitizeSummary(value) {
+function sanitizeSummaryText(value, maxChars) {
   return String(value || "")
     .trim()
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email omitted]")
     .replace(/https?:\/\/\S+/gi, "[link omitted]")
     .replace(/\b(?:\d[\s().-]?){10,}\b/g, "[number omitted]")
-    .slice(0, MAX_SUMMARY_CHARS)
+    .slice(0, maxChars)
     .trim();
+}
+
+function sanitizeSummary(value) {
+  return sanitizeSummaryText(value, MAX_SUMMARY_CHARS);
+}
+
+function sanitizeGuestSummary(value) {
+  return sanitizeSummaryText(value, MAX_GUEST_SUMMARY_CHARS);
 }
 
 async function generateSummary(snapshot, env) {
@@ -1246,6 +1311,63 @@ async function generateSummary(snapshot, env) {
   );
 
   return sanitizeSummary(result.text) || null;
+}
+
+async function generateGuestSummary(existingSummary, pendingMessages, env) {
+  const summary = normalizeGuestSummary(existingSummary);
+  const messages = normalizeGuestSummaryMessages(pendingMessages);
+  if (!messages.length) return null;
+
+  const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
+  if (demoMode || !String(env.OPENAI_API_KEY || "")) {
+    return { summary, updated: false };
+  }
+
+  try {
+    const { apiKey, model } = openAIConfig(env);
+    const result = await callOpenAI(
+      {
+        model,
+        reasoning: { effort: "low" },
+        instructions: COPY.model.guestSummaryPrompt,
+        input: [
+          {
+            role: "user",
+            content: JSON.stringify({
+              existing_summary: summary || null,
+              older_messages: messages,
+            }),
+          },
+        ],
+        max_output_tokens: MAX_GUEST_SUMMARY_OUTPUT_TOKENS,
+        text: { verbosity: "low" },
+        store: true,
+      },
+      apiKey,
+      35_000,
+      "OpenAIGuestSummaryHttpError",
+    );
+    const nextSummary = sanitizeGuestSummary(result.text);
+    return nextSummary
+      ? { summary: nextSummary, updated: true }
+      : { summary, updated: false };
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "guest_summary_failed",
+        error: error instanceof Error ? error.name : "UnknownError",
+      }),
+    );
+    return { summary, updated: false };
+  }
+}
+
+function guestSummaryFields(result) {
+  if (!result) return {};
+  return {
+    guestSummary: result.summary,
+    guestSummaryUpdated: result.updated === true,
+  };
 }
 
 async function compactSession(stub, env) {
@@ -1344,29 +1466,23 @@ export async function handlePreparedChat(
   }
 
   const stub = privateChat ? null : accountMemoryStub(env, accountKey);
-  const clientAwaiting = body?.awaitingSafetyAnswer === true;
-  let route = classifyInput(latestText, {
-    awaitingSafetyAnswer: clientAwaiting,
-  });
-  let fixed = fixedReplyForRoute(route);
-
-  if (fixed) {
-    const task = recordFixedRoute(stub, route, fixed);
-    if (!schedule(ctx, task)) await task;
-    return jsonResponse({ route, ...fixed });
-  }
-
   const memory = privateChat
     ? emptyMemoryContext()
     : preparedMemory || (await readMemoryContext(stub));
-
-  route = classifyInput(latestText, {
-    awaitingSafetyAnswer: clientAwaiting || memory.awaitingSafetyAnswer,
+  const clientAwaiting = body?.awaitingSafetyAnswer === true;
+  const route = classifyInput(latestText, {
+    awaitingSafetyAnswer:
+      clientAwaiting || memory.awaitingSafetyAnswer,
   });
-  fixed = fixedReplyForRoute(route);
+  const fixed = fixedReplyForRoute(route);
 
   if (fixed) {
-    const task = recordFixedRoute(stub, route, fixed);
+    const task = recordFixedRoute(
+      stub,
+      route,
+      fixed,
+      memory.generation,
+    );
     if (!schedule(ctx, task)) await task;
     return jsonResponse({ route, ...fixed });
   }
@@ -1380,7 +1496,15 @@ export async function handlePreparedChat(
     .toLowerCase()
     .includes("application/x-ndjson");
   if (acceptsStreaming) {
-    return streamChatReply(messages, route, env, latestText, stub, ctx);
+    return streamChatReply(
+      messages,
+      route,
+      env,
+      latestText,
+      stub,
+      memory.generation,
+      ctx,
+    );
   }
 
   const reply = await generateReply(messages, route, env, latestText);
@@ -1388,6 +1512,7 @@ export async function handlePreparedChat(
     user: latestText,
     assistant: reply,
     awaitingSafetyAnswer: false,
+    expectedGeneration: memory.generation,
   });
 
   if (result?.shouldCompact && stub && ctx) {
@@ -1473,9 +1598,19 @@ async function handleChat(request, env, ctx, accountKey) {
     return jsonResponse({ route, ...fixed });
   }
 
-  const messages = privateChat || signedOut
+  const guestSummaryPromise =
+    signedOut && !privateChat
+      ? generateGuestSummary(
+          body?.guestSummary,
+          body?.guestSummaryMessages,
+          env,
+        )
+      : null;
+  const messages = privateChat
     ? privateModelInput(body?.messages, latestText)
-    : modelInput(memory, latestText);
+    : signedOut
+      ? guestModelInput(body, latestText)
+      : modelInput(memory, latestText);
   if (!messages.length) throw new HttpError(400, COPY.api.invalidConversation);
 
   const acceptsStreaming = (request.headers.get("accept") || "")
@@ -1490,10 +1625,14 @@ async function handleChat(request, env, ctx, accountKey) {
       stub,
       memory.generation,
       ctx,
+      guestSummaryPromise,
     );
   }
 
-  const reply = await generateReply(messages, route, env, latestText);
+  const [reply, guestSummaryResult] = await Promise.all([
+    generateReply(messages, route, env, latestText),
+    guestSummaryPromise,
+  ]);
   const result = await recordExchange(stub, {
     user: latestText,
     assistant: reply,
@@ -1510,6 +1649,7 @@ async function handleChat(request, env, ctx, accountKey) {
     reply,
     showEmergency: false,
     awaitingSafetyAnswer: false,
+    ...guestSummaryFields(guestSummaryResult),
   });
 }
 
