@@ -65,7 +65,7 @@ jobs:
               )"
             fi
             privacy_status="$(
-              curl --max-time 20 --compressed --silent --show-error \
+              curl --max-time 20 --compressed --location --max-redirs 5 --silent --show-error \
                 --header "Cache-Control: no-cache" \
                 --output "$privacy" \
                 --write-out "%{http_code}" \
