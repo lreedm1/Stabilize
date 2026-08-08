@@ -1,0 +1,73 @@
+name: Verify account preflight production
+
+on:
+  push:
+    branches:
+      - agent/verify-account-preflight-production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-account-preflight-production-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify exact account preflight release
+        shell: bash
+        run: |
+          set -euo pipefail
+          origin="https://stabilize.info"
+          expected_script="/billing-client.js?v=20260808-account-preflight-1"
+
+          for attempt in $(seq 1 60); do
+            cache_bust="$(date +%s)-${attempt}"
+            html="$(curl --fail --silent --show-error --location \
+              --header 'Cache-Control: no-cache' \
+              "${origin}/?verify-account-preflight=${cache_bust}")"
+
+            script_reference=false
+            client_markers=false
+            endpoint_active=false
+
+            if grep -Fq "$expected_script" <<<"$html"; then
+              script_reference=true
+              client="$(curl --fail --silent --show-error --location \
+                --header 'Cache-Control: no-cache' \
+                "${origin}${expected_script}&verify=${cache_bust}")"
+              if grep -Fq 'normalizeAccountBillingPreflight' <<<"$client" && \
+                 grep -Fq 'scheduleAccountContextRefresh' <<<"$client" && \
+                 grep -Fq 'refreshAccountPreflightIfNeeded' <<<"$client"; then
+                client_markers=true
+              fi
+            fi
+
+            context_status="$(curl --silent --show-error \
+              --output /tmp/account-context.json \
+              --write-out '%{http_code}' \
+              --header 'Accept: application/json' \
+              --header 'Cache-Control: no-cache' \
+              "${origin}/api/account/context?verify=${cache_bust}")"
+            if [[ "$context_status" == "401" ]] && \
+               grep -Fq 'Sign in to use account memory.' /tmp/account-context.json; then
+              endpoint_active=true
+            fi
+
+            echo "attempt=${attempt} script=${script_reference} client=${client_markers} endpoint=${endpoint_active} status=${context_status}"
+            if [[ "$script_reference" == true && "$client_markers" == true && "$endpoint_active" == true ]]; then
+              echo "Exact account preflight release is live on stabilize.info."
+              exit 0
+            fi
+            sleep 5
+          done
+
+          echo "Timed out waiting for the exact account preflight release." >&2
+          echo "Homepage billing script references:" >&2
+          grep -oE 'billing-client\.js\?v=[A-Za-z0-9._-]+' <<<"$html" | sort -u >&2 || true
+          echo "Account-context response (${context_status}):" >&2
+          cat /tmp/account-context.json >&2 || true
+          exit 1
