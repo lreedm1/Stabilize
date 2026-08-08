@@ -13,10 +13,6 @@
     {
       "pattern": "stabilize.info/*",
       "zone_name": "stabilize.info"
-    },
-    {
-      "pattern": "reedlokken.com/*",
-      "zone_name": "reedlokken.com"
     }
   ],
   "assets": {
