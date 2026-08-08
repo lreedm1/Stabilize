@@ -94,3 +94,10 @@ replaceAll(
   "privateChat \\|\\| signedOut",
   "signedOut",
 );
+
+replaceAll(
+  "test/worker.test.mjs",
+  '"Content-Length": "256001"',
+  '"Content-Length": "2000001"',
+  { required: true },
+);
