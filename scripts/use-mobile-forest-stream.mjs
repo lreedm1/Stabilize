@@ -142,6 +142,7 @@ for (const path of STATIC_PAGES) {
 
 const mobileVideoClient = `const MOBILE_QUERY =
   "(max-width: 980px) and (orientation: portrait)";
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 const VIDEO_URL =
   "${MOBILE_VIDEO_ASSET}?v=${MOBILE_VIDEO_VERSION}";
 
@@ -167,7 +168,8 @@ function revealVideo(video, backdrop) {
   backdrop?.classList.add("video-active");
 }
 
-function keepPoster(backdrop) {
+function keepPoster(video, backdrop) {
+  video.style.opacity = "0";
   backdrop?.classList.remove("video-active");
 }
 
@@ -175,6 +177,12 @@ export function configureMobileForestVideo(target = globalThis.window) {
   const document = target?.document;
   const matchMedia = target?.matchMedia?.bind(target);
   if (!document || !matchMedia || !matchMedia(MOBILE_QUERY).matches) {
+    return null;
+  }
+  if (
+    matchMedia(REDUCED_MOTION_QUERY).matches ||
+    target.navigator?.connection?.saveData === true
+  ) {
     return null;
   }
 
@@ -204,7 +212,7 @@ export function configureMobileForestVideo(target = globalThis.window) {
 
     video.addEventListener("loadeddata", () => revealVideo(video, backdrop));
     video.addEventListener("playing", () => revealVideo(video, backdrop));
-    video.addEventListener("error", () => keepPoster(backdrop));
+    video.addEventListener("error", () => keepPoster(video, backdrop));
 
     backdrop.insertAdjacentElement("afterend", video);
   }
@@ -215,11 +223,20 @@ export function configureMobileForestVideo(target = globalThis.window) {
   }
 
   const tryPlay = () => {
+    if (
+      !matchMedia(MOBILE_QUERY).matches ||
+      matchMedia(REDUCED_MOTION_QUERY).matches ||
+      target.navigator?.connection?.saveData === true
+    ) {
+      video.pause();
+      keepPoster(video, backdrop);
+      return;
+    }
     video.muted = true;
     video.defaultMuted = true;
     const attempt = video.play();
     if (attempt && typeof attempt.catch === "function") {
-      attempt.catch(() => keepPoster(backdrop));
+      attempt.catch(() => keepPoster(video, backdrop));
     }
   };
 
@@ -231,8 +248,13 @@ export function configureMobileForestVideo(target = globalThis.window) {
     });
   }
   target.addEventListener("pageshow", tryPlay);
+  target.addEventListener("pagehide", () => video.pause());
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) tryPlay();
+    if (document.hidden) {
+      video.pause();
+      return;
+    }
+    tryPlay();
   });
 
   return video;
@@ -284,7 +306,7 @@ const mobileQualityTest = String.raw`test("mobile plays the uploaded forest stre
   );
   assert.match(
     pageSource,
-    /<script type="module" src="\/mobile-quality\.js\?v=20260808-uploaded-forest-video-1"><\/script>/,
+    /<script type="module" src="\/mobile-quality\.js\?v=[^"]+"><\/script>/,
   );
   assert.match(
     clientSource,
@@ -300,7 +322,10 @@ const mobileQualityTest = String.raw`test("mobile plays the uploaded forest stre
   assert.match(clientSource, /video\.play\(\)/);
   assert.match(clientSource, /"pointerdown", "touchstart", "keydown"/);
   assert.match(clientSource, /target\.addEventListener\("pageshow", tryPlay\)/);
+  assert.match(clientSource, /target\.addEventListener\("pagehide", \(\) => video\.pause\(\)\)/);
   assert.match(clientSource, /visibilitychange/);
+  assert.match(clientSource, /prefers-reduced-motion: reduce/);
+  assert.match(clientSource, /navigator\?\.connection\?\.saveData/);
   assert.match(clientSource, /objectFit: "cover"/);
   assert.match(clientSource, /backdrop\?\.classList\.add\("video-active"\)/);
   assert.match(mobileStyles, /\.photo-backdrop\.video-active img/);
