@@ -1,0 +1,123 @@
+name: Temporary Wisconsin act text export
+
+on:
+  push:
+    branches:
+      - tmp-wi-acts-20260808
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    name: Build Wisconsin 2025-26 enacted act text
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Install PDF text tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+
+      - name: Download all 247 chaptered acts and build TXT
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p acts text
+          out="Wisconsin_2025-26_enacted_bill_text.txt"
+
+          cat > "$out" <<'HEADER'
+Wisconsin bills enacted in the 2025-26 regular session
+Final chaptered text: 2025 Wisconsin Acts 1-247
+Generated from the Wisconsin Legislature's official chaptered-act PDFs
+
+Scope
+-----
+This compilation contains the final enacted text of all 247 Assembly and Senate bills that became 2025 Wisconsin Acts 1 through 247. It excludes bills that were fully vetoed. Because the source documents are chaptered acts, the text reflects partial vetoes where applicable.
+
+Each act begins with a separator and its official source URL. Page headers, page numbers, and other publication formatting may remain because the text is extracted from the official PDFs.
+
+HEADER
+
+          for n in $(seq 1 247); do
+            url="https://docs.legis.wisconsin.gov/document/acts/2025/${n}.pdf"
+            pdf="acts/${n}.pdf"
+            txt="text/${n}.txt"
+            echo "Downloading Act ${n}..."
+
+            ok=0
+            for attempt in 1 2 3 4 5; do
+              if curl --fail --location --silent --show-error \
+                --retry 2 --retry-all-errors --retry-delay 2 \
+                --connect-timeout 30 --max-time 240 \
+                --user-agent "Mozilla/5.0 (compatible; WisconsinActTextArchive/1.0)" \
+                "$url" --output "$pdf"; then
+                if [ -s "$pdf" ] && head -c 4 "$pdf" | grep -q '%PDF'; then
+                  ok=1
+                  break
+                fi
+              fi
+              rm -f "$pdf"
+              sleep $((attempt * 4))
+            done
+
+            if [ "$ok" -ne 1 ]; then
+              echo "Failed to download a valid PDF for Act ${n}" >&2
+              exit 1
+            fi
+
+            pdftotext -enc UTF-8 -nopgbrk "$pdf" "$txt"
+            if ! grep -Eqi "2025[[:space:]]+WISCONSIN[[:space:]]+ACT[[:space:]]+${n}([^0-9]|$)" "$txt"; then
+              echo "Act-number validation failed for Act ${n}" >&2
+              head -80 "$txt" >&2 || true
+              exit 1
+            fi
+
+            {
+              printf '\n\n'
+              printf '=%.0s' {1..100}
+              printf '\n2025 WISCONSIN ACT %s\n' "$n"
+              printf 'Official source: %s\n' "$url"
+              printf '=%.0s' {1..100}
+              printf '\n\n'
+              cat "$txt"
+            } >> "$out"
+          done
+
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          path = Path("Wisconsin_2025-26_enacted_bill_text.txt")
+          text = path.read_text(encoding="utf-8", errors="strict")
+          headers = [int(x) for x in re.findall(r"^2025 WISCONSIN ACT (\d+)$", text, re.M)]
+          if headers != list(range(1, 248)):
+              raise SystemExit(f"Act header QA failed: got {len(headers)} headers; first/last={headers[:3]}/{headers[-3:]}")
+
+          embedded = {int(x) for x in re.findall(r"2025\s+WISCONSIN\s+ACT\s+(\d+)", text, re.I)}
+          missing = sorted(set(range(1, 248)) - embedded)
+          if missing:
+              raise SystemExit(f"Embedded act-number QA failed; missing {missing}")
+
+          bill_ids = set(re.findall(r"2025\s+(?:Assembly|Senate)\s+Bill\s+(\d+)", text, re.I))
+          if len(bill_ids) < 100:
+              raise SystemExit(f"Bill-number extraction looked implausible: only {len(bill_ids)} unique numeric IDs")
+
+          if path.stat().st_size < 1_000_000:
+              raise SystemExit(f"Output unexpectedly small: {path.stat().st_size} bytes")
+
+          print(f"QA passed: 247 acts; {len(bill_ids)} unique numeric bill identifiers; {path.stat().st_size:,} bytes")
+          PY
+
+          sha256sum "$out" > "$out.sha256"
+          ls -lh "$out" "$out.sha256"
+
+      - name: Upload compilation
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wisconsin-2025-26-enacted-bill-text
+          path: |
+            Wisconsin_2025-26_enacted_bill_text.txt
+            Wisconsin_2025-26_enacted_bill_text.txt.sha256
+          if-no-files-found: error
+          retention-days: 1
