@@ -82,7 +82,13 @@ jobs:
           git diff --binary > /tmp/guest-summary-first.diff
           npm run apply:prompt-policy
           git diff --binary > /tmp/guest-summary-second.diff
-          cmp /tmp/guest-summary-first.diff /tmp/guest-summary-second.diff
+          if ! cmp /tmp/guest-summary-first.diff /tmp/guest-summary-second.diff; then
+            echo '::group::Guest summary idempotence difference'
+            diff -u /tmp/guest-summary-first.diff /tmp/guest-summary-second.diff \
+              | sed -n '1,500p' || true
+            echo '::endgroup::'
+            exit 1
+          fi
 
       - name: Run full regression suites
         run: npm test
