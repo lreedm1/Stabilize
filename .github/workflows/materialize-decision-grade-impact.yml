@@ -23,6 +23,24 @@ jobs:
           fetch-depth: 0
           ref: agent/decision-grade-impact
 
+      - name: Merge current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "Current main is already included."
+          else
+            if ! git merge --no-edit origin/main; then
+              echo "Conflicting paths:" >&2
+              git diff --name-only --diff-filter=U >&2
+              exit 1
+            fi
+            git push origin HEAD:agent/decision-grade-impact
+          fi
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
