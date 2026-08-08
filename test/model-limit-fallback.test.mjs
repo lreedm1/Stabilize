@@ -21,24 +21,37 @@ test("signed-in Fastest response uses GPT-5.4 while thinking uses the free Curre
   assert.equal(config.vars.FREE_PLAN_PRIMARY_MODEL, "gpt-5.6-sol");
   assert.equal(config.vars.FREE_PLAN_FALLBACK_MODEL, "gpt-5.4");
 
-  assert.ok(workerSource.includes("function chatPreparationOptions(env, body = {})"));
-  assert.ok(workerSource.includes('const usesThinking = ["low", "medium", "high", "xhigh", "max"].includes('));
-  assert.match(workerSource, /.prepareChat(chatPreparationOptions(env, body))/);
-  assert.match(workerSource, /preparation.model === defaultModel/);
-  assert.match(workerSource, /responseWithPreparationTiming/);
-  assert.match(workerSource, /X-Stabilize-Preparation-Ms/);
-  assert.match(workerSource, /X-Stabilize-Model-Selected/);
-  assert.match(workerSource, /Fastest response uses GPT-5.4/);
+  for (const expected of [
+    "function chatPreparationOptions(env, body = {})",
+    'const usesThinking = ["low", "medium", "high", "xhigh", "max"].includes(',
+    ".prepareChat(chatPreparationOptions(env, body))",
+    "preparation.model === defaultModel",
+    "responseWithPreparationTiming",
+    "X-Stabilize-Preparation-Ms",
+    "X-Stabilize-Model-Selected",
+    "Fastest response uses GPT-5.4",
+  ]) {
+    assert.ok(workerSource.includes(expected), `Missing signed-in worker source: ${expected}`);
+  }
 
-  assert.match(billingSource, /Signed-in instant chats use the unmetered default model/);
-  assert.match(billingSource, /config.freeModel === config.defaultModel/);
-  assert.match(billingSource, /model: config.freeModel/);
-  assert.match(billingSource, /model: config.fallbackModel/);
-  assert.match(billingSource, /fallback: true/);
+  for (const expected of [
+    "Signed-in instant chats use the unmetered default model",
+    "config.freeModel === config.defaultModel",
+    "model: config.freeModel",
+    "model: config.fallbackModel",
+    "fallback: true",
+  ]) {
+    assert.ok(billingSource.includes(expected), `Missing billing source: ${expected}`);
+  }
 
-  assert.match(clientSource, /free Current thinking messages used today/);
-  assert.match(clientSource, /function updateSelectedModelDisplay(model)/);
-  assert.match(clientSource, /X-Stabilize-Model-Selected/);
-  assert.match(policySource, /const usesThinking/);
-  assert.match(policySource, /const memoryWarmup = readMemoryContext/);
+  for (const expected of [
+    "free Current thinking messages used today",
+    "function updateSelectedModelDisplay(model)",
+    "X-Stabilize-Model-Selected",
+  ]) {
+    assert.ok(clientSource.includes(expected), `Missing client source: ${expected}`);
+  }
+
+  assert.ok(policySource.includes("const usesThinking"));
+  assert.ok(policySource.includes("const memoryWarmup = readMemoryContext"));
 });
