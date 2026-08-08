@@ -1,6 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 
 const MOBILE_ASSET = "/scenes/mobile-forest-stream-v1-540.webp";
+const MOBILE_VIDEO_ASSET = "/scenes/mobile-forest-stream-v1.mp4";
+const MOBILE_VIDEO_VERSION = "20260808-forest-video-1";
 const GUIDE_VERSION = "20260808-mobile-forest-stream-540-1";
 const MOBILE_STYLE_VERSION = "20260808-mobile-forest-stream-540-1";
 const STATIC_PAGES = [
@@ -34,6 +36,7 @@ function replaceMobileQualityTest(source, replacement) {
   const candidates = [
     'test("mobile uses responsive high-DPI static generated WebPs", async () => {',
     'test("mobile uses the project-owner forest stream as its static portrait background", async () => {',
+    'test("mobile uses the supplied forest stream video with a still fallback", async () => {',
   ];
   const starts = candidates
     .map((marker) => source.indexOf(marker))
@@ -91,6 +94,22 @@ await update("src/page.js", (source) => {
   return next;
 });
 
+await update("public/mobile-quality.js", (source) => {
+  let next = replacePattern(
+    source,
+    /const MOBILE_VIDEO_URL =\n  "[^"]+";/,
+    `const MOBILE_VIDEO_URL =\n  "${MOBILE_VIDEO_ASSET}?v=${MOBILE_VIDEO_VERSION}";`,
+    "the mobile video URL",
+  );
+  next = replacePattern(
+    next,
+    /const MOBILE_POSTER_URL = "[^"]+";/,
+    `const MOBILE_POSTER_URL = "${MOBILE_ASSET}";`,
+    "the mobile poster URL",
+  );
+  return next;
+});
+
 const guideMobileBlock = `@media (max-width: 980px) and (orientation: portrait) {
   body::before {
     background-image: url("${MOBILE_ASSET}");
@@ -136,20 +155,30 @@ for (const path of STATIC_PAGES) {
   );
 }
 
-const mobileQualityTest = String.raw`test("mobile uses the project-owner forest stream as its static portrait background", async () => {
+const mobileQualityTest = String.raw`test("mobile uses the supplied forest stream video with a still fallback", async () => {
   const tier = {
     filename: "mobile-forest-stream-v1-540.webp",
     width: 540,
     height: 960,
   };
-  const [pageSource, mobileStyles, image] = await Promise.all([
-    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/mobile-woodland-loop.css", import.meta.url), "utf8"),
-    readFile(new URL(
-      "../public/scenes/" + tier.filename,
-      import.meta.url,
-    )),
-  ]);
+  const [pageSource, mobileStyles, mobileScript, image, video] =
+    await Promise.all([
+      readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+      readFile(
+        new URL("../public/mobile-woodland-loop.css", import.meta.url),
+        "utf8",
+      ),
+      readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
+      readFile(
+        new URL("../public/scenes/" + tier.filename, import.meta.url),
+      ),
+      readFile(
+        new URL(
+          "../public/scenes/mobile-forest-stream-v1.mp4",
+          import.meta.url,
+        ),
+      ),
+    ]);
   const imageInfo = webpInfo(image);
   assert.deepEqual(
     { width: imageInfo.width, height: imageInfo.height },
@@ -157,6 +186,13 @@ const mobileQualityTest = String.raw`test("mobile uses the project-owner forest 
   );
   assert.equal(image.byteLength, 91_750);
   assert.equal(imageInfo.chunks.includes("ANIM"), false);
+  assert.equal(video.byteLength, 602_638);
+  for (const marker of ["ftyp", "moov", "mdat", "avc1", "vide"]) {
+    assert.ok(video.includes(Buffer.from(marker)), "MP4 includes " + marker);
+  }
+  assert.equal(video.includes(Buffer.from("mp4a")), false);
+  assert.equal(video.includes(Buffer.from("soun")), false);
+  assert.ok(video.indexOf(Buffer.from("moov")) < video.indexOf(Buffer.from("mdat")));
   assert.equal(
     [...pageSource.matchAll(new RegExp(tier.filename + " " + tier.width + "w", "g"))].length,
     2,
@@ -164,19 +200,28 @@ const mobileQualityTest = String.raw`test("mobile uses the project-owner forest 
   assert.match(pageSource, /<source[\s\S]*sizes="100vw"[\s\S]*srcset=/);
   assert.match(pageSource, /<link[\s\S]*rel="preload"[\s\S]*imagesrcset=/);
   assert.match(pageSource, /imagesizes="100vw"/);
+  assert.match(pageSource, /mobile-quality\.js\?v=20260802-8/);
   assert.match(
-    pageSource,
-    /href="\/scenes\/mobile-forest-stream-v1-540\.webp"/,
+    mobileScript,
+    /\/scenes\/mobile-forest-stream-v1\.mp4\?v=20260808-forest-video-1/,
   );
-  assert.match(
-    pageSource,
-    /mobile-woodland-loop\.css\?v=20260808-mobile-forest-stream-540-1/,
-  );
-  assert.doesNotMatch(pageSource, /mobile-golden-alpine/);
-  assert.match(mobileStyles, /opacity:\s*1/);
+  assert.match(mobileScript, /video\.autoplay = true/);
+  assert.match(mobileScript, /video\.muted = true/);
+  assert.match(mobileScript, /video\.defaultMuted = true/);
+  assert.match(mobileScript, /video\.loop = true/);
+  assert.match(mobileScript, /video\.playsInline = true/);
+  assert.match(mobileScript, /webkit-playsinline/);
+  assert.match(mobileScript, /video\.addEventListener\("playing"/);
+  assert.match(mobileScript, /await mobileVideo\.play\(\)/);
+  assert.match(mobileScript, /window\.addEventListener\("pageshow"/);
+  assert.match(mobileScript, /visibilitychange/);
+  assert.match(mobileScript, /pointerdown/);
+  assert.match(mobileScript, /touchstart/);
+  assert.match(mobileScript, /backdrop\.style\.opacity = "0"/);
+  assert.match(mobileScript, /video-waiting-for-interaction/);
   assert.match(mobileStyles, /object-fit:\s*cover/);
   assert.match(mobileStyles, /animation:\s*none/);
-  assert.doesNotMatch(mobileStyles, /@keyframes/);
+  assert.doesNotMatch(pageSource, /mobile-golden-alpine/);
 });
 
 `;
@@ -208,11 +253,6 @@ await update("test/shared-site-theme.test.mjs", (source) => {
   return next;
 });
 
-await update(".github/workflows/verify-mobile-background.yml", (source) =>
-  source.replace(
-    /href="\/scenes\/mobile-[^"]+\.webp"/,
-    `href="${MOBILE_ASSET}"`,
-  ),
+console.log(
+  "Installed the project-owner forest stream video with a portrait still fallback.",
 );
-
-console.log("Installed the project-owner forest stream as the portrait mobile background.");
