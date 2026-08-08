@@ -6,6 +6,7 @@ let terrainModule = null;
 let terrainModulePromise = null;
 let latestTerrainValue = "";
 let loadScheduled = false;
+let modulationScheduled = false;
 
 export function shouldLoadInteractiveBackground(target = globalThis.window) {
   if (!target || typeof target.matchMedia !== "function") return false;
@@ -64,15 +65,39 @@ function scheduleInteractiveBackgroundLoad() {
   }
 }
 
-export function modulateTerrain(value) {
-  latestTerrainValue = String(value || "");
-  if (!shouldLoadInteractiveBackground()) return null;
+function applyLatestTerrainValue() {
+  modulationScheduled = false;
+  if (!shouldLoadInteractiveBackground()) return;
 
   if (terrainModule) {
-    return terrainModule.modulateTerrain(latestTerrainValue);
+    terrainModule.modulateTerrain(latestTerrainValue);
+    return;
   }
 
   void loadInteractiveBackground();
+}
+
+function scheduleTerrainModulation() {
+  if (modulationScheduled || !shouldLoadInteractiveBackground()) return;
+  modulationScheduled = true;
+
+  const target = globalThis.window;
+  if (!target || typeof target.setTimeout !== "function") {
+    modulationScheduled = false;
+    return;
+  }
+
+  const runAfterPaint = () => target.setTimeout(applyLatestTerrainValue, 0);
+  if (typeof target.requestAnimationFrame === "function") {
+    target.requestAnimationFrame(runAfterPaint);
+  } else {
+    runAfterPaint();
+  }
+}
+
+export function modulateTerrain(value) {
+  latestTerrainValue = String(value || "");
+  scheduleTerrainModulation();
   return null;
 }
 
