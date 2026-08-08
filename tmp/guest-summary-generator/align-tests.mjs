@@ -25,8 +25,24 @@ if (!source.includes(alignmentIdentity)) {
 
   const alignmentCode = `const priorGuestSummaryPolicyPipeline =
   "node scripts/apply-priority-latency.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs";
+const guestSummaryPolicyStage = " && node scripts/add-guest-summary.mjs";
 const completeGuestSummaryPolicyPipeline =
-  priorGuestSummaryPolicyPipeline + " && node scripts/add-guest-summary.mjs";
+  priorGuestSummaryPolicyPipeline + guestSummaryPolicyStage;
+
+function normalizeGuestSummaryPolicyExpectation(text) {
+  let cursor = 0;
+  let normalized = "";
+  while (true) {
+    const start = text.indexOf(priorGuestSummaryPolicyPipeline, cursor);
+    if (start < 0) return normalized + text.slice(cursor);
+    normalized += text.slice(cursor, start) + completeGuestSummaryPolicyPipeline;
+    let end = start + priorGuestSummaryPolicyPipeline.length;
+    while (text.startsWith(guestSummaryPolicyStage, end)) {
+      end += guestSummaryPolicyStage.length;
+    }
+    cursor = end;
+  }
+}
 
 for (const path of [
   "test/composer-chat-sections.test.mjs",
@@ -37,12 +53,9 @@ for (const path of [
   "test/navigation-model-placement.test.mjs",
   "test/paid-model-choice.test.mjs",
 ]) {
-  replaceAllRequired(
-    path,
-    priorGuestSummaryPolicyPipeline,
-    completeGuestSummaryPolicyPipeline,
-    "guest-summary canonical policy pipeline expectation",
-  );
+  const before = read(path);
+  const after = normalizeGuestSummaryPolicyExpectation(before);
+  if (after !== before) write(path, after);
 }
 
 replaceRequired(
