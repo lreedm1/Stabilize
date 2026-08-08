@@ -6,10 +6,6 @@ on:
       - main
   workflow_dispatch:
 
-concurrency:
-  group: materialize-memory-deletion
-  cancel-in-progress: true
-
 permissions:
   contents: write
 
