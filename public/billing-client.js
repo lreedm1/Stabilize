@@ -374,6 +374,8 @@ let accountContextPendingTurns = 0;
 let accountContextMinimumTurnCount = 0;
 let accountContextDeltas = [];
 let accountContextRefreshPromise = null;
+let accountBillingPreflight = null;
+let accountContextRefreshTimer = 0;
 
 function resetAccountContextClient() {
   accountContextToken = "";
@@ -383,6 +385,96 @@ function resetAccountContextClient() {
   accountContextPendingTurns = 0;
   accountContextMinimumTurnCount = 0;
   accountContextDeltas = [];
+  accountBillingPreflight = null;
+  if (accountContextRefreshTimer) {
+    clearTimeout(accountContextRefreshTimer);
+    accountContextRefreshTimer = 0;
+  }
+  delete document.documentElement.dataset.accountPreflight;
+  delete document.documentElement.dataset.subscriptionActive;
+}
+
+function normalizeAccountBillingPreflight(value) {
+  if (!value || typeof value !== "object") return null;
+  const model = String(value.model || "").trim().slice(0, 128);
+  const tier = value.tier === null ? null : String(value.tier || "").trim();
+  const used = Math.max(0, Number(value.used) || 0);
+  const limit = Math.max(0, Number(value.limit) || 0);
+  const remaining = value.remaining === null
+    ? null
+    : Math.max(0, Number(value.remaining) || 0);
+  const subscriptionStatus = String(value.subscriptionStatus || "none")
+    .trim()
+    .slice(0, 32);
+  if (!model || ![null, "free", "paid"].includes(tier)) return null;
+  return {
+    allowed: value.allowed === true,
+    reason: value.reason === null ? null : String(value.reason || "").slice(0, 32),
+    model,
+    tier,
+    used,
+    limit,
+    remaining,
+    fallback: value.fallback === true,
+    paid: value.paid === true,
+    subscriptionStatus,
+  };
+}
+
+function accountBillingUsageCopy(preflight) {
+  if (!preflight) return "";
+  if (preflight.paid && preflight.tier === null) {
+    return "Subscription active. GPT-5.4 does not use the subscriber message allowance.";
+  }
+  if (preflight.paid) {
+    return (
+      preflight.used +
+      " of " +
+      preflight.limit +
+      " subscriber model messages used this UTC month. GPT-5.4 does not count."
+    );
+  }
+  return (
+    preflight.used +
+    " of " +
+    preflight.limit +
+    " free GPT-5.6 Fast messages used today. GPT-5.4 takes over after this allowance. The allowance resets at 00:00 UTC."
+  );
+}
+
+function installAccountBillingPreflight(preflight) {
+  if (!preflight) return;
+  accountBillingPreflight = preflight;
+  document.documentElement.dataset.accountPreflight = "ready";
+  document.documentElement.dataset.subscriptionActive = String(
+    preflight.paid,
+  );
+  const copy = accountBillingUsageCopy(preflight);
+  if (!copy) return;
+  for (const node of document.querySelectorAll('[data-model-usage="true"]')) {
+    node.textContent = copy;
+  }
+}
+
+function scheduleAccountContextRefresh() {
+  if (!accountContextSignedIn || !accountContextExpiresAt) return;
+  if (accountContextRefreshTimer) clearTimeout(accountContextRefreshTimer);
+  const refreshAt = accountContextExpiresAt - 60_000;
+  const delay = Math.max(5_000, refreshAt - Date.now());
+  accountContextRefreshTimer = setTimeout(() => {
+    accountContextRefreshTimer = 0;
+    void refreshAccountContext();
+  }, delay);
+}
+
+function refreshAccountPreflightIfNeeded() {
+  if (!accountContextSignedIn) return;
+  if (
+    !currentAccountContextToken() ||
+    Date.now() + 60_000 >= accountContextExpiresAt
+  ) {
+    void refreshAccountContext();
+  }
 }
 
 function normalizeAccountContextDeltas(messages) {
@@ -458,6 +550,9 @@ async function refreshAccountContext(minimumTurnCount = 0) {
       const expiresInSeconds = Number(result?.expiresInSeconds);
       const generation = Number(result?.generation);
       const turnCount = Number(result?.turnCount);
+      const billingPreflight = normalizeAccountBillingPreflight(
+        result?.billing,
+      );
       if (
         token.length < 80 ||
         token.length > ACCOUNT_CONTEXT_MAX_TOKEN_CHARS ||
@@ -485,6 +580,8 @@ async function refreshAccountContext(minimumTurnCount = 0) {
       accountContextExpiresAt = Date.now() + expiresInSeconds * 1_000;
       accountContextGeneration = generation;
       accountContextTurnCount = turnCount;
+      installAccountBillingPreflight(billingPreflight);
+      scheduleAccountContextRefresh();
       if (
         turnCount >= accountContextMinimumTurnCount &&
         !generationChanged
@@ -623,4 +720,15 @@ globalThis.fetch = async (input, init) => {
   return response;
 };
 
-if (accountContextSignedIn) void refreshAccountContext();
+if (accountContextSignedIn) {
+  void refreshAccountContext();
+  window.addEventListener("focus", refreshAccountPreflightIfNeeded);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshAccountPreflightIfNeeded();
+  });
+  const messageInput = document.querySelector("#message-input");
+  if (messageInput instanceof HTMLTextAreaElement) {
+    messageInput.addEventListener("focus", refreshAccountPreflightIfNeeded);
+    messageInput.addEventListener("input", refreshAccountPreflightIfNeeded);
+  }
+}
