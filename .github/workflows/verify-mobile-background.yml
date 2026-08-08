@@ -35,17 +35,21 @@ jobs:
 
           expected_app_path="$(
             grep -oE '/app\.js\?v=[A-Za-z0-9._-]+' src/page.js \
-              | tail -n 1
+              | tail -n 1 \
+              || true
           )"
-          expected_loader_path="/$(
+          expected_loader_name="$(
             grep -oE 'background-loader\.js\?v=[A-Za-z0-9._-]+' public/app.js \
-              | head -n 1
+              | head -n 1 \
+              || true
           )"
+          expected_loader_path="${expected_loader_name:+/${expected_loader_name}}"
           expected_loader_import=".${expected_loader_path}"
           expected_mobile_asset="$(
             sed -n 's/^const MOBILE_ASSET = "\([^"]*\)";$/\1/p' \
               scripts/use-mobile-forest-stream.mjs \
-              | head -n 1
+              | head -n 1 \
+              || true
           )"
           expected_mobile_file="public${expected_mobile_asset}"
 
@@ -88,6 +92,11 @@ jobs:
 
           for attempt in {1..36}; do
             cache_key="${GITHUB_SHA}-${attempt}"
+            : > "$tmpdir/live.html"
+            : > "$tmpdir/app.js"
+            : > "$tmpdir/background-loader.js"
+            : > "$tmpdir/mobile.headers"
+            : > "$tmpdir/mobile.webp"
 
             html_status="$(
               curl --max-time 20 --silent --show-error \
@@ -144,7 +153,8 @@ jobs:
             live_mobile_type="$(
               awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' \
                 "$tmpdir/mobile.headers" \
-                | tail -n 1
+                | tail -n 1 \
+                || true
             )"
 
             echo "Mobile release attempt ${attempt}: html=${html_status:-000} app=${app_status:-000} loader=${loader_status:-000} image=${mobile_status:-000}; live-app=${live_app_path:-missing}; live-mobile=${live_mobile_assets:-missing}; image-bytes=${live_mobile_bytes:-0}; image-sha=${live_mobile_sha:0:12}."
