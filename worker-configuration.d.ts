@@ -3,15 +3,23 @@
 interface __BaseEnv_Env {
 	ASSETS: Fetcher;
 	DEMO_MODE: "false";
-	OPENAI_MODEL: "gpt-5.6-sol";
-	OPENAI_REASONING_EFFORT: "medium";
+	OPENAI_MODEL: "gpt-5.4";
+	OPENAI_REASONING_EFFORT: "none";
 	PUBLIC_ORIGIN: "https://stabilize.info";
-	MODEL_CHOICES: "gpt-5.6-sol|Stabilize default,gpt-5.1|GPT-5.1,gpt-5-mini|GPT-5 mini";
+	MODEL_CHOICES: "gpt-5.4|GPT-5.4,gpt-5.6-sol|Current";
 	PAID_MONTHLY_MESSAGE_LIMIT: "200";
+	FREE_DAILY_MODEL_MESSAGE_LIMIT: "50";
 	STRIPE_MODEL_CHOICE_PRICE_ID: "price_1U01Jp96tfbPOBGIbQNXDlPx";
 	FEEDBACK_REPOSITORY: "lreedm1/Stabilize";
 	FEEDBACK_BRANCH: "feedback-inbox";
 	FEEDBACK_PATH: "feedback";
+	IMPACT_ADMIN_PASSWORD_SHA256: "c1926162:cf30c39d:cab9b52f:41993fa9:81623d41:20619aed:82b56cb5:2e19de60";
+	IMPACT_RETENTION_DAYS: "180";
+	IMPACT_ESTIMATED_CHAT_COST_MICROS: "0";
+	IMPACT_MONTHLY_RECURRING_REVENUE_CENTS: "0";
+	IMPACT_MONTHLY_RECURRING_COST_CENTS: "0";
+	FREE_PLAN_PRIMARY_MODEL: "gpt-5.6-sol";
+	FREE_PLAN_FALLBACK_MODEL: "gpt-5.4";
 	OPENAI_API_KEY: string;
 	GOOGLE_CLIENT_ID: string;
 	GOOGLE_CLIENT_SECRET: string;
@@ -20,11 +28,12 @@ interface __BaseEnv_Env {
 	BILLING: DurableObjectNamespace<import("./src/domain-router").BillingAccount>;
 	FEEDBACK_LIMITS: DurableObjectNamespace<import("./src/domain-router").FeedbackGate>;
 	FEEDBACK_INBOX: DurableObjectNamespace<import("./src/domain-router").FeedbackInbox>;
+	IMPACT: DurableObjectNamespace<import("./src/domain-router").ImpactAnalytics>;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
 		mainModule: typeof import("./src/domain-router");
-		durableNamespaces: "SessionMemory" | "BillingAccount" | "FeedbackGate" | "FeedbackInbox";
+		durableNamespaces: "SessionMemory" | "BillingAccount" | "FeedbackGate" | "FeedbackInbox" | "ImpactAnalytics";
 	}
 	interface Env extends __BaseEnv_Env {}
 }
@@ -33,5 +42,5 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "DEMO_MODE" | "OPENAI_MODEL" | "OPENAI_REASONING_EFFORT" | "PUBLIC_ORIGIN" | "MODEL_CHOICES" | "PAID_MONTHLY_MESSAGE_LIMIT" | "STRIPE_MODEL_CHOICE_PRICE_ID" | "FEEDBACK_REPOSITORY" | "FEEDBACK_BRANCH" | "FEEDBACK_PATH" | "OPENAI_API_KEY" | "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "AUTH_SECRET">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "DEMO_MODE" | "OPENAI_MODEL" | "OPENAI_REASONING_EFFORT" | "PUBLIC_ORIGIN" | "MODEL_CHOICES" | "PAID_MONTHLY_MESSAGE_LIMIT" | "FREE_DAILY_MODEL_MESSAGE_LIMIT" | "STRIPE_MODEL_CHOICE_PRICE_ID" | "FEEDBACK_REPOSITORY" | "FEEDBACK_BRANCH" | "FEEDBACK_PATH" | "IMPACT_ADMIN_PASSWORD_SHA256" | "IMPACT_RETENTION_DAYS" | "IMPACT_ESTIMATED_CHAT_COST_MICROS" | "IMPACT_MONTHLY_RECURRING_REVENUE_CENTS" | "IMPACT_MONTHLY_RECURRING_COST_CENTS" | "FREE_PLAN_PRIMARY_MODEL" | "FREE_PLAN_FALLBACK_MODEL" | "OPENAI_API_KEY" | "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "AUTH_SECRET">> {}
 }
