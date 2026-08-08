@@ -9,7 +9,7 @@
   },
   "scripts": {
     "postinstall": "npm run apply:prompt-policy",
-    "apply:prompt-policy": "node scripts/prepare-signed-in-latency.mjs && node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs",
+    "apply:prompt-policy": "node scripts/prepare-signed-in-latency.mjs && node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs && node scripts/align-signed-in-latency-tests.mjs",
     "check": "npm run apply:prompt-policy && wrangler types --include-runtime false && wrangler deploy --dry-run",
     "deploy": "npm run apply:prompt-policy && wrangler deploy",
     "dev": "npm run apply:prompt-policy && wrangler dev",
