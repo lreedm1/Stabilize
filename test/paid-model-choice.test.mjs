@@ -143,6 +143,6 @@ test("fast signed-in routing and subscriber choice share a resilient left-side p
     /"FREE_DAILY_MODEL_MESSAGE_LIMIT": "50"/,
   );
   assert.match(setupGuide, /https:\/\/stabilize\.info\/api\/stripe\/webhook/);
-  assert.match(setupGuide, /50 free GPT-5.6 Instant messages per UTC day/);
+  assert.match(setupGuide, /50 free Current thinking messages per UTC day/);
   assert.match(setupGuide, /200 non-default-model messages per UTC month/);
 });
