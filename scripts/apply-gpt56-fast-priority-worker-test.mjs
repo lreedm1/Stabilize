@@ -53,6 +53,33 @@ if (modelUsageSource.includes(brittleAssertions)) {
     routedAssertions,
   );
 }
+
+const signedInCapture = `      providerRequests.push({ model: body.model, effort: body.reasoning.effort });`;
+const signedInTierCapture = `      providerRequests.push({
+        model: body.model,
+        effort: body.reasoning.effort,
+        tier: body.service_tier,
+      });`;
+if (modelUsageSource.includes(signedInCapture)) {
+  modelUsageSource = modelUsageSource.replace(
+    signedInCapture,
+    signedInTierCapture,
+  );
+}
+
+const signedInExpected = `      { model: "gpt-5.6-sol", effort: "none" },
+      { model: "gpt-5.6-sol", effort: "high" },
+      { model: "gpt-5.4", effort: "none" },`;
+const signedInTierExpected = `      { model: "gpt-5.6-sol", effort: "none", tier: "fast" },
+      { model: "gpt-5.6-sol", effort: "high", tier: "fast" },
+      { model: "gpt-5.4", effort: "none", tier: "fast" },`;
+if (modelUsageSource.includes(signedInExpected)) {
+  modelUsageSource = modelUsageSource.replace(
+    signedInExpected,
+    signedInTierExpected,
+  );
+}
+
 await writeFile(modelUsagePath, modelUsageSource);
 
-console.log("Aligned GPT-5.6 Fast Worker coverage with quota and auxiliary requests.");
+console.log("Aligned GPT-5.6 Fast Worker coverage with quota and explicit Fast tier.");
