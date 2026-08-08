@@ -29,6 +29,6 @@ test("the composer placeholder is centered horizontally while entered text stays
   const config = JSON.parse(packageSource);
   assert.equal(
     config.scripts["apply:prompt-policy"],
-    "node scripts/apply-priority-latency.mjs",
+    "node scripts/prepare-signed-in-latency.mjs && node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs && node scripts/align-signed-in-latency-tests.mjs",
   );
 });

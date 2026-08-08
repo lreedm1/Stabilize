@@ -59,6 +59,6 @@ test("only GPT-5.4 and Current remain selectable, with instant responses by defa
   const packageJson = JSON.parse(packageSource);
   assert.equal(
     packageJson.scripts["apply:prompt-policy"],
-    "node scripts/apply-priority-latency.mjs",
+    "node scripts/prepare-signed-in-latency.mjs && node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs && node scripts/align-signed-in-latency-tests.mjs",
   );
 });

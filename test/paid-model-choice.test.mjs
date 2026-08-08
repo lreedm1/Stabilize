@@ -59,8 +59,14 @@ test("fast signed-in routing and subscriber choice share a resilient left-side p
   const chatEnd = workerSource.indexOf("function responseWithModelUsage", chatStart);
   assert.ok(chatStart >= 0 && chatEnd > chatStart, "paid chat handler is missing");
   const paidChat = workerSource.slice(chatStart, chatEnd);
-  assert.match(paidChat, /stub\.prepareChat\(chatPreparationOptions\(env, body\)\)/);
-  assert.match(paidChat, /const \[preparation, memory\] = await Promise\.all/);
+  assert.match(
+    paidChat,
+    /stub\s*\.prepareChat\(chatPreparationOptions\(env, body\)\)/,
+  );
+  assert.match(
+    paidChat,
+    /const \[billingResult, memoryResult\] = await Promise\.all/,
+  );
   assert.match(paidChat, /modelEnvironment\(env, preparation\.model\)/);
   assert.match(paidChat, /preparedChatResponse\(/);
   assert.match(paidChat, /stub\.refundUsage\(preparation\.tier, preparation\.period\)/);
@@ -70,7 +76,7 @@ test("fast signed-in routing and subscriber choice share a resilient left-side p
 
   assert.match(workerSource, /freeDailyModelMessageLimit\(env\)/);
   assert.match(workerSource, /dailyUsagePeriod\(\)/);
-  assert.match(workerSource, /freeLimit[\s\S]*GPT-5\.6 Instant messages/);
+  assert.match(workerSource, /freeLimit[\s\S]*Current thinking messages/);
   assert.match(workerSource, /allowance resets at 00:00 UTC/);
 
   assert.match(workerSource, /function composerModelPickerMarkup\(/);
@@ -87,6 +93,7 @@ test("fast signed-in routing and subscriber choice share a resilient left-side p
   assert.match(accountSource, /PRIMARY KEY \(tier, period\)/);
   assert.match(accountSource, /async prepareChat\(options\)/);
   assert.match(accountSource, /this\.ctx\.storage\.transactionSync/);
+  assert.match(accountSource, /config\.freeModel === config\.defaultModel/);
   assert.match(accountSource, /model: config\.freeModel/);
   assert.match(accountSource, /model: config\.fallbackModel/);
   assert.match(accountSource, /freeUsagePeriod/);
@@ -129,7 +136,7 @@ test("fast signed-in routing and subscriber choice share a resilient left-side p
   const packageJson = JSON.parse(packageSource);
   assert.equal(
     packageJson.scripts["apply:prompt-policy"],
-    "node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs",
+    "node scripts/prepare-signed-in-latency.mjs && node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs && node scripts/align-signed-in-latency-tests.mjs",
   );
   assert.match(
     wranglerSource,

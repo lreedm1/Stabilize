@@ -45,10 +45,19 @@ test("signed-in chat preparation uses one billing RPC and overlaps it with memor
   assert.ok(start >= 0 && end > start, "paid chat handler is missing");
   const paidChat = paid.slice(start, end);
 
-  assert.match(paidChat, /const \[preparation, memory\] = await Promise\.all\(\[/);
-  assert.match(paidChat, /stub\.prepareChat\(chatPreparationOptions\(env\)\)/);
+  assert.match(
+    paidChat,
+    /const \[billingResult, memoryResult\] = await Promise\.all\(\[/,
+  );
+  assert.match(
+    paidChat,
+    /stub\s*\.prepareChat\(chatPreparationOptions\(env, body\)\)/,
+  );
   assert.match(paidChat, /readMemoryContext\(memoryStub\)/);
   assert.match(paidChat, /preparedChatResponse\(/);
+  assert.match(paidChat, /event: "signed_in_chat_prepared"/);
+  assert.match(paidChat, /X-Stabilize-Preparation-Ms/);
+  assert.match(paidChat, /Server-Timing/);
   assert.doesNotMatch(paidChat, /readBillingState\(/);
   assert.doesNotMatch(paidChat, /reserveUsage\(/);
 });

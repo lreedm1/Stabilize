@@ -48,7 +48,7 @@ test("mobile clients keep the static image without loading the graphics module c
   const config = JSON.parse(packageSource);
   assert.equal(
     config.scripts["apply:prompt-policy"],
-    "node scripts/apply-priority-latency.mjs",
+    "node scripts/prepare-signed-in-latency.mjs && node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs && node scripts/align-signed-in-latency-tests.mjs",
   );
 
   const loader = await import(

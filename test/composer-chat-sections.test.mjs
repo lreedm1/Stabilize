@@ -44,6 +44,6 @@ test("the lower-left model button opens model, new chat, and private chat sectio
   const config = JSON.parse(packageSource);
   assert.equal(
     config.scripts["apply:prompt-policy"],
-    "node scripts/apply-priority-latency.mjs",
+    "node scripts/prepare-signed-in-latency.mjs && node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs && node scripts/align-signed-in-latency-tests.mjs",
   );
 });

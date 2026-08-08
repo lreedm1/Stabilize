@@ -61,6 +61,6 @@ test("Home lives in the hamburger menu without chat actions, duplicate model cho
   const config = JSON.parse(packageSource);
   assert.equal(
     config.scripts["apply:prompt-policy"],
-    "node scripts/apply-priority-latency.mjs",
+    "node scripts/prepare-signed-in-latency.mjs && node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs && node scripts/align-signed-in-latency-tests.mjs",
   );
 });
