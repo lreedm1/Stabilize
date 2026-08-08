@@ -157,6 +157,9 @@ function modelEnvironment(env, model) {
   return new Proxy(env, {
     get(target, property, receiver) {
       if (property === "OPENAI_MODEL") return model;
+      if (property === "OPENAI_SERVICE_TIER") {
+        return String(target.OPENAI_SERVICE_TIER || "fast");
+      }
       return Reflect.get(target, property, receiver);
     },
   });
@@ -481,12 +484,12 @@ async function injectBillingPage(response, request, env, authSession, state, rec
   if (!html.includes('href="/billing.css')) {
     html = html.replace(
       "</head>",
-      '    <link rel="stylesheet" href="/billing.css?v=20260807-free-gpt56-first-50-1" />\n  </head>',
+      '    <link rel="stylesheet" href="/billing.css?v=20260808-gpt56-fast-first-1" />\n  </head>',
     );
   } else {
     html = html.replace(
       /href="\/billing\.css(?:\?v=[^"]*)?"/,
-      'href="/billing.css?v=20260807-free-gpt56-first-50-1"',
+      'href="/billing.css?v=20260808-gpt56-fast-first-1"',
     );
   }
   if (markup) {

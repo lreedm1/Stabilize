@@ -456,12 +456,18 @@ replaceOnce(
   `- optional Google sign-in for cross-device memory; guest chats use bounded browser-tab continuity without entering Stabilize's server-side account memory\n`,
   "README guest memory feature",
 );
-replaceOnce(
-  readmePath,
-  `- **Guest:** ordinary chats use GPT-5.4. Guest chats do not use Stabilize account memory.\n`,
-  `- **Guest:** ordinary chats use GPT-5.4. A bounded recent transcript stays in the current browser tab and is sent with follow-ups, but it does not use Stabilize account memory.\n`,
-  "README guest model behavior",
-);
+if (
+  !read(readmePath).includes(
+    "- **Guest:** ordinary chats begin on GPT-5.6 Fast.",
+  )
+) {
+  replaceOnce(
+    readmePath,
+    `- **Guest:** ordinary chats use GPT-5.4. Guest chats do not use Stabilize account memory.\n`,
+    `- **Guest:** ordinary chats use GPT-5.4. A bounded recent transcript stays in the current browser tab and is sent with follow-ups, but it does not use Stabilize account memory.\n`,
+    "README guest model behavior",
+  );
+}
 replaceOnce(
   readmePath,
   `The same deployed OpenAI key also powers low-reasoning memory compaction for signed-in users. Guest and private chats do not enter the Stabilize account-memory or compaction path.\n`,

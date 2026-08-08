@@ -69,10 +69,10 @@ function chatRequest(message, { cookie = "", reasoningEffort = "none" } = {}) {
 
 test("guest Fastest response uses GPT-5.6 Fast", async () => {
   const originalFetch = globalThis.fetch;
-  let providerRequest;
+  const providerRequests = [];
   globalThis.fetch = async (_input, init) => {
     const body = JSON.parse(init.body);
-    if (body.text?.verbosity === "low") providerRequest = body;
+    if (body.text?.verbosity === "low") providerRequests.push(body);
     return responseWithText("Use one reversible step.");
   };
   try {
@@ -82,9 +82,13 @@ test("guest Fastest response uses GPT-5.6 Fast", async () => {
       {},
     );
     assert.equal(response.status, 200);
-    assert.equal(providerRequest.model, "gpt-5.6-sol");
+    const providerRequest = providerRequests.find(
+      (candidate) =>
+        candidate.model === "gpt-5.6-sol" &&
+        candidate.service_tier === "fast",
+    );
+    assert.ok(providerRequest, "guest chat did not issue a GPT-5.6 Fast request");
     assert.equal(providerRequest.reasoning.effort, "none");
-    assert.equal(providerRequest.service_tier, "fast");
     assert.equal((await response.json()).reply, "Use one reversible step.");
   } finally {
     globalThis.fetch = originalFetch;
@@ -98,7 +102,11 @@ test("signed-in first messages use GPT-5.6 and then fall back to GPT-5.4", async
   globalThis.fetch = async (_input, init) => {
     const body = JSON.parse(init.body);
     if (body.text?.verbosity === "low") {
-      providerRequests.push({ model: body.model, effort: body.reasoning.effort });
+      providerRequests.push({
+        model: body.model,
+        effort: body.reasoning.effort,
+        tier: body.service_tier,
+      });
     }
     return responseWithText("Use the smallest reversible step.");
   };
@@ -138,9 +146,9 @@ test("signed-in first messages use GPT-5.6 and then fall back to GPT-5.4", async
     assert.equal(fallback.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");
 
     assert.deepEqual(providerRequests, [
-      { model: "gpt-5.6-sol", effort: "none" },
-      { model: "gpt-5.6-sol", effort: "high" },
-      { model: "gpt-5.4", effort: "none" },
+      { model: "gpt-5.6-sol", effort: "none", tier: "fast" },
+      { model: "gpt-5.6-sol", effort: "high", tier: "fast" },
+      { model: "gpt-5.4", effort: "none", tier: "fast" },
     ]);
     assert.equal((await user.billing.readState()).freeUsageCount, 2);
   } finally {
