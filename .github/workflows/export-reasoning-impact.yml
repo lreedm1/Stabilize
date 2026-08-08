@@ -1,0 +1,32 @@
+name: Export reasoning impact worktree
+
+on:
+  push:
+    branches:
+      - agent/reasoning-effort-impact
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/reasoning-effort-impact
+          persist-credentials: false
+
+      - name: Remove Git metadata
+        run: rm -rf .git
+
+      - name: Upload worktree
+        uses: actions/upload-artifact@v4
+        with:
+          name: reasoning-impact-worktree
+          path: .
+          include-hidden-files: true
+          retention-days: 1
