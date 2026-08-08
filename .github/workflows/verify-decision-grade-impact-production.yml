@@ -17,6 +17,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Production-only probe; this workflow is intentionally not merged.
           origin="https://stabilize.info"
 
           for attempt in $(seq 1 60); do
