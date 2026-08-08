@@ -31,6 +31,23 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Materialize the uploaded MP4
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t chunks < <(find materialize/mobile-forest-video -maxdepth 1 -type f -name '*.b64' | sort)
+          test "${#chunks[@]}" -eq 12
+          mkdir -p public/scenes
+          cat "${chunks[@]}" \
+            | tr -d '[:space:]' \
+            | base64 --decode \
+            > public/scenes/mobile-forest-stream-loop-v1.mp4
+          test "$(wc -c < public/scenes/mobile-forest-stream-loop-v1.mp4)" -eq 602638
+          printf '%s  %s\n' \
+            'e5d824a487d3d423c5a6e70d84b45dbc2cee7afcbd3b618db0446ff002054e16' \
+            'public/scenes/mobile-forest-stream-loop-v1.mp4' \
+            | sha256sum --check --strict
+
       - name: Enable and apply the uploaded mobile video
         run: |
           node scripts/enable-mobile-video.mjs
@@ -47,6 +64,7 @@ jobs:
 
       - name: Remove one-time installer files
         run: |
+          rm -rf materialize/mobile-forest-video
           rm -f scripts/enable-mobile-video.mjs
           rm -f .github/workflows/enable-mobile-video.yml
 
