@@ -73,7 +73,7 @@ test("sharing stays user-controlled and outside impact analytics", async () => {
   ]);
 
   assert.match(copy, /Only this field and the Stabilize link will be copied or shared/);
-  assert.match(events, /20260806-shareable-next-step-1/);
+  assert.match(events, /20260808-browser-response-time-1/);
   assert.match(events, /The optional copy\/share editor stays in the browser/);
   assert.match(events, /it is not sent to impact analytics/);
   assert.match(privacy, /id="sharing-a-next-step"/);
