@@ -44,9 +44,11 @@ test("mobile clients keep the static image without loading the graphics module c
     /export function modulateTerrain\(value\) \{[\s\S]*scheduleTerrainModulation\(\);[\s\S]*return null;/,
   );
   assert.match(pageSource, /\/app\.js\?v=20260807-priority-latency-1/);
-  assert.match(
-    packageSource,
-    /node scripts\/defer-mobile-background\.mjs/,
+
+  const config = JSON.parse(packageSource);
+  assert.equal(
+    config.scripts["apply:prompt-policy"],
+    "node scripts/apply-priority-latency.mjs",
   );
 
   const loader = await import(
