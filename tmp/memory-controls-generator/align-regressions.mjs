@@ -88,6 +88,46 @@ await update("test/new-conversation.test.mjs", (text) => {
   );
 });
 
+await update("test/private-chat.test.mjs", (text) => {
+  const path = "test/private-chat.test.mjs";
+  text = replaceRequired(
+    text,
+    String.raw`appendPrivateThreadMessage\("user", clean\)`,
+    String.raw`appendLocalThreadMessage\("user", clean\)`,
+    "local user-thread append",
+    path,
+  );
+  text = replaceRequired(
+    text,
+    String.raw`appendPrivateThreadMessage\("assistant", cleanReply\)`,
+    String.raw`appendLocalThreadMessage\("assistant", cleanReply\)`,
+    "local assistant-thread append",
+    path,
+  );
+  text = replaceRequired(
+    text,
+    String.raw`messages:\s*privateChat \? privateThreadMessages : undefined`,
+    String.raw`privateChat \|\| !signedIn \? \[\.\.\.activeLocalThreadMessages\(\)\] : undefined`,
+    "local request-history selection",
+    path,
+  );
+  text = replaceRequired(
+    text,
+    String.raw`rollbackPrivateUser\(clean\)`,
+    String.raw`rollbackLocalUser\(clean\)`,
+    "local retry rollback",
+    path,
+  );
+  text = replaceRequired(
+    text,
+    String.raw`body:\s*JSON\.stringify\(\{[\s\S]*message:\s*clean,[\s\S]*privateChat`,
+    String.raw`body:\s*buildChatRequestBody\(clean\)`,
+    "bounded local request builder",
+    path,
+  );
+  return text;
+});
+
 await update("test/product.test.mjs", (text) =>
   replaceRequired(
     text,
