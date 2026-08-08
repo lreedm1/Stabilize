@@ -13,6 +13,7 @@ concurrency:
 
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   verify-payload:
@@ -79,11 +80,34 @@ jobs:
 
       - name: Wait for the exact video loader and payload to reach production
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           expected_sha='a3493523af9dd22728fb81ab30b36b9633debf49b8486f168efc0503b039ae57'
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
+
+          publish_status() {
+            local state="$1"
+            local description="$2"
+            local payload
+            payload="$(printf '{"state":"%s","context":"verification/mobile-video-background","description":"%s","target_url":"%s/%s/actions/runs/%s"}' \
+              "$state" \
+              "$description" \
+              "$GITHUB_SERVER_URL" \
+              "$GITHUB_REPOSITORY" \
+              "$GITHUB_RUN_ID")"
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header 'Accept: application/vnd.github+json' \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              --data "$payload" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+          }
+
+          publish_status pending 'Waiting for the exact mobile video release'
 
           for attempt in {1..36}; do
             key="${GITHUB_SHA}-${attempt}"
@@ -144,6 +168,7 @@ jobs:
               && grep -Fq 'video.defaultMuted = true' "$tmpdir/mobile-quality.js" \
               && grep -Fq 'video.play()' "$tmpdir/mobile-quality.js" \
               && grep -Fqi "media-src 'self' blob:" "$tmpdir/home.headers"; then
+              publish_status success 'Exact mobile forest video is live'
               echo 'The exact mobile forest video loader and payload are live.'
               exit 0
             fi
@@ -151,5 +176,6 @@ jobs:
             sleep 10
           done
 
+          publish_status failure 'Exact mobile forest video is not live'
           echo '::error::Production never served the exact mobile video loader, CSP, and reconstructed MP4 together.'
           exit 1
