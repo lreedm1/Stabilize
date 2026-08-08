@@ -99,6 +99,10 @@ await update("src/paid-worker.js", (source) => {
     .replaceAll(
       "billing-client.js?v=20260807-free-gpt56-first-50-1",
       "billing-client.js?v=20260808-gpt56-fast-first-1",
+    )
+    .replaceAll(
+      "billing.css?v=20260807-free-gpt56-first-50-1",
+      "billing.css?v=20260808-gpt56-fast-first-1",
     );
 
   next = replaceBlock(
