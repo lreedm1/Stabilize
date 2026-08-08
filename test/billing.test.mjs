@@ -72,7 +72,7 @@ test("model subscription uses standard Stripe Checkout parameters", async () => 
         STRIPE_SECRET_KEY: "sk_test_1234567890abcdefghijklmnop",
         STRIPE_WEBHOOK_SECRET: "whsec_1234567890abcdefghijklmnop",
         STRIPE_MODEL_CHOICE_PRICE_ID: "price_12345678",
-        PUBLIC_ORIGIN: "https://reedlokken.com",
+        PUBLIC_ORIGIN: "https://stabilize.info",
       },
       {},
       accountAlias,
@@ -99,11 +99,11 @@ test("model subscription uses standard Stripe Checkout parameters", async () => 
     );
     assert.equal(
       params.get("success_url"),
-      "https://reedlokken.com/?billing=success&session_id={CHECKOUT_SESSION_ID}",
+      "https://stabilize.info/?billing=success&session_id={CHECKOUT_SESSION_ID}",
     );
     assert.equal(
       params.get("cancel_url"),
-      "https://reedlokken.com/?billing=cancelled",
+      "https://stabilize.info/?billing=cancelled",
     );
   } finally {
     globalThis.fetch = originalFetch;
