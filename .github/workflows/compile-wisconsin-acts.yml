@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: compile-wisconsin-acts-2025
+  cancel-in-progress: true
+
 jobs:
   compile:
     runs-on: ubuntu-latest
@@ -17,6 +21,15 @@ jobs:
     steps:
       - name: Check out build branch
         uses: actions/checkout@v4
+
+      - name: Record workflow run ID for retrieval
+        run: |
+          printf '%s\n' "$GITHUB_RUN_ID" > automation/wi-acts-run-id.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add automation/wi-acts-run-id.txt
+          git commit -m "Record Wisconsin Acts build run [skip ci]"
+          git push origin "HEAD:$GITHUB_REF_NAME"
 
       - name: Install PDF text tools
         run: |
@@ -37,12 +50,3 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           compression-level: 9
-
-      - name: Record workflow run ID for retrieval
-        run: |
-          printf '%s\n' "$GITHUB_RUN_ID" > automation/wi-acts-run-id.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add automation/wi-acts-run-id.txt
-          git commit -m "Record Wisconsin Acts build run [skip ci]"
-          git push origin "HEAD:$GITHUB_REF_NAME"
