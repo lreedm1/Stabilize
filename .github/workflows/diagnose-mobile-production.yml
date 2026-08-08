@@ -1,0 +1,46 @@
+name: Diagnose live mobile background
+
+on:
+  push:
+    branches:
+      - agent/diagnose-mobile-production
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect exact production assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${GITHUB_SHA}-$(date +%s)"
+          curl --fail --silent --show-error --header 'Cache-Control: no-cache' \
+            "https://stabilize.info/?diagnostic=${key}" > live.html
+
+          echo '--- mobile references in live HTML ---'
+          grep -oE '/scenes/mobile-[^" ]+' live.html | sort -u || true
+          echo '--- app references in live HTML ---'
+          grep -oE '/app\.js\?v=[^" ]+' live.html | sort -u || true
+
+          status="$(curl --silent --show-error --output forest.webp --write-out '%{http_code}' \
+            --header 'Cache-Control: no-cache' \
+            "https://stabilize.info/scenes/mobile-forest-stream-v1-540.webp?diagnostic=${key}")"
+          echo "forest asset HTTP ${status}"
+          file forest.webp || true
+          wc -c forest.webp
+          sha256sum forest.webp
+
+          echo '--- response headers ---'
+          curl --silent --show-error --head --header 'Cache-Control: no-cache' \
+            "https://stabilize.info/scenes/mobile-forest-stream-v1-540.webp?diagnostic=${key}" \
+            | tr -d '\r'
+
+          test "$status" = 200
+          test "$(wc -c < forest.webp)" -eq 91750
+          printf '%s  %s\n' \
+            'e2396c2f73018151c20f99130ebdde75a85db6248ed5459ea0039f03e84eb23c' \
+            forest.webp | sha256sum --check --strict
+          grep -Fq '/scenes/mobile-forest-stream-v1-540.webp' live.html
