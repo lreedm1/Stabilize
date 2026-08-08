@@ -1,0 +1,63 @@
+HEAD=5cfda7b24d41c23b6f800421a95cdc1036a44b41
+--- node checks ---
+apply_check=0
+finalize_check=0
+normalize_check=0
+--- npm ci ---
+
+> stabilize@0.1.0 postinstall
+> npm run apply:prompt-policy
+
+
+> stabilize@0.1.0 apply:prompt-policy
+> node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-context-prefetch.mjs && node scripts/finalize-signed-in-context-prefetch.mjs && node scripts/normalize-signed-in-prefetch-pipeline.mjs
+
+Prepared the priority generator for signed-in latency changes.
+Applied Fast mode, explicit prompt caching, parallel chat preparation, bounded output, and frame-throttled streaming.
+Prepared legacy generators for GPT-5.6 Fast-first routing and copy.
+file:///home/runner/work/Stabilize/Stabilize/scripts/add-memory-deletion-and-guest-session.mjs:15
+    throw new Error(`Could not locate ${label} in ${path}`);
+          ^
+
+Error: Could not locate sign-out local thread clearing in public/app.js
+    at replaceOnce (file:///home/runner/work/Stabilize/Stabilize/scripts/add-memory-deletion-and-guest-session.mjs:15:11)
+    at file:///home/runner/work/Stabilize/Stabilize/scripts/add-memory-deletion-and-guest-session.mjs:355:1
+    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
+    at async node:internal/modules/esm/loader:643:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.18.0
+npm error code 1
+npm error path /home/runner/work/Stabilize/Stabilize
+npm error command failed
+npm error command sh -c npm run apply:prompt-policy
+npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2026-08-08T13_09_45_646Z-debug-0.log
+npm_ci=1
+--- generated syntax ---
+auth_check=0
+/home/runner/work/Stabilize/Stabilize/src/paid-worker.js:91
+        previous.content + "
+                           ^
+
+SyntaxError: Invalid or unexpected token
+    at checkSyntax (node:internal/main/check_syntax:72:5)
+
+Node.js v24.18.0
+paid_worker_check=1
+billing_account_check=0
+session_memory_check=0
+index_check=0
+/home/runner/work/Stabilize/Stabilize/public/app.js:53
+const GUEST_THREAD_STORAGE_KEY = "stabilize:guest-thread:v1";
+      ^
+
+SyntaxError: Identifier 'GUEST_THREAD_STORAGE_KEY' has already been declared
+    at checkSyntax (node:internal/main/check_syntax:72:5)
+
+Node.js v24.18.0
+app_check=1
+--- status ---
+ M public/app.js
+ M src/page.js
+ M src/paid-worker.js
+?? signed-in-prefetch-diagnostic.log

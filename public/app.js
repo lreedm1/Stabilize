@@ -49,6 +49,11 @@ const GUEST_THREAD_STORAGE_KEY = "stabilize:guest-thread:v1";
 const GUEST_THREAD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_GUEST_THREAD_MESSAGES = 8;
 const MAX_GUEST_THREAD_MESSAGE_CHARS = 2_500;
+const MAX_CHAT_REQUEST_BYTES = 28_000;
+const GUEST_THREAD_STORAGE_KEY = "stabilize:guest-thread:v1";
+const GUEST_THREAD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const MAX_GUEST_THREAD_MESSAGES = 8;
+const MAX_GUEST_THREAD_MESSAGE_CHARS = 2_500;
 const MAX_SIGNED_IN_THREAD_MESSAGES = 6;
 const MAX_SIGNED_IN_THREAD_MESSAGE_CHARS = 2_000;
 const ACCOUNT_CONTEXT_TOKEN_MAX_CHARS = 16_384;
@@ -502,84 +507,10 @@ function appendGuestThreadMessage(role, content) {
   persistGuestThread();
 }
 
-function resetSignedInThread() {
-  signedInThreadMessages = [];
-  accountContextEpoch += 1;
-}
-
-function appendSignedInThreadMessage(role, content) {
-  if (!signedIn || privateChat || !["user", "assistant"].includes(role)) {
-    return;
-  }
-  const clean = String(content || "")
-    .trim()
-    .slice(0, MAX_SIGNED_IN_THREAD_MESSAGE_CHARS);
-  if (!clean) return;
-  signedInThreadMessages = normalizeGuestThread([
-    ...signedInThreadMessages,
-    { role, content: clean },
-  ]).slice(-MAX_SIGNED_IN_THREAD_MESSAGES);
-  accountContextEpoch += 1;
-}
-
-function invalidateAccountContextToken() {
-  accountContextEpoch += 1;
-  accountContextToken = "";
-  accountContextTokenExpiresAt = 0;
-  signedInThreadMessages = [];
-}
-
-function currentAccountContextToken() {
-  if (
-    !signedIn ||
-    privateChat ||
-    !accountContextToken ||
-    Date.now() + 5_000 >= accountContextTokenExpiresAt
-  ) {
-    return "";
-  }
-  return accountContextToken;
-}
-
-async function prefetchAccountContextToken() {
-  if (!signedIn) return null;
-  const requestEpoch = accountContextEpoch;
-  try {
-    const response = await fetch("/api/account/context", {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      credentials: "same-origin",
-    });
-    if (!response.ok) return null;
-    const result = await response.json().catch(() => ({}));
-    const token = String(result?.token || "");
-    const expiresInSeconds = Number(result?.expiresInSeconds);
-    if (
-      token.length < 80 ||
-      token.length > ACCOUNT_CONTEXT_TOKEN_MAX_CHARS ||
-      !/^[A-Za-z0-9_-]+.[A-Za-z0-9_-]+$/.test(token) ||
-      !Number.isFinite(expiresInSeconds) ||
-      expiresInSeconds < 60 ||
-      expiresInSeconds > 3_600 ||
-      requestEpoch !== accountContextEpoch
-    ) {
-      return null;
-    }
-
-    accountContextToken = token;
-    accountContextTokenExpiresAt =
-      Date.now() + expiresInSeconds * 1_000;
-    signedInThreadMessages = [];
-    return token;
-  } catch {
-    return null;
-  }
-}
-
 function activeLocalThreadMessages() {
   if (privateChat) return privateThreadMessages;
   if (!signedIn) return guestThreadMessages;
-  return signedInThreadMessages;
+  return [];
 }
 
 function appendLocalThreadMessage(role, content) {
@@ -587,8 +518,6 @@ function appendLocalThreadMessage(role, content) {
     appendPrivateThreadMessage(role, content);
   } else if (!signedIn) {
     appendGuestThreadMessage(role, content);
-  } else {
-    appendSignedInThreadMessage(role, content);
   }
 }
 
@@ -603,9 +532,6 @@ function rollbackLocalUser(content) {
   } else if (!signedIn) {
     guestThreadMessages.pop();
     persistGuestThread();
-  } else {
-    signedInThreadMessages.pop();
-    accountContextEpoch += 1;
   }
 }
 
@@ -991,6 +917,33 @@ function buildChatRequestBody(clean) {
   return serialized;
 }
 
+function buildChatRequestBody(clean) {
+  let messages =
+    privateChat || !signedIn ? [...activeLocalThreadMessages()] : undefined;
+  if (messages?.at(-1)?.role === "user" && messages.at(-1).content === clean) {
+    messages.pop();
+  }
+
+  const build = () =>
+    JSON.stringify({
+      message: clean,
+      awaitingSafetyAnswer: currentAwaitingSafetyAnswer(),
+      privateChat,
+      messages,
+    });
+
+  let serialized = build();
+  while (
+    Array.isArray(messages) &&
+    messages.length > 0 &&
+    new TextEncoder().encode(serialized).byteLength > MAX_CHAT_REQUEST_BYTES
+  ) {
+    messages.shift();
+    serialized = build();
+  }
+  return serialized;
+}
+
 async function sendMessage(text) {
   const clean = String(text || "").trim();
   if (!clean || pending) {
@@ -1103,6 +1056,42 @@ async function deleteRememberedContext() {
     resetConversationView();
     invalidateAccountContextToken();
     if (signedIn) void prefetchAccountContextToken();
+    setMemoryDeleteStatus(copy.deleteMemorySuccess);
+  } catch {
+    setMemoryDeleteStatus(copy.deleteMemoryFailed, true);
+  } finally {
+    deleteMemoryButton.textContent = originalLabel || copy.deleteMemoryButton;
+    setPending(false);
+    input.focus({ preventScroll: true });
+  }
+}
+
+function setMemoryDeleteStatus(message, isError = false) {
+  if (!(memoryDeleteStatus instanceof HTMLElement)) return;
+  memoryDeleteStatus.textContent = String(message || "");
+  memoryDeleteStatus.hidden = !message;
+  memoryDeleteStatus.classList.toggle("is-error", isError);
+}
+
+async function deleteRememberedContext() {
+  if (pending || !(deleteMemoryButton instanceof HTMLButtonElement)) return;
+  if (!window.confirm(copy.deleteMemoryConfirm)) return;
+
+  const originalLabel = deleteMemoryButton.textContent;
+  setPending(true);
+  deleteMemoryButton.textContent = copy.deleteMemoryPending;
+  setMemoryDeleteStatus("");
+
+  try {
+    const response = await fetch("/api/account/memory", {
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) throw new Error("Memory deletion request failed");
+    const result = await response.json().catch(() => ({}));
+    if (result.deleted !== true) throw new Error("Memory was not deleted");
+
+    resetConversationView();
     setMemoryDeleteStatus(copy.deleteMemorySuccess);
   } catch {
     setMemoryDeleteStatus(copy.deleteMemoryFailed, true);

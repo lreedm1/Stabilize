@@ -309,6 +309,33 @@ function chatPreparationOptions(env, body = {}) {
   };
 }
 
+function chatPreparationOptions(env) {
+  const choices = modelChoices(env);
+  const defaultModel = String(env.OPENAI_MODEL || "gpt-5.4");
+  const fallbackModel = String(
+    env.FREE_PLAN_FALLBACK_MODEL || defaultModel || "gpt-5.4",
+  );
+  const freeModel = String(
+    env.FREE_PLAN_PRIMARY_MODEL || "gpt-5.6-sol",
+  );
+  const allowedModels = [...new Set([
+    ...choices.map((choice) => choice.id),
+    defaultModel,
+    freeModel,
+    fallbackModel,
+  ])];
+  return {
+    allowedModels,
+    defaultModel,
+    freeModel,
+    fallbackModel,
+    paidPeriod: usagePeriod(),
+    freePeriod: dailyUsagePeriod(),
+    paidLimit: monthlyModelMessageLimit(env),
+    freeLimit: freeDailyModelMessageLimit(env),
+  };
+}
+
 function billingNotice(url, reconciled) {
   const state = url.searchParams.get("billing");
   if (state === "success") {
