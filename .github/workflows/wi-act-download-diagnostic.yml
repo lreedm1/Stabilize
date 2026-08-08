@@ -10,32 +10,47 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: diagnose-wisconsin-act-download
+  cancel-in-progress: true
+
 jobs:
   diagnose:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Test official Act PDF
+      - name: Test LegiScan chaptered PDF
         run: |
           python - <<'PY' > automation/wi-act-download-diagnostic.txt
           import time
           import requests
-          url = "https://docs.legis.wisconsin.gov/document/acts/2025/1.pdf"
-          start = time.monotonic()
-          try:
-              r = requests.get(url, timeout=(20, 90))
-              print(f"status={r.status_code}")
-              print(f"bytes={len(r.content)}")
-              print(f"content_type={r.headers.get('content-type')}")
-              print(f"pdf={r.content.startswith(b'%PDF-')}")
-          except Exception as exc:
-              print(f"error={type(exc).__name__}: {exc}")
-          print(f"elapsed={time.monotonic() - start:.3f}")
+          urls = [
+              "https://legiscan.com/WI/bill/AB94/2025",
+              "https://legiscan.com/WI/text/AB94/2025",
+              "https://legiscan.com/WI/text/AB94/id/3199083/Wisconsin-2025-AB94-Chaptered.pdf",
+          ]
+          s = requests.Session()
+          s.headers["User-Agent"] = "Mozilla/5.0 (compatible; WisconsinActsCompiler/1.0)"
+          for url in urls:
+              start = time.monotonic()
+              print(f"url={url}")
+              try:
+                  r = s.get(url, timeout=(20, 90), allow_redirects=True)
+                  print(f"status={r.status_code}")
+                  print(f"final_url={r.url}")
+                  print(f"bytes={len(r.content)}")
+                  print(f"content_type={r.headers.get('content-type')}")
+                  print(f"pdf={r.content.startswith(b'%PDF-')}")
+                  print(f"contains_chaptered={'Chaptered' in r.text if not r.content.startswith(b'%PDF-') else False}")
+              except Exception as exc:
+                  print(f"error={type(exc).__name__}: {exc}")
+              print(f"elapsed={time.monotonic() - start:.3f}")
+              print()
           PY
           cat automation/wi-act-download-diagnostic.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add automation/wi-act-download-diagnostic.txt
-          git commit -m "Record Wisconsin Act download diagnostic [skip ci]"
+          git commit -m "Record LegiScan download diagnostic [skip ci]"
           git push origin "HEAD:$GITHUB_REF_NAME"
