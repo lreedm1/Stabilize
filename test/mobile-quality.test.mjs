@@ -53,20 +53,30 @@ function webpInfo(buffer) {
   return { width, height, chunks };
 }
 
-test("mobile uses the project-owner forest stream as its static portrait background", async () => {
+test("mobile uses the supplied forest stream video with a still fallback", async () => {
   const tier = {
     filename: "mobile-forest-stream-v1-540.webp",
     width: 540,
     height: 960,
   };
-  const [pageSource, mobileStyles, image] = await Promise.all([
-    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/mobile-woodland-loop.css", import.meta.url), "utf8"),
-    readFile(new URL(
-      "../public/scenes/" + tier.filename,
-      import.meta.url,
-    )),
-  ]);
+  const [pageSource, mobileStyles, mobileScript, image, video] =
+    await Promise.all([
+      readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+      readFile(
+        new URL("../public/mobile-woodland-loop.css", import.meta.url),
+        "utf8",
+      ),
+      readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
+      readFile(
+        new URL("../public/scenes/" + tier.filename, import.meta.url),
+      ),
+      readFile(
+        new URL(
+          "../public/scenes/mobile-forest-stream-v1.mp4",
+          import.meta.url,
+        ),
+      ),
+    ]);
   const imageInfo = webpInfo(image);
   assert.deepEqual(
     { width: imageInfo.width, height: imageInfo.height },
@@ -74,6 +84,13 @@ test("mobile uses the project-owner forest stream as its static portrait backgro
   );
   assert.equal(image.byteLength, 91_750);
   assert.equal(imageInfo.chunks.includes("ANIM"), false);
+  assert.equal(video.byteLength, 602_638);
+  for (const marker of ["ftyp", "moov", "mdat", "avc1", "vide"]) {
+    assert.ok(video.includes(Buffer.from(marker)), "MP4 includes " + marker);
+  }
+  assert.equal(video.includes(Buffer.from("mp4a")), false);
+  assert.equal(video.includes(Buffer.from("soun")), false);
+  assert.ok(video.indexOf(Buffer.from("moov")) < video.indexOf(Buffer.from("mdat")));
   assert.equal(
     [...pageSource.matchAll(new RegExp(tier.filename + " " + tier.width + "w", "g"))].length,
     2,
@@ -81,19 +98,28 @@ test("mobile uses the project-owner forest stream as its static portrait backgro
   assert.match(pageSource, /<source[\s\S]*sizes="100vw"[\s\S]*srcset=/);
   assert.match(pageSource, /<link[\s\S]*rel="preload"[\s\S]*imagesrcset=/);
   assert.match(pageSource, /imagesizes="100vw"/);
+  assert.match(pageSource, /mobile-quality\.js\?v=20260802-8/);
   assert.match(
-    pageSource,
-    /href="\/scenes\/mobile-forest-stream-v1-540\.webp"/,
+    mobileScript,
+    /\/scenes\/mobile-forest-stream-v1\.mp4\?v=20260808-forest-video-1/,
   );
-  assert.match(
-    pageSource,
-    /mobile-woodland-loop\.css\?v=20260808-mobile-forest-stream-540-1/,
-  );
-  assert.doesNotMatch(pageSource, /mobile-golden-alpine/);
-  assert.match(mobileStyles, /opacity:\s*1/);
+  assert.match(mobileScript, /video\.autoplay = true/);
+  assert.match(mobileScript, /video\.muted = true/);
+  assert.match(mobileScript, /video\.defaultMuted = true/);
+  assert.match(mobileScript, /video\.loop = true/);
+  assert.match(mobileScript, /video\.playsInline = true/);
+  assert.match(mobileScript, /webkit-playsinline/);
+  assert.match(mobileScript, /video\.addEventListener\("playing"/);
+  assert.match(mobileScript, /await mobileVideo\.play\(\)/);
+  assert.match(mobileScript, /window\.addEventListener\("pageshow"/);
+  assert.match(mobileScript, /visibilitychange/);
+  assert.match(mobileScript, /pointerdown/);
+  assert.match(mobileScript, /touchstart/);
+  assert.match(mobileScript, /backdrop\.style\.opacity = "0"/);
+  assert.match(mobileScript, /video-waiting-for-interaction/);
   assert.match(mobileStyles, /object-fit:\s*cover/);
   assert.match(mobileStyles, /animation:\s*none/);
-  assert.doesNotMatch(mobileStyles, /@keyframes/);
+  assert.doesNotMatch(pageSource, /mobile-golden-alpine/);
 });
 
 test("restored tabs recover from interrupted blank thinking views", async () => {
