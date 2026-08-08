@@ -1,0 +1,32 @@
+name: Export Luna routing worktree
+
+on:
+  push:
+    branches:
+      - agent/luna-adaptive-routing
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/luna-adaptive-routing
+          persist-credentials: false
+
+      - name: Remove Git metadata
+        run: rm -rf .git
+
+      - name: Upload worktree
+        uses: actions/upload-artifact@v4
+        with:
+          name: luna-routing-worktree
+          path: .
+          include-hidden-files: true
+          retention-days: 1
