@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
 
+# The second branch push runs this after GitHub has registered the workflow file.
 jobs:
   materialize:
     runs-on: ubuntu-latest
