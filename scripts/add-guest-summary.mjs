@@ -11,6 +11,13 @@ function write(path, content) {
 function replaceRequired(path, before, after, label = path) {
   const source = read(path);
   if (source.includes(after)) return false;
+  if (
+    label === "stream guest summary completion" &&
+    source.includes("guestSummaryResult = guestSummaryPromise") &&
+    source.includes("...guestSummaryFields(guestSummaryResult)")
+  ) {
+    return false;
+  }
   if (!source.includes(before)) {
     throw new Error(`Could not locate ${label} in ${path}`);
   }

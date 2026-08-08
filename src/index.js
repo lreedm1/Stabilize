@@ -566,19 +566,54 @@ function usageNumber(value) {
   return Number.isFinite(number) && number >= 0 ? Math.round(number) : 0;
 }
 
-function logInteractiveUsage(result, model, requestedServiceTier) {
+function interactiveUsageSnapshot(result, model, requestedServiceTier) {
   const usage = result?.usage || {};
   const inputDetails = usage.input_tokens_details || {};
+  const outputDetails = usage.output_tokens_details || {};
+  return {
+    model: safeProviderField(model) || "unknown",
+    requestedServiceTier:
+      safeProviderField(requestedServiceTier) || "default",
+    actualServiceTier: safeProviderField(result?.serviceTier),
+    inputTokens: usageNumber(usage.input_tokens),
+    cachedInputTokens: usageNumber(inputDetails.cached_tokens),
+    cacheWriteTokens: usageNumber(inputDetails.cache_write_tokens),
+    reasoningTokens: usageNumber(outputDetails.reasoning_tokens),
+    outputTokens: usageNumber(usage.output_tokens),
+  };
+}
+
+function zeroUsageSnapshot(model = "none", requestedServiceTier = "none") {
+  return {
+    model: safeProviderField(model) || "none",
+    requestedServiceTier:
+      safeProviderField(requestedServiceTier) || "none",
+    actualServiceTier: null,
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningTokens: 0,
+    outputTokens: 0,
+  };
+}
+
+function logInteractiveUsage(result, model, requestedServiceTier) {
+  const analytics = interactiveUsageSnapshot(
+    result,
+    model,
+    requestedServiceTier,
+  );
   console.info(
     JSON.stringify({
       event: "openai_chat_usage",
-      model: String(model || "").slice(0, 128),
-      requestedServiceTier,
-      actualServiceTier: safeProviderField(result?.serviceTier),
-      inputTokens: usageNumber(usage.input_tokens),
-      cachedTokens: usageNumber(inputDetails.cached_tokens),
-      cacheWriteTokens: usageNumber(inputDetails.cache_write_tokens),
-      outputTokens: usageNumber(usage.output_tokens),
+      model: analytics.model,
+      requestedServiceTier: analytics.requestedServiceTier,
+      actualServiceTier: analytics.actualServiceTier,
+      inputTokens: analytics.inputTokens,
+      cachedTokens: analytics.cachedInputTokens,
+      cacheWriteTokens: analytics.cacheWriteTokens,
+      reasoningTokens: analytics.reasoningTokens,
+      outputTokens: analytics.outputTokens,
     }),
   );
 }
@@ -1071,7 +1106,10 @@ async function generateFallbackReply(messages, route, env, latestText) {
       clientRequestId: result.clientRequestId,
     });
   }
-  return reply;
+  return {
+    reply,
+    analytics: interactiveUsageSnapshot(result, model, serviceTier),
+  };
 }
 
 async function writeReplyDeltas(writer, text) {
@@ -1097,6 +1135,7 @@ function streamChatReply(
 
   const produce = async () => {
     let reply = "";
+    let analytics = null;
     try {
       await writer.write(
         streamEvent({
@@ -1112,6 +1151,7 @@ function streamChatReply(
       if (demoMode) {
         const demo = demoReply(route, latestText);
         reply = demo;
+        analytics = zeroUsageSnapshot("demo", "none");
         await writeReplyDeltas(writer, demo);
       } else {
         try {
@@ -1137,6 +1177,7 @@ function streamChatReply(
             await writer.write(streamEvent({ type: "delta", delta }));
           }
           logInteractiveUsage(result, model, serviceTier);
+          analytics = interactiveUsageSnapshot(result, model, serviceTier);
         } catch (streamError) {
           if (reply || !shouldUseNonStreamingFallback(streamError)) {
             throw streamError;
@@ -1149,7 +1190,14 @@ function streamChatReply(
               diagnostic: streamFailureDiagnostic(streamError),
             }),
           );
-          reply = await generateFallbackReply(messages, route, env, latestText);
+          const fallback = await generateFallbackReply(
+            messages,
+            route,
+            env,
+            latestText,
+          );
+          reply = fallback.reply;
+          analytics = fallback.analytics;
           await writeReplyDeltas(writer, reply);
         }
       }
@@ -1163,7 +1211,7 @@ function streamChatReply(
         isNeutralGreeting(latestText) &&
         isUnsolicitedSafetyCheck(validated)
       ) {
-        validated = "Hi. What’s happening right now?";
+        validated = neutralGreetingReply();
       }
       if (!validated) {
         throw new OpenAIRequestError({
@@ -1195,6 +1243,7 @@ function streamChatReply(
           reply: validated,
           showEmergency: false,
           awaitingSafetyAnswer: false,
+          analytics: analytics || zeroUsageSnapshot(),
           ...guestSummaryFields(guestSummaryResult),
         }),
       );
@@ -1244,9 +1293,18 @@ function streamChatReply(
   return new Response(readable, { status: 200, headers: streamHeaders() });
 }
 
+function neutralGreetingReply() {
+  return "Hi. What’s happening right now?";
+}
+
 async function generateReply(messages, route, env, latestText) {
   const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
-  if (demoMode) return demoReply(route, latestText);
+  if (demoMode) {
+    return {
+      reply: demoReply(route, latestText),
+      analytics: zeroUsageSnapshot("demo", "none"),
+    };
+  }
 
   const { apiKey, model, reasoningEffort, serviceTier } = openAIConfig(env);
   const turnReasoningEffort = reasoningEffort;
@@ -1274,7 +1332,7 @@ async function generateReply(messages, route, env, latestText) {
   );
   logInteractiveUsage(result, model, serviceTier);
 
-  const reply = validateModelReply(result.text);
+  let reply = validateModelReply(result.text);
   if (!reply) {
     throw new OpenAIRequestError({
       name: "OpenAIInvalidReplyError",
@@ -1289,9 +1347,12 @@ async function generateReply(messages, route, env, latestText) {
     isNeutralGreeting(latestText) &&
     isUnsolicitedSafetyCheck(reply)
   ) {
-    return "Hi. What’s happening right now?";
+    reply = neutralGreetingReply();
   }
-  return reply;
+  return {
+    reply,
+    analytics: interactiveUsageSnapshot(result, model, serviceTier),
+  };
 }
 
 function sanitizeSummaryText(value, maxChars) {
@@ -1532,7 +1593,8 @@ export async function handlePreparedChat(
     );
   }
 
-  const reply = await generateReply(messages, route, env, latestText);
+  const generated = await generateReply(messages, route, env, latestText);
+  const reply = generated.reply;
   const result = await recordExchange(stub, {
     user: latestText,
     assistant: reply,
@@ -1549,6 +1611,7 @@ export async function handlePreparedChat(
     reply,
     showEmergency: false,
     awaitingSafetyAnswer: false,
+    analytics: generated.analytics,
   });
 }
 
@@ -1649,10 +1712,11 @@ async function handleChat(request, env, ctx, accountKey) {
     );
   }
 
-  const [reply, guestSummaryResult] = await Promise.all([
+  const [generated, guestSummaryResult] = await Promise.all([
     generateReply(messages, route, env, latestText),
     guestSummaryPromise,
   ]);
+  const reply = generated.reply;
   const result = await recordExchange(stub, {
     user: latestText,
     assistant: reply,
@@ -1669,6 +1733,7 @@ async function handleChat(request, env, ctx, accountKey) {
     reply,
     showEmergency: false,
     awaitingSafetyAnswer: false,
+    analytics: generated.analytics,
     ...guestSummaryFields(guestSummaryResult),
   });
 }

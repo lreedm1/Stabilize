@@ -242,6 +242,123 @@ function feedbackCommentList(summary) {
     .join("");
 }
 
+function formatPerDollar(value) {
+  if (value === null || value === undefined || Number(value) <= 0) {
+    return "Not enough data";
+  }
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 1,
+  }).format(Number(value));
+}
+
+function latencySummaryRows(summary) {
+  const first = summary.latency?.firstToken || {};
+  const total = summary.latency?.totalResponse || {};
+  const rows = [];
+  const add = (label, firstValue, totalValue) => {
+    const count = Math.max(
+      Number(firstValue?.count || 0),
+      Number(totalValue?.count || 0),
+    );
+    if (!count) return;
+    rows.push({ label, count, first: firstValue, total: totalValue });
+  };
+  add("All chats", first.overall, total.overall);
+  for (const [key, label] of [
+    ["guest", "Guest"],
+    ["signed_in", "Signed in"],
+  ]) {
+    add(label, first.accountType?.[key], total.accountType?.[key]);
+  }
+  for (const [key, label] of [
+    ["first", "First message"],
+    ["follow_up", "Follow-up"],
+  ]) {
+    add(label, first.messagePosition?.[key], total.messagePosition?.[key]);
+  }
+  const addTop = (dimension, prefix, limit = 6) => {
+    const keys = new Set([
+      ...Object.keys(first?.[dimension] || {}),
+      ...Object.keys(total?.[dimension] || {}),
+    ]);
+    [...keys]
+      .map((key) => ({
+        key,
+        count: Math.max(
+          Number(first?.[dimension]?.[key]?.count || 0),
+          Number(total?.[dimension]?.[key]?.count || 0),
+        ),
+      }))
+      .filter((entry) => entry.count > 0 && entry.key !== "unknown")
+      .sort((left, right) => right.count - left.count)
+      .slice(0, limit)
+      .forEach((entry) =>
+        add(
+          prefix + entry.key,
+          first?.[dimension]?.[entry.key],
+          total?.[dimension]?.[entry.key],
+        ),
+      );
+  };
+  addTop("model", "Model · ");
+  addTop("memorySource", "Memory · ");
+  return rows;
+}
+
+function latencyBreakdownTable(summary) {
+  const rows = latencySummaryRows(summary);
+  if (!rows.length) {
+    return '<tr><td colspan="6">No completed timing samples yet.</td></tr>';
+  }
+  return rows
+    .map(
+      (row) =>
+        '<tr><th scope="row">' +
+        escapeHtml(row.label) +
+        "</th><td>" +
+        formatInteger(row.count) +
+        "</td><td>" +
+        escapeHtml(formatDurationMs(row.first?.p50Ms)) +
+        "</td><td>" +
+        escapeHtml(formatDurationMs(row.first?.p95Ms)) +
+        "</td><td>" +
+        escapeHtml(formatDurationMs(row.total?.p50Ms)) +
+        "</td><td>" +
+        escapeHtml(formatDurationMs(row.total?.p95Ms)) +
+        "</td></tr>",
+    )
+    .join("");
+}
+
+function costBreakdownTable(summary) {
+  const rows = (summary.costBreakdown || []).slice(0, 12);
+  if (!rows.length) {
+    return '<tr><td colspan="8">No provider usage has been priced yet.</td></tr>';
+  }
+  return rows
+    .map(
+      (row) =>
+        '<tr><th scope="row">' +
+        escapeHtml(row.model) +
+        "</th><td>" +
+        escapeHtml(row.serviceTier) +
+        "</td><td>" +
+        formatInteger(row.chats) +
+        "</td><td>" +
+        formatInteger(row.inputTokens) +
+        "</td><td>" +
+        formatInteger(row.cachedInputTokens) +
+        "</td><td>" +
+        formatInteger(row.reasoningTokens) +
+        "</td><td>" +
+        formatInteger(row.outputTokens) +
+        "</td><td>" +
+        escapeHtml(formatMoneyFromMicros(row.estimatedCostMicros)) +
+        "</td></tr>",
+    )
+    .join("");
+}
+
 function weeklyDecision(summary, finance) {
   if (
     summary.conversationPrompts >= 30 &&
@@ -284,8 +401,18 @@ function weeklyDecision(summary, finance) {
   ) {
     return "Improve response usefulness before reducing model quality or compute.";
   }
-  if (summary.estimatedCostMicros <= 0 || finance.costCents <= 0) {
-    return "Enter real per-chat and recurring costs before changing model routing.";
+  if (
+    summary.modelChats >= 10 &&
+    summary.pricingCoverageRate !== null &&
+    summary.pricingCoverageRate < 0.95
+  ) {
+    return "Fix provider-usage pricing coverage before changing model routing.";
+  }
+  if (summary.estimatedCostMicros <= 0) {
+    return "Collect provider-reported token usage before changing model routing.";
+  }
+  if (finance.costCents <= 0) {
+    return "Enter recurring infrastructure cost before judging self-funding.";
   }
   if (finance.revenueCents / finance.costCents < 1) {
     return "Improve recurring revenue while preserving the free core and current safety guardrails.";
@@ -309,13 +436,16 @@ function adminLoginPage(configured, error = false) {
 function dashboardPage(summary, finance) {
   const decision = weeklyDecision(summary, finance);
   const financeConfigured =
-    finance.costCents > 0 && summary.estimatedCostMicros > 0;
+    finance.costCents > 0 &&
+    summary.estimatedCostMicros > 0 &&
+    (summary.pricingCoverageRate === null ||
+      summary.pricingCoverageRate >= 0.95);
 
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Stabilize impact dashboard</title><link rel="stylesheet" href="/guides.css?v=20260806-unified-site-theme-1" /><style>
 :root{color-scheme:dark}*{box-sizing:border-box}.shell{width:min(1040px,calc(100% - 32px));margin:32px auto 56px;border:var(--stabilize-reading-border);background:var(--stabilize-reading-surface);box-shadow:var(--stabilize-reading-shadow);color:var(--stabilize-reading-text);-webkit-backdrop-filter:var(--stabilize-reading-filter);backdrop-filter:var(--stabilize-reading-filter)}.top{display:flex;gap:20px;align-items:flex-start;justify-content:space-between}.top h1{margin:0 0 6px;font-size:clamp(1.7rem,3vw,2.5rem)}.top p{margin:0;color:var(--stabilize-reading-text)}.logout button{border:var(--stabilize-reading-border);border-radius:9px;background:var(--stabilize-reading-surface);box-shadow:0 7px 22px rgba(4,13,10,.18);color:var(--stabilize-reading-text);cursor:pointer;font:inherit;padding:8px 11px;-webkit-backdrop-filter:var(--stabilize-reading-filter);backdrop-filter:var(--stabilize-reading-filter)}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:24px 0}.tile,.panel,.note{border:var(--stabilize-reading-border);background:var(--stabilize-reading-surface);box-shadow:var(--stabilize-reading-shadow);color:var(--stabilize-reading-text);-webkit-backdrop-filter:var(--stabilize-reading-filter);backdrop-filter:var(--stabilize-reading-filter)}.tile,.panel{border-radius:16px}.tile{padding:18px}.tile span{display:block;margin-bottom:7px;color:var(--stabilize-reading-text);font-size:.82rem}.tile strong{display:block;color:var(--stabilize-reading-text);font-size:1.45rem;line-height:1.2}.decision{width:100%;min-width:0;max-width:none;margin:0;padding:19px;border-left:0;text-align:left;justify-self:stretch}.decision h2,.guardrails h2,.usage h2,.feedback-reasons h2,.feedback-comments h2{font-size:1.05rem;margin:0 0 10px}.usage,.feedback-reasons,.feedback-comments{margin-bottom:14px;padding:19px}.usage-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.usage-heading p,.feedback-reasons p,.feedback-comments-note{margin:0;line-height:1.45}.usage-today{display:grid;gap:3px;text-align:right;white-space:nowrap}.usage-today span{font-size:.78rem;opacity:.8}.usage-today strong{font-size:.95rem}.usage-table-wrap{overflow-x:auto;margin-top:16px}table{width:100%;border-collapse:collapse}th,td{border-top:1px solid #dce6df;padding:9px 10px;text-align:right}th:first-child,td:first-child{text-align:left}thead th{border-top:0;font-size:.78rem}tbody th{font-weight:600}.feedback-reasons ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px;list-style:none;padding:0;margin:0 0 14px}.feedback-reasons li{display:flex;justify-content:space-between;gap:14px;border-bottom:1px solid #e4ebe6;padding:7px 0}.feedback-comments>div{display:grid;gap:10px;margin-top:14px}.feedback-comment{border:1px solid #dce6df;border-radius:12px;padding:12px}.feedback-comment div{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px}.feedback-comment span{font-size:.78rem;color:#607b6f}.feedback-comment p{white-space:pre-wrap;overflow-wrap:anywhere;margin:9px 0 0;line-height:1.45}.decision p{font-size:1.1rem;line-height:1.55;margin:0}.guardrails{margin-top:14px;padding:19px}.guardrails ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 22px;margin:0;padding-left:20px}.guardrails li{line-height:1.45}.note{margin-top:16px;border-radius:12px;padding:14px;line-height:1.5}.meta{margin-top:14px;color:var(--stabilize-reading-text);font-size:.85rem;text-shadow:var(--stabilize-reading-text-shadow)}@media(max-width:760px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.guardrails ul{grid-template-columns:1fr}}@media(max-width:620px){.usage-heading{display:block}.usage-today{margin-top:12px;text-align:left}.feedback-reasons ul{grid-template-columns:1fr}}@media(max-width:520px){.shell{width:min(100% - 20px,1040px);margin-top:18px;padding:24px 20px}.top{display:block}.logout{margin-top:12px}.grid{grid-template-columns:1fr}.tile strong{font-size:1.3rem}}
-</style></head><body><main class="shell"><header class="top"><div><h1>Orderly impact</h1><p>Engagement, response quality, outcomes, reliability, and cost.</p></div><form class="logout" action="/admin/impact/logout" method="post"><button type="submit">Sign out</button></form></header>
+</style></head><body><main class="shell"><header class="top"><div><h1>Orderly impact</h1><p>Outcomes, latency, provider usage, reliability, and cost.</p></div><form class="logout" action="/admin/impact/logout" method="post"><button type="submit">Sign out</button></form></header>
 <section class="grid" aria-label="Primary engagement and quality metrics">
 <div class="tile"><span>Eligible checks shown</span><strong>${formatInteger(summary.prompts)}</strong></div>
 <div class="tile"><span>Reports received</span><strong>${formatInteger(summary.responses)}</strong></div>
@@ -329,18 +459,27 @@ function dashboardPage(summary, finance) {
 <div class="tile"><span>Feedback response rate</span><strong>${formatPercent(summary.feedbackResponseRate)}</strong></div>
 <div class="tile"><span>Failed responses</span><strong>${formatInteger(summary.failedChats)}</strong></div>
 <div class="tile"><span>Average response time</span><strong>${formatDurationMs(summary.averageResponseMs)}</strong></div>
+<div class="tile"><span>First-token p50</span><strong>${formatDurationMs(summary.latency?.firstToken?.overall?.p50Ms)}</strong></div>
+<div class="tile"><span>First-token p95</span><strong>${formatDurationMs(summary.latency?.firstToken?.overall?.p95Ms)}</strong></div>
+<div class="tile"><span>Total-response p50</span><strong>${formatDurationMs(summary.latency?.totalResponse?.overall?.p50Ms)}</strong></div>
+<div class="tile"><span>Total-response p95</span><strong>${formatDurationMs(summary.latency?.totalResponse?.overall?.p95Ms)}</strong></div>
 <div class="tile"><span>Returning-browser rate</span><strong>${formatPercent(summary.returningBrowserRate)}</strong></div>
 <div class="tile"><span>Est. cost / helpful response</span><strong>${formatMoneyFromMicros(summary.estimatedCostPerHelpfulMicros)}</strong></div>
 <div class="tile"><span>Written comments</span><strong>${formatInteger(summary.feedbackComments)}</strong></div>
 <div class="tile"><span>Conversation help rate</span><strong>${formatPercent(summary.conversationHelpRate)}</strong></div>
 <div class="tile"><span>Conversation feedback rate</span><strong>${formatPercent(summary.conversationResponseRate)}</strong></div>
+<div class="tile"><span>Helpful conversations / $</span><strong>${formatPerDollar(summary.helpfulConversationsPerDollar)}</strong></div>
+<div class="tile"><span>Est. cost / helpful conversation</span><strong>${formatMoneyFromMicros(summary.estimatedCostPerHelpfulConversationMicros)}</strong></div>
+<div class="tile"><span>Pricing coverage</span><strong>${formatPercent(summary.pricingCoverageRate)}</strong></div>
 </section>
 <section class="panel usage"><div class="usage-heading"><div><h2>Daily usage</h2><p>Unique browsers and submitted chat messages by UTC day.</p></div><div class="usage-today"><span>Today</span><strong>${formatInteger(dailyUsageRows(summary, 1)[0]?.users || 0)} users</strong><strong>${formatInteger(dailyUsageRows(summary, 1)[0]?.messages || 0)} messages</strong></div></div><div class="usage-table-wrap"><table><thead><tr><th>Date</th><th>Users</th><th>Messages</th></tr></thead><tbody>${dailyUsageTable(summary)}</tbody></table></div></section>
+<section class="panel usage latency-breakdown"><div class="usage-heading"><div><h2>Latency breakdown</h2><p>Mergeable p50 and p95 timing buckets, segmented without storing chat text.</p></div></div><div class="usage-table-wrap"><table><thead><tr><th>Segment</th><th>Chats</th><th>First p50</th><th>First p95</th><th>Total p50</th><th>Total p95</th></tr></thead><tbody>${latencyBreakdownTable(summary)}</tbody></table></div></section>
+<section class="panel usage cost-breakdown"><div class="usage-heading"><div><h2>Model and cost breakdown</h2><p>Provider-reported tokens priced with ${escapeHtml(summary.pricingVersion || "the current versioned catalog")}.</p></div></div><div class="usage-table-wrap"><table><thead><tr><th>Model</th><th>Tier</th><th>Chats</th><th>Input</th><th>Cached</th><th>Reasoning</th><th>Output</th><th>Est. cost</th></tr></thead><tbody>${costBreakdownTable(summary)}</tbody></table></div></section>
 <section class="panel feedback-reasons"><h2>Top feedback reasons</h2><ul>${feedbackReasonList(summary)}</ul><p>${formatInteger(summary.helpfulResponses)} helpful · ${formatInteger(summary.unhelpfulResponses)} not helpful · ${formatInteger(summary.feedbackComments)} written comments</p></section>
 <section class="panel feedback-comments"><h2>Recent written feedback</h2><p class="feedback-comments-note">Private, retention-limited comments. No chat text or user identifier is shown.</p><div>${feedbackCommentList(summary)}</div></section>
 <section class="panel decision"><h2>One decision this week</h2><p>${escapeHtml(decision)}</p></section>
 <section class="panel guardrails"><h2>Guardrails that cannot be traded away</h2><ul><li><strong>Safety:</strong> the ordinary check is excluded from immediate-danger, medical-emergency, and safety-unclear routes.</li><li><strong>Privacy:</strong> impact analytics never store chat text; optional written feedback is private and retention-limited.</li><li><strong>Trust:</strong> all feedback controls are optional and never block the conversation.</li><li><strong>Reliability:</strong> production checks verify the outcome asset, privacy disclosure, and protected dashboard route after every main deployment.</li></ul></section>
-<p class="note">A reported next step means the user selected “Yes.” “Partly” and “No” remain visible in the response count but are not counted as resolved. Nonresponses remain unknown rather than being labeled failures. ${financeConfigured ? "Operating-cost inputs are configured." : "Cost metrics stay marked as not configured until real operating inputs are entered."}</p>
+<p class="note">A reported next step means the user selected “Yes.” “Partly” and “No” remain visible in the response count but are not counted as resolved. Nonresponses remain unknown rather than being labeled failures. ${financeConfigured ? "Operating-cost inputs are configured." : "Provider cost uses provider-reported token counts and a versioned pricing catalog; it remains an estimate until reconciled with invoices. Recurring infrastructure cost remains separate."}</p>
 <p class="meta">Window: ${new Date(summary.since).toISOString().slice(0, 10)} through ${new Date(summary.now).toISOString().slice(0, 10)}.</p>
 </main></body></html>`;
 }

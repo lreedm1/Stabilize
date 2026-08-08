@@ -22,7 +22,7 @@ test("interactive OpenAI calls use Fast mode, bounded output, and explicit GPT-5
   assert.match(worker, /prompt_cache_options: \{ mode: "explicit", ttl: "30m" \}/);
   assert.match(worker, /prompt_cache_breakpoint: \{ mode: "explicit" \}/);
   assert.match(worker, /supportsExplicitPromptCaching\(model\)/);
-  assert.match(worker, /cachedTokens: usageNumber\(inputDetails\.cached_tokens\)/);
+  assert.match(worker, /cachedInputTokens: usageNumber\(inputDetails\.cached_tokens\)/);
   assert.match(worker, /cacheWriteTokens: usageNumber\(inputDetails\.cache_write_tokens\)/);
 });
 
