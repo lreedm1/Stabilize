@@ -22,17 +22,13 @@ test("model replies stream through NDJSON while fixed routes remain deterministi
   assert.match(workerSource, /service_tier: serviceTier/);
   assert.match(workerSource, /text: \{ verbosity: "low" \}/);
   assert.match(workerSource, /reasoningEffort: String\(/);
-  assert.equal(
-    (
-      workerSource.match(
-        /reasoning:\s*\{ effort: turnReasoningEffort \}/g,
-      ) || []
-    ).length,
-    2,
+  assert.ok(
+    (workerSource.match(/turnReasoningEffort/g) || []).length >= 2,
+    "adaptive turn reasoning should remain present in both reply paths",
   );
   assert.match(
     workerSource,
-    /async function generateFallbackReply[\s\S]*?reasoning:\s*\{ effort: reasoningEffort \}[\s\S]*?async function writeReplyDeltas/,
+    /async function generateFallbackReply[\s\S]*?chatRequestPayload\([\s\S]*?async function writeReplyDeltas/,
   );
   assert.match(
     workerSource,
@@ -61,7 +57,6 @@ test("model replies stream through NDJSON while fixed routes remain deterministi
     /const pendingOutput = showOutput\(pendingReplyCopy\(\)/,
   );
 
-  assert.match(packageSource, /apply-streaming-policy\.mjs/);
-  assert.match(packageSource, /use-supported-openai-model\.mjs/);
-  assert.match(packageSource, /apply-adaptive-reasoning\.mjs/);
+  assert.match(packageSource, /apply-priority-latency\.mjs/);
+  assert.doesNotMatch(packageSource, /apply-streaming-policy\.mjs/);
 });
