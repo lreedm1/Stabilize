@@ -1186,7 +1186,7 @@ function streamChatReply(
         isNeutralGreeting(latestText) &&
         isUnsolicitedSafetyCheck(validated)
       ) {
-        validated = "Hi. What’s happening right now?";
+        validated = neutralGreetingReply();
       }
       if (!validated) {
         throw new OpenAIRequestError({
@@ -1268,6 +1268,10 @@ function streamChatReply(
   return new Response(readable, { status: 200, headers: streamHeaders() });
 }
 
+function neutralGreetingReply() {
+  return "Hi. What’s happening right now?";
+}
+
 async function generateReply(messages, route, env, latestText) {
   const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
   if (demoMode) {
@@ -1318,7 +1322,7 @@ async function generateReply(messages, route, env, latestText) {
     isNeutralGreeting(latestText) &&
     isUnsolicitedSafetyCheck(reply)
   ) {
-    reply = "Hi. What’s happening right now?";
+    reply = neutralGreetingReply();
   }
   return {
     reply,

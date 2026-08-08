@@ -163,6 +163,7 @@ async function recordChatAnalytics({
   browserId,
   conversationId,
 }) {
+  // Consume the cloned stream immediately so analytics cannot backpressure the visible response.
   const resultPromise = parseChatResponse(analyticsCopy, startedAt).catch(() => ({
     route: "UNKNOWN",
     status: "error",
