@@ -204,7 +204,7 @@ test("a free signed-in user gets GPT-5.4 instantly and Current when thinking", a
   const providerRequests = [];
   globalThis.fetch = async (_input, init) => {
     const body = JSON.parse(init.body);
-    if (body.service_tier === "fast") {
+    if (body.text?.verbosity === "low") {
       providerRequests.push({ model: body.model, effort: body.reasoning.effort });
     }
     return responseWithText("Use the smallest reversible step.");
