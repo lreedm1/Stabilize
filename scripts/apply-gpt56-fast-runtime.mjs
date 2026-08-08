@@ -28,6 +28,30 @@ await update("src/paid-worker.js", (source) => {
   let next = source;
   next = replaceRequired(
     next,
+    `function modelEnvironment(env, model) {
+  return new Proxy(env, {
+    get(target, property, receiver) {
+      if (property === "OPENAI_MODEL") return model;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}`,
+    `function modelEnvironment(env, model) {
+  return new Proxy(env, {
+    get(target, property, receiver) {
+      if (property === "OPENAI_MODEL") return model;
+      if (property === "OPENAI_SERVICE_TIER") {
+        return String(target.OPENAI_SERVICE_TIER || "fast");
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}`,
+    "the model environment proxy",
+  );
+
+  next = replaceRequired(
+    next,
     `  const requestedEffort = String(body?.reasoningEffort || "none")
     .trim()
     .toLowerCase();
