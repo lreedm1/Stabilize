@@ -133,7 +133,7 @@ export function renderPage(options = {}) {
       type="image/webp"
       fetchpriority="high"
     />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=20260807-priority-latency-1" />
     <link rel="stylesheet" href="/seo.css?v=20260804-private-chat-1" />
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
     <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
@@ -279,7 +279,7 @@ export function renderPage(options = {}) {
     <template id="client-copy">${copyData}</template>
     <template id="product-copy">${productCopyData}</template>
     <script src="/mobile-quality.js?v=20260802-8"></script>
-    <script type="module" src="/app.js?v=20260806-static-mobile-background-1"></script>
+    <script type="module" src="/app.js?v=20260807-priority-latency-1"></script>
     <script type="module" src="/reasoning-choice.js?v=20260807-instant-thinking-2-fastest-1"></script>
   </body>
 </html>`;

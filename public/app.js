@@ -1,5 +1,5 @@
 import { renderMarkdown } from "./markdown.js";
-import { modulateTerrain } from "./background-loader.js?v=20260806-static-mobile-background-1";
+import { modulateTerrain } from "./background-loader.js?v=20260807-priority-latency-1";
 
 const form = document.querySelector("#chat-form");
 const input = document.querySelector("#message-input");
@@ -538,15 +538,62 @@ function recoverInterruptedThinking() {
   if (hasConversation) scrollConversationToLatest();
 }
 
-function renderStreamingOutput(article, content) {
+let streamingRenderHandle = 0;
+let streamingRenderUsesAnimationFrame = false;
+let queuedStreamingArticle = null;
+let queuedStreamingContent = "";
+
+function cancelStreamingOutputRender() {
+  if (!streamingRenderHandle) return;
+  if (
+    streamingRenderUsesAnimationFrame &&
+    typeof window.cancelAnimationFrame === "function"
+  ) {
+    window.cancelAnimationFrame(streamingRenderHandle);
+  } else {
+    window.clearTimeout(streamingRenderHandle);
+  }
+  streamingRenderHandle = 0;
+  streamingRenderUsesAnimationFrame = false;
+  queuedStreamingArticle = null;
+  queuedStreamingContent = "";
+}
+
+function flushStreamingOutput() {
+  const article = queuedStreamingArticle;
+  const content = queuedStreamingContent;
+  streamingRenderHandle = 0;
+  streamingRenderUsesAnimationFrame = false;
+  queuedStreamingArticle = null;
+
+  if (!(article instanceof HTMLElement)) return;
   article.className = "assistant-output streaming-output";
   article.setAttribute("aria-label", "Stabilize");
-  article.replaceChildren();
-  article.appendChild(renderMarkdown(content || pendingReplyCopy()));
+  let text = article.querySelector(".streaming-text");
+  if (!(text instanceof HTMLElement)) {
+    text = document.createElement("div");
+    text.className = "streaming-text";
+    article.replaceChildren(text);
+  }
+  text.textContent = content || pendingReplyCopy();
   chatLog.hidden = false;
   chatLog.tabIndex = 0;
   conversationSurface.dataset.view = "response";
   scrollConversationToLatest();
+}
+
+function renderStreamingOutput(article, content) {
+  queuedStreamingArticle = article;
+  queuedStreamingContent = String(content || "");
+  if (streamingRenderHandle) return;
+
+  if (typeof window.requestAnimationFrame === "function") {
+    streamingRenderUsesAnimationFrame = true;
+    streamingRenderHandle = window.requestAnimationFrame(flushStreamingOutput);
+  } else {
+    streamingRenderUsesAnimationFrame = false;
+    streamingRenderHandle = window.setTimeout(flushStreamingOutput, 0);
+  }
 }
 
 async function readStreamingResponse(response, article) {
@@ -591,6 +638,7 @@ async function readStreamingResponse(response, article) {
 }
 
 function finalizeStreamingOutput(article, reply, route, offerOutcomeCheck) {
+  cancelStreamingOutputRender();
   article.className = "assistant-output";
   article.replaceChildren();
   article.appendChild(renderMarkdown(reply));
@@ -702,6 +750,7 @@ async function sendMessage(text) {
     persistLatestAnswer(reply, route, needsSafetyAnswer);
     lastSubmittedText = "";
   } catch (error) {
+    cancelStreamingOutputRender();
     rollbackPrivateUser(clean);
     input.value = clean;
     lastSubmittedText = "";

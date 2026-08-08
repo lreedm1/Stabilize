@@ -85,7 +85,7 @@ test("the terrain background is token-modulated and motion-aware", async () => {
 
   assert.match(
     clientScript,
-    /import \{ modulateTerrain \} from "\.\/background-loader\.js\?v=20260806-static-mobile-background-1"/,
+    /import \{ modulateTerrain \} from "\.\/background-loader\.js\?v=20260807-priority-latency-1"/,
   );
   assert.match(clientScript, /modulateTerrain\(clean\)/);
   assert.match(clientScript, /modulateTerrain\(reply\)/);

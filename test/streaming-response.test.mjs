@@ -17,10 +17,10 @@ test("model replies stream through NDJSON while fixed routes remain deterministi
   assert.match(workerSource, /type:\s*"done"/);
   assert.match(workerSource, /await recordExchange\(stub/);
   assert.match(workerSource, /selectReasoningEffort/);
-  assert.equal(
-    (workerSource.match(/max_output_tokens: 500/g) || []).length,
-    2,
-  );
+  assert.match(workerSource, /ORDINARY_OUTPUT_TOKEN_LIMIT = 360/);
+  assert.match(workerSource, /LONG_FORM_OUTPUT_TOKEN_LIMIT = 900/);
+  assert.match(workerSource, /service_tier: serviceTier/);
+  assert.match(workerSource, /text: \{ verbosity: "low" \}/);
   assert.match(workerSource, /reasoningEffort: String\(/);
   assert.equal(
     (
@@ -47,6 +47,12 @@ test("model replies stream through NDJSON while fixed routes remain deterministi
   assert.match(clientSource, /response\.body\.getReader\(\)/);
   assert.match(clientSource, /contentType\.includes\("application\/x-ndjson"\)/);
   assert.match(clientSource, /renderStreamingOutput\(article, accumulated\)/);
+  assert.match(clientSource, /requestAnimationFrame\(flushStreamingOutput\)/);
+  assert.match(clientSource, /text\.textContent = content/);
+  assert.doesNotMatch(
+    clientSource,
+    /function renderStreamingOutput[\s\S]*renderMarkdown\(content/,
+  );
   assert.match(clientSource, /finalizeStreamingOutput\(/);
   assert.match(clientSource, /function pendingReplyCopy\(/);
   assert.match(clientSource, /copy\.responding/);

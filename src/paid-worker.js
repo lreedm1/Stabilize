@@ -1,4 +1,11 @@
-import originalWorker, { SessionMemory } from "./index.js";
+import originalWorker, {
+  SessionMemory,
+  accountMemoryStub,
+  emptyMemoryContext,
+  preparedChatResponse,
+  readBoundedJson,
+  readMemoryContext,
+} from "./index.js";
 import { readAuthSession } from "./auth.js";
 import { fixedReplyForRoute } from "./safety.js";
 import { BillingAccount } from "./billing-account.js";
@@ -153,6 +160,33 @@ function modelEnvironment(env, model) {
       return Reflect.get(target, property, receiver);
     },
   });
+}
+
+function chatPreparationOptions(env) {
+  const choices = modelChoices(env);
+  const defaultModel = String(env.OPENAI_MODEL || "gpt-5.4");
+  const fallbackModel = String(
+    env.FREE_PLAN_FALLBACK_MODEL || defaultModel || "gpt-5.4",
+  );
+  const freeModel = String(
+    env.FREE_PLAN_PRIMARY_MODEL || "gpt-5.6-sol",
+  );
+  const allowedModels = [...new Set([
+    ...choices.map((choice) => choice.id),
+    defaultModel,
+    freeModel,
+    fallbackModel,
+  ])];
+  return {
+    allowedModels,
+    defaultModel,
+    freeModel,
+    fallbackModel,
+    paidPeriod: usagePeriod(),
+    freePeriod: dailyUsagePeriod(),
+    paidLimit: monthlyModelMessageLimit(env),
+    freeLimit: freeDailyModelMessageLimit(env),
+  };
 }
 
 function billingNotice(url, reconciled) {
@@ -598,96 +632,67 @@ async function paidChatResponse(request, env, ctx) {
   if (!authSession) return originalWorker.fetch(request, env, ctx);
 
   const stub = billingStub(env, authSession.accountKey);
-  const state = await readBillingState(stub);
-  const defaultModel = String(env.OPENAI_MODEL || "gpt-5.4");
-  const fallbackModel = String(
-    env.FREE_PLAN_FALLBACK_MODEL || defaultModel || "gpt-5.4",
-  );
-  const freeModel = String(
-    env.FREE_PLAN_PRIMARY_MODEL || "gpt-5.6-sol",
-  );
-
-  if (state.entitled === true) {
-    const selectedModel = isAllowedModel(env, state.selectedModel)
-      ? state.selectedModel
-      : defaultModel;
-    if (selectedModel === defaultModel) {
-      return originalWorker.fetch(request, env, ctx);
-    }
-
-    const tier = "paid";
-    const period = usagePeriod();
-    const limit = monthlyModelMessageLimit(env);
-    const reservation = await stub.reserveUsage(tier, period, limit);
-    if (!reservation.allowed) {
-      return jsonResponse(
-        {
-          error:
-            "The monthly subscriber model-message limit has been reached. Choose GPT-5.4 or manage billing.",
-        },
-        429,
-      );
-    }
-
-    const response = await originalWorker.fetch(
-      request,
-      modelEnvironment(env, selectedModel),
-      ctx,
-    );
-    if (await shouldRefundModelUsage(response)) {
-      await stub.refundUsage(tier, period);
-      return response;
-    }
-    return responseWithModelUsage(response, {
-      tier,
-      used: reservation.used,
-      limit,
-      period,
-      model: selectedModel,
-    });
+  if (!stub || typeof stub.prepareChat !== "function") {
+    return originalWorker.fetch(request, env, ctx);
   }
 
-  const tier = "free";
-  const freeRequest = await requestWithReasoningEffort(request, "none");
-  const period = dailyUsagePeriod();
-  const limit = freeDailyModelMessageLimit(env);
-  const reservation = await stub.reserveUsage(tier, period, limit);
-
-  if (!reservation.allowed) {
-    await stub.setSelectedModel(defaultModel);
-    const response = await originalWorker.fetch(
-      freeRequest,
-      modelEnvironment(env, defaultModel),
-      ctx,
-    );
-    return responseWithModelUsage(response, {
-      tier,
-      used: limit,
-      limit,
-      period,
-      model: defaultModel,
-      fallback: true,
-    });
+  const fallbackRequest = request.clone();
+  let body;
+  try {
+    body = await readBoundedJson(request);
+  } catch {
+    return originalWorker.fetch(fallbackRequest, env, ctx);
   }
 
-  const response = await originalWorker.fetch(
-    freeRequest,
-    modelEnvironment(env, freeModel),
+  const memoryStub = body?.privateChat === true
+    ? null
+    : accountMemoryStub(env, authSession.accountKey);
+  const [preparation, memory] = await Promise.all([
+    stub.prepareChat(chatPreparationOptions(env)),
+    readMemoryContext(memoryStub),
+  ]);
+
+  if (!preparation?.allowed) {
+    return jsonResponse(
+      {
+        error:
+          preparation?.reason === "inactive"
+            ? "The selected model requires an active subscription."
+            : "The monthly subscriber model-message limit has been reached. Choose GPT-5.4 or manage billing.",
+      },
+      preparation?.reason === "inactive" ? 403 : 429,
+    );
+  }
+
+  if (preparation.paid !== true) body.reasoningEffort = "none";
+  const selectedEnv = modelEnvironment(env, preparation.model);
+  const response = await preparedChatResponse(
+    request,
+    body,
+    selectedEnv,
     ctx,
+    authSession.accountKey,
+    body?.privateChat === true ? emptyMemoryContext() : memory,
   );
-  if (await shouldRefundModelUsage(response)) {
-    await stub.refundUsage(tier, period);
+
+  if (
+    preparation.reservationMade &&
+    (await shouldRefundModelUsage(response))
+  ) {
+    await stub.refundUsage(preparation.tier, preparation.period);
     return response;
   }
+
+  if (!preparation.tier) return response;
   return responseWithModelUsage(response, {
-    tier,
-    used: reservation.used,
-    limit,
-    period,
-    model: freeModel,
+    tier: preparation.tier,
+    used: preparation.used,
+    limit: preparation.limit,
+    period: preparation.period,
+    model: preparation.model,
+    fallback: preparation.fallback,
   });
 }
-
 
 function responseWithModelUsage(
   response,

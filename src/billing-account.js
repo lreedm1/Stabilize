@@ -64,6 +64,52 @@ function normalizeRefund(tierOrPeriod, maybePeriod) {
   return USAGE_TIERS.has(tier) && periodIsValid ? { tier, period } : null;
 }
 
+function cleanModelId(value) {
+  const model = String(value || "").trim().slice(0, 128);
+  return MODEL_ID_PATTERN.test(model) ? model : null;
+}
+
+function normalizePrepareOptions(options) {
+  const allowedModels = Array.isArray(options?.allowedModels)
+    ? [...new Set(options.allowedModels.map(cleanModelId).filter(Boolean))]
+    : [];
+  const defaultModel = cleanModelId(options?.defaultModel);
+  const freeModel = cleanModelId(options?.freeModel);
+  const fallbackModel = cleanModelId(options?.fallbackModel);
+  const paidPeriod = String(options?.paidPeriod || "").trim();
+  const freePeriod = String(options?.freePeriod || "").trim();
+  const paidLimit = Number(options?.paidLimit);
+  const freeLimit = Number(options?.freeLimit);
+
+  if (
+    !defaultModel ||
+    !freeModel ||
+    !fallbackModel ||
+    !allowedModels.includes(defaultModel) ||
+    !allowedModels.includes(freeModel) ||
+    !allowedModels.includes(fallbackModel) ||
+    !MONTHLY_PERIOD_PATTERN.test(paidPeriod) ||
+    !DAILY_PERIOD_PATTERN.test(freePeriod) ||
+    !Number.isSafeInteger(paidLimit) ||
+    paidLimit < 1 ||
+    !Number.isSafeInteger(freeLimit) ||
+    freeLimit < 1
+  ) {
+    throw new Error("Invalid chat preparation");
+  }
+
+  return {
+    allowedModels: new Set(allowedModels),
+    defaultModel,
+    freeModel,
+    fallbackModel,
+    paidPeriod,
+    freePeriod,
+    paidLimit,
+    freeLimit,
+  };
+}
+
 export class BillingAccount extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -219,62 +265,147 @@ export class BillingAccount extends DurableObject {
     return this.readState();
   }
 
+  reserveUsageSync(tier, period, limit) {
+    if (tier === "paid") {
+      const billing = this.ctx.storage.sql
+        .exec(
+          `SELECT subscription_status
+           FROM billing_state
+           WHERE id = 1`,
+        )
+        .toArray()[0];
+      if (!billing || !ACTIVE_STATUSES.has(String(billing.subscription_status))) {
+        return { allowed: false, reason: "inactive", used: 0, limit };
+      }
+    }
+
+    const row = this.ctx.storage.sql
+      .exec(
+        `SELECT usage_count
+         FROM model_usage
+         WHERE tier = ? AND period = ?`,
+        tier,
+        period,
+      )
+      .toArray()[0];
+    const used = row ? Math.max(0, Number(row.usage_count) || 0) : 0;
+    if (used >= limit) {
+      return { allowed: false, reason: "limit", used, limit };
+    }
+
+    const next = used + 1;
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO model_usage (
+         tier, period, usage_count, updated_at
+       ) VALUES (?, ?, ?, ?)
+       ON CONFLICT(tier, period) DO UPDATE SET
+         usage_count = excluded.usage_count,
+         updated_at = excluded.updated_at`,
+      tier,
+      period,
+      next,
+      now,
+    );
+    this.ctx.storage.sql.exec(
+      `DELETE FROM model_usage
+       WHERE tier = ? AND period <> ?`,
+      tier,
+      period,
+    );
+    return { allowed: true, reason: null, used: next, limit };
+  }
+
   async reserveUsage(tierOrPeriod, periodOrLimit, maybeLimit) {
     const { tier, period, limit } = normalizeReservation(
       tierOrPeriod,
       periodOrLimit,
       maybeLimit,
     );
+    return this.ctx.storage.transactionSync(() =>
+      this.reserveUsageSync(tier, period, limit),
+    );
+  }
+
+  async prepareChat(options) {
+    const config = normalizePrepareOptions(options);
 
     return this.ctx.storage.transactionSync(() => {
-      if (tier === "paid") {
-        const billing = this.ctx.storage.sql
-          .exec(
-            `SELECT subscription_status
-             FROM billing_state
-             WHERE id = 1`,
-          )
-          .toArray()[0];
-        if (!billing || !ACTIVE_STATUSES.has(String(billing.subscription_status))) {
-          return { allowed: false, reason: "inactive", used: 0, limit };
-        }
-      }
-
-      const row = this.ctx.storage.sql
+      const billing = this.ctx.storage.sql
         .exec(
-          `SELECT usage_count
-           FROM model_usage
-           WHERE tier = ? AND period = ?`,
-          tier,
-          period,
+          `SELECT subscription_status, selected_model
+           FROM billing_state
+           WHERE id = 1`,
         )
         .toArray()[0];
-      const used = row ? Math.max(0, Number(row.usage_count) || 0) : 0;
-      if (used >= limit) {
-        return { allowed: false, reason: "limit", used, limit };
+      const status = String(billing?.subscription_status || "none");
+      const paid = ACTIVE_STATUSES.has(status);
+      const storedModel = cleanModelId(billing?.selected_model);
+
+      if (paid) {
+        const model = config.allowedModels.has(storedModel)
+          ? storedModel
+          : config.defaultModel;
+        if (model === config.defaultModel) {
+          return {
+            allowed: true,
+            reason: null,
+            model,
+            tier: null,
+            period: null,
+            used: 0,
+            limit: 0,
+            fallback: false,
+            paid: true,
+            reservationMade: false,
+          };
+        }
+
+        const reservation = this.reserveUsageSync(
+          "paid",
+          config.paidPeriod,
+          config.paidLimit,
+        );
+        return {
+          ...reservation,
+          model,
+          tier: "paid",
+          period: config.paidPeriod,
+          fallback: false,
+          paid: true,
+          reservationMade: reservation.allowed,
+        };
       }
 
-      const next = used + 1;
-      const now = Date.now();
-      this.ctx.storage.sql.exec(
-        `INSERT INTO model_usage (
-           tier, period, usage_count, updated_at
-         ) VALUES (?, ?, ?, ?)
-         ON CONFLICT(tier, period) DO UPDATE SET
-           usage_count = excluded.usage_count,
-           updated_at = excluded.updated_at`,
-        tier,
-        period,
-        next,
-        now,
+      const reservation = this.reserveUsageSync(
+        "free",
+        config.freePeriod,
+        config.freeLimit,
       );
-      this.ctx.storage.sql.exec(
-        `DELETE FROM model_usage
-         WHERE tier = ? AND period <> ?`,
-        tier,
-        period,
-      );
-      return { allowed: true, reason: null, used: next, limit };
+      if (reservation.allowed) {
+        return {
+          ...reservation,
+          model: config.freeModel,
+          tier: "free",
+          period: config.freePeriod,
+          fallback: false,
+          paid: false,
+          reservationMade: true,
+        };
+      }
+
+      return {
+        allowed: true,
+        reason: "fallback",
+        model: config.fallbackModel,
+        tier: "free",
+        period: config.freePeriod,
+        used: Math.max(reservation.used, config.freeLimit),
+        limit: config.freeLimit,
+        fallback: true,
+        paid: false,
+        reservationMade: false,
+      };
     });
   }
 
