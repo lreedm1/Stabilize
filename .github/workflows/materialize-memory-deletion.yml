@@ -1,9 +1,6 @@
 name: Materialize memory deletion
 
 on:
-  push:
-    branches:
-      - agent/add-memory-deletion
   pull_request:
     branches:
       - main
