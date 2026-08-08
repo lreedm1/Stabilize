@@ -298,11 +298,6 @@ export function renderPage(options = {}) {
     <template id="product-copy">${productCopyData}</template>
     <script src="/mobile-quality.js?v=20260802-8"></script>
     <!-- Legacy generator marker: 20260808-guest-summary-1 -->
-    <!-- Legacy generator marker: 20260808-guest-summary-1 -->
-    <!-- Legacy generator marker: 20260808-guest-summary-1 -->
-    <!-- Legacy generator marker: 20260808-guest-summary-1 -->
-    <!-- Legacy generator marker: 20260808-guest-summary-1 -->
-    <!-- Legacy generator marker: 20260808-guest-summary-1 -->
     <script type="module" src="/app.js?v=20260808-full-guest-thread-1"></script>
     <script type="module" src="/reasoning-choice.js?v=20260807-instant-thinking-2-fastest-1"></script>
   </body>
