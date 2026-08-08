@@ -1,0 +1,73 @@
+name: Materialize memory deletion
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out the feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/add-memory-deletion
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Prepare compatibility and regression coverage
+        run: node scripts/prepare-memory-deletion-compat.mjs
+
+      - name: Install and materialize canonical output
+        run: npm ci
+
+      - name: Diagnose a second policy pass
+        shell: bash
+        run: |
+          cp public/app.js /tmp/stabilize-app-first-pass.js
+          npm run apply:prompt-policy
+          if ! cmp --silent /tmp/stabilize-app-first-pass.js public/app.js; then
+            echo "public/app.js changed on the second policy pass:"
+            diff --unified /tmp/stabilize-app-first-pass.js public/app.js || true
+          else
+            echo "public/app.js is stable across a second policy pass."
+          fi
+
+      - name: Run the complete test suite
+        run: npm test
+
+      - name: Validate the Worker build
+        run: npm run check
+
+      - name: Commit canonical generated output
+        id: commit
+        shell: bash
+        run: |
+          if [[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "The memory-deletion tree is already canonical."
+            exit 0
+          fi
+
+          git status --short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Add immediate remembered-context deletion"
+          git push origin HEAD:agent/add-memory-deletion
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the committed tree is clean
+        if: steps.commit.outputs.changed != 'true'
+        run: npm run verify:clean

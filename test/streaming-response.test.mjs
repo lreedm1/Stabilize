@@ -15,7 +15,7 @@ test("model replies stream through NDJSON while fixed routes remain deterministi
   assert.match(workerSource, /response\.output_text\.delta/);
   assert.match(workerSource, /type:\s*"delta"/);
   assert.match(workerSource, /type:\s*"done"/);
-  assert.match(workerSource, /await recordExchange\(stub/);
+  assert.match(workerSource, /await recordExchange\(\s*stub/);
   assert.match(workerSource, /selectReasoningEffort/);
   assert.equal(
     (workerSource.match(/max_output_tokens: 500/g) || []).length,
@@ -40,7 +40,7 @@ test("model replies stream through NDJSON while fixed routes remain deterministi
   );
   assert.match(
     workerSource,
-    /return streamChatReply\(messages, route, env, latestText, stub, ctx\)/,
+    /return streamChatReply\([\s\S]*?messages,[\s\S]*?route,[\s\S]*?env,[\s\S]*?latestText,[\s\S]*?stub,[\s\S]*?ctx,[\s\S]*?memory\.generation,[\s\S]*?\);/,
   );
 
   assert.match(clientSource, /async function readStreamingResponse\(/);
