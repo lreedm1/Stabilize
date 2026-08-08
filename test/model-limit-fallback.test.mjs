@@ -43,6 +43,6 @@ test("signed-in fastest response matches the guest model while thinking uses the
   const packageJson = JSON.parse(packageSource);
   assert.equal(
     packageJson.scripts["apply:prompt-policy"],
-    "node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs",
+    "node scripts/prepare-signed-in-latency.mjs && node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs",
   );
 });

@@ -546,7 +546,7 @@ test("signed-in fastest response matches the guest model while thinking uses the
   const packageJson = JSON.parse(packageSource);
   assert.equal(
     packageJson.scripts["apply:prompt-policy"],
-    "node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs",
+    "node scripts/prepare-signed-in-latency.mjs && node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs",
   );
 });
 `);
@@ -811,7 +811,7 @@ await update("test/paid-model-choice.test.mjs", (source) => {
   );
   next = next.replace(
     `    "node scripts/apply-priority-latency.mjs",`,
-    `    "node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs",`,
+    `    "node scripts/prepare-signed-in-latency.mjs && node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs",`,
   );
   next = next.replace(
     /50 free GPT-5\\\.6 Instant messages per UTC day/,
