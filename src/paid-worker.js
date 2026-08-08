@@ -6,7 +6,11 @@ import originalWorker, {
   readBoundedJson,
   readMemoryContext,
 } from "./index.js";
-import { readAuthSession } from "./auth.js";
+import {
+  createAccountContextToken,
+  readAccountContextToken,
+  readAuthSession,
+} from "./auth.js";
 import { fixedReplyForRoute } from "./safety.js";
 import { BillingAccount } from "./billing-account.js";
 import {
@@ -29,6 +33,130 @@ import {
 export { SessionMemory, BillingAccount };
 
 const ACCOUNT_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+const ACCOUNT_CONTEXT_VERSION = 1;
+const ACCOUNT_CONTEXT_TOKEN_SECONDS = 15 * 60;
+const ACCOUNT_CONTEXT_SUMMARY_BYTES = 1_600;
+const ACCOUNT_CONTEXT_MESSAGE_BYTES = 1_600;
+const ACCOUNT_CONTEXT_RECENT_MESSAGES = 4;
+const ACCOUNT_CONTEXT_MERGED_MESSAGES = 8;
+const accountContextEncoder = new TextEncoder();
+
+function truncateAccountContextUtf8(value, maxBytes) {
+  const text = String(value || "").trim();
+  if (!text || accountContextEncoder.encode(text).byteLength <= maxBytes) {
+    return text;
+  }
+
+  const points = Array.from(text);
+  let low = 0;
+  let high = points.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    const candidate = points.slice(0, middle).join("");
+    if (accountContextEncoder.encode(candidate).byteLength <= maxBytes) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return points.slice(0, low).join("").trim();
+}
+
+function normalizeAccountContextMessages(
+  messages,
+  limit = ACCOUNT_CONTEXT_MERGED_MESSAGES,
+) {
+  if (!Array.isArray(messages)) return [];
+  const cleaned = messages
+    .filter(
+      (message) =>
+        message && ["user", "assistant"].includes(message.role),
+    )
+    .map((message) => ({
+      role: message.role,
+      content: truncateAccountContextUtf8(
+        message.content,
+        ACCOUNT_CONTEXT_MESSAGE_BYTES,
+      ),
+    }))
+    .filter((message) => message.content)
+    .slice(-limit);
+
+  const alternating = [];
+  for (const message of cleaned) {
+    const previous = alternating.at(-1);
+    if (previous?.role === message.role) {
+      previous.content = truncateAccountContextUtf8(
+        previous.content + "\n" + message.content,
+        ACCOUNT_CONTEXT_MESSAGE_BYTES,
+      );
+    } else if (
+      previous?.role !== message.role ||
+      previous?.content !== message.content
+    ) {
+      alternating.push({ ...message });
+    }
+  }
+  return alternating.slice(-limit);
+}
+
+function boundedAccountContext(memory) {
+  const generation = Number(memory?.generation);
+  return {
+    v: ACCOUNT_CONTEXT_VERSION,
+    summary: truncateAccountContextUtf8(
+      memory?.summary,
+      ACCOUNT_CONTEXT_SUMMARY_BYTES,
+    ),
+    recent: normalizeAccountContextMessages(
+      memory?.recent,
+      ACCOUNT_CONTEXT_RECENT_MESSAGES,
+    ),
+    awaitingSafetyAnswer: memory?.awaitingSafetyAnswer === true,
+    turnCount: Math.max(0, Number(memory?.turnCount) || 0),
+    updatedAt: Number(memory?.updatedAt) || null,
+    generation:
+      Number.isSafeInteger(generation) && generation >= 0 ? generation : 0,
+  };
+}
+
+function localAccountContextMessages(body) {
+  const messages = normalizeAccountContextMessages(body?.messages);
+  const latest = messages.at(-1);
+  const current = String(body?.message || "").trim();
+  if (latest?.role === "user" && latest.content === current) messages.pop();
+  return messages;
+}
+
+function preparedMemoryFromAccountContext(context, body) {
+  const generation = Number(context?.generation);
+  if (
+    context?.v !== ACCOUNT_CONTEXT_VERSION ||
+    !Number.isSafeInteger(generation) ||
+    generation < 0
+  ) {
+    return null;
+  }
+
+  return {
+    summary: truncateAccountContextUtf8(
+      context.summary,
+      ACCOUNT_CONTEXT_SUMMARY_BYTES,
+    ),
+    recent: normalizeAccountContextMessages(
+      [
+        ...(Array.isArray(context.recent) ? context.recent : []),
+        ...localAccountContextMessages(body),
+      ],
+      ACCOUNT_CONTEXT_MERGED_MESSAGES,
+    ),
+    awaitingSafetyAnswer: context.awaitingSafetyAnswer === true,
+    turnCount: Math.max(0, Number(context.turnCount) || 0),
+    updatedAt: Number(context.updatedAt) || null,
+    generation,
+  };
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -189,6 +317,7 @@ function chatPreparationOptions(env, body = {}) {
     freePeriod: dailyUsagePeriod(),
     paidLimit: monthlyModelMessageLimit(env),
     freeLimit: freeDailyModelMessageLimit(env),
+    includeMemoryGeneration: true,
   };
 }
 
@@ -511,7 +640,7 @@ async function injectBillingPage(response, request, env, authSession, state, rec
   if ((markup || composerModelPicker) && !html.includes('src="/billing-client.js')) {
     html = html.replace(
       "</body>",
-      '    <script type="module" src="/billing-client.js?v=20260808-gpt56-fast-first-1"></script>\n  </body>',
+      '    <script type="module" src="/billing-client.js?v=20260808-signed-in-prefetch-1"></script>\n  </body>',
     );
   }
   if (notice) {
@@ -535,13 +664,6 @@ async function rootResponse(request, env, ctx) {
   const authSession = await readAuthSession(request, env);
   const stub = billingStub(env, authSession?.accountKey);
   let state = await readBillingState(stub);
-  if (authSession) {
-    const memoryWarmup = readMemoryContext(
-      accountMemoryStub(env, authSession.accountKey),
-    );
-    if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(memoryWarmup);
-    else void memoryWarmup;
-  }
   let reconciled = false;
   const url = new URL(request.url);
 
@@ -571,6 +693,87 @@ async function rootResponse(request, env, ctx) {
 
   const response = await originalWorker.fetch(request, env, ctx);
   return injectBillingPage(response, request, env, authSession, state, reconciled);
+}
+
+async function syncBillingMemoryGeneration(stub, value) {
+  const generation = Number(value);
+  if (!Number.isSafeInteger(generation) || generation < 0) return null;
+  if (!stub || typeof stub.setMemoryGeneration !== "function") {
+    return generation;
+  }
+  try {
+    return await stub.setMemoryGeneration(generation);
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: "billing_memory_generation_sync_failed",
+      error: error instanceof Error ? error.name : "UnknownError",
+    }));
+    return null;
+  }
+}
+
+async function accountContextResponse(request, env) {
+  if (request.method !== "GET") {
+    return jsonResponse({ error: "Method not allowed." }, 405);
+  }
+  if (!sameOriginOrNonBrowser(request)) {
+    return jsonResponse({ error: "Cross-origin request rejected." }, 403);
+  }
+  const authSession = await readAuthSession(request, env);
+  if (!authSession) {
+    return jsonResponse({ error: "Sign in to use account memory." }, 401);
+  }
+
+  const accountStub = billingStub(env, authSession.accountKey);
+  const memory = await readMemoryContext(
+    accountMemoryStub(env, authSession.accountKey),
+  );
+  await syncBillingMemoryGeneration(accountStub, memory.generation);
+  const token = await createAccountContextToken(
+    authSession.accountKey,
+    boundedAccountContext(memory),
+    env,
+  );
+  return jsonResponse(
+    {
+      token,
+      expiresInSeconds: ACCOUNT_CONTEXT_TOKEN_SECONDS,
+      generation: Math.max(0, Number(memory.generation) || 0),
+      turnCount: Math.max(0, Number(memory.turnCount) || 0),
+    },
+    200,
+    { "X-Stabilize-Memory-Source": "durable-object" },
+  );
+}
+
+async function memoryControlResponse(request, env, ctx) {
+  const authSessionPromise = readAuthSession(request, env);
+  const response = await originalWorker.fetch(request, env, ctx);
+  if (!response.ok) return response;
+
+  const authSession = await authSessionPromise;
+  if (!authSession) return response;
+  let generation = null;
+  try {
+    const result = await response.clone().json();
+    const supplied = Number(result?.generation);
+    if (Number.isSafeInteger(supplied) && supplied >= 0) {
+      generation = supplied;
+    }
+  } catch {
+    // The original control response remains authoritative.
+  }
+  if (generation === null) {
+    const memory = await readMemoryContext(
+      accountMemoryStub(env, authSession.accountKey),
+    );
+    generation = Math.max(0, Number(memory.generation) || 0);
+  }
+  await syncBillingMemoryGeneration(
+    billingStub(env, authSession.accountKey),
+    generation,
+  );
+  return response;
 }
 
 async function checkoutResponse(request, env) {
@@ -669,6 +872,22 @@ async function paidChatResponse(request, env, ctx) {
   const memoryStub = body?.privateChat === true
     ? null
     : accountMemoryStub(env, authSession.accountKey);
+  const contextStartedAt = Date.now();
+  const contextPreparation = body?.privateChat === true
+    ? Promise.resolve({ value: null, durationMs: 0 })
+    : readAccountContextToken(
+        String(body?.accountContextToken || ""),
+        authSession.accountKey,
+        env,
+      )
+        .then((value) => ({
+          value: preparedMemoryFromAccountContext(value, body),
+          durationMs: Date.now() - contextStartedAt,
+        }))
+        .catch(() => ({
+          value: null,
+          durationMs: Date.now() - contextStartedAt,
+        }));
   const billingStartedAt = Date.now();
   const billingPreparation = stub
     .prepareChat(chatPreparationOptions(env, body))
@@ -677,16 +896,48 @@ async function paidChatResponse(request, env, ctx) {
       durationMs: Date.now() - billingStartedAt,
     }));
   const memoryStartedAt = Date.now();
-  const memoryPreparation = readMemoryContext(memoryStub).then((value) => ({
-    value,
-    durationMs: Date.now() - memoryStartedAt,
-  }));
+  const memoryPreparation = body?.privateChat === true
+    ? Promise.resolve({
+        value: emptyMemoryContext(),
+        durationMs: 0,
+        source: "private",
+      })
+    : Promise.all([contextPreparation, billingPreparation]).then(
+        async ([prefetched, preparedBilling]) => {
+          const suppliedGeneration = Number(
+            preparedBilling.value?.memoryGeneration,
+          );
+          const currentGeneration =
+            Number.isSafeInteger(suppliedGeneration) && suppliedGeneration >= 0
+              ? suppliedGeneration
+              : 0;
+          if (
+            prefetched.value &&
+            prefetched.value.generation === currentGeneration
+          ) {
+            return {
+              value: prefetched.value,
+              durationMs: prefetched.durationMs,
+              source: "prefetched",
+            };
+          }
+
+          const value = await readMemoryContext(memoryStub);
+          await syncBillingMemoryGeneration(stub, value.generation);
+          return {
+            value,
+            durationMs: Date.now() - memoryStartedAt,
+            source: "durable-object",
+          };
+        },
+      );
   const [billingResult, memoryResult] = await Promise.all([
     billingPreparation,
     memoryPreparation,
   ]);
   const preparation = billingResult.value;
   const memory = memoryResult.value;
+  const memorySource = memoryResult.source || "durable-object";
   const preparationMs = Date.now() - requestStartedAt;
   console.info(
     JSON.stringify({
@@ -694,6 +945,7 @@ async function paidChatResponse(request, env, ctx) {
       authMs,
       billingMs: billingResult.durationMs,
       memoryMs: memoryResult.durationMs,
+      memorySource,
       preparationMs,
       model: String(preparation?.model || "").slice(0, 128),
       paid: preparation?.paid === true,
@@ -731,6 +983,7 @@ async function paidChatResponse(request, env, ctx) {
     authMs,
     billingMs: billingResult.durationMs,
     memoryMs: memoryResult.durationMs,
+    memorySource,
     preparationMs,
     model: preparation.model,
   });
@@ -756,7 +1009,14 @@ async function paidChatResponse(request, env, ctx) {
 
 function responseWithPreparationTiming(
   response,
-  { authMs, billingMs, memoryMs, preparationMs, model },
+  {
+    authMs,
+    billingMs,
+    memoryMs,
+    memorySource,
+    preparationMs,
+    model,
+  },
 ) {
   const headers = new Headers(response.headers);
   const timing = [
@@ -772,6 +1032,10 @@ function responseWithPreparationTiming(
     String(Math.max(0, Number(preparationMs) || 0)),
   );
   headers.set("X-Stabilize-Model-Selected", String(model || ""));
+  headers.set(
+    "X-Stabilize-Memory-Source",
+    String(memorySource || "durable-object"),
+  );
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -830,6 +1094,15 @@ const worker = {
       }
       if (url.pathname === "/api/stripe/webhook") {
         return await webhookResponse(request, env);
+      }
+      if (
+        url.pathname === "/api/account/memory" ||
+        url.pathname === "/api/conversation/new"
+      ) {
+        return await memoryControlResponse(request, env, ctx);
+      }
+      if (url.pathname === "/api/account/context") {
+        return await accountContextResponse(request, env);
       }
       if (url.pathname === "/api/chat") {
         return await paidChatResponse(request, env, ctx);

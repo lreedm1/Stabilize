@@ -89,6 +89,9 @@
         response from recreating the deleted memory. Billing and usage records are separate. This
         local deletion does not shorten the separate OpenAI storage period.
       </p>
+      <p>
+        To reduce signed-in response delay, the page requests a bounded, short-lived HMAC-signed account-context snapshot while you read or type. The opaque token is bound to the signed-in account, kept only in active page memory, checked against the current memory generation returned by the existing quota lookup, and refreshed after completed replies. It is not written to localStorage or sessionStorage. Invalid, expired, cross-account, or superseded tokens fall back to the account-memory Durable Object.
+      </p>
 
       <h2>Private chat</h2>
       <p>

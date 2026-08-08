@@ -173,6 +173,8 @@ Guest chats create no server-side Stabilize account memory. The web client keeps
 
 Signed-in users can start a private chat that bypasses Stabilize account-memory reads and writes for that tab. Private chat does not disable Cloudflare or OpenAI processing and does not change the provider-retention behavior described above.
 
+To reduce signed-in response delay, the web page prefetches a bounded, short-lived signed account-context snapshot while the user is reading or typing. The opaque snapshot is bound to the signed-in account, held only in active page memory, checked against the current memory generation returned by the existing quota lookup, and refreshed after completed replies. It is not written to localStorage or sessionStorage. Invalid, expired, cross-account, or superseded snapshots fall back to the account-memory Durable Object.
+
 The landscape animation tokenizes submitted prompts and displayed replies locally, immediately reduces them to numeric climate and motion signals, and does not add message text to animation storage, requests, or logs. Reduced-motion and lower-capacity mobile clients receive a static landscape path.
 
 The application does not use `CF-Connecting-IP` for memory, derive network aliases, or include account or network identifiers in successful-chat logs. Impact analytics uses one-way hashes of random browser, tab, and conversation identifiers and does not store prompt or assistant-response text. Google, Cloudflare, OpenAI, Stripe when used, and network infrastructure may process request data and metadata under their applicable terms. See `PRIVACY.md` for the implementation-level description and limitations.
