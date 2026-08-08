@@ -8,22 +8,13 @@ permissions:
   contents: read
 
 jobs:
-  migrate-generated-mobile-photo:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: write
+  test:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out main
+      - name: Check out repository
         uses: actions/checkout@v7
         with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -31,188 +22,14 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Install image tooling
-        run: python -m pip install --disable-pip-version-check pillow
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Reconstruct the generated image
-        run: |
-          cat tmp/mobile-generated-v5-q35/chunk-*.txt | base64 --decode > /tmp/mobile-generated-forest-path.webp
-          test -s /tmp/mobile-generated-forest-path.webp
-          echo "837815654053c38fccb60940b1a6a8455d338f259cb3e2f6ca52d34f114274af  /tmp/mobile-generated-forest-path.webp" | sha256sum --check
+      - name: Run tests
+        run: npm test
 
-      - name: Build responsive mobile images
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          from PIL import Image, ImageFilter, ImageOps
+      - name: Validate Worker build
+        run: npm run check
 
-          source_path = Path('/tmp/mobile-generated-forest-path.webp')
-          outputs = {
-              Path('public/scenes/mobile-generated-forest-path-v5-1440.webp'): (1440, 2560),
-              Path('public/scenes/mobile-generated-forest-path-v5-2160.webp'): (2160, 3840),
-              Path('public/scenes/mobile-generated-forest-path-v5-2880.webp'): (2880, 5120),
-          }
-          start_quality = {1440: 96, 2160: 95, 2880: 93}
-
-          with Image.open(source_path) as source:
-              source = ImageOps.exif_transpose(source).convert('RGB')
-              if source.size != (941, 1672):
-                  raise SystemExit(f'Unexpected generated source dimensions: {source.size}')
-
-          def save_bounded(image, path, quality):
-              while quality >= 84:
-                  image.save(path, 'WEBP', quality=quality, method=6)
-                  byte_size = path.stat().st_size
-                  if byte_size < 5_000_000:
-                      return quality, byte_size
-                  quality -= 2
-              raise SystemExit(f'Could not keep {path} below 5 MB')
-
-          for path, size in outputs.items():
-              rendered = ImageOps.fit(
-                  source,
-                  size,
-                  method=Image.Resampling.LANCZOS,
-                  centering=(0.50, 0.53),
-              )
-              rendered = rendered.filter(
-                  ImageFilter.UnsharpMask(radius=0.65, percent=34, threshold=4)
-              )
-              quality, byte_size = save_bounded(
-                  rendered,
-                  path,
-                  start_quality[size[0]],
-              )
-              with Image.open(path) as check:
-                  if check.size != size:
-                      raise SystemExit(f'Unexpected dimensions for {path}: {check.size}')
-              if byte_size < 200_000:
-                  raise SystemExit(f'{path} is unexpectedly small: {byte_size}')
-              print(
-                  f'Wrote {path}: {size[0]}x{size[1]}, quality {quality}, '
-                  f'{byte_size:,} bytes'
-              )
-          PY
-
-      - name: Wire the generated image into mobile
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          replacements = {
-              'mobile-sunlit-green-path-v4-1440.webp': 'mobile-generated-forest-path-v5-1440.webp',
-              'mobile-sunlit-green-path-v4-2160.webp': 'mobile-generated-forest-path-v5-2160.webp',
-              'mobile-sunlit-green-path-v4-2880.webp': 'mobile-generated-forest-path-v5-2880.webp',
-          }
-
-          for filename in [
-              'src/page.js',
-              'test/mobile-quality.test.mjs',
-              'test/product.test.mjs',
-          ]:
-              path = Path(filename)
-              text = path.read_text()
-              for old, new in replacements.items():
-                  text = text.replace(old, new)
-              path.write_text(text)
-
-          product_test = Path('test/product.test.mjs')
-          product = product_test.read_text()
-          product = product.replace('/Wolfgang Hasselmann/', '/OpenAI image generation/')
-          product = product.replace('/Unsplash License/', '/No external stock-photo attribution/')
-          product_test.write_text(product)
-
-          css_path = Path('public/photo-tuning.css')
-          css = css_path.read_text()
-          marker = '''  .photo-background {
-    display: none;
-  }
-}'''
-          replacement = '''  .photo-background {
-    display: none;
-  }
-
-  body::before {
-    background: linear-gradient(
-      180deg,
-      rgba(0, 0, 0, 0.16),
-      rgba(0, 0, 0, 0) 28%,
-      rgba(0, 0, 0, 0.04)
-    );
-  }
-}'''
-          if marker not in css:
-              raise SystemExit('Could not locate the mobile photo rule')
-          css = css.replace(marker, replacement, 1)
-          css_path.write_text(css)
-
-          Path('public/scenes/MOBILE_PHOTO_CREDIT.md').write_text(
-              'Mobile background generated for Stabilize with OpenAI image generation '
-              'on 2026-08-02.\n'
-              'No external stock-photo attribution is required.\n'
-              'Processed into responsive WebP sizes for the mobile background.\n'
-          )
-
-          for old in Path('public/scenes').glob('mobile-sunlit-green-path-v4-*.webp'):
-              old.unlink()
-
-          Path('.github/workflows/test.yml').write_text('''name: Test
-
-on:
-  push:
-  pull_request:
-
-permissions:
-  contents: read
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm test
-      - run: npm run check
-''')
-          PY
-
-          rm -rf tmp
-
-      - name: Validate the finished site
-        run: |
-          npm ci
-          npm test
-          npm run check
-          node --check src/page.js
-          grep -q "mobile-generated-forest-path-v5-2160.webp" src/page.js
-          grep -q "mobile-generated-forest-path-v5-2160.webp" test/mobile-quality.test.mjs
-          grep -q "OpenAI image generation" public/scenes/MOBILE_PHOTO_CREDIT.md
-          grep -q "rgba(0, 0, 0, 0.16)" public/photo-tuning.css
-          test ! -d tmp
-          test ! -e public/scenes/mobile-sunlit-green-path-v4-1440.webp
-
-      - name: Publish the clean result branch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Use the generated forest path on mobile"
-          git push --force origin HEAD:agent/generated-photo-output-v5
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm test
-      - run: npm run check
+      - name: Verify repository stays clean
+        run: npm run verify:clean
