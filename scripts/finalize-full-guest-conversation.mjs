@@ -42,6 +42,7 @@ function removeLinesContaining(path, marker) {
   return true;
 }
 
+// Keep the cache-busted guest client script stable across repeated policy runs.
 function canonicalizeGuestAppScript(path) {
   const source = read(path);
   const canonical =
