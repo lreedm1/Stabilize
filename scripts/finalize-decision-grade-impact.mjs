@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-// Keep the final canonical pass idempotent after every historical generator.
+// Keep runtime and regression output canonical after every historical generator.
 async function update(path, transform) {
   const before = await readFile(path, "utf8");
   const after = transform(before);
