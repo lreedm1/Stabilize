@@ -8,6 +8,12 @@ async function update(path, transform) {
 
 function replaceRequired(source, before, after, label) {
   if (source.includes(after)) return source;
+  if (
+    label === "the JSON-mode usage log" &&
+    source.includes("logInteractiveUsage(result, model, serviceTier);")
+  ) {
+    return source;
+  }
   if (!source.includes(before)) {
     throw new Error(`GPT-5.6 fast-first runtime could not find ${label}`);
   }
