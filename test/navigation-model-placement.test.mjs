@@ -57,8 +57,10 @@ test("Home lives in the hamburger menu without chat actions, duplicate model cho
     workerSource,
     /url\.searchParams\.get\("model"\) === "saved"/,
   );
-  assert.match(
-    packageSource,
-    /node scripts\/finalize-home-menu-and-model-placement\.mjs/,
+
+  const config = JSON.parse(packageSource);
+  assert.equal(
+    config.scripts["apply:prompt-policy"],
+    "node scripts/apply-priority-latency.mjs",
   );
 });
