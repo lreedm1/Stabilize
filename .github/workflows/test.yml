@@ -56,6 +56,14 @@ jobs:
       - name: Reconstruct the final generator
         shell: bash
         run: |
+          wc -c tmp/memory-controls-generator/chunk-*.txt
+          cat > /tmp/memory-control-chunks.sha256 <<'SUMS'
+          ec641de22336de71aacc6a245900c79f302efedb42a484c30236c7080e7a5ef3  tmp/memory-controls-generator/chunk-00.txt
+          4cf278828ff73e6158e0763da25b5a2c823548c0d884d996109ea6727d8ab952  tmp/memory-controls-generator/chunk-01.txt
+          0c74ffa49cef018a3f97ff9198bec1a238db926c145e92e686f10e3235a16c58  tmp/memory-controls-generator/chunk-02.txt
+          6eb6a7afb60f0e208e4c91b688b50d6da820ea6b21dfe3c876f56cdc491451e3  tmp/memory-controls-generator/chunk-03.txt
+          SUMS
+          sha256sum --check /tmp/memory-control-chunks.sha256
           cat tmp/memory-controls-generator/chunk-*.txt \
             | base64 --decode \
             | gzip --decompress \
