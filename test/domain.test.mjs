@@ -44,7 +44,11 @@ test("stabilize.info is the only production domain", async () => {
   assert.match(sitemap, /https:\/\/stabilize\.info\//);
   assert.match(sitemap, /https:\/\/stabilize\.info\/about\.html/);
   assert.match(sitemap, /https:\/\/stabilize\.info\/sustainability\.html/);
+  assert.match(sitemap, /https:\/\/stabilize\.info\/support\.html/);
+  assert.match(robots, /User-agent: \*/);
+  assert.match(robots, /Allow: \//);
   assert.match(robots, /Sitemap: https:\/\/stabilize\.info\/sitemap\.xml/);
+  assert.doesNotMatch(robots, /Disallow: \/\s*$/m);
   assert.match(workflow, /https:\/\/stabilize\.info\/api\/auth/);
   assert.doesNotMatch(workflow, /Legacy-domain redirect/);
 });
@@ -87,7 +91,7 @@ test("repository and public descriptions match the current model policy", async 
   assert.match(sustainability, /free GPT-5\.6 Instant → GPT-5\.4 ladder intact/);
 });
 
-test("all public guide pages use stabilize.info canonicals", async () => {
+test("all public guide pages use stabilize.info canonicals and remain indexable", async () => {
   const pages = await Promise.all([
     repositoryFile("public/about.html"),
     repositoryFile("public/sustainability.html"),
@@ -95,10 +99,12 @@ test("all public guide pages use stabilize.info canonicals", async () => {
     repositoryFile("public/floor-first.html"),
     repositoryFile("public/safety.html"),
     repositoryFile("public/privacy.html"),
+    repositoryFile("public/support.html"),
   ]);
 
   for (const page of pages) {
     assert.match(page, /rel="canonical" href="https:\/\/stabilize\.info\//);
+    assert.match(page, /meta name="robots" content="index,follow/);
   }
 });
 

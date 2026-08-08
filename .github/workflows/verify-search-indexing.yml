@@ -1,0 +1,83 @@
+name: Verify search indexing readiness
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy Stabilize to Cloudflare
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-indexing:
+    name: Verify crawlable production pages
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Verify robots, sitemap, canonicals, and indexability
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base="https://stabilize.info"
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+          googlebot='Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+
+          for attempt in {1..18}; do
+            echo "Indexing-readiness attempt ${attempt}"
+
+            if curl --fail --location --max-time 20 --silent --show-error \
+              --user-agent "$googlebot" \
+              "$base/robots.txt" > "$workdir/robots.txt" && \
+              curl --fail --location --max-time 20 --silent --show-error \
+              --user-agent "$googlebot" \
+              "$base/sitemap.xml" > "$workdir/sitemap.xml" && \
+              curl --fail --location --max-time 20 --silent --show-error \
+              --user-agent "$googlebot" \
+              --dump-header "$workdir/home.headers" \
+              "$base/" > "$workdir/home.html"; then
+
+              mapfile -t urls < <(
+                grep -oE '<loc>[^<]+' "$workdir/sitemap.xml" | sed 's#<loc>##'
+              )
+
+              ready=true
+              grep -Fq 'User-agent: *' "$workdir/robots.txt" || ready=false
+              grep -Fq 'Allow: /' "$workdir/robots.txt" || ready=false
+              grep -Fq 'Sitemap: https://stabilize.info/sitemap.xml' "$workdir/robots.txt" || ready=false
+              ! grep -Eq '^Disallow: /[[:space:]]*$' "$workdir/robots.txt" || ready=false
+              [[ ${#urls[@]} -ge 8 ]] || ready=false
+              grep -Fq '<loc>https://stabilize.info/</loc>' "$workdir/sitemap.xml" || ready=false
+              grep -Fq '<loc>https://stabilize.info/support.html</loc>' "$workdir/sitemap.xml" || ready=false
+              grep -Fq '<link rel="canonical" href="https://stabilize.info/"' "$workdir/home.html" || ready=false
+              grep -Fq '<meta name="robots" content="index,follow' "$workdir/home.html" || ready=false
+              grep -Fq '<h1 id="seo-heading">Get unstuck.</h1>' "$workdir/home.html" || ready=false
+              ! grep -Eqi '^x-robots-tag:.*noindex' "$workdir/home.headers" || ready=false
+
+              if [[ "$ready" == true ]]; then
+                for url in "${urls[@]}"; do
+                  curl --fail --location --max-time 20 --silent --show-error \
+                    --user-agent "$googlebot" \
+                    --output /dev/null \
+                    "$url"
+                done
+                echo "Production exposes a crawlable homepage, robots.txt, sitemap, and ${#urls[@]} canonical URLs."
+                exit 0
+              fi
+            fi
+
+            sleep 10
+          done
+
+          echo "::error::Production search-indexing signals are incomplete or unavailable."
+          echo "--- robots.txt ---"
+          cat "$workdir/robots.txt" 2>/dev/null || true
+          echo "--- sitemap.xml ---"
+          cat "$workdir/sitemap.xml" 2>/dev/null || true
+          exit 1
