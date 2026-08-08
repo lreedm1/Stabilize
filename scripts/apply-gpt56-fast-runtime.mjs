@@ -154,6 +154,48 @@ await update("src/paid-worker.js", (source) => {
   return next;
 });
 
+await update("src/index.js", (source) =>
+  replaceBlock(
+    source,
+    "async function generateReply(messages, route, env, latestText) {",
+    "\nfunction sanitizeSummary",
+    (block) => {
+      let next = replaceRequired(
+        block,
+        `  const { apiKey, model, reasoningEffort } = openAIConfig(env);`,
+        `  const { apiKey, model, reasoningEffort, serviceTier } = openAIConfig(env);`,
+        "the JSON-mode OpenAI configuration",
+      );
+      next = replaceRequired(
+        next,
+        `    {
+      model,
+      reasoning: { effort: turnReasoningEffort },`,
+        `    {
+      model,
+      service_tier: serviceTier,
+      reasoning: { effort: turnReasoningEffort },`,
+        "the JSON-mode Fast service tier",
+      );
+      next = replaceRequired(
+        next,
+        `    "OpenAIHttpError",
+  );
+
+  const reply = validateModelReply(result.text);`,
+        `    "OpenAIHttpError",
+  );
+  logInteractiveUsage(result, model, serviceTier);
+
+  const reply = validateModelReply(result.text);`,
+        "the JSON-mode usage log",
+      );
+      return next;
+    },
+    "the JSON-mode chat generator",
+  ),
+);
+
 await update("src/billing-account.js", (source) =>
   source.replace(
     `      // Signed-in instant chats use the unmetered default model.
