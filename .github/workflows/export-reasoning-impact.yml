@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/reasoning-effort-impact
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -11,6 +14,7 @@ permissions:
 
 jobs:
   export:
+    if: github.event_name != 'pull_request' || github.head_ref == 'agent/reasoning-effort-impact'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
