@@ -87,6 +87,15 @@ test("signed-in Fastest response uses GPT-5.4 while thinking uses the free Curre
 });
 `);
 
+await update("test/model-usage-worker.test.mjs", (source) =>
+  source.replace(
+    '  assert.match(html, /<span class="composer-model-current">5.4</span>/);',
+    `  assert.ok(
+    html.includes('<span class="composer-model-current">5.4</span>'),
+  );`,
+  ),
+);
+
 await update("test/sustainability.test.mjs", (source) =>
   source
     .replaceAll(
