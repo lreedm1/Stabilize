@@ -1,0 +1,125 @@
+name: Debug decision-grade impact bootstrap
+
+on:
+  push:
+    branches:
+      - agent/decision-grade-impact-v2
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  debug-bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Mark diagnostic pending
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          target="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          payload="$(printf '{"state":"pending","context":"diagnostic/decision-grade-impact","description":"Reproducing current-main measurement bootstrap","target_url":"%s"}' "$target")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+
+      - name: Check out current-main feature branch
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: agent/decision-grade-impact-v2
+
+      - name: Copy measurement sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin agent/decision-grade-impact
+          for file in \
+            scripts/apply-decision-grade-impact.mjs \
+            scripts/prepare-decision-grade-impact.mjs \
+            scripts/finalize-decision-grade-impact.mjs \
+            src/impact-pricing.js \
+            src/impact-latency.js \
+            test/decision-grade-impact.test.mjs \
+            test/decision-grade-impact-worker.test.mjs
+          do
+            mkdir -p "$(dirname "$file")"
+            git show "origin/agent/decision-grade-impact:${file}" > "$file"
+          done
+
+      - name: Wire the current pipeline
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const prepare = 'node scripts/prepare-decision-grade-impact.mjs';
+          const apply = 'node scripts/apply-decision-grade-impact.mjs';
+          const finalize = 'node scripts/finalize-decision-grade-impact.mjs';
+          const pipeline = pkg.scripts['apply:prompt-policy']
+            .split(' && ')
+            .filter(Boolean)
+            .filter((entry) => ![prepare, apply, finalize].includes(entry));
+          const prepareAnchor = pipeline.indexOf(
+            'node scripts/prepare-gpt56-fast-generators.mjs',
+          );
+          pipeline.splice(prepareAnchor >= 0 ? prepareAnchor + 1 : 0, 0, prepare);
+          const fullGuestAnchor = pipeline.indexOf(
+            'node scripts/finalize-full-guest-conversation.mjs',
+          );
+          pipeline.splice(
+            fullGuestAnchor >= 0 ? fullGuestAnchor + 1 : pipeline.length,
+            0,
+            apply,
+            finalize,
+          );
+          pkg.scripts['apply:prompt-policy'] = pipeline.join(' && ');
+          for (const [name, file] of [
+            ['test:node', 'test/decision-grade-impact.test.mjs'],
+            ['test:worker', 'test/decision-grade-impact-worker.test.mjs'],
+          ]) {
+            const parts = pkg.scripts[name].split(/\s+/).filter(Boolean);
+            if (!parts.includes(file)) parts.push(file);
+            pkg.scripts[name] = parts.join(' ');
+          }
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Reproduce generation
+        run: npm ci
+
+      - name: Publish diagnostic result
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          target="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          if [[ "$JOB_STATUS" == "success" ]]; then
+            state="success"
+            description="Current-main generation completed"
+          else
+            state="failure"
+            description="Current-main generation failed; inspect logs"
+          fi
+          payload="$(printf '{"state":"%s","context":"diagnostic/decision-grade-impact","description":"%s","target_url":"%s"}' "$state" "$description" "$target")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
