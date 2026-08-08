@@ -72,6 +72,7 @@ jobs:
             | base64 --decode \
             | gzip --decompress \
             > scripts/add-memory-deletion-and-guest-session.mjs
+          node tmp/memory-controls-generator/patch-current-main.mjs
           node --check scripts/add-memory-deletion-and-guest-session.mjs
 
       - name: Wire the generator and regression suites
