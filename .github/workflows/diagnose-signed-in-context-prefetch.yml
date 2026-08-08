@@ -1,0 +1,72 @@
+name: Diagnose signed-in context prefetch
+
+on:
+  push:
+    branches:
+      - agent/signed-in-prefetch-latency
+
+permissions:
+  contents: write
+
+concurrency:
+  group: diagnose-signed-in-prefetch-v1-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: agent/signed-in-prefetch-latency
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Run generation and capture diagnostics
+        shell: bash
+        run: |
+          set +e
+          {
+            echo "HEAD=$(git rev-parse HEAD)"
+            echo "--- node checks ---"
+            node --check scripts/apply-signed-in-context-prefetch.mjs
+            echo "apply_check=$?"
+            node --check scripts/finalize-signed-in-context-prefetch.mjs
+            echo "finalize_check=$?"
+            node --check scripts/normalize-signed-in-prefetch-pipeline.mjs
+            echo "normalize_check=$?"
+            echo "--- npm ci ---"
+            npm ci
+            echo "npm_ci=$?"
+            echo "--- generated syntax ---"
+            node --check src/auth.js
+            echo "auth_check=$?"
+            node --check src/paid-worker.js
+            echo "paid_worker_check=$?"
+            node --check src/billing-account.js
+            echo "billing_account_check=$?"
+            node --check src/session-memory.js
+            echo "session_memory_check=$?"
+            node --check src/index.js
+            echo "index_check=$?"
+            node --check public/app.js
+            echo "app_check=$?"
+            echo "--- status ---"
+            git status --short
+          } > signed-in-prefetch-diagnostic.log 2>&1
+          cat signed-in-prefetch-diagnostic.log
+      - name: Commit diagnostics and generated output
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No diagnostic changes to commit."
+            exit 0
+          fi
+          git commit -m "Record signed-in prefetch diagnostics"
+          git push origin HEAD:agent/signed-in-prefetch-latency
