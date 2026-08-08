@@ -22,7 +22,7 @@ test("signed-in Fastest response uses GPT-5.4 while thinking uses the free Curre
   assert.equal(config.vars.FREE_PLAN_FALLBACK_MODEL, "gpt-5.4");
 
   assert.ok(workerSource.includes("function chatPreparationOptions(env, body = {})"));
-  assert.match(workerSource, /const usesThinking = ["low", "medium", "high", "xhigh", "max"]/);
+  assert.ok(workerSource.includes('const usesThinking = ["low", "medium", "high", "xhigh", "max"].includes('));
   assert.match(workerSource, /.prepareChat(chatPreparationOptions(env, body))/);
   assert.match(workerSource, /preparation.model === defaultModel/);
   assert.match(workerSource, /responseWithPreparationTiming/);
