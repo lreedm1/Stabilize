@@ -71,6 +71,35 @@ jobs:
             );
           }
           writeFileSync(idempotencyPath, idempotency);
+
+          const streamingPath = 'scripts/apply-streaming-policy.mjs';
+          let streaming = readFileSync(streamingPath, 'utf8');
+          const oldStreamingCheck = `if (!workerAfter.includes("return streamChatReply(messages, route, env, latestText, stub, ctx);")) {
+            throw new Error("Streaming policy did not replace the chat completion response");
+          }`;
+          const newStreamingCheck = `const generationFencedStreamCompletion = \`    return streamChatReply(
+                messages,
+                route,
+                env,
+                latestText,
+                stub,
+                ctx,
+                memory.generation,
+              );\`;
+          
+          if (
+            !workerAfter.includes("return streamChatReply(messages, route, env, latestText, stub, ctx);") &&
+            !workerAfter.includes(generationFencedStreamCompletion)
+          ) {
+            throw new Error("Streaming policy did not replace the chat completion response");
+          }`;
+          if (!streaming.includes('generationFencedStreamCompletion')) {
+            if (!streaming.includes(oldStreamingCheck)) {
+              throw new Error('Could not locate the streaming compatibility check');
+            }
+            streaming = streaming.replace(oldStreamingCheck, newStreamingCheck);
+            writeFileSync(streamingPath, streaming);
+          }
           NODE
 
       - name: Install and materialize canonical output
