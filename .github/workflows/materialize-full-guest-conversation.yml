@@ -6,9 +6,11 @@ on:
       - agent/full-guest-conversation
     paths:
       - package.json
+      - scripts/prepare-full-guest-cache-version.mjs
       - scripts/remember-full-guest-conversation.mjs
       - scripts/remember-full-guest-client.mjs
       - scripts/remember-full-guest-server-docs.mjs
+      - scripts/finalize-full-guest-conversation.mjs
       - test/guest-summary.test.mjs
       - test/guest-summary-worker.test.mjs
       - .github/workflows/materialize-full-guest-conversation.yml
