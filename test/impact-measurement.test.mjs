@@ -5,9 +5,11 @@ import test from "node:test";
 const [
   worker,
   events,
+  latencyEvents,
   shards,
   dashboard,
   analytics,
+  latencyAnalytics,
   client,
   styles,
   router,
@@ -15,9 +17,11 @@ const [
 ] = await Promise.all([
   readFile("src/impact-worker.js", "utf8"),
   readFile("src/impact-events.js", "utf8"),
+  readFile("src/chat-latency-events.js", "utf8"),
   readFile("src/impact-shards.js", "utf8"),
   readFile("src/impact-dashboard.js", "utf8"),
   readFile("src/impact-analytics.js", "utf8"),
+  readFile("src/impact-analytics-latency.js", "utf8"),
   readFile("public/impact.js", "utf8"),
   readFile("public/impact.css", "utf8"),
   readFile("src/domain-router.js", "utf8"),
@@ -28,7 +32,9 @@ test("orderly impact keeps verified inline next-step and whole-conversation even
   assert.match(worker, /\/api\/impact-event/);
   assert.match(worker, /\/api\/message-feedback/);
   assert.match(worker, /\/admin\/impact/);
-  assert.match(events, /X-Stabilize-Turn-Id/);
+  assert.match(worker, /\.\/chat-latency-events\.js/);
+  assert.match(worker, /\.\/impact-analytics-latency\.js/);
+  assert.match(latencyEvents, /X-Stabilize-Turn-Id/);
   assert.match(events, /conversation_help_reported/);
   assert.match(shards, /IMPACT_SHARD_COUNT = 16/);
   assert.doesNotMatch(shards, /global-impact-v1/);
@@ -64,13 +70,48 @@ test("orderly impact keeps verified inline next-step and whole-conversation even
   assert.doesNotMatch(client, /outcome_selected/);
 
   assert.match(events, /const EVENT_SCHEMAS =/);
-  assert.match(events, /hashIdentifier\(env, "impact-conversation"/);
+  assert.match(latencyEvents, /hashIdentifier\(env, "impact-conversation"/);
   assert.match(events, /id=\"outcome-measurement\"/);
   assert.match(events, /up to three optional action buttons beside/);
   assert.match(styles, /\.impact-conversation-card/);
   assert.doesNotMatch(
-    `${worker}\n${events}\n${shards}\n${dashboard}`,
+    `${worker}\n${events}\n${latencyEvents}\n${shards}\n${dashboard}`,
     /userMessage|assistantReply|conversationText/,
+  );
+});
+
+test("chat analytics starts after the response stream and records first-token timing", () => {
+  const responseIndex = latencyEvents.indexOf(
+    "const response = await worker.fetch(request, env, ctx);",
+  );
+  const cloneIndex = latencyEvents.indexOf(
+    "const analyticsCopy = response.clone();",
+    responseIndex,
+  );
+  const analyticsIndex = latencyEvents.indexOf(
+    "recordChatAnalytics({",
+    cloneIndex,
+  );
+
+  assert.ok(responseIndex >= 0, "chat Worker call is missing");
+  assert.ok(cloneIndex > responseIndex, "analytics clone must follow the chat response");
+  assert.ok(
+    analyticsIndex > cloneIndex,
+    "analytics scheduling must follow the user-facing response",
+  );
+  assert.match(latencyEvents, /const resultPromise = parseChatResponse\(/);
+  assert.match(latencyEvents, /event\?\.type === "delta"/);
+  assert.match(latencyEvents, /result\.firstTokenMs = Math\.max/);
+  assert.match(latencyEvents, /schedule\(\s*ctx,\s*recordChatAnalytics\(/);
+  assert.match(latencyEvents, /Consume the cloned stream immediately/);
+  assert.match(latencyAnalytics, /extends BaseImpactAnalytics/);
+  assert.match(
+    latencyAnalytics,
+    /ALTER TABLE chat_turns ADD COLUMN first_token_ms INTEGER/,
+  );
+  assert.match(
+    latencyAnalytics,
+    /UPDATE chat_turns SET first_token_ms = \? WHERE turn_id = \?/,
   );
 });
 
