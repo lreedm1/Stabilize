@@ -29,10 +29,15 @@ for (const name of await readdir("test")) {
 }
 
 await update("test/model-limit-fallback.test.mjs", (source) =>
-  source.replace(
-    "  assert.match(workerSource, /function chatPreparationOptions(env, body = {})/);",
-    '  assert.ok(workerSource.includes("function chatPreparationOptions(env, body = {})"));',
-  ),
+  source
+    .replace(
+      "  assert.match(workerSource, /function chatPreparationOptions(env, body = {})/);",
+      '  assert.ok(workerSource.includes("function chatPreparationOptions(env, body = {})"));',
+    )
+    .replace(
+      '  assert.match(workerSource, /const usesThinking = ["low", "medium", "high", "xhigh", "max"]/);',
+      '  assert.ok(workerSource.includes(\'const usesThinking = ["low", "medium", "high", "xhigh", "max"].includes(\'));',
+    ),
 );
 
 await update("test/sustainability.test.mjs", (source) =>
