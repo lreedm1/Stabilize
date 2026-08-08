@@ -11,7 +11,7 @@ test("the About page states the product limits and funding problem honestly", as
   assert.match(about, /has not been clinically validated/i);
   assert.match(about, /cannot predict a\s+crisis/i);
   assert.match(about, /Impact requires sustainability/);
-  assert.match(about, /50 GPT-5\.6 Instant\s+messages per UTC day/i);
+  assert.match(about, /50 Current thinking\s+messages per UTC day/i);
   assert.match(about, /paid model-allowance subscription\s+enables subscriber model choice/i);
   assert.match(about, /200 non-default-model messages per UTC month/i);
   assert.match(about, /href="\/sustainability\.html"/);
