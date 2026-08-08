@@ -15,9 +15,9 @@ const assets = [
     label: "mobile forest video",
     payloadDirectory: "materialize/mobile-forest-video",
     outputPath: "public/scenes/mobile-forest-stream-v1.mp4",
-    expectedBytes: 602_638,
+    expectedBytes: 180_293,
     expectedSha256:
-      "f1cb23e5d78610429d9a473bd641ee2d31a0d0f8d4b461ccfe4f9d209232d3eb",
+      "591dae8d7ee75cb4426bea5820e8716acc521e9e1cf9cafc900ff8fd1b38d6bf",
     validate: validateVideo,
   },
 ];
@@ -108,7 +108,7 @@ function validateVideo(video) {
     throw new Error("Mobile forest background video must not contain audio");
   }
 
-  return "H.264 MP4, fast-start, no audio";
+  return "360x640 H.264 MP4, fast-start, no audio";
 }
 
 async function materialize(asset) {
