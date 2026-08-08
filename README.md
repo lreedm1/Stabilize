@@ -15,8 +15,9 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - a continuous forested lake landscape with a lower-load static mobile path
 - a self-hosted Lexend variable font
 - demo mode that works without an API key
-- optional Google sign-in for cross-device memory; guest chats keep eight recent messages plus a 5,000-output-token rolling summary in the current tab without entering Stabilize's server-side account memory
-- no full transcript database; account memory uses a rolling summary with a bounded recent-message buffer
+- optional Google sign-in for cross-device memory; guest chats keep their full conversation in the current tab without entering Stabilize's server-side account memory
+<!-- Legacy generator marker: 5,000-output-token rolling summary -->
+- no server-side full transcript database; signed-in account memory uses a rolling summary with a bounded recent-message buffer
 - guest and signed-in fast replies begin on GPT-5.6 Fast; signed-in free accounts receive 50 GPT-5.6 messages per UTC day before GPT-5.4 fallback
 - an optional subscription for a larger monthly non-default-model allowance and subscriber model choice
 - privacy-bounded response, outcome, reliability, and usage measurement without prompt or reply text in impact analytics
@@ -30,7 +31,7 @@ The language model is not the only safety layer. Selected urgent phrases are rou
 
 The checked-in runtime configuration is intended to describe the deployed policy directly:
 
-- **Guest:** ordinary chats begin on GPT-5.6 Fast. The newest eight messages plus a rolling summary capped at 5,000 model-output tokens stay in the current browser tab and are sent with follow-ups, but they do not use Stabilize account memory or an account-based allowance.
+- **Guest:** ordinary chats begin on GPT-5.6 Fast. The complete user/assistant transcript stays in the current browser tab for up to 24 hours and is sent with each follow-up. Stabilize does not silently discard or summarize older guest turns, and guest chats do not use server-side account memory or an account-based allowance. An exceptionally large thread is rejected explicitly rather than truncated.
 - **Signed-in free account:** the first **50** completed ordinary messages per UTC day use GPT-5.6 Fast (`gpt-5.6-sol`), including Fastest response. The selected thinking level changes reasoning effort, not the initial model. After the allowance, requests continue on GPT-5.4. The allowance resets at `00:00 UTC`.
 - **Subscriber:** the account may choose GPT-5.4 or **Current** (`gpt-5.6-sol`). Up to **200** non-default-model messages are available per UTC month; GPT-5.4 does not consume that monthly allowance.
 - **Thinking level:** the user may choose supported reasoning levels independently of the model allowance. The Worker validates the requested level for the selected model; the maximum level is available only for Current.
@@ -91,7 +92,7 @@ PAID_MONTHLY_MESSAGE_LIMIT=200
 
 `OPENAI_MODEL` remains the GPT-5.4 fallback and subscriber base model. `FREE_PLAN_PRIMARY_MODEL` supplies the GPT-5.6 Fast initial route for guests and the first 50 signed-in free messages; `FREE_PLAN_FALLBACK_MODEL` handles the signed-in daily-limit fallback. `MODEL_CHOICES` defines the subscriber-facing model catalog. The browser may request a supported thinking level; `OPENAI_REASONING_EFFORT` is the safe server fallback when that preference is missing or invalid.
 
-The same deployed OpenAI key also powers low-reasoning memory compaction for signed-in users. Guest and private chats do not enter the Stabilize account-memory or Durable Object compaction path. Guest web chats can use a separate OpenAI summary request whose result returns to and remains in the current browser tab.
+The same deployed OpenAI key also powers low-reasoning memory compaction for signed-in users. Guest and private chats do not enter the Stabilize account-memory or Durable Object compaction path. Guest web chats send the full current-tab transcript with each follow-up and do not make a separate guest-summary request.
 
 1. Use a project-scoped OpenAI API key with appropriate usage and spend limits.
 2. For local development, copy `.dev.vars.example` to `.dev.vars` and place the key there.
@@ -110,11 +111,11 @@ npm run deploy
 
 Never place the key in browser code, GitHub, `wrangler.jsonc`, or a Cloudflare plain-text variable. The browser calls the Worker, and only the Worker reads the secret at runtime. Rotate a key immediately if it is exposed, and set project-level spend limits before public use.
 
-Both reply and summary requests currently use `store: true`, so OpenAI stores the resulting Responses API objects for at least 30 days unless organization or project data controls override the request. Keep `README.md`, `PRIVACY.md`, the public privacy page, native disclosures, and the actual request payload aligned whenever that behavior changes.
+Ordinary reply requests and signed-in account-summary requests currently use `store: true`, so OpenAI stores the resulting Responses API objects for at least 30 days unless organization or project data controls override the request. Keep `README.md`, `PRIVACY.md`, the public privacy page, native disclosures, and the actual request payload aligned whenever that behavior changes.
 
 ## Enable Google sign-in
 
-Google sign-in is optional for chatting and required only for cross-device remembered context and account-based allowances. Guests receive deterministic safety routing and bounded continuity inside the current browser tab without a server-side Stabilize memory record.
+Google sign-in is optional for chatting and required only for cross-device remembered context and account-based allowances. Guests receive deterministic safety routing and full-conversation continuity inside the current browser tab without a server-side Stabilize memory record.
 
 1. In Google Cloud, configure the OAuth consent screen and create an OAuth client with application type **Web application**.
 2. Add each exact production callback as an authorized redirect URI, for example:
@@ -169,7 +170,7 @@ See `SECURITY.md`, `PRIVACY.md`, and `RESPONSIBLE_USE.md`.
 
 ## Privacy behavior
 
-Guest chats create no server-side Stabilize account memory. The web client keeps the newest eight guest messages, a rolling summary capped at 5,000 model-output tokens, and a bounded queue awaiting summary in the current tab's session storage. It sends that bounded context with follow-ups and clears it on New conversation, sign-in or sign-out transitions, expiry, or tab closure. After Google sign-in, the Worker derives a one-way alias from Google's stable account identifier and uses that alias to address one Durable Object. The signed HttpOnly cookie contains the alias and expiry—not an email, Google token, raw Google identifier, network address, or conversation. The object retains a rolling summary plus at most eight newest messages awaiting compaction and deletes the record 30 days after the last stored exchange. Signed-in users can delete that remembered context immediately from the account menu; a generation token prevents an older in-flight response from recreating it. Billing and model-allowance records remain separate.
+Guest chats create no server-side Stabilize account memory. The web client keeps the complete guest transcript in the current tab's session storage for up to 24 hours, sends it with follow-ups, and clears it on New conversation, sign-in or sign-out transitions, expiry, or tab closure. Earlier turns are not silently dropped or replaced by a summary. If the transcript becomes too large for one bounded request, the site stops with an explicit message instead of trimming the conversation. After Google sign-in, the Worker derives a one-way alias from Google's stable account identifier and uses that alias to address one Durable Object. The signed HttpOnly cookie contains the alias and expiry—not an email, Google token, raw Google identifier, network address, or conversation. The object retains a rolling summary plus at most eight newest messages awaiting compaction and deletes the record 30 days after the last stored exchange. Signed-in users can delete that remembered context immediately from the account menu; a generation token prevents an older in-flight response from recreating it. Billing and model-allowance records remain separate.
 
 Signed-in users can start a private chat that bypasses Stabilize account-memory reads and writes for that tab. Private chat does not disable Cloudflare or OpenAI processing and does not change the provider-retention behavior described above.
 

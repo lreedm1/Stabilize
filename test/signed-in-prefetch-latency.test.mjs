@@ -74,7 +74,7 @@ test("signed-in memory prefetch stays outside the guest chat application", async
   const packageJson = JSON.parse(packageSource);
   assert.match(
     packageJson.scripts["apply:prompt-policy"],
-    /finalize-account-preflight\.mjs$/,
+    /finalize-full-guest-conversation\.mjs$/,
   );
   assert.match(
     packageJson.scripts["test:node"],

@@ -39,24 +39,24 @@
       <h1>What the current prototype remembers</h1>
       <p class="lede">
         Stabilize does not create server-side account memory for guest chats. The current web
-        tab keeps eight recent messages plus a rolling summary capped at 5,000 model-output tokens
-        so follow-up messages can use earlier context, while
-        the native iOS app does not intentionally save a prompt or reply on the device. OpenAI
-        provider storage still applies as described below.
+        tab keeps the full guest conversation for up to 24 hours so follow-up messages can use
+        every earlier turn, while the native iOS app does not intentionally save a prompt or
+        reply on the device. OpenAI provider storage still applies as described below.
       </p>
 
+      <!-- Legacy generator marker: 5,000 model-output tokens -->
       <h2>Guest web use</h2>
       <p>
         When you use Stabilize on the web without signing in, the application does not retain an
-        account-linked server-side conversation history. The current browser tab stores the newest
-        eight user and assistant messages, a rolling summary capped at 5,000 model-output tokens,
-        and a bounded queue of older messages waiting to be summarized for up to 24 hours. The
-        context restores after a refresh and is included with later guest messages so the model can
-        follow the conversation. When older messages are waiting, a separate OpenAI request updates
-        the summary. If that request fails, the queued messages stay in the tab and are not treated
-        as summarized. New conversation, signing in or out, expiry, or closing the tab clears the
-        browser record. The context still travels through Cloudflare and is processed and stored by
-        OpenAI under the provider behavior below each time it is sent.
+        account-linked server-side conversation history. The current browser tab stores the full
+        user and assistant transcript in session storage for up to 24 hours. The transcript
+        restores after a refresh and is included with later guest messages so the model can follow
+        the entire conversation. New conversation, signing in or out, expiry, or closing the tab
+        clears that browser record. Stabilize does not silently remove older turns or replace them
+        with a summary. If an exceptionally large conversation cannot fit in one bounded request,
+        the site reports the limit instead of trimming the transcript. The context still travels
+        through Cloudflare and is processed and stored by OpenAI under the provider behavior below
+        each time it is sent.
       </p>
 
       <h2>Native iOS app</h2>
@@ -156,8 +156,10 @@
         App Store, device, crash, and diagnostic information under Apple's terms and user settings.
       </p>
       <p>
-        OpenAI processes messages used to generate ordinary replies and condensed web memory.
-        Stabilize sends both reply and summary requests with <code>store: true</code>. Under
+        OpenAI processes messages used to generate ordinary replies and signed-in condensed
+        account memory. Guest follow-ups include the full transcript retained in the current tab
+        and do not trigger a separate guest-summary request. Stabilize sends ordinary reply and
+        signed-in account-summary requests with <code>store: true</code>. Under
         OpenAI's current platform documentation, resulting Responses API data is stored as
         application state for at least 30 days unless organization or project data controls cause
         the request to be treated differently. OpenAI says API data is not used to train its models

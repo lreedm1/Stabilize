@@ -56,7 +56,7 @@ test("the homepage gives a short product promise", async () => {
   assert.match(pageSource, /page\.promise/);
   assert.match(
     pageSource,
-    /Guest chats keep eight recent messages plus a tab-only rolling summary/,
+    /Guest chats keep the full conversation in this tab/,
   );
   assert.doesNotMatch(pageSource, /data-example-message=/);
   assert.doesNotMatch(pageSource, /example-starts/);
@@ -150,31 +150,33 @@ test("the homepage has no predefined prompt buttons", async () => {
   assert.match(clientScript, /form\.addEventListener\("submit"/);
 });
 
-test("guest conversations persist only within the current tab", async () => {
+test("guest conversations preserve the full current-tab transcript", async () => {
   const [clientScript, privacyPage] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
     readFile(new URL("../public/privacy.html", import.meta.url), "utf8"),
   ]);
 
-  assert.match(clientScript, /GUEST_THREAD_STORAGE_KEY/);
-  assert.match(clientScript, /MAX_GUEST_THREAD_MESSAGES = 8/);
+  assert.match(
+    clientScript,
+    /GUEST_THREAD_STORAGE_KEY = "stabilize:guest-thread:v3"/,
+  );
+  assert.match(clientScript, /MAX_GUEST_THREAD_MESSAGE_CHARS = 4_000/);
+  assert.match(clientScript, /MAX_GUEST_SUMMARY_CHARS = 30_000/);
+  assert.match(clientScript, /MAX_CHAT_REQUEST_BYTES = 1_900_000/);
   assert.match(clientScript, /sessionStorage\.setItem/);
   assert.match(clientScript, /sessionStorage\.getItem/);
   assert.match(clientScript, /sessionStorage\.removeItem/);
-  assert.match(clientScript, /activeLocalThreadMessages\(\)/);
-  assert.match(clientScript, /privateChat \|\| !signedIn/);
+  assert.match(clientScript, /return normalizeGuestMessages\(messages\);/);
   assert.match(clientScript, /restoreGuestConversation\(\)/);
-  assert.match(clientScript, /MAX_CHAT_REQUEST_BYTES = 240_000/);
-  assert.match(clientScript, /MAX_GUEST_SUMMARY_CHARS = 30_000/);
-  assert.match(clientScript, /MAX_GUEST_SUMMARY_BATCH_MESSAGES = 12/);
-  assert.match(clientScript, /guestSummaryMessages/);
-  assert.match(clientScript, /guestSummaryUpdated/);
   assert.match(clientScript, /new TextEncoder\(\)\.encode\(serialized\)\.byteLength/);
+  assert.doesNotMatch(clientScript, /MAX_GUEST_THREAD_MESSAGES = 8/);
+  assert.doesNotMatch(clientScript, /messages\.shift\(\)/);
+  assert.doesNotMatch(clientScript, /applyGuestSummaryResult/);
   assert.doesNotMatch(clientScript, /localStorage/);
-  assert.match(privacyPage, /newest\s+eight/i);
-  assert.match(privacyPage, /5,000 model-output tokens/i);
+  assert.match(privacyPage, /full\s+user and assistant transcript/i);
   assert.match(privacyPage, /current browser tab/i);
   assert.match(privacyPage, /included with later guest\s+messages/i);
+  assert.match(privacyPage, /does not silently remove older turns/i);
 });
 
 test("ordinary replies offer useful model follow-up actions", async () => {
