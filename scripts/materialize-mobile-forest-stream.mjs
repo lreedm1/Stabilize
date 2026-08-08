@@ -1,7 +1,7 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 
-const payloadPath = "materialize/mobile-forest-stream/01.b64";
-const outputPath = "public/scenes/mobile-forest-stream-v1-864.webp";
+const payloadDirectory = "materialize/mobile-forest-stream";
+const outputPath = "public/scenes/mobile-forest-stream-v1-720.webp";
 
 function webpInfo(buffer) {
   if (
@@ -59,18 +59,30 @@ function webpInfo(buffer) {
   return { width, height, animated };
 }
 
-const encoded = (await readFile(payloadPath, "utf8")).replace(/\s+/g, "");
+const payloadFiles = (await readdir(payloadDirectory))
+  .filter((name) => /^\d{3}\.b64$/.test(name))
+  .sort();
+if (!payloadFiles.length) {
+  throw new Error("Mobile forest payload chunks are missing");
+}
+
+const encodedParts = await Promise.all(
+  payloadFiles.map((name) =>
+    readFile(`${payloadDirectory}/${name}`, "utf8"),
+  ),
+);
+const encoded = encodedParts.join("").replace(/\s+/g, "");
 if (!encoded || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
   throw new Error("Mobile forest payload is not valid base64 text");
 }
 
 const image = Buffer.from(encoded, "base64");
-if (image.byteLength < 100_000 || image.byteLength > 1_000_000) {
+if (image.byteLength < 100_000 || image.byteLength > 500_000) {
   throw new Error(`Unexpected mobile forest image size: ${image.byteLength}`);
 }
 
 const info = webpInfo(image);
-if (info.width !== 864 || info.height !== 1536 || info.animated) {
+if (info.width !== 720 || info.height !== 1280 || info.animated) {
   throw new Error(
     `Unexpected mobile forest image: ${info.width}x${info.height}, animated=${info.animated}`,
   );
@@ -79,5 +91,5 @@ if (info.width !== 864 || info.height !== 1536 || info.animated) {
 await mkdir("public/scenes", { recursive: true });
 await writeFile(outputPath, image);
 console.log(
-  `Materialized ${outputPath}: ${info.width}x${info.height}, ${image.byteLength} bytes`,
+  `Materialized ${outputPath}: ${info.width}x${info.height}, ${image.byteLength} bytes from ${payloadFiles.length} chunks`,
 );
