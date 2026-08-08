@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/memory-deletion-guest-session
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 concurrency:
