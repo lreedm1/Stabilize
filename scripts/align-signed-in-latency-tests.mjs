@@ -110,6 +110,24 @@ await update("test/priority-latency.test.mjs", (source) => {
   return next;
 });
 
+const interactiveRequestRecord = `    providerRequests.push({ model: body.model, effort: body.reasoning.effort });`;
+const filteredInteractiveRequestRecord = `    if (body.service_tier === "fast") {
+      providerRequests.push({ model: body.model, effort: body.reasoning.effort });
+    }`;
+for (const path of [
+  "test/model-usage-worker.test.mjs",
+  "test/paid-worker.test.mjs",
+]) {
+  await update(path, (source) =>
+    source.includes(filteredInteractiveRequestRecord)
+      ? source
+      : source.replaceAll(
+          interactiveRequestRecord,
+          filteredInteractiveRequestRecord,
+        ),
+  );
+}
+
 await update("test/sustainability.test.mjs", (source) =>
   source
     .replace(
