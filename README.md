@@ -17,7 +17,7 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - demo mode that works without an API key
 - optional Google sign-in for cross-device memory; guest chats use bounded browser-tab continuity without entering Stabilize's server-side account memory
 - no full transcript database; account memory uses a rolling summary with a bounded recent-message buffer
-- signed-in fast replies on GPT-5.4 plus 50 free Current thinking messages per UTC day
+- guest and signed-in fast replies begin on GPT-5.6 Fast; signed-in free accounts receive 50 GPT-5.6 messages per UTC day before GPT-5.4 fallback
 - an optional subscription for a larger monthly non-default-model allowance and subscriber model choice
 - privacy-bounded response, outcome, reliability, and usage measurement without prompt or reply text in impact analytics
 - safety, privacy, billing, UI, Worker, and release tests
@@ -30,13 +30,13 @@ The language model is not the only safety layer. Selected urgent phrases are rou
 
 The checked-in runtime configuration is intended to describe the deployed policy directly:
 
-- **Guest:** ordinary chats use GPT-5.4. A bounded recent transcript stays in the current browser tab and is sent with follow-ups, but it does not use Stabilize account memory.
-- **Signed-in free account:** **Fastest response** uses GPT-5.4, matching guest speed while retaining account memory. Choosing a thinking level uses **Current** (`gpt-5.6-sol`) for up to **50** completed messages per UTC day; after that allowance, the request continues on GPT-5.4. The allowance resets at `00:00 UTC`.
+- **Guest:** ordinary chats begin on GPT-5.6 Fast. A bounded recent transcript stays in the current browser tab and is sent with follow-ups, but it does not use Stabilize account memory or an account-based allowance.
+- **Signed-in free account:** the first **50** completed ordinary messages per UTC day use GPT-5.6 Fast (`gpt-5.6-sol`), including Fastest response. The selected thinking level changes reasoning effort, not the initial model. After the allowance, requests continue on GPT-5.4. The allowance resets at `00:00 UTC`.
 - **Subscriber:** the account may choose GPT-5.4 or **Current** (`gpt-5.6-sol`). Up to **200** non-default-model messages are available per UTC month; GPT-5.4 does not consume that monthly allowance.
 - **Thinking level:** the user may choose supported reasoning levels independently of the model allowance. The Worker validates the requested level for the selected model; the maximum level is available only for Current.
 - **Urgent fixed routes and failed provider requests:** these do not consume the free or subscriber model allowance.
 
-The public labels intentionally use **GPT-5.4**, **Current**, and thinking-level names. Internal API model IDs remain in configuration and code.
+The public labels intentionally use **GPT-5.6 Fast**, **GPT-5.4**, **Current**, and thinking-level names. Internal API model IDs remain in configuration and code.
 
 ## Project map
 
@@ -89,7 +89,7 @@ FREE_PLAN_FALLBACK_MODEL=gpt-5.4
 PAID_MONTHLY_MESSAGE_LIMIT=200
 ```
 
-`OPENAI_MODEL` is the guest, signed-in fastest-response, and fallback model. The two `FREE_PLAN_*` values define the signed-in Current thinking allowance and fallback. `MODEL_CHOICES` defines the subscriber-facing model catalog. The browser may request a supported thinking level; `OPENAI_REASONING_EFFORT` is the safe server fallback when that preference is missing or invalid.
+`OPENAI_MODEL` remains the GPT-5.4 fallback and subscriber base model. `FREE_PLAN_PRIMARY_MODEL` supplies the GPT-5.6 Fast initial route for guests and the first 50 signed-in free messages; `FREE_PLAN_FALLBACK_MODEL` handles the signed-in daily-limit fallback. `MODEL_CHOICES` defines the subscriber-facing model catalog. The browser may request a supported thinking level; `OPENAI_REASONING_EFFORT` is the safe server fallback when that preference is missing or invalid.
 
 The same deployed OpenAI key also powers low-reasoning memory compaction for signed-in users. Guest and private chats do not enter the Stabilize account-memory or compaction path; their bounded browser context is sent directly with follow-up requests.
 

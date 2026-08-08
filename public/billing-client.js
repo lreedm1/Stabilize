@@ -180,7 +180,7 @@ function modelUsageCopy(usage) {
     : usage.used +
         " of " +
         usage.limit +
-        " free Current thinking messages used today. Fastest response uses GPT-5.4 and does not count. The allowance resets at 00:00 UTC.";
+        " free GPT-5.6 Fast messages used today. GPT-5.4 takes over after this allowance. The allowance resets at 00:00 UTC.";
 }
 
 function updateSelectedModelDisplay(model) {
@@ -255,7 +255,7 @@ function showModelFallbackNotice(defaultModel, limit = 50) {
   notice.textContent =
     "You used today’s " +
     limit +
-    " Current thinking messages. Stabilize used GPT-5.4 for this message; it was still sent.";
+    " GPT-5.6 Fast messages. Stabilize used GPT-5.4 for this message; it was still sent.";
   for (const select of document.querySelectorAll(
     '#model-choice, #composer-model-choice',
   )) {
