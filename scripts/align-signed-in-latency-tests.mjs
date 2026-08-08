@@ -61,7 +61,7 @@ await update("test/paid-model-choice.test.mjs", (source) => {
     `/freeLimit[\\s\\S]*Current thinking messages/`,
   );
   next = next.replace(
-    `/50 free GPT-5\\.6 Instant messages per UTC day/`,
+    `/50 free GPT-5.6 Instant messages per UTC day/`,
     `/50 free Current thinking messages per UTC day/`,
   );
   if (!next.includes("config\\.freeModel === config\\.defaultModel")) {
