@@ -84,7 +84,7 @@ test("mobile uses the supplied forest stream video with a still fallback", async
   );
   assert.equal(image.byteLength, 91_750);
   assert.equal(imageInfo.chunks.includes("ANIM"), false);
-  assert.equal(video.byteLength, 602_638);
+  assert.equal(video.byteLength, 180_293);
   for (const marker of ["ftyp", "moov", "mdat", "avc1", "vide"]) {
     assert.ok(video.includes(Buffer.from(marker)), "MP4 includes " + marker);
   }
