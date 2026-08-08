@@ -25,6 +25,17 @@ function dedupeExactLines(source, exactLines) {
   return trailingNewline && !joined.endsWith("\n") ? joined + "\n" : joined;
 }
 
+function allowMobileVideoCsp(source) {
+  const next = source.replaceAll(
+    "img-src 'self' data:; script-src 'self';",
+    "img-src 'self' data:; media-src 'self' blob:; script-src 'self';",
+  );
+  if (!next.includes("media-src 'self' blob:")) {
+    throw new Error("Could not enable the mobile-video media-src policy.");
+  }
+  return next;
+}
+
 await update("src/chat-latency-events.js", (source) => {
   const marker =
     "  const resultPromise = parseChatResponse(analyticsCopy, startedAt).catch(() => ({";
@@ -63,6 +74,10 @@ await update("src/index.js", (source) => {
   );
   return next;
 });
+
+for (const path of ["src/index.js", "src/impact-shards.js", "public/_headers"]) {
+  await update(path, allowMobileVideoCsp);
+}
 
 for (const path of [
   "test/account-preflight.test.mjs",
@@ -127,5 +142,5 @@ await update("package.json", (source) => {
 });
 
 console.log(
-  "Finalized decision-grade impact compatibility and canonical regression expectations.",
+  "Finalized decision-grade impact compatibility, mobile-video CSP, and canonical regression expectations.",
 );
