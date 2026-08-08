@@ -99,12 +99,25 @@ for (const path of [
   "test/account-preflight.test.mjs",
   "test/signed-in-prefetch-latency.test.mjs",
 ]) {
-  replaceAll(
+  const fullGuestExpectation =
+    "/finalize-full-guest-conversation\\.mjs$/";
+  const changedFromImpact = replaceAll(
+    path,
+    "/finalize-decision-grade-impact\\.mjs$/",
+    fullGuestExpectation,
+  );
+  const changedFromAccount = replaceAll(
     path,
     "/finalize-account-preflight\\.mjs$/",
-    "/finalize-full-guest-conversation\\.mjs$/",
-    { required: true },
+    fullGuestExpectation,
   );
+  if (
+    !changedFromImpact &&
+    !changedFromAccount &&
+    !read(path).includes(fullGuestExpectation)
+  ) {
+    throw new Error(`Could not locate expected pipeline assertion in ${path}`);
+  }
 }
 
 replaceAll(
