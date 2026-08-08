@@ -89,6 +89,7 @@ jobs:
           }
           fs.writeFileSync(path, source);
           NODE
+          node tmp/guest-summary-generator/align-tests.mjs
           node --check scripts/add-guest-summary.mjs
 
       - name: Add the generator to the canonical policy pipeline
