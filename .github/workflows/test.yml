@@ -75,7 +75,18 @@ jobs:
         run: npm ci
 
       - name: Run complete test suite
-        run: npm test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee /tmp/luna-adaptive-test.log
+
+      - name: Upload exact test failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: luna-adaptive-test-failure
+          path: /tmp/luna-adaptive-test.log
+          retention-days: 1
 
       - name: Validate and materialize Worker bundle
         run: npm run check
