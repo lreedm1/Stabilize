@@ -162,15 +162,21 @@ function modelEnvironment(env, model) {
   });
 }
 
-function chatPreparationOptions(env) {
+function chatPreparationOptions(env, body = {}) {
   const choices = modelChoices(env);
   const defaultModel = String(env.OPENAI_MODEL || "gpt-5.4");
   const fallbackModel = String(
     env.FREE_PLAN_FALLBACK_MODEL || defaultModel || "gpt-5.4",
   );
-  const freeModel = String(
-    env.FREE_PLAN_PRIMARY_MODEL || "gpt-5.6-sol",
+  const requestedEffort = String(body?.reasoningEffort || "none")
+    .trim()
+    .toLowerCase();
+  const usesThinking = ["low", "medium", "high", "xhigh", "max"].includes(
+    requestedEffort,
   );
+  const freeModel = usesThinking
+    ? String(env.FREE_PLAN_PRIMARY_MODEL || "gpt-5.6-sol")
+    : defaultModel;
   const allowedModels = [...new Set([
     ...choices.map((choice) => choice.id),
     defaultModel,
@@ -197,13 +203,13 @@ function billingNotice(url, reconciled) {
       : "Payment is being confirmed. Refresh shortly if the larger allowance is not active yet.";
   }
   if (state === "cancelled") {
-    return "Checkout was cancelled. Your free GPT-5.6 allowance is unchanged.";
+    return "Checkout was cancelled. Your free Current thinking allowance is unchanged.";
   }
   if (state === "error") {
     return "Billing could not complete that request. Try again from the model menu.";
   }
   if (url.searchParams.get("model") === "automatic") {
-    return "Free accounts use GPT-5.6 Instant automatically, then GPT-5.4 after the daily allowance.";
+    return "Fastest response uses GPT-5.4. Thinking levels use Current until the daily allowance is reached.";
   }
   if (url.searchParams.get("model") === "limit") {
     return "That subscriber model allowance has been reached. Choose GPT-5.4 or manage billing.";
@@ -219,20 +225,13 @@ function modelChoiceState(state, choices, defaultModel) {
     OPENAI_MODEL: defaultModel,
   };
   const paid = state.entitled === true;
-  const automaticFreeModel = choices.some(
-    (choice) => choice.id === "gpt-5.6-sol",
-  )
-    ? "gpt-5.6-sol"
-    : defaultModel;
   const selected = paid
     ? isAllowedModel(choiceEnvironment, state.selectedModel)
       ? state.selectedModel
       : defaultModel
-    : automaticFreeModel;
+    : defaultModel;
   const selectedChoice = choices.find((choice) => choice.id === selected);
-  const currentLabel = paid
-    ? selectedChoice?.label || "Stabilize default"
-    : "GPT-5.6 Instant";
+  const currentLabel = selectedChoice?.label || "GPT-5.4";
   const currentPeriod = paid ? usagePeriod() : dailyUsagePeriod();
   const storedPeriod = paid
     ? state.paidUsagePeriod || state.usagePeriod
@@ -271,7 +270,7 @@ function modelUsageCopy({ paid, used, freeLimit, paidLimit }) {
     : used +
         " of " +
         freeLimit +
-        " free GPT-5.6 Instant messages used today. Stabilize switches to GPT-5.4 after this allowance. The allowance resets at 00:00 UTC.";
+        " free Current thinking messages used today. Fastest response uses GPT-5.4 and does not count. The allowance resets at 00:00 UTC.";
 }
 
 function billingMenuMarkup({
@@ -288,7 +287,7 @@ function billingMenuMarkup({
       '<h2 id="billing-heading">AI model</h2>' +
       "<p>Sign in for " +
       freeLimit +
-      " GPT-5.6 Instant messages each day, then GPT-5.4 automatically.</p>" +
+      " Current thinking messages each day. Fastest response stays on GPT-5.4.</p>" +
       '<a class="billing-primary billing-link" href="/auth/google">Sign in to choose a model</a>' +
       "</section>";
   }
@@ -314,9 +313,9 @@ function billingMenuMarkup({
   if (!choice.paid) {
     return '<section class="billing-menu" aria-labelledby="billing-heading">' +
       '<h2 id="billing-heading">AI model</h2>' +
-      "<p>GPT-5.6 Instant is automatic for the first " +
+      "<p>Fastest response uses GPT-5.4. Choose a thinking level to use Current for up to " +
       freeLimit +
-      " messages each UTC day. GPT-5.4 takes over afterward.</p>" +
+      " messages each UTC day.</p>" +
       '<p class="billing-usage" data-model-usage="true" aria-live="polite">' +
       escapeHtml(usage) +
       "</p>" +
@@ -366,7 +365,7 @@ function composerModelPickerMarkup({
     modelPanel =
       "<p>Sign in for " +
       freeLimit +
-      " GPT-5.6 Instant messages each day, then GPT-5.4 automatically.</p>" +
+      " Current thinking messages each day. Fastest response stays on GPT-5.4.</p>" +
       '<a class="billing-primary billing-link" href="/auth/google">Sign in to choose a model</a>';
   } else if (!choice.paid) {
     const usage = modelUsageCopy({
@@ -381,9 +380,9 @@ function composerModelPickerMarkup({
           "</form>"
       : "";
     modelPanel =
-      "<p>GPT-5.6 Instant is automatic for the first " +
+      "<p>Fastest response uses GPT-5.4. Choose a thinking level to use Current for up to " +
       freeLimit +
-      " messages each UTC day. GPT-5.4 takes over afterward.</p>" +
+      " messages each UTC day.</p>" +
       '<p class="billing-usage" data-model-usage="true" aria-live="polite">' +
       escapeHtml(usage) +
       "</p>" +
@@ -532,6 +531,13 @@ async function rootResponse(request, env, ctx) {
   const authSession = await readAuthSession(request, env);
   const stub = billingStub(env, authSession?.accountKey);
   let state = await readBillingState(stub);
+  if (authSession) {
+    const memoryWarmup = readMemoryContext(
+      accountMemoryStub(env, authSession.accountKey),
+    );
+    if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(memoryWarmup);
+    else void memoryWarmup;
+  }
   let reconciled = false;
   const url = new URL(request.url);
 
@@ -628,7 +634,10 @@ async function shouldRefundModelUsage(response) {
 
 async function paidChatResponse(request, env, ctx) {
   if (request.method !== "POST") return originalWorker.fetch(request, env, ctx);
+  const requestStartedAt = Date.now();
+  const authStartedAt = Date.now();
   const authSession = await readAuthSession(request, env);
+  const authMs = Date.now() - authStartedAt;
   if (!authSession) return originalWorker.fetch(request, env, ctx);
 
   const stub = billingStub(env, authSession.accountKey);
@@ -647,10 +656,38 @@ async function paidChatResponse(request, env, ctx) {
   const memoryStub = body?.privateChat === true
     ? null
     : accountMemoryStub(env, authSession.accountKey);
-  const [preparation, memory] = await Promise.all([
-    stub.prepareChat(chatPreparationOptions(env)),
-    readMemoryContext(memoryStub),
+  const billingStartedAt = Date.now();
+  const billingPreparation = stub
+    .prepareChat(chatPreparationOptions(env, body))
+    .then((value) => ({
+      value,
+      durationMs: Date.now() - billingStartedAt,
+    }));
+  const memoryStartedAt = Date.now();
+  const memoryPreparation = readMemoryContext(memoryStub).then((value) => ({
+    value,
+    durationMs: Date.now() - memoryStartedAt,
+  }));
+  const [billingResult, memoryResult] = await Promise.all([
+    billingPreparation,
+    memoryPreparation,
   ]);
+  const preparation = billingResult.value;
+  const memory = memoryResult.value;
+  const preparationMs = Date.now() - requestStartedAt;
+  console.info(
+    JSON.stringify({
+      event: "signed_in_chat_prepared",
+      authMs,
+      billingMs: billingResult.durationMs,
+      memoryMs: memoryResult.durationMs,
+      preparationMs,
+      model: String(preparation?.model || "").slice(0, 128),
+      paid: preparation?.paid === true,
+      fallback: preparation?.fallback === true,
+      privateChat: body?.privateChat === true,
+    }),
+  );
 
   if (!preparation?.allowed) {
     return jsonResponse(
@@ -664,9 +701,12 @@ async function paidChatResponse(request, env, ctx) {
     );
   }
 
-  if (preparation.paid !== true) body.reasoningEffort = "none";
+  const defaultModel = String(env.OPENAI_MODEL || "gpt-5.4");
+  if (preparation.paid !== true && preparation.model === defaultModel) {
+    body.reasoningEffort = "none";
+  }
   const selectedEnv = modelEnvironment(env, preparation.model);
-  const response = await preparedChatResponse(
+  let response = await preparedChatResponse(
     request,
     body,
     selectedEnv,
@@ -674,6 +714,13 @@ async function paidChatResponse(request, env, ctx) {
     authSession.accountKey,
     body?.privateChat === true ? emptyMemoryContext() : memory,
   );
+  response = responseWithPreparationTiming(response, {
+    authMs,
+    billingMs: billingResult.durationMs,
+    memoryMs: memoryResult.durationMs,
+    preparationMs,
+    model: preparation.model,
+  });
 
   if (
     preparation.reservationMade &&
@@ -691,6 +738,31 @@ async function paidChatResponse(request, env, ctx) {
     period: preparation.period,
     model: preparation.model,
     fallback: preparation.fallback,
+  });
+}
+
+function responseWithPreparationTiming(
+  response,
+  { authMs, billingMs, memoryMs, preparationMs, model },
+) {
+  const headers = new Headers(response.headers);
+  const timing = [
+    "stabilize-auth;dur=" + Math.max(0, Number(authMs) || 0),
+    "stabilize-billing;dur=" + Math.max(0, Number(billingMs) || 0),
+    "stabilize-memory;dur=" + Math.max(0, Number(memoryMs) || 0),
+    "stabilize-preparation;dur=" + Math.max(0, Number(preparationMs) || 0),
+  ].join(", ");
+  const existing = String(headers.get("Server-Timing") || "").trim();
+  headers.set("Server-Timing", existing ? existing + ", " + timing : timing);
+  headers.set(
+    "X-Stabilize-Preparation-Ms",
+    String(Math.max(0, Number(preparationMs) || 0)),
+  );
+  headers.set("X-Stabilize-Model-Selected", String(model || ""));
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
   });
 }
 

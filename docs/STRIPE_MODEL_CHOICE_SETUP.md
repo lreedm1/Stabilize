@@ -1,11 +1,11 @@
 # Stripe model-allowance setup
 
-Stabilize uses an automatic model ladder for signed-in free accounts and an optional Stripe subscription for a larger monthly non-default-model allowance.
+Stabilize keeps signed-in fastest responses on GPT-5.4 and provides a free daily Current thinking allowance, plus an optional Stripe subscription for a larger monthly non-default-model allowance.
 
 The current behavior is:
 
 - guests use GPT-5.4 for ordinary chats
-- signed-in free accounts receive 50 free GPT-5.6 Instant messages per UTC day, then continue on GPT-5.4
+- signed-in free accounts use GPT-5.4 for Fastest response and receive 50 free Current thinking messages per UTC day
 - subscribers can choose GPT-5.4 or Current (`gpt-5.6-sol`) and receive 200 non-default-model messages per UTC month
 - GPT-5.4 does not consume the subscriber monthly allowance
 - fixed urgent routes and failed provider requests do not consume either allowance
@@ -78,7 +78,7 @@ FREE_PLAN_FALLBACK_MODEL=gpt-5.4
 PAID_MONTHLY_MESSAGE_LIMIT=200
 ```
 
-The automatic free ladder remains available even when Stripe is not configured. Only upgrade and billing-management controls depend on valid Stripe secrets, the recurring Price, and the public origin. Checkout errors appear in the browser instead of failing silently.
+The free Current thinking allowance remains available even when Stripe is not configured. Only upgrade and billing-management controls depend on valid Stripe secrets, the recurring Price, and the public origin. Checkout errors appear in the browser instead of failing silently.
 
 ## Access and model routing
 

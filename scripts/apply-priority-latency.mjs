@@ -901,7 +901,10 @@ await update("src/paid-worker.js", (source) => {
 }
 
 `;
-  if (!next.includes("stub.prepareChat(chatPreparationOptions(env))")) {
+  if (
+    !next.includes("stub.prepareChat(chatPreparationOptions(env))") &&
+    !next.includes(".prepareChat(chatPreparationOptions(env, body))")
+  ) {
     next = replaceRegexRequired(
       next,
       /async function paidChatResponse\(request, env, ctx\) \{[\s\S]*?\n\}\n\n\n(?=function responseWithModelUsage)/,
