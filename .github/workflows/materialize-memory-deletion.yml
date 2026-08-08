@@ -1,0 +1,102 @@
+name: Materialize memory deletion
+
+on:
+  push:
+    branches:
+      - agent/add-memory-deletion
+  workflow_dispatch:
+
+concurrency:
+  group: materialize-memory-deletion
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out the feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/add-memory-deletion
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Register the final materialization pass and tests
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { readFileSync, writeFileSync } = require('node:fs');
+
+          const packagePath = 'package.json';
+          const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
+          const finalPass = 'node scripts/apply-memory-deletion.mjs';
+          if (!packageJson.scripts['apply:prompt-policy'].includes(finalPass)) {
+            packageJson.scripts['apply:prompt-policy'] += ` && ${finalPass}`;
+          }
+          if (!packageJson.scripts['test:node'].includes('test/memory-deletion-ui.test.mjs')) {
+            packageJson.scripts['test:node'] = packageJson.scripts['test:node'].replace(
+              'node --test ',
+              'node --test test/memory-deletion-ui.test.mjs ',
+            );
+          }
+          if (!packageJson.scripts['test:worker'].includes('test/memory-deletion-worker.test.mjs')) {
+            packageJson.scripts['test:worker'] += ' test/memory-deletion-worker.test.mjs';
+          }
+          writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
+
+          const idempotencyPath = 'test/prompt-policy-idempotency.test.mjs';
+          let idempotency = readFileSync(idempotencyPath, 'utf8');
+          if (!idempotency.includes('"scripts/apply-memory-deletion.mjs"')) {
+            idempotency = idempotency.replace(
+              '  "scripts/finalize-free-gpt56-repeat-shape.mjs",\n];',
+              '  "scripts/finalize-free-gpt56-repeat-shape.mjs",\n  "scripts/apply-memory-deletion.mjs",\n];',
+            );
+          }
+          if (!idempotency.includes('  "PRIVACY.md",')) {
+            idempotency = idempotency.replace(
+              'const POLICY_TARGETS = [\n',
+              'const POLICY_TARGETS = [\n  "PRIVACY.md",\n',
+            );
+          }
+          writeFileSync(idempotencyPath, idempotency);
+          NODE
+
+      - name: Install and materialize canonical output
+        run: npm ci
+
+      - name: Run the complete test suite
+        run: npm test
+
+      - name: Validate the Worker build
+        run: npm run check
+
+      - name: Commit canonical generated output
+        id: commit
+        shell: bash
+        run: |
+          if [[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "The memory-deletion tree is already canonical."
+            exit 0
+          fi
+
+          git status --short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Add immediate remembered-context deletion"
+          git push origin HEAD:agent/add-memory-deletion
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the committed tree is clean
+        if: steps.commit.outputs.changed != 'true'
+        run: npm run verify:clean
