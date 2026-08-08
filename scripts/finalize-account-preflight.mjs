@@ -11,20 +11,25 @@ async function update(path, transform) {
   if (after !== before) await writeFile(path, after);
 }
 
-const basePipeline =
-  "node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/add-guest-summary.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs";
-const preflightSuffix = " && node scripts/apply-account-preflight.mjs";
-const finalizerSuffix = " && node scripts/finalize-account-preflight.mjs";
-const canonicalPipeline = basePipeline + preflightSuffix + finalizerSuffix;
+const insertionAnchor =
+  "node scripts/finalize-signed-in-prefetch-tests.mjs";
+const preflightCommand = "node scripts/apply-account-preflight.mjs";
+const finalizerCommand = "node scripts/finalize-account-preflight.mjs";
+const canonicalSuffix =
+  " && " + preflightCommand + " && " + finalizerCommand;
 
 function canonicalizePipeline(source) {
-  return source
-    .split(preflightSuffix)
+  const withoutAccountCommands = source
+    .split(" && " + preflightCommand)
     .join("")
-    .split(finalizerSuffix)
-    .join("")
-    .split(basePipeline)
-    .join(canonicalPipeline);
+    .split(" && " + finalizerCommand)
+    .join("");
+  if (!withoutAccountCommands.includes(insertionAnchor)) {
+    return withoutAccountCommands;
+  }
+  return withoutAccountCommands
+    .split(insertionAnchor)
+    .join(insertionAnchor + canonicalSuffix);
 }
 
 await update("package.json", (source) => canonicalizePipeline(source));
@@ -55,5 +60,5 @@ for (const path of await testFiles("test")) {
 }
 
 console.log(
-  "Finalized one idempotent account-preflight pipeline and its regression expectations.",
+  "Finalized one extensible account-preflight pipeline and its regression expectations.",
 );
