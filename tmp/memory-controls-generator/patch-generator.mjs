@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -13,10 +13,11 @@ if (!source.includes(target) && !source.includes(replacement)) {
 source = source.split(target).join(replacement);
 
 const here = dirname(fileURLToPath(import.meta.url));
-const compatibilityBlock = readFileSync(
-  join(here, "compatibility-block.txt"),
-  "utf8",
-);
+const compatibilityBlock = readdirSync(here)
+  .filter((name) => name.startsWith("compatibility-") && name.endsWith(".txt"))
+  .sort()
+  .map((name) => readFileSync(join(here, name), "utf8"))
+  .join("");
 const compatibilityMarker = 'const readmePath = "README.md";\n';
 if (!source.includes(compatibilityBlock)) {
   if (!source.includes(compatibilityMarker)) {
