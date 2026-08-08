@@ -1,0 +1,100 @@
+replaceOnce(
+  "scripts/finalize-private-chat.mjs",
+  `  if (!text.includes('appendPrivateThreadMessage("assistant", cleanReply);')) {
+`,
+  `  if (
+    !text.includes('appendPrivateThreadMessage("assistant", cleanReply);') &&
+    !text.includes('appendLocalThreadMessage("assistant", cleanReply);')
+  ) {
+`,
+  "private finalizer local assistant persistence compatibility",
+);
+replaceOnce(
+  "scripts/finalize-private-chat.mjs",
+  `  if (!text.includes('appendPrivateThreadMessage("assistant", record.reply);')) {
+`,
+  `  if (
+    !text.includes('appendPrivateThreadMessage("assistant", record.reply);') &&
+    !text.includes('appendLocalThreadMessage("assistant", record.reply);')
+  ) {
+`,
+  "private finalizer local restored assistant compatibility",
+);
+replaceOnce(
+  "scripts/finalize-private-chat.mjs",
+  `  if (!text.includes('appendPrivateThreadMessage("user", clean);')) {
+`,
+  `  if (
+    !text.includes('appendPrivateThreadMessage("user", clean);') &&
+    !text.includes('appendLocalThreadMessage("user", clean);')
+  ) {
+`,
+  "private finalizer local user persistence compatibility",
+);
+replaceOnce(
+  "scripts/finalize-private-chat.mjs",
+  `  if (!text.includes("messages: privateChat ? privateThreadMessages : undefined")) {
+`,
+  `  const boundedRequestAlreadyCarriesPrivateHistory =
+    text.includes("function buildChatRequestBody(") &&
+    text.includes("privateChat || !signedIn") &&
+    text.includes("messages,");
+  if (
+    !text.includes("messages: privateChat ? privateThreadMessages : undefined") &&
+    !boundedRequestAlreadyCarriesPrivateHistory
+  ) {
+`,
+  "private finalizer bounded request history compatibility",
+);
+replaceOnce(
+  "scripts/finalize-private-chat.mjs",
+  `  if (!text.includes("rollbackPrivateUser(clean);")) {
+`,
+  `  if (
+    !text.includes("rollbackPrivateUser(clean);") &&
+    !text.includes("rollbackLocalUser(clean);")
+  ) {
+`,
+  "private finalizer local rollback compatibility",
+);
+replaceOnce(
+  "scripts/finalize-private-chat.mjs",
+  `  requireText(text, "let privateThreadMessages = [];", "the ephemeral private thread");
+  requireText(text, 'appendPrivateThreadMessage("user", clean)', "the private user turn");
+  requireText(text, 'appendPrivateThreadMessage("assistant", cleanReply)', "the private assistant turn");
+  requireText(text, "messages: privateChat ? privateThreadMessages : undefined", "the private request history");
+  requireText(text, "rollbackPrivateUser(clean);", "the private retry rollback");
+`,
+  `  requireText(text, "let privateThreadMessages = [];", "the ephemeral private thread");
+  if (
+    !text.includes('appendPrivateThreadMessage("user", clean)') &&
+    !text.includes('appendLocalThreadMessage("user", clean)')
+  ) {
+    throw new Error("Private-chat finalization could not find the private user turn");
+  }
+  if (
+    !text.includes('appendPrivateThreadMessage("assistant", cleanReply)') &&
+    !text.includes('appendLocalThreadMessage("assistant", cleanReply)')
+  ) {
+    throw new Error("Private-chat finalization could not find the private assistant turn");
+  }
+  if (
+    !text.includes("messages: privateChat ? privateThreadMessages : undefined") &&
+    !(
+      text.includes("function buildChatRequestBody(") &&
+      text.includes("privateChat || !signedIn") &&
+      text.includes("messages,")
+    )
+  ) {
+    throw new Error("Private-chat finalization could not find the private request history");
+  }
+  if (
+    !text.includes("rollbackPrivateUser(clean);") &&
+    !text.includes("rollbackLocalUser(clean);")
+  ) {
+    throw new Error("Private-chat finalization could not find the private retry rollback");
+  }
+`,
+  "private finalizer bounded local history assertions",
+);
+
