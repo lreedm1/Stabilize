@@ -42,7 +42,19 @@ function createEnv() {
   };
 }
 
-function guestRequest() {
+function guestRequest(overrides = {}) {
+  const messages = [];
+  for (let turn = 1; turn <= 10; turn += 1) {
+    messages.push({
+      role: "user",
+      content: "Earlier user turn " + turn + ": detail " + turn + ".",
+    });
+    messages.push({
+      role: "assistant",
+      content: "Earlier assistant turn " + turn + ": response " + turn + ".",
+    });
+  }
+
   return new Request("https://stabilize.test/api/chat", {
     method: "POST",
     headers: {
@@ -51,83 +63,71 @@ function guestRequest() {
       Origin: "https://stabilize.test",
     },
     body: JSON.stringify({
-      message: "What should I do next?",
-      guestSummary: "Earlier, the user planned to call the pharmacy.",
-      guestSummaryMessages: [
-        { role: "user", content: "The pharmacy closes at six." },
-        { role: "assistant", content: "Put the medication name by the phone." },
-      ],
-      messages: [
-        { role: "user", content: "I found the medication bottle." },
-        { role: "assistant", content: "Keep it beside you for the call." },
-      ],
+      message: "What did I say in the first turn?",
+      messages,
+      ...overrides,
     }),
   });
 }
 
-test("guest replies use the rolling summary and return a 5,000-token summary update without server memory", async () => {
+test("guest replies receive every current-tab turn in one model request", async () => {
   const setup = createEnv();
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_input, init) => {
     const payload = JSON.parse(init.body);
     calls.push(payload);
-    if (payload.max_output_tokens === 5_000) {
-      return responseWithText(
-        "The user plans to call the pharmacy before six and has the bottle ready.",
-      );
-    }
-    return responseWithText("Call the pharmacy now with the bottle beside you.");
+    return responseWithText("You said detail 1 in the first turn.");
   };
 
   try {
     const response = await worker.fetch(guestRequest(), setup.env);
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.equal(body.reply, "Call the pharmacy now with the bottle beside you.");
-    assert.equal(body.guestSummaryUpdated, true);
-    assert.match(body.guestSummary, /before six/);
+    assert.equal(body.reply, "You said detail 1 in the first turn.");
+    assert.equal(calls.length, 1);
 
-    assert.equal(calls.length, 2);
-    const summaryCall = calls.find((call) => call.max_output_tokens === 5_000);
-    const replyCall = calls.find((call) => call !== summaryCall);
-    assert.ok(summaryCall);
-    assert.ok(replyCall);
-    assert.match(summaryCall.instructions, /rolling guest-conversation summary/i);
-    assert.match(summaryCall.input[0].content, /pharmacy closes at six/i);
-
-    const replyInput = JSON.stringify(replyCall.input);
-    assert.match(replyInput, /GUEST ROLLING SUMMARY/);
-    assert.match(replyInput, /OLDER GUEST MESSAGES AWAITING SUMMARY/);
-    assert.match(replyInput, /I found the medication bottle/);
-    assert.match(replyInput, /What should I do next/);
+    const replyInput = JSON.stringify(calls[0].input);
+    assert.match(replyInput, /Earlier user turn 1: detail 1/);
+    assert.match(replyInput, /Earlier assistant turn 10: response 10/);
+    assert.match(replyInput, /What did I say in the first turn/);
     assert.equal(setup.states.size, 0);
+    assert.equal("guestSummaryUpdated" in body, false);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test("a failed guest-summary request leaves the prior summary unacknowledged", async () => {
+test("legacy v2 guest context is carried forward without another summary call", async () => {
   const setup = createEnv();
+  const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_input, init) => {
     const payload = JSON.parse(init.body);
-    if (payload.max_output_tokens === 5_000) {
-      return responseWithText("", 500);
-    }
-    return responseWithText("The ordinary reply still works.");
+    calls.push(payload);
+    return responseWithText("Call before six with the bottle ready.");
   };
 
   try {
-    const response = await worker.fetch(guestRequest(), setup.env);
+    const response = await worker.fetch(
+      guestRequest({
+        guestSummary: "The user planned to call the pharmacy.",
+        guestSummaryMessages: [
+          { role: "user", content: "The pharmacy closes at six." },
+          { role: "assistant", content: "Keep the bottle ready." },
+        ],
+      }),
+      setup.env,
+    );
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.equal(body.reply, "The ordinary reply still works.");
-    assert.equal(body.guestSummaryUpdated, false);
-    assert.equal(
-      body.guestSummary,
-      "Earlier, the user planned to call the pharmacy.",
-    );
+    assert.equal(body.reply, "Call before six with the bottle ready.");
+    assert.equal(calls.length, 1);
+
+    const replyInput = JSON.stringify(calls[0].input);
+    assert.match(replyInput, /LEGACY GUEST SUMMARY/);
+    assert.match(replyInput, /pharmacy closes at six/i);
+    assert.equal("guestSummaryUpdated" in body, false);
     assert.equal(setup.states.size, 0);
   } finally {
     globalThis.fetch = originalFetch;
