@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/verify-account-preflight-production
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
