@@ -113,6 +113,19 @@ jobs:
       - name: Prove generation is idempotent
         run: npm run apply:prompt-policy
 
+      - name: Align legacy regression expectations
+        run: node tmp/memory-controls-generator/align-regressions.mjs
+
+      - name: Inspect generated chat exports
+        shell: bash
+        run: |
+          echo '--- generated core ---'
+          grep -n -A18 -B6 'preparedChatResponse\|handlePreparedChat' src/index.js || true
+          echo '--- generated paid worker ---'
+          grep -n -A14 -B6 'preparedChatResponse\|handlePreparedChat' src/paid-worker.js || true
+          echo '--- final generator ---'
+          grep -n -A18 -B6 'preparedChatResponse\|handlePreparedChat' scripts/add-memory-deletion-and-guest-session.mjs || true
+
       - name: Run Node regression suites
         run: npm run test:node
 
@@ -130,6 +143,7 @@ jobs:
         run: |
           rm -rf tmp/memory-controls-generator
           rm -f .github/workflows/materialize-memory-controls-v2.yml
+          rm -f .github/workflows/diagnose-memory-node.yml
           cat > .github/workflows/test.yml <<'YAML'
           name: Test
 
