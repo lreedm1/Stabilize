@@ -74,11 +74,11 @@
   "vars": {
     "DEMO_MODE": "false",
     "OPENAI_MODEL": "gpt-5.4",
-    "OPENAI_REASONING_EFFORT": "max",
+    "OPENAI_REASONING_EFFORT": "none",
     "PUBLIC_ORIGIN": "https://stabilize.info",
-    "MODEL_CHOICES": "gpt-5.4|GPT-5.4 (default),gpt-5-mini|GPT-5 mini,gpt-5.1|GPT-5.1,gpt-5.6-luna|GPT-5.6 Luna,gpt-5.6-terra|GPT-5.6 Terra,gpt-5.6-sol|GPT-5.6 Sol",
+    "MODEL_CHOICES": "gpt-5.4|GPT-5.4,gpt-5.6-sol|Current",
     "PAID_MONTHLY_MESSAGE_LIMIT": "200",
-    "FREE_DAILY_MODEL_MESSAGE_LIMIT": "20",
+    "FREE_DAILY_MODEL_MESSAGE_LIMIT": "50",
     "STRIPE_MODEL_CHOICE_PRICE_ID": "price_1U01Jp96tfbPOBGIbQNXDlPx",
     "FEEDBACK_REPOSITORY": "lreedm1/Stabilize",
     "FEEDBACK_BRANCH": "feedback-inbox",
@@ -87,7 +87,9 @@
     "IMPACT_RETENTION_DAYS": "180",
     "IMPACT_ESTIMATED_CHAT_COST_MICROS": "0",
     "IMPACT_MONTHLY_RECURRING_REVENUE_CENTS": "0",
-    "IMPACT_MONTHLY_RECURRING_COST_CENTS": "0"
+    "IMPACT_MONTHLY_RECURRING_COST_CENTS": "0",
+    "FREE_PLAN_PRIMARY_MODEL": "gpt-5.6-sol",
+    "FREE_PLAN_FALLBACK_MODEL": "gpt-5.4"
   },
   "secrets": {
     "required": [

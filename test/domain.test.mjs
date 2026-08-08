@@ -49,6 +49,44 @@ test("stabilize.info is the only production domain", async () => {
   assert.doesNotMatch(workflow, /Legacy-domain redirect/);
 });
 
+test("repository and public descriptions match the current model policy", async () => {
+  const [configText, readme, setupGuide, about, sustainability] =
+    await Promise.all([
+      repositoryFile("wrangler.jsonc"),
+      repositoryFile("README.md"),
+      repositoryFile("docs/STRIPE_MODEL_CHOICE_SETUP.md"),
+      repositoryFile("public/about.html"),
+      repositoryFile("public/sustainability.html"),
+    ]);
+  const config = JSON.parse(configText);
+
+  assert.equal(config.vars.OPENAI_MODEL, "gpt-5.4");
+  assert.equal(config.vars.OPENAI_REASONING_EFFORT, "none");
+  assert.equal(
+    config.vars.MODEL_CHOICES,
+    "gpt-5.4|GPT-5.4,gpt-5.6-sol|Current",
+  );
+  assert.equal(config.vars.FREE_DAILY_MODEL_MESSAGE_LIMIT, "50");
+  assert.equal(config.vars.FREE_PLAN_PRIMARY_MODEL, "gpt-5.6-sol");
+  assert.equal(config.vars.FREE_PLAN_FALLBACK_MODEL, "gpt-5.4");
+  assert.equal(config.vars.PAID_MONTHLY_MESSAGE_LIMIT, "200");
+
+  for (const description of [readme, setupGuide, about, sustainability]) {
+    assert.match(description, /50|Fifty/);
+    assert.match(description, /GPT-5\.6 Instant/);
+    assert.match(description, /GPT-5\.4/);
+    assert.match(description, /200/);
+    assert.doesNotMatch(description, /20 (?:messages|non-default-model)/i);
+    assert.doesNotMatch(description, /GPT-5 mini|GPT-5\.1|GPT-5\.6 Luna|GPT-5\.6 Terra/);
+  }
+
+  assert.match(readme, /FREE_PLAN_PRIMARY_MODEL=gpt-5\.6-sol/);
+  assert.match(readme, /FREE_PLAN_FALLBACK_MODEL=gpt-5\.4/);
+  assert.match(setupGuide, /fixed urgent routes and failed provider requests do not consume/i);
+  assert.match(about, /Signed-in free accounts automatically receive 50 GPT-5\.6 Instant/);
+  assert.match(sustainability, /free GPT-5\.6 Instant → GPT-5\.4 ladder intact/);
+});
+
 test("all public guide pages use stabilize.info canonicals", async () => {
   const pages = await Promise.all([
     repositoryFile("public/about.html"),
@@ -98,8 +136,8 @@ test("the About page preserves the origin while stating evidence and sustainabil
   assert.match(about, /has not been clinically validated/i);
   assert.match(about, /preserve agency/i);
   assert.match(about, /Impact requires sustainability/i);
-  assert.match(about, /20 messages per UTC day/i);
-  assert.match(about, /current paid model-allowance\s+subscription is an early payment experiment/i);
+  assert.match(about, /50 GPT-5\.6 Instant\s+messages per UTC day/i);
+  assert.match(about, /current paid model-allowance subscription\s+enables subscriber model choice/i);
   assert.match(about, /not emergency care/i);
   assert.match(enhancer, /href=\"\/about\.html\"/);
 
