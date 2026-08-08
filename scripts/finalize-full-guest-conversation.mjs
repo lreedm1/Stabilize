@@ -31,6 +31,17 @@ function removeBlock(path, startMarker, endMarker) {
   return true;
 }
 
+function removeLinesContaining(path, marker) {
+  const source = read(path);
+  if (!source.includes(marker)) return false;
+  const next = source
+    .split("\n")
+    .filter((line) => !line.includes(marker))
+    .join("\n");
+  write(path, next);
+  return true;
+}
+
 // Remove the obsolete v2 guest-summary callback even when an earlier generator
 // has already changed or removed its adjacent helper.
 removeBlock(
@@ -43,6 +54,7 @@ removeBlock(
   "function sameThreadMessages(left, right) {",
   "function rollbackLocalUser(content) {",
 );
+removeLinesContaining("public/app.js", "applyGuestSummaryResult(");
 
 for (const path of [
   "test/mobile-background-loading.test.mjs",
