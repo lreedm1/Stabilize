@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const MOBILE_ASSET = "/scenes/mobile-forest-stream-v1-864.webp";
+const MOBILE_ASSET = "/scenes/mobile-forest-stream-v1-720.webp";
 const GUIDE_VERSION = "20260808-mobile-forest-stream-1";
 const MOBILE_STYLE_VERSION = "20260808-mobile-forest-stream-1";
 const STATIC_PAGES = [
@@ -41,7 +41,7 @@ const mobilePreload = `    <link
       as="image"
       href="${MOBILE_ASSET}"
       imagesrcset="
-        ${MOBILE_ASSET} 864w
+        ${MOBILE_ASSET} 720w
       "
       imagesizes="100vw"
       media="(max-width: 980px) and (orientation: portrait)"
@@ -53,7 +53,7 @@ const mobileSource = `      <source
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="\\n          ${MOBILE_ASSET} 864w\\n        "
+        srcset="\\n          ${MOBILE_ASSET} 720w\\n        "
       />`;
 
 await update("src/page.js", (source) => {
@@ -73,7 +73,7 @@ await update("src/page.js", (source) => {
     /mobile-woodland-loop\.css\?v=[^"]+/,
     `mobile-woodland-loop.css?v=${MOBILE_STYLE_VERSION}`,
   );
-  const references = next.split(`${MOBILE_ASSET} 864w`).length - 1;
+  const references = next.split(`${MOBILE_ASSET} 720w`).length - 1;
   if (references !== 2) {
     throw new Error(`Expected two mobile forest references, found ${references}`);
   }
@@ -127,9 +127,9 @@ for (const path of STATIC_PAGES) {
 
 const mobileQualityTest = String.raw`test("mobile uses the project-owner forest stream as its static portrait background", async () => {
   const tier = {
-    filename: "mobile-forest-stream-v1-864.webp",
-    width: 864,
-    height: 1536,
+    filename: "mobile-forest-stream-v1-720.webp",
+    width: 720,
+    height: 1280,
   };
   const [pageSource, mobileStyles, image] = await Promise.all([
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
@@ -145,7 +145,7 @@ const mobileQualityTest = String.raw`test("mobile uses the project-owner forest 
     { width: tier.width, height: tier.height },
   );
   assert.ok(image.byteLength > 100_000);
-  assert.ok(image.byteLength < 1_000_000);
+  assert.ok(image.byteLength < 500_000);
   assert.equal(imageInfo.chunks.includes("ANIM"), false);
   assert.equal(
     [...pageSource.matchAll(new RegExp(tier.filename + " " + tier.width + "w", "g"))].length,
@@ -156,7 +156,7 @@ const mobileQualityTest = String.raw`test("mobile uses the project-owner forest 
   assert.match(pageSource, /imagesizes="100vw"/);
   assert.match(
     pageSource,
-    /href="\/scenes\/mobile-forest-stream-v1-864\.webp"/,
+    /href="\/scenes\/mobile-forest-stream-v1-720\.webp"/,
   );
   assert.match(
     pageSource,
@@ -194,7 +194,7 @@ await update("test/shared-site-theme.test.mjs", (source) => {
   }
   next = next.replaceAll(
     "mobile-golden-alpine-v3",
-    "mobile-forest-stream-v1-864",
+    "mobile-forest-stream-v1-720",
   );
   return next;
 });
