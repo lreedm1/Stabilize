@@ -18,15 +18,4 @@ if (priorityAfter !== priorityBefore) {
   await writeFile(priorityPath, priorityAfter);
 }
 
-const signedPolicyPath = "scripts/apply-signed-in-latency.mjs";
-const signedBefore = await readFile(signedPolicyPath, "utf8");
-const oldPipeline =
-  "node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs";
-const newPipeline =
-  "node scripts/prepare-signed-in-latency.mjs && node scripts/apply-priority-latency.mjs && node scripts/apply-signed-in-latency.mjs";
-const signedAfter = signedBefore.replaceAll(oldPipeline, newPipeline);
-if (signedAfter !== signedBefore) {
-  await writeFile(signedPolicyPath, signedAfter);
-}
-
-console.log("Prepared the canonical generators for signed-in latency changes.");
+console.log("Prepared the priority generator for signed-in latency changes.");
