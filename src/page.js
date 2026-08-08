@@ -51,10 +51,6 @@ export function renderPage(options = {}) {
     operatingSystem: "Any",
     isAccessibleForFree: true,
     description: seoDescription,
-    creator: {
-      "@type": "Person",
-      name: "Reed Lokken",
-    },
   }).replaceAll("<", "\\u003c");
   const authControl = signedIn
     ? `<form class="auth-session" action="/auth/logout" method="post">
