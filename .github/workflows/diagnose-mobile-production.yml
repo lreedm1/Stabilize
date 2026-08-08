@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
 
+# A second push triggers this after GitHub registers the workflow file.
 jobs:
   diagnose:
     runs-on: ubuntu-latest
