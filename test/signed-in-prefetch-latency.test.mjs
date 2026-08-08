@@ -57,7 +57,8 @@ test("signed-in memory prefetch stays outside the guest chat application", async
   assert.match(billingClient, /refreshAccountContext/);
   assert.match(billingClient, /accountContextToken/);
   assert.match(billingClient, /observeAccountContextResponse/);
-  assert.match(billingClient, /not written|sessionStorage/);
+  assert.doesNotMatch(billingClient, /localStorage\.setItem/);
+  assert.doesNotMatch(billingClient, /sessionStorage\.setItem/);
   assert.match(paidWorker, /billing-client\.js\?v=20260808-signed-in-prefetch-1/);
 
   assert.doesNotMatch(app, /accountContextToken/);
@@ -73,7 +74,7 @@ test("signed-in memory prefetch stays outside the guest chat application", async
   const packageJson = JSON.parse(packageSource);
   assert.match(
     packageJson.scripts["apply:prompt-policy"],
-    /apply-signed-in-prefetch-latency\.mjs$/,
+    /finalize-signed-in-prefetch-tests\.mjs$/,
   );
   assert.match(
     packageJson.scripts["test:node"],
