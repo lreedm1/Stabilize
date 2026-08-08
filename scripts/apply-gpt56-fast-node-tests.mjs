@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 async function update(path, transform) {
   const before = await readFile(path, "utf8");
@@ -101,5 +102,27 @@ await update("test/sustainability.test.mjs", (source) =>
       "/50 GPT-5\\.6 Fast messages per UTC day/i",
     ),
 );
+
+const packageJson = JSON.parse(await readFile("package.json", "utf8"));
+const pipeline = String(packageJson.scripts?.["apply:prompt-policy"] || "");
+if (!pipeline.includes("apply-gpt56-fast-runtime.mjs")) {
+  throw new Error("GPT-5.6 Fast-first policy is absent from the package pipeline");
+}
+const pipelineLiteral = JSON.stringify(pipeline);
+for (const name of await readdir("test")) {
+  if (!name.endsWith(".mjs")) continue;
+  const path = join("test", name);
+  await update(path, (source) =>
+    source
+      .replace(
+        /"node scripts\/[^"\n]*apply-priority-latency[^"\n]*"/g,
+        pipelineLiteral,
+      )
+      .replaceAll(
+        "20260807-free-gpt56-first-50-1",
+        "20260808-gpt56-fast-first-1",
+      ),
+  );
+}
 
 console.log("Aligned Node regression tests with GPT-5.6 Fast-first routing.");
