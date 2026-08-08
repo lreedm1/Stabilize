@@ -19,6 +19,12 @@
 /mobile-creek-gif.js
   Cache-Control: no-store, max-age=0
 
+/scenes/mobile-forest-stream-v1.mp4
+  Cache-Control: public, max-age=31536000, immutable
+
+/scenes/mobile-forest-stream-v1-540.webp
+  Cache-Control: public, max-age=31536000, immutable
+
 /scenes/mobile-golden-alpine-v2.webp
   Cache-Control: public, max-age=31536000, immutable
 
