@@ -57,6 +57,40 @@ jobs:
             | sha256sum --check
           node --check scripts/add-guest-summary.mjs
 
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = "scripts/add-guest-summary.mjs";
+          let source = fs.readFileSync(path, "utf8");
+          const start = `replaceBlock(
+            indexPath,
+            \`function sanitizeSummary(value) {\`,`;
+          const guardedStart = `if (
+            !read(indexPath).includes(
+              "function sanitizeSummaryText(value, maxChars) {",
+            )
+          ) {
+            replaceBlock(
+              indexPath,
+              \`function sanitizeSummary(value) {\`,`;
+          const end = `  "summary sanitization helpers",
+          );
+
+          insertBefore(`;
+          const guardedEnd = `    "summary sanitization helpers",
+            );
+          }
+
+          insertBefore(`;
+          if (!source.includes(guardedStart)) {
+            if (!source.includes(start) || !source.includes(end)) {
+              throw new Error("Could not guard summary sanitization generation");
+            }
+            source = source.replace(start, guardedStart).replace(end, guardedEnd);
+          }
+          fs.writeFileSync(path, source);
+          NODE
+          node --check scripts/add-guest-summary.mjs
+
       - name: Add the generator to the canonical policy pipeline
         shell: bash
         run: |
