@@ -700,6 +700,13 @@ test("the free homepage presents GPT-5.4 fastest response and the Current thinki
 `);
 
 await update("test/paid-worker.test.mjs", (source) => {
+  if (
+    source.includes(
+      'test("a free signed-in user gets GPT-5.4 instantly and Current when thinking"',
+    )
+  ) {
+    return source;
+  }
   const replacement = `test("a free signed-in user gets GPT-5.4 instantly and Current when thinking", async () => {
   const user = await identity("free-daily-model-user");
   const limitedEnv = {
