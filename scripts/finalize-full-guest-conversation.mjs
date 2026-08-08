@@ -31,6 +31,13 @@ function removeBlock(path, startMarker, endMarker) {
   return true;
 }
 
+// Remove the obsolete v2 guest-summary callback even when an earlier generator
+// has already changed or removed its adjacent helper.
+removeBlock(
+  "public/app.js",
+  "function applyGuestSummaryResult(result) {",
+  "function rollbackLocalUser(content) {",
+);
 removeBlock(
   "public/app.js",
   "function sameThreadMessages(left, right) {",
@@ -50,6 +57,13 @@ for (const path of [
     { required: true },
   );
 }
+
+replaceAll(
+  "test/private-chat.test.mjs",
+  "/privateChat \\|\\| !signedIn \\? \\[\\.\\.\\.activeLocalThreadMessages\\(\\)\\] : undefined/",
+  "/privateChat \\|\\| !signedIn[\\s\\S]*cloneThreadMessages\\(activeLocalThreadMessages\\(\\)\\)/",
+  { required: true },
+);
 
 for (const path of [
   "test/account-preflight.test.mjs",
