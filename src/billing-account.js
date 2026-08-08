@@ -377,6 +377,22 @@ export class BillingAccount extends DurableObject {
         };
       }
 
+      // Signed-in instant chats use the unmetered default model.
+      if (config.freeModel === config.defaultModel) {
+        return {
+          allowed: true,
+          reason: null,
+          model: config.defaultModel,
+          tier: null,
+          period: null,
+          used: 0,
+          limit: 0,
+          fallback: false,
+          paid: false,
+          reservationMade: false,
+        };
+      }
+
       const reservation = this.reserveUsageSync(
         "free",
         config.freePeriod,

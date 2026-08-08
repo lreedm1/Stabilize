@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("automatic free model routing and subscriber choice share a resilient left-side picker", async () => {
+test("fast signed-in routing and subscriber choice share a resilient left-side picker", async () => {
   const [
     workerSource,
     accountSource,
@@ -59,10 +59,18 @@ test("automatic free model routing and subscriber choice share a resilient left-
   const chatEnd = workerSource.indexOf("function responseWithModelUsage", chatStart);
   assert.ok(chatStart >= 0 && chatEnd > chatStart, "paid chat handler is missing");
   const paidChat = workerSource.slice(chatStart, chatEnd);
-  assert.match(paidChat, /stub\.prepareChat\(chatPreparationOptions\(env\)\)/);
-  assert.match(paidChat, /const \[preparation, memory\] = await Promise\.all/);
+  assert.match(
+    paidChat,
+    /stub\s*\.prepareChat\(chatPreparationOptions\(env, body\)\)/,
+  );
+  assert.match(
+    paidChat,
+    /const \[billingResult, memoryResult\] = await Promise\.all/,
+  );
   assert.match(paidChat, /modelEnvironment\(env, preparation\.model\)/);
   assert.match(paidChat, /preparedChatResponse\(/);
+  assert.match(paidChat, /event: "signed_in_chat_prepared"/);
+  assert.match(paidChat, /X-Stabilize-Preparation-Ms/);
   assert.match(paidChat, /stub\.refundUsage\(preparation\.tier, preparation\.period\)/);
   assert.match(paidChat, /fallback: preparation\.fallback/);
   assert.doesNotMatch(paidChat, /readBillingState\(/);
@@ -70,7 +78,7 @@ test("automatic free model routing and subscriber choice share a resilient left-
 
   assert.match(workerSource, /freeDailyModelMessageLimit\(env\)/);
   assert.match(workerSource, /dailyUsagePeriod\(\)/);
-  assert.match(workerSource, /freeLimit[\s\S]*GPT-5\.6 Instant messages/);
+  assert.match(workerSource, /freeLimit[\s\S]*Current thinking messages/);
   assert.match(workerSource, /allowance resets at 00:00 UTC/);
 
   assert.match(workerSource, /function composerModelPickerMarkup\(/);
@@ -87,6 +95,7 @@ test("automatic free model routing and subscriber choice share a resilient left-
   assert.match(accountSource, /PRIMARY KEY \(tier, period\)/);
   assert.match(accountSource, /async prepareChat\(options\)/);
   assert.match(accountSource, /this\.ctx\.storage\.transactionSync/);
+  assert.match(accountSource, /config\.freeModel === config\.defaultModel/);
   assert.match(accountSource, /model: config\.freeModel/);
   assert.match(accountSource, /model: config\.fallbackModel/);
   assert.match(accountSource, /freeUsagePeriod/);
@@ -129,13 +138,13 @@ test("automatic free model routing and subscriber choice share a resilient left-
   const packageJson = JSON.parse(packageSource);
   assert.equal(
     packageJson.scripts["apply:prompt-policy"],
-    "node scripts/apply-priority-latency.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs",
+    "node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs",
   );
   assert.match(
     wranglerSource,
     /"FREE_DAILY_MODEL_MESSAGE_LIMIT": "50"/,
   );
   assert.match(setupGuide, /https:\/\/stabilize\.info\/api\/stripe\/webhook/);
-  assert.match(setupGuide, /50 free GPT-5.6 Instant messages per UTC day/);
+  assert.match(setupGuide, /50 free Current thinking messages per UTC day/);
   assert.match(setupGuide, /200 non-default-model messages per UTC month/);
 });

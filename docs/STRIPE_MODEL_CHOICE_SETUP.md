@@ -1,11 +1,11 @@
 # Stripe model-allowance setup
 
-Stabilize uses an automatic model ladder for signed-in free accounts and an optional Stripe subscription for a larger monthly non-default-model allowance.
+Stabilize keeps signed-in fastest responses on GPT-5.4 and provides a free daily Current thinking allowance, plus an optional Stripe subscription for a larger monthly non-default-model allowance.
 
 The current behavior is:
 
 - guests use GPT-5.4 for ordinary chats
-- signed-in free accounts receive 50 free GPT-5.6 Instant messages per UTC day, then continue on GPT-5.4
+- signed-in free accounts use GPT-5.4 for Fastest response and receive 50 free Current thinking messages per UTC day
 - subscribers can choose GPT-5.4 or Current (`gpt-5.6-sol`) and receive 200 non-default-model messages per UTC month
 - GPT-5.4 does not consume the subscriber monthly allowance
 - fixed urgent routes and failed provider requests do not consume either allowance
@@ -78,7 +78,7 @@ FREE_PLAN_FALLBACK_MODEL=gpt-5.4
 PAID_MONTHLY_MESSAGE_LIMIT=200
 ```
 
-The automatic free ladder remains available even when Stripe is not configured. Only upgrade and billing-management controls depend on valid Stripe secrets, the recurring Price, and the public origin. Checkout errors appear in the browser instead of failing silently.
+The free Current thinking allowance remains available even when Stripe is not configured. Only upgrade and billing-management controls depend on valid Stripe secrets, the recurring Price, and the public origin. Checkout errors appear in the browser instead of failing silently.
 
 ## Access and model routing
 
@@ -88,9 +88,9 @@ A guest ordinary chat uses the configured fallback model, currently GPT-5.4. Gue
 
 ### Signed-in free account
 
-For each UTC day, the first 50 completed ordinary responses automatically use `gpt-5.6-sol` with `reasoning.effort: none`, shown publicly as **GPT-5.6 Instant**. After the daily allowance is used, ordinary chats continue on GPT-5.4. The daily counter resets at `00:00 UTC`.
+Fastest response uses GPT-5.4 so signing in does not silently move the user onto a slower default model. Choosing any supported thinking level uses Current (`gpt-5.6-sol`) and consumes one of 50 free Current thinking messages per UTC day. When that allowance is exhausted, the request continues on GPT-5.4 with instant reasoning. The daily counter resets at `00:00 UTC`.
 
-The free-account UI presents this as an automatic ladder rather than a model picker. A saved historical model preference does not override the automatic free route.
+The free-account model tile shows GPT-5.4 by default. The separate thinking-level control opts into Current; a saved historical model preference does not override the free route.
 
 ### Subscriber
 
@@ -118,10 +118,10 @@ Run the **Deploy Stabilize to Cloudflare** GitHub Action or deploy with Wrangler
 Expected signed-in free flow:
 
 1. Sign in with Google.
-2. Open the model control and confirm it explains the automatic GPT-5.6 Instant → GPT-5.4 ladder.
-3. Send an ordinary message and confirm the selected model is GPT-5.6 Instant and the daily count increases.
+2. Send a Fastest response message and confirm GPT-5.4 is selected without increasing the Current allowance.
+3. Choose a thinking level, send a message, and confirm Current is selected and the daily count increases.
 4. Reload the page and confirm the count remains.
-5. In a test environment with a reduced free limit, exhaust the allowance and confirm the next ordinary response succeeds on GPT-5.4 with the fallback notice.
+5. In a test environment with a reduced free limit, exhaust the allowance and confirm the next thinking request succeeds on GPT-5.4 with the fallback notice.
 6. Confirm the daily period resets at `00:00 UTC`.
 
 Expected subscriber flow:
@@ -133,7 +133,7 @@ Expected subscriber flow:
 5. Choose **Current**, send an ordinary message, and confirm the monthly count increases.
 6. Choose **GPT-5.4**, send an ordinary message, and confirm the monthly count does not increase.
 7. Open **Manage billing** and verify the customer portal works.
-8. Cancel the test subscription and confirm the account returns to the automatic free ladder after Stripe sends the subscription update.
+8. Cancel the test subscription and confirm the account returns to the free GPT-5.4 Fastest-response and Current-thinking policy after Stripe sends the subscription update.
 
 ## Operational notes
 
