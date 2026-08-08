@@ -1,0 +1,97 @@
+name: Reconcile guest rolling summary
+
+on:
+  push:
+    branches:
+      - agent/guest-summary-5k
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reconcile-guest-summary
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the feature branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/guest-summary-5k
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Reconcile the generator with current main
+        run: node tmp/reconcile-guest-summary.mjs
+
+      - name: Add guest summarization to the canonical pipeline
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = "package.json";
+          const packageJson = JSON.parse(fs.readFileSync(path, "utf8"));
+          const stage = "node scripts/add-guest-summary.mjs";
+          if (!packageJson.scripts["apply:prompt-policy"].includes(stage)) {
+            packageJson.scripts["apply:prompt-policy"] += ` && ${stage}`;
+          }
+          fs.writeFileSync(path, JSON.stringify(packageJson, null, 2) + "\n");
+          NODE
+
+      - name: Install dependencies without lifecycle generation
+        run: npm ci --ignore-scripts
+
+      - name: Apply the current generators
+        run: npm run apply:prompt-policy
+
+      - name: Prove generation is idempotent
+        shell: bash
+        run: |
+          git add -N .
+          git diff --binary > /tmp/guest-summary-first.diff
+          npm run apply:prompt-policy
+          git diff --binary > /tmp/guest-summary-second.diff
+          if ! cmp /tmp/guest-summary-first.diff /tmp/guest-summary-second.diff; then
+            diff -u /tmp/guest-summary-first.diff /tmp/guest-summary-second.diff \
+              | sed -n '1,600p' || true
+            exit 1
+          fi
+
+      - name: Run the complete regression suite
+        run: npm test
+
+      - name: Validate the Cloudflare Worker bundle
+        run: npm run check
+
+      - name: Remove one-shot reconciliation scaffolding
+        shell: bash
+        run: |
+          rm -f .github/workflows/reconcile-guest-summary.yml
+          rm -f tmp/reconcile-guest-summary.mjs
+
+      - name: Commit the reconciled implementation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Reconcile guest summaries with GPT-5.6 Fast"
+
+      - name: Verify the committed tree stays canonical and clean
+        shell: bash
+        run: |
+          npm run apply:prompt-policy
+          git diff --exit-code
+          npm run verify:clean
+
+      - name: Push the completed branch
+        run: git push origin HEAD:agent/guest-summary-5k
