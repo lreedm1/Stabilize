@@ -1,0 +1,66 @@
+name: Materialize mobile forest background
+
+on:
+  push:
+    branches:
+      - agent/mobile-forest-stream-background
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out the feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/mobile-forest-stream-background
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies and materialize generated files
+        run: npm ci
+
+      - name: Run all tests
+        run: npm test
+
+      - name: Validate the Worker build
+        run: npm run check
+
+      - name: Commit the canonical generated output
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f public/scenes/mobile-forest-stream-v1-540.webp
+          test "$(wc -c < public/scenes/mobile-forest-stream-v1-540.webp)" -eq 91750
+          printf '%s  %s\n' \
+            'e2396c2f73018151c20f99130ebdde75a85db6248ed5459ea0039f03e84eb23c' \
+            'public/scenes/mobile-forest-stream-v1-540.webp' \
+            | sha256sum --check --strict
+          grep -Fq '/scenes/mobile-forest-stream-v1-540.webp' src/page.js
+          grep -Fq '/scenes/mobile-forest-stream-v1-540.webp' public/guides.css
+          ! grep -Fq 'mobile-golden-alpine' src/page.js
+
+          rm -f .github/workflows/materialize-mobile-forest-stream.yml
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No generated changes were produced.'
+            exit 1
+          fi
+          git diff --cached --check
+          git commit -m 'Use the forest stream mobile background [materialized]'
+          npm run verify:clean
+          git push origin HEAD:agent/mobile-forest-stream-background
