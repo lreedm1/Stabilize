@@ -93,6 +93,21 @@ jobs:
             streaming = streaming.replace(oldStreamingCheck, newStreamingCheck);
             writeFileSync(streamingPath, streaming);
           }
+
+          const hardeningPath = 'scripts/harden-openai-streaming.mjs';
+          let hardening = readFileSync(hardeningPath, 'utf8');
+          const oldHardeningPattern = 'const pattern = /async function\\* openAITextDeltas\\(result\\) \\{[\\s\\S]*?\\n\\}\\n\\nfunction streamChatReply\\(messages, route, env, latestText, stub, ctx\\) \\{[\\s\\S]*?\\n\\}\\n\\nasync function generateReply/;';
+          const newHardeningPattern = 'const pattern = /async function\\* openAITextDeltas\\(result\\) \\{[\\s\\S]*?\\n\\}\\n\\nfunction streamChatReply\\([\\s\\S]*?\\) \\{[\\s\\S]*?\\n\\}\\n\\nasync function generateReply/;';
+          if (!hardening.includes(newHardeningPattern)) {
+            if (!hardening.includes(oldHardeningPattern)) {
+              throw new Error('Could not locate the streaming hardening matcher');
+            }
+            hardening = hardening.replace(
+              oldHardeningPattern,
+              newHardeningPattern,
+            );
+            writeFileSync(hardeningPath, hardening);
+          }
           NODE
 
       - name: Install and materialize canonical output
