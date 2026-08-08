@@ -1,7 +1,11 @@
+import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 
 const payloadDirectory = "materialize/mobile-forest-stream";
-const outputPath = "public/scenes/mobile-forest-stream-v1-720.webp";
+const outputPath = "public/scenes/mobile-forest-stream-v1-540.webp";
+const expectedBytes = 91_750;
+const expectedSha256 =
+  "e2396c2f73018151c20f99130ebdde75a85db6248ed5459ea0039f03e84eb23c";
 
 function webpInfo(buffer) {
   if (
@@ -77,12 +81,20 @@ if (!encoded || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
 }
 
 const image = Buffer.from(encoded, "base64");
-if (image.byteLength < 100_000 || image.byteLength > 500_000) {
-  throw new Error(`Unexpected mobile forest image size: ${image.byteLength}`);
+if (image.byteLength !== expectedBytes) {
+  throw new Error(
+    `Unexpected mobile forest image size: ${image.byteLength}; expected ${expectedBytes}`,
+  );
+}
+const actualSha256 = createHash("sha256").update(image).digest("hex");
+if (actualSha256 !== expectedSha256) {
+  throw new Error(
+    `Mobile forest payload checksum mismatch: ${actualSha256}`,
+  );
 }
 
 const info = webpInfo(image);
-if (info.width !== 720 || info.height !== 1280 || info.animated) {
+if (info.width !== 540 || info.height !== 960 || info.animated) {
   throw new Error(
     `Unexpected mobile forest image: ${info.width}x${info.height}, animated=${info.animated}`,
   );
