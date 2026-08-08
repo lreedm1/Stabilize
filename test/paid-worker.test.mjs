@@ -178,7 +178,7 @@ test("the homepage places the current model picker left of the message form", as
   );
 });
 
-test("a free signed-in user gets GPT-5.4 instantly and Current when thinking", async () => {
+test("a free signed-in user gets GPT-5.6 Fast before GPT-5.4 fallback", async () => {
   const user = await identity("free-daily-model-user");
   const limitedEnv = {
     ...TEST_ENV,
@@ -198,7 +198,7 @@ test("a free signed-in user gets GPT-5.4 instantly and Current when thinking", a
     {},
   );
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /0 of 2 free Current thinking messages used today/);
+  assert.match(await page.text(), /0 of 2 free GPT-5\.6 Fast messages used today/);
 
   const originalFetch = globalThis.fetch;
   const providerRequests = [];
@@ -211,25 +211,30 @@ test("a free signed-in user gets GPT-5.4 instantly and Current when thinking", a
   };
 
   try {
-    const instant = await worker.fetch(
-      new Request("https://stabilize.info/api/chat", {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          Cookie: user.cookie,
-          Origin: "https://stabilize.info",
-        },
-        body: JSON.stringify({ message: "Give me a quick step." }),
-      }),
-      limitedEnv,
-      {},
-    );
-    assert.equal(instant.status, 200);
-    assert.equal(instant.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");
-    assert.equal((await user.billing.readState()).freeUsageCount, 0);
+    for (const [index, reasoningEffort] of ["none", "high"].entries()) {
+      const response = await worker.fetch(
+        new Request("https://stabilize.info/api/chat", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            Cookie: user.cookie,
+            Origin: "https://stabilize.info",
+          },
+          body: JSON.stringify({
+            message: `Give me step ${index + 1}.`,
+            reasoningEffort,
+          }),
+        }),
+        limitedEnv,
+        {},
+      );
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("X-Stabilize-Model-Selected"), "gpt-5.6-sol");
+      assert.equal(response.headers.get("X-Stabilize-Model-Usage-Used"), String(index + 1));
+    }
 
-    const thinking = await worker.fetch(
+    const fallback = await worker.fetch(
       new Request("https://stabilize.info/api/chat", {
         method: "POST",
         headers: {
@@ -239,24 +244,26 @@ test("a free signed-in user gets GPT-5.4 instantly and Current when thinking", a
           Origin: "https://stabilize.info",
         },
         body: JSON.stringify({
-          message: "Think through this step.",
+          message: "Give me one more step.",
           reasoningEffort: "high",
         }),
       }),
       limitedEnv,
       {},
     );
-    assert.equal(thinking.status, 200);
-    assert.equal(thinking.headers.get("X-Stabilize-Model-Selected"), "gpt-5.6-sol");
-    assert.equal(thinking.headers.get("X-Stabilize-Model-Usage-Used"), "1");
+    assert.equal(fallback.status, 200);
+    assert.equal(fallback.headers.get("X-Stabilize-Model-Fallback"), "daily-limit");
+    assert.equal(fallback.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");
     assert.deepEqual(providerRequests, [
-      { model: "gpt-5.4", effort: "none" },
+      { model: "gpt-5.6-sol", effort: "none" },
       { model: "gpt-5.6-sol", effort: "high" },
+      { model: "gpt-5.4", effort: "none" },
     ]);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
+
 
 test("an entitled user can select a subscriber model and the chat request uses it", async () => {
   const user = await identity("paid-model-user");

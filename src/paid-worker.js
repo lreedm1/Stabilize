@@ -157,6 +157,9 @@ function modelEnvironment(env, model) {
   return new Proxy(env, {
     get(target, property, receiver) {
       if (property === "OPENAI_MODEL") return model;
+      if (property === "OPENAI_SERVICE_TIER") {
+        return String(target.OPENAI_SERVICE_TIER || "fast");
+      }
       return Reflect.get(target, property, receiver);
     },
   });
@@ -168,15 +171,9 @@ function chatPreparationOptions(env, body = {}) {
   const fallbackModel = String(
     env.FREE_PLAN_FALLBACK_MODEL || defaultModel || "gpt-5.4",
   );
-  const requestedEffort = String(body?.reasoningEffort || "none")
-    .trim()
-    .toLowerCase();
-  const usesThinking = ["low", "medium", "high", "xhigh", "max"].includes(
-    requestedEffort,
+  const freeModel = String(
+    env.FREE_PLAN_PRIMARY_MODEL || "gpt-5.6-sol",
   );
-  const freeModel = usesThinking
-    ? String(env.FREE_PLAN_PRIMARY_MODEL || "gpt-5.6-sol")
-    : defaultModel;
   const allowedModels = [...new Set([
     ...choices.map((choice) => choice.id),
     defaultModel,
@@ -203,13 +200,13 @@ function billingNotice(url, reconciled) {
       : "Payment is being confirmed. Refresh shortly if the larger allowance is not active yet.";
   }
   if (state === "cancelled") {
-    return "Checkout was cancelled. Your free Current thinking allowance is unchanged.";
+    return "Checkout was cancelled. Your free GPT-5.6 Fast allowance is unchanged.";
   }
   if (state === "error") {
     return "Billing could not complete that request. Try again from the model menu.";
   }
   if (url.searchParams.get("model") === "automatic") {
-    return "Fastest response uses GPT-5.4. Thinking levels use Current until the daily allowance is reached.";
+    return "Guest and signed-in Fastest responses begin on GPT-5.6 Fast. Signed-in accounts switch to GPT-5.4 after the daily allowance.";
   }
   if (url.searchParams.get("model") === "limit") {
     return "That subscriber model allowance has been reached. Choose GPT-5.4 or manage billing.";
@@ -225,13 +222,20 @@ function modelChoiceState(state, choices, defaultModel) {
     OPENAI_MODEL: defaultModel,
   };
   const paid = state.entitled === true;
+  const automaticFreeModel = choices.some(
+    (choice) => choice.id === "gpt-5.6-sol",
+  )
+    ? "gpt-5.6-sol"
+    : defaultModel;
   const selected = paid
     ? isAllowedModel(choiceEnvironment, state.selectedModel)
       ? state.selectedModel
       : defaultModel
-    : defaultModel;
+    : automaticFreeModel;
   const selectedChoice = choices.find((choice) => choice.id === selected);
-  const currentLabel = selectedChoice?.label || "GPT-5.4";
+  const currentLabel = paid
+    ? selectedChoice?.label || "GPT-5.4"
+    : "GPT-5.6 Fast";
   const currentPeriod = paid ? usagePeriod() : dailyUsagePeriod();
   const storedPeriod = paid
     ? state.paidUsagePeriod || state.usagePeriod
@@ -270,7 +274,7 @@ function modelUsageCopy({ paid, used, freeLimit, paidLimit }) {
     : used +
         " of " +
         freeLimit +
-        " free Current thinking messages used today. Fastest response uses GPT-5.4 and does not count. The allowance resets at 00:00 UTC.";
+        " free GPT-5.6 Fast messages used today. GPT-5.4 takes over after this allowance. The allowance resets at 00:00 UTC.";
 }
 
 function billingMenuMarkup({
@@ -287,7 +291,7 @@ function billingMenuMarkup({
       '<h2 id="billing-heading">AI model</h2>' +
       "<p>Sign in for " +
       freeLimit +
-      " Current thinking messages each day. Fastest response stays on GPT-5.4.</p>" +
+      " GPT-5.6 Fast messages each UTC day before GPT-5.4 fallback. Guest chats also begin on GPT-5.6 Fast.</p>" +
       '<a class="billing-primary billing-link" href="/auth/google">Sign in to choose a model</a>' +
       "</section>";
   }
@@ -313,9 +317,9 @@ function billingMenuMarkup({
   if (!choice.paid) {
     return '<section class="billing-menu" aria-labelledby="billing-heading">' +
       '<h2 id="billing-heading">AI model</h2>' +
-      "<p>Fastest response uses GPT-5.4. Choose a thinking level to use Current for up to " +
+      "<p>GPT-5.6 Fast is automatic for the first " +
       freeLimit +
-      " messages each UTC day.</p>" +
+      " messages each UTC day. GPT-5.4 takes over afterward.</p>" +
       '<p class="billing-usage" data-model-usage="true" aria-live="polite">' +
       escapeHtml(usage) +
       "</p>" +
@@ -365,7 +369,7 @@ function composerModelPickerMarkup({
     modelPanel =
       "<p>Sign in for " +
       freeLimit +
-      " Current thinking messages each day. Fastest response stays on GPT-5.4.</p>" +
+      " GPT-5.6 Fast messages each UTC day before GPT-5.4 fallback. Guest chats also begin on GPT-5.6 Fast.</p>" +
       '<a class="billing-primary billing-link" href="/auth/google">Sign in to choose a model</a>';
   } else if (!choice.paid) {
     const usage = modelUsageCopy({
@@ -380,9 +384,9 @@ function composerModelPickerMarkup({
           "</form>"
       : "";
     modelPanel =
-      "<p>Fastest response uses GPT-5.4. Choose a thinking level to use Current for up to " +
+      "<p>GPT-5.6 Fast is automatic for the first " +
       freeLimit +
-      " messages each UTC day.</p>" +
+      " messages each UTC day. GPT-5.4 takes over afterward.</p>" +
       '<p class="billing-usage" data-model-usage="true" aria-live="polite">' +
       escapeHtml(usage) +
       "</p>" +
@@ -480,12 +484,12 @@ async function injectBillingPage(response, request, env, authSession, state, rec
   if (!html.includes('href="/billing.css')) {
     html = html.replace(
       "</head>",
-      '    <link rel="stylesheet" href="/billing.css?v=20260807-free-gpt56-first-50-1" />\n  </head>',
+      '    <link rel="stylesheet" href="/billing.css?v=20260808-gpt56-fast-first-1" />\n  </head>',
     );
   } else {
     html = html.replace(
       /href="\/billing\.css(?:\?v=[^"]*)?"/,
-      'href="/billing.css?v=20260807-free-gpt56-first-50-1"',
+      'href="/billing.css?v=20260808-gpt56-fast-first-1"',
     );
   }
   if (markup) {
@@ -507,7 +511,7 @@ async function injectBillingPage(response, request, env, authSession, state, rec
   if ((markup || composerModelPicker) && !html.includes('src="/billing-client.js')) {
     html = html.replace(
       "</body>",
-      '    <script type="module" src="/billing-client.js?v=20260807-free-gpt56-first-50-1"></script>\n  </body>',
+      '    <script type="module" src="/billing-client.js?v=20260808-gpt56-fast-first-1"></script>\n  </body>',
     );
   }
   if (notice) {
@@ -638,7 +642,16 @@ async function paidChatResponse(request, env, ctx) {
   const authStartedAt = Date.now();
   const authSession = await readAuthSession(request, env);
   const authMs = Date.now() - authStartedAt;
-  if (!authSession) return originalWorker.fetch(request, env, ctx);
+  if (!authSession) {
+    return originalWorker.fetch(
+      request,
+      modelEnvironment(
+        env,
+        String(env.FREE_PLAN_PRIMARY_MODEL || "gpt-5.6-sol"),
+      ),
+      ctx,
+    );
+  }
 
   const stub = billingStub(env, authSession.accountKey);
   if (!stub || typeof stub.prepareChat !== "function") {

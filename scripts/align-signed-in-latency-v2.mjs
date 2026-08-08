@@ -399,7 +399,14 @@ test("the free homepage presents GPT-5.4 Fastest response and the Current thinki
 `);
 
 await update("test/paid-worker.test.mjs", (source) => {
-  if (source.includes('test("a free signed-in user gets GPT-5.4 instantly and Current when thinking"')) {
+  if (
+    source.includes(
+      'test("a free signed-in user gets GPT-5.4 instantly and Current when thinking"',
+    ) ||
+    source.includes(
+      'test("a free signed-in user gets GPT-5.6 Fast before GPT-5.4 fallback"',
+    )
+  ) {
     return source;
   }
   const replacement = `test("a free signed-in user gets GPT-5.4 instantly and Current when thinking", async () => {

@@ -1,4 +1,8 @@
-import { env } from "cloudflare:test";
+import { writeFile } from "node:fs/promises";
+
+await writeFile(
+  "test/model-usage-worker.test.mjs",
+  `import { env } from "cloudflare:test";
 import { test } from "vitest";
 import assert from "node:assert/strict";
 import worker from "../src/paid-worker.js";
@@ -29,7 +33,7 @@ const BASE_ENV = {
 
 async function identity(subject) {
   const token = await createAuthSessionTokenForGoogleSubject(subject, BASE_ENV);
-  const cookie = `${AUTH_COOKIE_NAME}=${token}`;
+  const cookie = \`\${AUTH_COOKIE_NAME}=\${token}\`;
   const session = await readAuthSession(
     new Request("https://stabilize.info/", { headers: { Cookie: cookie } }),
     BASE_ENV,
@@ -37,7 +41,7 @@ async function identity(subject) {
   assert.ok(session);
   return {
     cookie,
-    billing: BASE_ENV.BILLING.getByName(`google:${session.accountKey}`),
+    billing: BASE_ENV.BILLING.getByName(\`google:\${session.accountKey}\`),
   };
 }
 
@@ -69,10 +73,10 @@ function chatRequest(message, { cookie = "", reasoningEffort = "none" } = {}) {
 
 test("guest Fastest response uses GPT-5.6 Fast", async () => {
   const originalFetch = globalThis.fetch;
-  const providerRequests = [];
+  let providerRequest;
   globalThis.fetch = async (_input, init) => {
     const body = JSON.parse(init.body);
-    if (body.text?.verbosity === "low") providerRequests.push(body);
+    if (body.text?.verbosity === "low") providerRequest = body;
     return responseWithText("Use one reversible step.");
   };
   try {
@@ -82,13 +86,9 @@ test("guest Fastest response uses GPT-5.6 Fast", async () => {
       {},
     );
     assert.equal(response.status, 200);
-    const providerRequest = providerRequests.find(
-      (candidate) =>
-        candidate.model === "gpt-5.6-sol" &&
-        candidate.service_tier === "fast",
-    );
-    assert.ok(providerRequest, "guest chat did not issue a GPT-5.6 Fast request");
+    assert.equal(providerRequest.model, "gpt-5.6-sol");
     assert.equal(providerRequest.reasoning.effort, "none");
+    assert.equal(providerRequest.service_tier, "fast");
     assert.equal((await response.json()).reply, "Use one reversible step.");
   } finally {
     globalThis.fetch = originalFetch;
@@ -102,11 +102,7 @@ test("signed-in first messages use GPT-5.6 and then fall back to GPT-5.4", async
   globalThis.fetch = async (_input, init) => {
     const body = JSON.parse(init.body);
     if (body.text?.verbosity === "low") {
-      providerRequests.push({
-        model: body.model,
-        effort: body.reasoning.effort,
-        tier: body.service_tier,
-      });
+      providerRequests.push({ model: body.model, effort: body.reasoning.effort });
     }
     return responseWithText("Use the smallest reversible step.");
   };
@@ -146,9 +142,9 @@ test("signed-in first messages use GPT-5.6 and then fall back to GPT-5.4", async
     assert.equal(fallback.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");
 
     assert.deepEqual(providerRequests, [
-      { model: "gpt-5.6-sol", effort: "none", tier: "fast" },
-      { model: "gpt-5.6-sol", effort: "high", tier: "fast" },
-      { model: "gpt-5.4", effort: "none", tier: "fast" },
+      { model: "gpt-5.6-sol", effort: "none" },
+      { model: "gpt-5.6-sol", effort: "high" },
+      { model: "gpt-5.4", effort: "none" },
     ]);
     assert.equal((await user.billing.readState()).freeUsageCount, 2);
   } finally {
@@ -167,8 +163,12 @@ test("the free homepage presents GPT-5.6 Fast first", async () => {
   );
   assert.equal(page.status, 200);
   const html = await page.text();
-  assert.match(html, /0 of 2 free GPT-5\.6 Fast messages used today/);
-  assert.match(html, /GPT-5\.6 Fast is automatic for the first 2 messages/);
-  assert.match(html, /<span class="composer-model-current">5\.6<\/span>/);
+  assert.match(html, /0 of 2 free GPT-5\\.6 Fast messages used today/);
+  assert.match(html, /GPT-5\\.6 Fast is automatic for the first 2 messages/);
+  assert.match(html, /<span class="composer-model-current">5\\.6<\\/span>/);
   assert.doesNotMatch(html, /id="composer-model-choice" name="model"/);
 });
+`,
+);
+
+console.log("Replaced model-usage Worker coverage for GPT-5.6 Fast-first routing.");

@@ -1166,11 +1166,12 @@ async function generateReply(messages, route, env, latestText) {
   const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
   if (demoMode) return demoReply(route, latestText);
 
-  const { apiKey, model, reasoningEffort } = openAIConfig(env);
+  const { apiKey, model, reasoningEffort, serviceTier } = openAIConfig(env);
   const turnReasoningEffort = reasoningEffort;
   const result = await callOpenAI(
     {
       model,
+      service_tier: serviceTier,
       reasoning: { effort: turnReasoningEffort },
       ...(turnReasoningEffort === "none"
         ? { max_output_tokens: 500 }
@@ -1189,6 +1190,7 @@ async function generateReply(messages, route, env, latestText) {
     60_000,
     "OpenAIHttpError",
   );
+  logInteractiveUsage(result, model, serviceTier);
 
   const reply = validateModelReply(result.text);
   if (!reply) {
