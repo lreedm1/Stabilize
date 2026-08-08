@@ -31,8 +31,5 @@ jobs:
       - name: Validate Worker build
         run: npm run check
 
-      - name: Show generated environment type diff
-        run: git diff -- worker-configuration.d.ts
-
       - name: Verify repository stays clean
         run: npm run verify:clean
