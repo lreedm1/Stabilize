@@ -26,7 +26,7 @@ export const COPY = {
         "Free AI support for overloaded moments—not emergency care.",
       infoLabel: "Info",
       infoDetails:
-        "Not therapy or diagnosis. Guest chats are not remembered by Stabilize between sessions. If you sign in, condensed context is remembered for 30 days and follows the same Google account. Private chat does not use or update that Stabilize memory. This app does not use IP addresses for memory or application logs; infrastructure providers may still process connection metadata. Google handles sign-in. OpenAI processes messages and stores response data for at least 30 days unless organization or project data controls override the request. Adults 18+.",
+        "Not therapy or diagnosis. Guest chats keep a bounded transcript only in the current browser tab so follow-up messages can use earlier context; they are not written to Stabilize account memory. If you sign in, condensed context is remembered for 30 days, follows the same Google account, and can be deleted immediately from the account menu. Private chat does not use or update that Stabilize memory. This app does not use IP addresses for memory or application logs; infrastructure providers may still process connection metadata. Google handles sign-in. OpenAI processes messages and stores response data for at least 30 days unless organization or project data controls override the request. Adults 18+.",
       inputLabel: "Your message",
       responseLabel: "Latest AI response",
       inputPlaceholder: "What is happening?",
@@ -66,6 +66,14 @@ export const COPY = {
     },
     newConversationFailed:
       "Stabilize couldn't start a new conversation. Try again.",
+    deleteMemoryButton: "Delete remembered context",
+    deleteMemoryPending: "Deleting…",
+    deleteMemoryConfirm:
+      "Delete the condensed context and recent messages Stabilize remembers for this account? This cannot undo provider processing that already happened.",
+    deleteMemorySuccess:
+      "Remembered context deleted. This chat has been reset.",
+    deleteMemoryFailed:
+      "Stabilize couldn't delete remembered context. Try again.",
     privateChatButton: "Private chat",
     endPrivateChatButton: "End private chat",
     privateChatStatus: "Private chat — Stabilize memory is off.",
@@ -131,6 +139,8 @@ export const COPY = {
     messageRequired: "Please enter a message.",
     messageTooLong: "Please keep your message to 4,000 characters or fewer.",
     invalidConversation: "No valid conversation was supplied.",
+    signInRequired: "Sign in to manage remembered context.",
+    memoryUnavailable: "Remembered context is unavailable right now.",
     crossOriginRequest: "Cross-origin request rejected.",
     unreliableReply:
       "Stabilize couldn't complete a reliable reply. Try sending the message again.",

@@ -65,9 +65,24 @@ test("New conversation stays out of the hamburger menu while remaining functiona
     memorySource,
     /startNewConversation[\s\S]*DELETE FROM recent_messages[\s\S]*awaiting_safety_answer = 0/,
   );
+  const newConversationStart = memorySource.indexOf(
+    "async startNewConversation()",
+  );
+  const deleteMemoryStart = memorySource.indexOf(
+    "async deleteRememberedContext()",
+    newConversationStart,
+  );
+  const compactionStart = memorySource.indexOf(
+    "async getCompactionSnapshot()",
+    newConversationStart,
+  );
+  const newConversationEnd =
+    deleteMemoryStart > newConversationStart
+      ? deleteMemoryStart
+      : compactionStart;
   const newConversationMethod = memorySource.slice(
-    memorySource.indexOf("async startNewConversation()"),
-    memorySource.indexOf("async getCompactionSnapshot()"),
+    newConversationStart,
+    newConversationEnd,
   );
   assert.doesNotMatch(newConversationMethod, /DELETE FROM memory_state/);
   assert.doesNotMatch(newConversationMethod, /summary\s*=/);

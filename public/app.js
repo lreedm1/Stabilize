@@ -17,6 +17,9 @@ const newConversationButton = document.querySelector(
 const siteMenu = document.querySelector(".site-menu");
 const privateChatButton = document.querySelector("#private-chat-button");
 const privateChatStatus = document.querySelector("#private-chat-status");
+const deleteMemoryButton = document.querySelector("#delete-memory-button");
+const memoryDeleteStatus = document.querySelector("#memory-delete-status");
+const signedIn = document.documentElement.dataset.signedIn === "true";
 
 if (!(copyTemplate instanceof HTMLTemplateElement)) {
   throw new Error("Missing client copy data");
@@ -42,6 +45,11 @@ const MAX_PERSISTED_REPLY_CHARS = 12_000;
 const PRIVATE_CHAT_STORAGE_KEY = "stabilize:private-chat:v1";
 const MAX_PRIVATE_THREAD_MESSAGES = 6;
 const MAX_PRIVATE_THREAD_MESSAGE_CHARS = 3_000;
+const GUEST_THREAD_STORAGE_KEY = "stabilize:guest-thread:v1";
+const GUEST_THREAD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const MAX_GUEST_THREAD_MESSAGES = 8;
+const MAX_GUEST_THREAD_MESSAGE_CHARS = 2_500;
+const MAX_CHAT_REQUEST_BYTES = 28_000;
 
 chatLog.setAttribute("aria-atomic", "false");
 chatLog.setAttribute("aria-label", "Current conversation");
@@ -137,6 +145,7 @@ let nextVisibleUserText = "";
 let activeAssistantOutput = null;
 let privateChat = false;
 let privateThreadMessages = [];
+let guestThreadMessages = [];
 
 function buildOutcomeActionPrompt(instruction, previousReply) {
   const request = String(instruction || "").trim();
@@ -287,7 +296,7 @@ function clearPersistedAnswer() {
 function persistLatestAnswer(reply, route, needsSafetyAnswer) {
   const cleanReply = String(reply || "").trim().slice(0, MAX_PERSISTED_REPLY_CHARS);
   if (!cleanReply) return;
-  appendPrivateThreadMessage("assistant", cleanReply);
+  appendLocalThreadMessage("assistant", cleanReply);
 
   const cleanRoute = /^[A-Z_]{1,64}$/.test(String(route || ""))
     ? String(route)
@@ -350,7 +359,7 @@ function restorePersistedAnswer() {
 
   awaitingSafetyAnswer = record.awaitingSafetyAnswer;
   awaitingSafetyAnswerSince = record.awaitingSafetyAnswer ? record.savedAt : null;
-  appendPrivateThreadMessage("assistant", record.reply);
+  appendLocalThreadMessage("assistant", record.reply);
   const offerOutcomeCheck =
     !record.awaitingSafetyAnswer &&
     !ROUTES_WITHOUT_OUTCOME_CHECK.has(record.route);
@@ -378,13 +387,186 @@ function appendPrivateThreadMessage(role, content) {
   );
 }
 
-function rollbackPrivateUser(content) {
-  if (!privateChat) return;
-  const clean = String(content || "").trim();
-  const latest = privateThreadMessages.at(-1);
-  if (latest?.role === "user" && latest.content === clean) {
-    privateThreadMessages.pop();
+function clearGuestThreadStorage() {
+  try {
+    sessionStorage.removeItem(GUEST_THREAD_STORAGE_KEY);
+  } catch {
+    // Storage can be unavailable in hardened or private browser contexts.
   }
+}
+
+function normalizeGuestThread(messages) {
+  if (!Array.isArray(messages)) return [];
+  const cleaned = messages
+    .filter(
+      (message) =>
+        message && ["user", "assistant"].includes(message.role),
+    )
+    .map((message) => ({
+      role: message.role,
+      content: String(message.content || "")
+        .trim()
+        .slice(0, MAX_GUEST_THREAD_MESSAGE_CHARS),
+    }))
+    .filter((message) => message.content)
+    .slice(-MAX_GUEST_THREAD_MESSAGES);
+
+  const alternating = [];
+  for (const message of cleaned) {
+    const previous = alternating.at(-1);
+    if (previous?.role === message.role) {
+      previous.content = (previous.content + "\n" + message.content).slice(
+        0,
+        MAX_GUEST_THREAD_MESSAGE_CHARS,
+      );
+    } else {
+      alternating.push({ ...message });
+    }
+  }
+  return alternating.slice(-MAX_GUEST_THREAD_MESSAGES);
+}
+
+function persistGuestThread() {
+  if (signedIn || privateChat || guestThreadMessages.length === 0) {
+    clearGuestThreadStorage();
+    return;
+  }
+  try {
+    sessionStorage.setItem(
+      GUEST_THREAD_STORAGE_KEY,
+      JSON.stringify({
+        v: 1,
+        savedAt: Date.now(),
+        messages: guestThreadMessages,
+      }),
+    );
+  } catch {
+    // The current page still keeps the bounded thread in memory.
+  }
+}
+
+function initializeGuestThread() {
+  if (signedIn || privateChat) {
+    guestThreadMessages = [];
+    clearGuestThreadStorage();
+    return;
+  }
+
+  try {
+    const record = JSON.parse(
+      sessionStorage.getItem(GUEST_THREAD_STORAGE_KEY) || "null",
+    );
+    const age = Date.now() - Number(record?.savedAt);
+    if (
+      record?.v !== 1 ||
+      !Number.isFinite(age) ||
+      age < 0 ||
+      age > GUEST_THREAD_MAX_AGE_MS
+    ) {
+      guestThreadMessages = [];
+      clearGuestThreadStorage();
+      return;
+    }
+    guestThreadMessages = normalizeGuestThread(record.messages);
+    if (guestThreadMessages.length === 0) clearGuestThreadStorage();
+  } catch {
+    guestThreadMessages = [];
+    clearGuestThreadStorage();
+  }
+}
+
+function resetGuestThread() {
+  guestThreadMessages = [];
+  clearGuestThreadStorage();
+}
+
+function appendGuestThreadMessage(role, content) {
+  if (signedIn || privateChat || !["user", "assistant"].includes(role)) {
+    return;
+  }
+  const clean = String(content || "")
+    .trim()
+    .slice(0, MAX_GUEST_THREAD_MESSAGE_CHARS);
+  if (!clean) return;
+  guestThreadMessages = normalizeGuestThread([
+    ...guestThreadMessages,
+    { role, content: clean },
+  ]);
+  persistGuestThread();
+}
+
+function activeLocalThreadMessages() {
+  if (privateChat) return privateThreadMessages;
+  if (!signedIn) return guestThreadMessages;
+  return [];
+}
+
+function appendLocalThreadMessage(role, content) {
+  if (privateChat) {
+    appendPrivateThreadMessage(role, content);
+  } else if (!signedIn) {
+    appendGuestThreadMessage(role, content);
+  }
+}
+
+function rollbackLocalUser(content) {
+  const clean = String(content || "").trim();
+  const thread = activeLocalThreadMessages();
+  const latest = thread.at(-1);
+  if (latest?.role !== "user" || latest.content !== clean) return;
+
+  if (privateChat) {
+    privateThreadMessages.pop();
+  } else if (!signedIn) {
+    guestThreadMessages.pop();
+    persistGuestThread();
+  }
+}
+
+function restoreGuestConversation() {
+  if (signedIn || privateChat || guestThreadMessages.length === 0) return false;
+
+  const persisted = readPersistedAnswer();
+  const lastAssistantIndex = guestThreadMessages.findLastIndex(
+    (message) => message.role === "assistant",
+  );
+  chatLog.replaceChildren();
+  clearOutcomeTray();
+
+  guestThreadMessages.forEach((message, index) => {
+    if (message.role === "user") {
+      appendUserOutput(message.content);
+      return;
+    }
+
+    const isLastAssistant = index === lastAssistantIndex;
+    const route =
+      isLastAssistant && persisted?.reply === message.content
+        ? String(persisted.route || "ORDINARY")
+        : "ORDINARY";
+    const needsSafetyAnswer =
+      isLastAssistant &&
+      persisted?.reply === message.content &&
+      persisted.awaitingSafetyAnswer === true;
+    showOutput(message.content, "", "response", {
+      offerOutcomeCheck:
+        isLastAssistant &&
+        !needsSafetyAnswer &&
+        !ROUTES_WITHOUT_OUTCOME_CHECK.has(route),
+      route,
+    });
+
+    if (isLastAssistant) {
+      awaitingSafetyAnswer = needsSafetyAnswer;
+      awaitingSafetyAnswerSince = needsSafetyAnswer
+        ? Number(persisted?.savedAt) || Date.now()
+        : null;
+    }
+  });
+
+  const latest = guestThreadMessages.at(-1);
+  if (latest?.content) modulateTerrain(latest.content);
+  return true;
 }
 
 function privateChatAvailable() {
@@ -417,7 +599,13 @@ function persistPrivateChatPreference() {
 
 function renderPrivateChatState() {
   const active = privateChatAvailable() && privateChat;
-  if (privateChatButton instanceof HTMLButtonElement) {
+  if (deleteMemoryButton instanceof HTMLButtonElement) {
+  deleteMemoryButton.addEventListener("click", () => {
+    void deleteRememberedContext();
+  });
+}
+
+if (privateChatButton instanceof HTMLButtonElement) {
     privateChatButton.setAttribute("aria-pressed", String(active));
     privateChatButton.textContent = active
       ? copy.endPrivateChatButton
@@ -451,6 +639,7 @@ function togglePrivateChat() {
 
 function resetConversationView() {
   resetPrivateThread();
+  resetGuestThread();
   clearPersistedAnswer();
   awaitingSafetyAnswer = false;
   awaitingSafetyAnswerSince = null;
@@ -497,6 +686,9 @@ if (newConversationButton instanceof HTMLButtonElement) {
   }
   if (privateChatButton instanceof HTMLButtonElement) {
     privateChatButton.disabled = value;
+  }
+  if (deleteMemoryButton instanceof HTMLButtonElement) {
+    deleteMemoryButton.disabled = value;
   }
   for (const button of exampleStarts) button.disabled = value;
 }
@@ -676,6 +868,33 @@ function currentAwaitingSafetyAnswer() {
   return true;
 }
 
+function buildChatRequestBody(clean) {
+  let messages =
+    privateChat || !signedIn ? [...activeLocalThreadMessages()] : undefined;
+  if (messages?.at(-1)?.role === "user" && messages.at(-1).content === clean) {
+    messages.pop();
+  }
+
+  const build = () =>
+    JSON.stringify({
+      message: clean,
+      awaitingSafetyAnswer: currentAwaitingSafetyAnswer(),
+      privateChat,
+      messages,
+    });
+
+  let serialized = build();
+  while (
+    Array.isArray(messages) &&
+    messages.length > 0 &&
+    new TextEncoder().encode(serialized).byteLength > MAX_CHAT_REQUEST_BYTES
+  ) {
+    messages.shift();
+    serialized = build();
+  }
+  return serialized;
+}
+
 async function sendMessage(text) {
   const clean = String(text || "").trim();
   if (!clean || pending) {
@@ -691,7 +910,7 @@ async function sendMessage(text) {
   appendUserOutput(visibleUserText);
   setPending(true);
   const pendingOutput = showOutput(pendingReplyCopy(), "thinking-output", "thinking");
-  appendPrivateThreadMessage("user", clean);
+  appendLocalThreadMessage("user", clean);
 
   try {
     const response = await fetch("/api/chat", {
@@ -700,12 +919,7 @@ async function sendMessage(text) {
         "Content-Type": "application/json",
         Accept: "application/x-ndjson, application/json",
       },
-      body: JSON.stringify({
-        message: clean,
-        awaitingSafetyAnswer: currentAwaitingSafetyAnswer(),
-        privateChat,
-        messages: privateChat ? privateThreadMessages : undefined,
-      }),
+      body: buildChatRequestBody(clean),
     });
 
     const contentType = response.headers.get("content-type") || "";
@@ -728,7 +942,7 @@ async function sendMessage(text) {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      rollbackPrivateUser(clean);
+      rollbackLocalUser(clean);
       input.value = clean;
       lastSubmittedText = "";
       showOutput(
@@ -751,13 +965,49 @@ async function sendMessage(text) {
     lastSubmittedText = "";
   } catch (error) {
     cancelStreamingOutputRender();
-    rollbackPrivateUser(clean);
+    rollbackLocalUser(clean);
     input.value = clean;
     lastSubmittedText = "";
     const message = error?.streamingError ? error.message : copy.unexpectedError;
     const reference = error?.streamingError ? error.reference : "";
     showOutput(requestErrorMessage(message, reference), "error-output");
   } finally {
+    setPending(false);
+    input.focus({ preventScroll: true });
+  }
+}
+
+function setMemoryDeleteStatus(message, isError = false) {
+  if (!(memoryDeleteStatus instanceof HTMLElement)) return;
+  memoryDeleteStatus.textContent = String(message || "");
+  memoryDeleteStatus.hidden = !message;
+  memoryDeleteStatus.classList.toggle("is-error", isError);
+}
+
+async function deleteRememberedContext() {
+  if (pending || !(deleteMemoryButton instanceof HTMLButtonElement)) return;
+  if (!window.confirm(copy.deleteMemoryConfirm)) return;
+
+  const originalLabel = deleteMemoryButton.textContent;
+  setPending(true);
+  deleteMemoryButton.textContent = copy.deleteMemoryPending;
+  setMemoryDeleteStatus("");
+
+  try {
+    const response = await fetch("/api/account/memory", {
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) throw new Error("Memory deletion request failed");
+    const result = await response.json().catch(() => ({}));
+    if (result.deleted !== true) throw new Error("Memory was not deleted");
+
+    resetConversationView();
+    setMemoryDeleteStatus(copy.deleteMemorySuccess);
+  } catch {
+    setMemoryDeleteStatus(copy.deleteMemoryFailed, true);
+  } finally {
+    deleteMemoryButton.textContent = originalLabel || copy.deleteMemoryButton;
     setPending(false);
     input.focus({ preventScroll: true });
   }
@@ -795,12 +1045,15 @@ if (newConversationButton instanceof HTMLButtonElement) {
 if (signOutForm instanceof HTMLFormElement) {
   signOutForm.addEventListener("submit", () => {
     clearPersistedAnswer();
+    resetGuestThread();
+    resetPrivateThread();
     clearPrivateChatPreference();
   });
 }
 
 initializePrivateChat();
-restorePersistedAnswer();
+initializeGuestThread();
+if (!restoreGuestConversation()) restorePersistedAnswer();
 
 window.addEventListener("pageshow", (event) => {
   const view = conversationSurface.dataset.view || "compose";
@@ -813,6 +1066,8 @@ window.addEventListener("pageshow", (event) => {
   }
 
   if (view !== "compose" && outputIsMissing) {
-    if (!restorePersistedAnswer()) restoreComposeView();
+    if (!restoreGuestConversation() && !restorePersistedAnswer()) {
+      restoreComposeView();
+    }
   }
 });

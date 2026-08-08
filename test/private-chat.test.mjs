@@ -40,7 +40,7 @@ test("signed-in private chat stays out of the hamburger menu and disables memory
     /id="private-chat-button"/,
   );
   assert.match(pageSource, /id="private-chat-status"[\s\S]*hidden/);
-  assert.match(pageSource, /app\.js\?v=20260807-priority-latency-1/);
+  assert.match(pageSource, /app\.js\?v=20260808-memory-controls-1/);
 
   assert.match(clientSource, /PRIVATE_CHAT_STORAGE_KEY/);
   assert.match(clientSource, /function togglePrivateChat\(\)/);
@@ -49,19 +49,19 @@ test("signed-in private chat stays out of the hamburger menu and disables memory
   assert.match(clientSource, /privateChatStatus\.hidden = !active/);
   assert.match(clientSource, /let privateThreadMessages = \[\]/);
   assert.match(clientSource, /function appendPrivateThreadMessage\(/);
-  assert.match(clientSource, /appendPrivateThreadMessage\("user", clean\)/);
+  assert.match(clientSource, /appendLocalThreadMessage\("user", clean\)/);
   assert.match(
     clientSource,
-    /appendPrivateThreadMessage\("assistant", cleanReply\)/,
+    /appendLocalThreadMessage\("assistant", cleanReply\)/,
   );
   assert.match(
     clientSource,
-    /messages:\s*privateChat \? privateThreadMessages : undefined/,
+    /privateChat \|\| !signedIn \? \[\.\.\.activeLocalThreadMessages\(\)\] : undefined/,
   );
-  assert.match(clientSource, /rollbackPrivateUser\(clean\)/);
+  assert.match(clientSource, /rollbackLocalUser\(clean\)/);
   assert.match(
     clientSource,
-    /body:\s*JSON\.stringify\(\{[\s\S]*message:\s*clean,[\s\S]*privateChat/,
+    /body:\s*buildChatRequestBody\(clean\)/,
   );
   assert.match(
     clientSource,

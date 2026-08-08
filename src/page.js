@@ -52,10 +52,25 @@ export function renderPage(options = {}) {
     description: seoDescription,
   }).replaceAll("<", "\\u003c");
   const authControl = signedIn
-    ? `<form class="auth-session" action="/auth/logout" method="post">
-          <span class="auth-state">${escapeHtml(page.auth.signedIn)}</span>
-          <button class="auth-link" type="submit">${escapeHtml(page.auth.signOut)}</button>
-        </form>`
+    ? `<div class="auth-account-controls">
+          <form class="auth-session" action="/auth/logout" method="post">
+            <span class="auth-state">${escapeHtml(page.auth.signedIn)}</span>
+            <button class="auth-link" type="submit">${escapeHtml(page.auth.signOut)}</button>
+          </form>
+          <button
+            id="delete-memory-button"
+            class="auth-link memory-delete-button"
+            type="button"
+            aria-describedby="memory-delete-status"
+          >${escapeHtml(client.deleteMemoryButton)}</button>
+          <p
+            id="memory-delete-status"
+            class="memory-delete-status"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></p>
+        </div>`
     : googleSignInAvailable
       ? `<a class="google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>`
       : `<span class="menu-account-note">Chat without an account.</span>`;
@@ -80,9 +95,12 @@ export function renderPage(options = {}) {
           ${escapeHtml(client.privateChatStatus)}
         </p>`
     : "";
+  const landingPrivacySignal = signedIn
+    ? "Signed-in chats use bounded 30-day memory. Delete it anytime."
+    : "Guest chats stay in this browser tab only.";
 
   return `<!doctype html>
-<html lang="${escapeHtml(page.language)}">
+<html lang="${escapeHtml(page.language)}" data-signed-in="${signedIn}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -134,7 +152,7 @@ export function renderPage(options = {}) {
       fetchpriority="high"
     />
     <link rel="stylesheet" href="/styles.css?v=20260807-priority-latency-1" />
-    <link rel="stylesheet" href="/seo.css?v=20260804-private-chat-1" />
+    <link rel="stylesheet" href="/seo.css?v=20260808-memory-controls-1" />
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
     <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
@@ -247,7 +265,7 @@ export function renderPage(options = {}) {
               class="landing-meta"
               data-support-note="${escapeHtml(page.chat.supportNote)}"
             >
-              <p class="privacy-signal">Guest chats aren't remembered. ${escapeHtml(emergencyBoundary)}</p>
+              <p class="privacy-signal">${escapeHtml(landingPrivacySignal)} ${escapeHtml(emergencyBoundary)}</p>
             </div>
           </section>
 
@@ -279,7 +297,7 @@ export function renderPage(options = {}) {
     <template id="client-copy">${copyData}</template>
     <template id="product-copy">${productCopyData}</template>
     <script src="/mobile-quality.js?v=20260802-8"></script>
-    <script type="module" src="/app.js?v=20260807-priority-latency-1"></script>
+    <script type="module" src="/app.js?v=20260808-memory-controls-1"></script>
     <script type="module" src="/reasoning-choice.js?v=20260807-instant-thinking-2-fastest-1"></script>
   </body>
 </html>`;
