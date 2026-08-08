@@ -1,27 +1,30 @@
-url=https://legiscan.com/WI/bill/AB94/2025
-status=403
-final_url=https://legiscan.com/WI/bill/AB94/2025
-bytes=5539
-content_type=text/html; charset=UTF-8
-pdf=False
-contains_chaptered=False
-elapsed=0.144
+url=https://r.jina.ai/https://docs.legis.wisconsin.gov/document/acts/2025/1.pdf
+status=200
+final_url=https://r.jina.ai/https://docs.legis.wisconsin.gov/document/acts/2025/1.pdf
+bytes=2129
+content_type=text/plain; charset=utf-8
+head='Title: 1.pdf\n\nURL Source: https://docs.legis.wisconsin.gov/document/acts/2025/1.pdf\n\nPublished Time: Sat, 08 Aug 2026 19:50:12 GMT\n\nNumber of Pages: 1\n\nMarkdown Content:\nDate of enactment: March 28, 2'
+has_act_1=True
+has_ab94=True
+elapsed=1.861
 
-url=https://legiscan.com/WI/text/AB94/2025
-status=403
-final_url=https://legiscan.com/WI/text/AB94/2025
-bytes=5539
-content_type=text/html; charset=UTF-8
-pdf=False
-contains_chaptered=False
-elapsed=0.157
+url=https://r.jina.ai/http://docs.legis.wisconsin.gov/document/acts/2025/1.pdf
+status=200
+final_url=https://r.jina.ai/http://docs.legis.wisconsin.gov/document/acts/2025/1.pdf
+bytes=2128
+content_type=text/plain; charset=utf-8
+head='Title: 1.pdf\n\nURL Source: http://docs.legis.wisconsin.gov/document/acts/2025/1.pdf\n\nPublished Time: Sat, 08 Aug 2026 19:50:12 GMT\n\nNumber of Pages: 1\n\nMarkdown Content:\nDate of enactment: March 28, 20'
+has_act_1=True
+has_ab94=True
+elapsed=1.823
 
-url=https://legiscan.com/WI/text/AB94/id/3199083/Wisconsin-2025-AB94-Chaptered.pdf
-status=403
-final_url=https://legiscan.com/WI/text/AB94/id/3199083/Wisconsin-2025-AB94-Chaptered.pdf
-bytes=5723
-content_type=text/html; charset=UTF-8
-pdf=False
-contains_chaptered=True
-elapsed=0.142
+url=https://r.jina.ai/https://legiscan.com/WI/text/AB94/id/3199083/Wisconsin-2025-AB94-Chaptered.pdf
+status=200
+final_url=https://r.jina.ai/https://legiscan.com/WI/text/AB94/id/3199083/Wisconsin-2025-AB94-Chaptered.pdf
+bytes=501
+content_type=text/plain; charset=utf-8
+head='Title: Just a moment...\n\nURL Source: https://legiscan.com/WI/text/AB94/id/3199083/Wisconsin-2025-AB94-Chaptered.pdf\n\nWarning: This page maybe requiring CAPTCHA, please make sure you are authorized to '
+has_act_1=False
+has_ab94=False
+elapsed=6.090
 
