@@ -71,3 +71,31 @@ test("mobile clients keep the static image without loading the graphics module c
   assert.equal(loader.shouldLoadInteractiveBackground(desktop), true);
   assert.equal(loader.shouldLoadInteractiveBackground(dataSaver), false);
 });
+
+test("the production mobile release gate follows built versions and exact image bytes", async () => {
+  const workflow = await read(
+    ".github/workflows/verify-mobile-background.yml",
+  );
+
+  assert.doesNotMatch(workflow, /defer-mobile-background\.mjs/);
+  assert.doesNotMatch(workflow, /asset_version=/);
+  assert.ok(
+    workflow.includes(
+      "grep -oE '/app\\.js\\?v=[A-Za-z0-9._-]+' src/page.js",
+    ),
+  );
+  assert.ok(
+    workflow.includes(
+      "grep -oE 'background-loader\\.js\\?v=[A-Za-z0-9._-]+' public/app.js",
+    ),
+  );
+  assert.ok(workflow.includes("scripts/use-mobile-forest-stream.mjs"));
+  assert.ok(workflow.includes('sha256sum "$expected_mobile_file"'));
+  assert.ok(workflow.includes('wc -c < "$expected_mobile_file"'));
+  assert.ok(workflow.includes('live_mobile_sha'));
+  assert.ok(workflow.includes('live_mobile_bytes'));
+  assert.ok(workflow.includes('live_mobile_type'));
+  assert.ok(
+    workflow.includes("Exact forest-stream mobile release is live"),
+  );
+});
