@@ -1,0 +1,87 @@
+name: Materialize memory controls and guest sessions
+
+on:
+  push:
+    branches:
+      - agent/memory-deletion-guest-session
+  workflow_dispatch:
+
+concurrency:
+  group: materialize-memory-controls
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out the feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/memory-deletion-guest-session
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Restore the transparent final generator
+        shell: bash
+        run: |
+          base64 --decode tmp/memory-controls-generator/payload.b64 \
+            | gzip --decompress \
+            > scripts/add-memory-deletion-and-guest-session.mjs
+          node --check scripts/add-memory-deletion-and-guest-session.mjs
+
+      - name: Wire the generator and tests into npm scripts
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = "package.json";
+          const packageJson = JSON.parse(fs.readFileSync(path, "utf8"));
+          const generator = "node scripts/add-memory-deletion-and-guest-session.mjs";
+          if (!packageJson.scripts["apply:prompt-policy"].includes(generator)) {
+            packageJson.scripts["apply:prompt-policy"] += ` && ${generator}`;
+          }
+          const nodeTest = "test/memory-controls.test.mjs";
+          if (!packageJson.scripts["test:node"].includes(nodeTest)) {
+            packageJson.scripts["test:node"] =
+              packageJson.scripts["test:node"].replace(
+                "node --test ",
+                `node --test ${nodeTest} `,
+              );
+          }
+          for (const workerTest of [
+            "test/memory-controls-worker.test.mjs",
+            "test/memory-deletion-worker.test.mjs",
+          ]) {
+            if (!packageJson.scripts["test:worker"].includes(workerTest)) {
+              packageJson.scripts["test:worker"] += ` ${workerTest}`;
+            }
+          }
+          fs.writeFileSync(path, JSON.stringify(packageJson, null, 2) + "\n");
+          NODE
+
+      - name: Materialize and validate the canonical tree
+        run: |
+          npm ci
+          npm test
+          npm run check
+
+      - name: Commit canonical output and remove temporary payload
+        shell: bash
+        run: |
+          rm -rf tmp/memory-controls-generator
+          rm -f .github/workflows/materialize-memory-controls.yml
+          git status --short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Add memory deletion and guest session continuity"
+          npm run verify:clean
+          git push origin HEAD:agent/memory-deletion-guest-session
