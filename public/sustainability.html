@@ -49,9 +49,9 @@
       <ul>
         <li>A short conversation focused on reducing load and finding one next step.</li>
         <li>Deterministic routing for certain urgent safety, medical, shelter, and medication situations.</li>
-        <li>Twenty non-default-model messages per UTC day for signed-in users who want model choice.</li>
+        <li>A usable guest experience on GPT-5.4 without requiring an account.</li>
+        <li>Fifty automatic GPT-5.6 Instant messages per UTC day for signed-in free accounts, followed by continued access on GPT-5.4.</li>
         <li>Public explanations of the floor-first approach, limits, privacy behavior, and responsible use.</li>
-        <li>A usable guest experience without requiring an account.</li>
       </ul>
       <p>
         Free use still needs rate limits, abuse controls, and a fixed monthly infrastructure budget. “Free”
@@ -63,10 +63,11 @@
         <section class="plan-card">
           <h3>Individuals</h3>
           <p>
-            Signed-in users can choose another model for up to 20 messages per UTC day. The current
-            optional subscription raises that allowance to 200 messages per UTC month. Future paid
-            features should be added only when user research shows they solve a real problem, such as
-            useful continuity, saved plans, higher limits, or better follow-through.
+            Signed-in free accounts automatically receive 50 GPT-5.6 Instant messages per UTC day and then
+            continue on GPT-5.4. The current optional subscription enables choice between GPT-5.4 and
+            Current and provides 200 non-default-model messages per UTC month. Future paid features should
+            be added only when user research shows they solve a real problem, such as useful continuity,
+            saved plans, higher limits, or better follow-through.
           </p>
           <p><strong>Boundary:</strong> no safety-critical capability should depend on payment.</p>
         </section>
@@ -148,9 +149,10 @@
 
       <h2>Support the current experiment</h2>
       <p>
-        The present paid offering increases the non-default-model allowance from 20 messages per UTC day to
-        200 messages per UTC month. It is an early experiment, not a promise that this is the final product
-        or price. Proceeds help cover model usage and continued development while the broader plan is tested.
+        The present paid offering leaves the free GPT-5.6 Instant → GPT-5.4 ladder intact while enabling
+        subscriber model choice and 200 non-default-model messages per UTC month. It is an early experiment,
+        not a promise that this is the final product or price. Proceeds help cover model usage and continued
+        development while the broader plan is tested.
       </p>
       <form class="support-form" action="/billing/checkout" method="post">
         <button class="cta" type="submit">Support Stabilize and upgrade model allowance</button>
