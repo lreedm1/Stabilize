@@ -1,4 +1,6 @@
 const IMPACT_ENDPOINT = "/api/impact-event";
+const CLIENT_LATENCY_ENDPOINT = "/api/client-latency";
+const CLIENT_LATENCY_VERSION = "browser-render-v1";
 const NEXT_STEP_PROMPT_VERSION = "next-step-v1";
 const CONVERSATION_PROMPT_VERSION = "conversation-help-v1";
 const BROWSER_KEY = "stabilize:impact-browser:v1";
@@ -26,6 +28,7 @@ const enhancedTurns = new Set();
 const conversationPromptedTurns = new Set();
 let latestTurn = null;
 let activeConversationCard = null;
+let activeLatencyTurn = null;
 
 function randomId() {
   return crypto.randomUUID();
@@ -135,6 +138,154 @@ function withImpactHeaders(input, init = {}) {
   return [input, { ...init, headers }];
 }
 
+function monotonicNow() {
+  return typeof performance?.now === "function" ? performance.now() : Date.now();
+}
+
+function currentAssistantArticle() {
+  const articles = document.querySelectorAll(
+    "#chat-log .assistant-output",
+  );
+  const article = articles.item(articles.length - 1);
+  return article instanceof HTMLElement ? article : null;
+}
+
+function afterNextPaint(callback) {
+  if (typeof window.requestAnimationFrame !== "function") {
+    window.setTimeout(callback, 0);
+    return;
+  }
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(callback);
+  });
+}
+
+function clientLatencyElapsed(measurement) {
+  return Math.max(0, Math.round(monotonicNow() - measurement.startedAt));
+}
+
+async function postClientLatency(turn) {
+  const measurement = turn?.clientLatency;
+  if (
+    !turn?.turnId ||
+    !measurement ||
+    !Number.isFinite(measurement.firstVisibleMs) ||
+    !Number.isFinite(measurement.completeMs)
+  ) {
+    return undefined;
+  }
+
+  const payload = {
+    sessionId: impactSessionId,
+    browserId: impactBrowserId,
+    turnId: turn.turnId,
+    firstVisibleMs: measurement.firstVisibleMs,
+    completeMs: measurement.completeMs,
+    metricVersion: CLIENT_LATENCY_VERSION,
+  };
+  const request = () =>
+    originalFetch(CLIENT_LATENCY_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    });
+
+  try {
+    for (const delay of [0, 300, 900]) {
+      if (delay) {
+        await new Promise((resolve) => window.setTimeout(resolve, delay));
+      }
+      const response = await request();
+      if (response.status !== 409) return response;
+    }
+  } catch {
+    // Client timing is optional and must never interfere with the chat.
+  }
+  return undefined;
+}
+
+function queueClientLatencyPaint(turn, phase) {
+  const measurement = turn?.clientLatency;
+  if (!measurement || !measurement.eligible || measurement.reported) return;
+  const flag = phase === "first" ? "firstPaintQueued" : "completePaintQueued";
+  if (measurement[flag]) return;
+  measurement[flag] = true;
+
+  afterNextPaint(() => {
+    measurement[flag] = false;
+    if (
+      !measurement.eligible ||
+      measurement.reported ||
+      document.visibilityState !== "visible"
+    ) {
+      return;
+    }
+    const article = measurement.article;
+    if (
+      !(article instanceof HTMLElement) ||
+      !article.isConnected ||
+      article.classList.contains("error-output")
+    ) {
+      return;
+    }
+
+    const elapsed = clientLatencyElapsed(measurement);
+    if (phase === "first") {
+      if (measurement.firstVisibleMs === null) {
+        measurement.firstVisibleMs = elapsed;
+      }
+      return;
+    }
+
+    if (
+      article.classList.contains("thinking-output") ||
+      article.classList.contains("streaming-output")
+    ) {
+      return;
+    }
+    if (measurement.firstVisibleMs === null) {
+      measurement.firstVisibleMs = elapsed;
+    }
+    measurement.completeMs = Math.max(measurement.firstVisibleMs, elapsed);
+    measurement.reported = true;
+    if (activeLatencyTurn === turn) activeLatencyTurn = null;
+    void postClientLatency(turn);
+  });
+}
+
+function observeClientLatency() {
+  const turn = activeLatencyTurn;
+  const measurement = turn?.clientLatency;
+  if (!measurement || !measurement.eligible || measurement.reported) return;
+  const article = measurement.article;
+  if (!(article instanceof HTMLElement) || !article.isConnected) return;
+  if (article.classList.contains("error-output")) {
+    measurement.eligible = false;
+    return;
+  }
+
+  const text = String(article.textContent || "").trim();
+  if (!text) return;
+  if (article.classList.contains("streaming-output")) {
+    queueClientLatencyPaint(turn, "first");
+    return;
+  }
+  if (
+    article.classList.contains("assistant-output") &&
+    !article.classList.contains("thinking-output")
+  ) {
+    queueClientLatencyPaint(turn, "first");
+    queueClientLatencyPaint(turn, "complete");
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") return;
+  const measurement = activeLatencyTurn?.clientLatency;
+  if (measurement) measurement.eligible = false;
+});
+
 async function inspectChatResponse(response, turn) {
   let route = "UNKNOWN";
   let text = "";
@@ -191,14 +342,27 @@ window.fetch = async (input, init) => {
   }
   if (!chatRequest(input)) return originalFetch(input, init);
 
+  const latencyMeasurement = {
+    startedAt: monotonicNow(),
+    article: currentAssistantArticle(),
+    eligible: document.visibilityState === "visible",
+    firstVisibleMs: null,
+    completeMs: null,
+    firstPaintQueued: false,
+    completePaintQueued: false,
+    reported: false,
+  };
   const [nextInput, nextInit] = withImpactHeaders(input, init);
   const response = await originalFetch(nextInput, nextInit);
   const turn = {
     turnId: response.headers.get("X-Stabilize-Turn-Id") || randomId(),
     route: "UNKNOWN",
     completed: false,
+    clientLatency: latencyMeasurement,
   };
   latestTurn = turn;
+  activeLatencyTurn = turn;
+  observeClientLatency();
   void inspectChatResponse(response.clone(), turn);
   return response;
 };
@@ -416,11 +580,16 @@ function queueOutcomeEnhancement() {
   });
 }
 
-const observer = new MutationObserver(queueOutcomeEnhancement);
+function observeImpactChanges() {
+  observeClientLatency();
+  queueOutcomeEnhancement();
+}
+
+const observer = new MutationObserver(observeImpactChanges);
 observer.observe(document.documentElement, {
   childList: true,
   subtree: true,
   attributes: true,
-  attributeFilter: ["hidden"],
+  attributeFilter: ["hidden", "class"],
 });
-queueOutcomeEnhancement();
+observeImpactChanges();

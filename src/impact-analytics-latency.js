@@ -11,6 +11,9 @@ import {
 
 const METRIC_COLUMNS = Object.freeze([
   ["first_token_ms", "INTEGER"],
+  ["client_first_visible_ms", "INTEGER"],
+  ["client_complete_ms", "INTEGER"],
+  ["client_latency_version", "TEXT"],
   ["requested_service_tier", "TEXT"],
   ["actual_service_tier", "TEXT"],
   ["memory_source", "TEXT"],
@@ -146,12 +149,56 @@ export class ImpactAnalytics extends BaseImpactAnalytics {
     return result;
   }
 
+  async recordClientLatency(record) {
+    await this.ensureMetricsColumns();
+    const turnId = boundedToken(record?.turnId, 64);
+    const sessionHash = boundedToken(record?.sessionHash, 128);
+    const browserHash = boundedToken(record?.browserHash, 128);
+    const firstVisibleMs = boundedTiming(record?.firstVisibleMs);
+    const completeMs = boundedTiming(record?.completeMs);
+    const metricVersion = boundedToken(record?.metricVersion, 64);
+    if (
+      !turnId ||
+      !sessionHash ||
+      !browserHash ||
+      firstVisibleMs === null ||
+      completeMs === null ||
+      completeMs < firstVisibleMs ||
+      !metricVersion
+    ) {
+      return { accepted: false, reason: "invalid" };
+    }
+    if (!this.verifiedChat(turnId, sessionHash, browserHash)) {
+      return { accepted: false, reason: "turn" };
+    }
+
+    const existing = this.ctx.storage.sql
+      .exec(
+        "SELECT client_complete_ms FROM chat_turns WHERE turn_id = ?",
+        turnId,
+      )
+      .toArray()[0];
+    if (existing?.client_complete_ms !== null && existing?.client_complete_ms !== undefined) {
+      return { accepted: true, duplicate: true, verifiedTurn: true };
+    }
+
+    this.ctx.storage.sql.exec(
+      "UPDATE chat_turns SET client_first_visible_ms = ?, client_complete_ms = ?, client_latency_version = ? WHERE turn_id = ? AND client_complete_ms IS NULL",
+      firstVisibleMs,
+      completeMs,
+      metricVersion,
+      turnId,
+    );
+    await this.scheduleRetention(Number(record?.occurredAt) || Date.now());
+    return { accepted: true, verifiedTurn: true };
+  }
+
   async summary(options = {}) {
     await this.ensureMetricsColumns();
     const base = await super.summary(options);
     const rows = this.ctx.storage.sql
       .exec(
-        "SELECT account_type, model, requested_service_tier, actual_service_tier, memory_source, conversation_turn_index, status, first_token_ms, total_response_ms, input_tokens, cached_input_tokens, cache_write_tokens, reasoning_tokens, output_tokens, estimated_cost_micros, pricing_version, pricing_status FROM chat_turns WHERE occurred_at >= ?",
+        "SELECT account_type, model, requested_service_tier, actual_service_tier, memory_source, conversation_turn_index, status, first_token_ms, total_response_ms, client_first_visible_ms, client_complete_ms, client_latency_version, input_tokens, cached_input_tokens, cache_write_tokens, reasoning_tokens, output_tokens, estimated_cost_micros, pricing_version, pricing_status FROM chat_turns WHERE occurred_at >= ?",
         base.since,
       )
       .toArray();
@@ -179,6 +226,8 @@ export class ImpactAnalytics extends BaseImpactAnalytics {
         conversationTurnIndex: row.conversation_turn_index,
         firstTokenMs: row.first_token_ms,
         totalResponseMs: row.total_response_ms,
+        clientFirstVisibleMs: row.client_first_visible_ms,
+        clientCompleteMs: row.client_complete_ms,
       });
 
       const inputTokens = boundedInteger(row.input_tokens);
@@ -241,6 +290,13 @@ export class ImpactAnalytics extends BaseImpactAnalytics {
       estimatedCostMicros,
       latencyHistograms,
       latency: summarizeLatencyBreakdowns(latencyHistograms),
+      clientLatencyChats: Number(
+        latencyHistograms.clientComplete?.overall?.count || 0,
+      ),
+      clientTimingCoverageRate: rate(
+        Number(latencyHistograms.clientComplete?.overall?.count || 0),
+        Number(base.completedChats || 0),
+      ),
       tokenTotals,
       modelChats,
       pricedChats,

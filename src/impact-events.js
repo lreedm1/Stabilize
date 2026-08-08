@@ -12,8 +12,10 @@ import {
   schedule,
 } from "./impact-shards.js";
 
-const IMPACT_ASSET_VERSION = "20260806-shareable-next-step-1";
+const IMPACT_ASSET_VERSION = "20260808-browser-response-time-1";
 const IMPACT_PROMPT_VERSION = "next-step-v1";
+const CLIENT_LATENCY_VERSION = "browser-render-v1";
+const MAX_CLIENT_LATENCY_MS = 600_000;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EVENT_SCHEMAS = {
@@ -100,6 +102,89 @@ export async function impactEventResponse(request, env) {
     return jsonResponse({ accepted: false }, status);
   }
   return jsonResponse({ accepted: true }, 202);
+}
+
+function clientTiming(value) {
+  const number = Number(value);
+  if (
+    !Number.isFinite(number) ||
+    number < 0 ||
+    number > MAX_CLIENT_LATENCY_MS
+  ) {
+    return null;
+  }
+  return Math.round(number);
+}
+
+function cleanClientLatencyPayload(body) {
+  const sessionId = String(body?.sessionId || "");
+  const browserId = String(body?.browserId || "");
+  const turnId = String(body?.turnId || "");
+  const firstVisibleMs = clientTiming(body?.firstVisibleMs);
+  const completeMs = clientTiming(body?.completeMs);
+  const metricVersion = String(body?.metricVersion || "");
+  if (
+    !UUID_PATTERN.test(sessionId) ||
+    !UUID_PATTERN.test(browserId) ||
+    !UUID_PATTERN.test(turnId) ||
+    firstVisibleMs === null ||
+    completeMs === null ||
+    completeMs < firstVisibleMs ||
+    metricVersion !== CLIENT_LATENCY_VERSION
+  ) {
+    return null;
+  }
+  return {
+    sessionId,
+    browserId,
+    turnId,
+    firstVisibleMs,
+    completeMs,
+    metricVersion,
+  };
+}
+
+export async function clientLatencyResponse(request, env) {
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed." }, 405);
+  }
+  if (!sameOriginRequest(request)) {
+    return jsonResponse({ error: "Cross-origin request rejected." }, 403);
+  }
+
+  const body = cleanClientLatencyPayload(await readBoundedJson(request));
+  if (!body) {
+    return jsonResponse({ error: "Invalid client latency report." }, 400);
+  }
+  const [sessionHash, browserHash] = await Promise.all([
+    hashIdentifier(env, "impact-session", body.sessionId),
+    hashIdentifier(env, "impact-browser", body.browserId),
+  ]);
+  if (!sessionHash || !browserHash) {
+    return jsonResponse({ error: "Impact measurement is unavailable." }, 503);
+  }
+  const store = impactStub(env, browserHash);
+  if (!store || typeof store.recordClientLatency !== "function") {
+    return jsonResponse({ error: "Impact measurement is unavailable." }, 503);
+  }
+
+  const result = await store.recordClientLatency({
+    occurredAt: Date.now(),
+    sessionHash,
+    browserHash,
+    turnId: body.turnId,
+    firstVisibleMs: body.firstVisibleMs,
+    completeMs: body.completeMs,
+    metricVersion: body.metricVersion,
+  });
+  if (!result?.accepted) {
+    const status = result?.reason === "turn" ? 409 : 400;
+    return jsonResponse({ accepted: false }, status);
+  }
+  return jsonResponse(
+    { accepted: true, duplicate: result?.duplicate === true },
+    202,
+  );
 }
 
 function parseNdjson(text) {
@@ -291,8 +376,10 @@ export async function enhancePrivacyPage(response, request) {
         include private or identifying information.
       </p>
       <p>
-        The impact store also keeps broad route, completion, configured cost, and timing
-        metadata, plus one-way hashes of random browser, tab, and conversation identifiers.
+        The impact store also keeps broad route, completion, provider-usage cost, server
+        timing, and foreground browser timing from Send to the first visible token and fully
+        rendered reply, plus one-way hashes of random browser, tab, and conversation
+        identifiers. Browser timing is skipped unless the tab stays continuously visible.
         It does not place the user's message or the assistant's reply in impact analytics.
         The browser identifier rotates after 30 days, the tab identifier ends with the tab,
         and the conversation identifier rotates after New conversation succeeds. Impact
