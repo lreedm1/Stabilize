@@ -5,7 +5,7 @@ Stabilize uses an automatic model ladder for signed-in free accounts and an opti
 The current behavior is:
 
 - guests use GPT-5.4 for ordinary chats
-- signed-in free accounts automatically receive 50 GPT-5.6 Instant messages per UTC day, then continue on GPT-5.4
+- signed-in free accounts receive 50 free GPT-5.6 Instant messages per UTC day, then continue on GPT-5.4
 - subscribers can choose GPT-5.4 or Current (`gpt-5.6-sol`) and receive 200 non-default-model messages per UTC month
 - GPT-5.4 does not consume the subscriber monthly allowance
 - fixed urgent routes and failed provider requests do not consume either allowance
