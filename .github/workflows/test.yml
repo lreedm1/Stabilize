@@ -15,21 +15,32 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
-
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
-
       - name: Install dependencies
         run: npm ci
-
       - name: Run tests
         run: npm test
-
       - name: Validate Worker build
         run: npm run check
-
       - name: Verify repository stays clean
         run: npm run verify:clean
+
+  export-feature-worktree:
+    if: github.event_name == 'pull_request' && github.head_ref == 'temp/luna-feature-export'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: temp/luna-feature-export
+          persist-credentials: false
+      - run: rm -rf .git
+      - uses: actions/upload-artifact@v4
+        with:
+          name: luna-feature-worktree
+          path: .
+          include-hidden-files: true
+          retention-days: 1
