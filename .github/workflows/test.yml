@@ -56,6 +56,8 @@ jobs:
       - name: Reconstruct and verify payload
         shell: bash
         run: |
+          wc -c .github/luna-routing-payload/part-*
+          sha256sum .github/luna-routing-payload/part-*
           cat .github/luna-routing-payload/part-* > /tmp/luna-routing-payload.b64
           echo "3d98de641401e02eda5c186f543ede57562ce352520c34bf1d48dc08fa8e8f54  /tmp/luna-routing-payload.b64" | sha256sum --check
           base64 --decode /tmp/luna-routing-payload.b64 > /tmp/luna-routing-payload.tar.gz
