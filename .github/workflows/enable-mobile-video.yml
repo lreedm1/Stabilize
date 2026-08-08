@@ -36,15 +36,15 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t chunks < <(find materialize/mobile-forest-video -maxdepth 1 -type f -name '*.b64' | sort)
-          test "${#chunks[@]}" -eq 12
+          test "${#chunks[@]}" -eq 10
           mkdir -p public/scenes
           cat "${chunks[@]}" \
             | tr -d '[:space:]' \
             | base64 --decode \
             > public/scenes/mobile-forest-stream-loop-v1.mp4
-          test "$(wc -c < public/scenes/mobile-forest-stream-loop-v1.mp4)" -eq 602638
+          test "$(wc -c < public/scenes/mobile-forest-stream-loop-v1.mp4)" -eq 122770
           printf '%s  %s\n' \
-            'e5d824a487d3d423c5a6e70d84b45dbc2cee7afcbd3b618db0446ff002054e16' \
+            '48d1cc54b69de9a5b5c0c1b62938fddb6cef3f59ae5b1deb3f73e54aeb55e0c6' \
             'public/scenes/mobile-forest-stream-loop-v1.mp4' \
             | sha256sum --check --strict
 
@@ -73,9 +73,9 @@ jobs:
         run: |
           set -euo pipefail
           test -f public/scenes/mobile-forest-stream-loop-v1.mp4
-          test "$(wc -c < public/scenes/mobile-forest-stream-loop-v1.mp4)" -eq 602638
+          test "$(wc -c < public/scenes/mobile-forest-stream-loop-v1.mp4)" -eq 122770
           printf '%s  %s\n' \
-            'e5d824a487d3d423c5a6e70d84b45dbc2cee7afcbd3b618db0446ff002054e16' \
+            '48d1cc54b69de9a5b5c0c1b62938fddb6cef3f59ae5b1deb3f73e54aeb55e0c6' \
             'public/scenes/mobile-forest-stream-loop-v1.mp4' \
             | sha256sum --check --strict
           grep -Fq 'id="mobile-background-video"' src/page.js
