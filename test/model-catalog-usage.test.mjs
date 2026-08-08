@@ -55,5 +55,10 @@ test("only GPT-5.4 and Current remain selectable, with instant responses by defa
   assert.doesNotMatch(reasoningClient, /new MutationObserver/);
   assert.match(reasoningClient, /DOMContentLoaded/);
   assert.match(reasoningClient, /current\.textContent !== nextText/);
-  assert.match(packageSource, /add-instant-thinking-menu\.mjs/);
+
+  const packageJson = JSON.parse(packageSource);
+  assert.equal(
+    packageJson.scripts["apply:prompt-policy"],
+    "node scripts/apply-priority-latency.mjs",
+  );
 });
