@@ -1,8 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const MOBILE_ASSET = "/scenes/mobile-forest-stream-v1-720.webp";
-const GUIDE_VERSION = "20260808-mobile-forest-stream-1";
-const MOBILE_STYLE_VERSION = "20260808-mobile-forest-stream-1";
+const MOBILE_ASSET = "/scenes/mobile-forest-stream-v1-540.webp";
+const GUIDE_VERSION = "20260808-mobile-forest-stream-540-1";
+const MOBILE_STYLE_VERSION = "20260808-mobile-forest-stream-540-1";
 const STATIC_PAGES = [
   "public/about.html",
   "public/floor-first.html",
@@ -27,11 +27,22 @@ function replacePattern(source, pattern, replacement, label) {
   return source.replace(pattern, replacement);
 }
 
-function replaceBetween(source, startMarker, endMarker, replacement, label) {
-  const start = source.indexOf(startMarker);
-  const end = source.indexOf(endMarker, start + startMarker.length);
-  if (start < 0 || end < 0) {
-    throw new Error(`Mobile forest background could not find ${label}`);
+function replaceMobileQualityTest(source, replacement) {
+  const endMarker =
+    'test("restored tabs recover from interrupted blank thinking views", async () => {';
+  const end = source.indexOf(endMarker);
+  const candidates = [
+    'test("mobile uses responsive high-DPI static generated WebPs", async () => {',
+    'test("mobile uses the project-owner forest stream as its static portrait background", async () => {',
+  ];
+  const starts = candidates
+    .map((marker) => source.indexOf(marker))
+    .filter((index) => index >= 0);
+  const start = starts.length ? Math.min(...starts) : -1;
+  if (start < 0 || end < 0 || end <= start) {
+    throw new Error(
+      "Mobile forest background could not find the existing mobile background test",
+    );
   }
   return source.slice(0, start) + replacement + source.slice(end);
 }
@@ -41,7 +52,7 @@ const mobilePreload = `    <link
       as="image"
       href="${MOBILE_ASSET}"
       imagesrcset="
-        ${MOBILE_ASSET} 720w
+        ${MOBILE_ASSET} 540w
       "
       imagesizes="100vw"
       media="(max-width: 980px) and (orientation: portrait)"
@@ -53,7 +64,7 @@ const mobileSource = `      <source
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="\\n          ${MOBILE_ASSET} 720w\\n        "
+        srcset="\\n          ${MOBILE_ASSET} 540w\\n        "
       />`;
 
 await update("src/page.js", (source) => {
@@ -73,7 +84,7 @@ await update("src/page.js", (source) => {
     /mobile-woodland-loop\.css\?v=[^"]+/,
     `mobile-woodland-loop.css?v=${MOBILE_STYLE_VERSION}`,
   );
-  const references = next.split(`${MOBILE_ASSET} 720w`).length - 1;
+  const references = next.split(`${MOBILE_ASSET} 540w`).length - 1;
   if (references !== 2) {
     throw new Error(`Expected two mobile forest references, found ${references}`);
   }
@@ -127,9 +138,9 @@ for (const path of STATIC_PAGES) {
 
 const mobileQualityTest = String.raw`test("mobile uses the project-owner forest stream as its static portrait background", async () => {
   const tier = {
-    filename: "mobile-forest-stream-v1-720.webp",
-    width: 720,
-    height: 1280,
+    filename: "mobile-forest-stream-v1-540.webp",
+    width: 540,
+    height: 960,
   };
   const [pageSource, mobileStyles, image] = await Promise.all([
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
@@ -144,8 +155,7 @@ const mobileQualityTest = String.raw`test("mobile uses the project-owner forest 
     { width: imageInfo.width, height: imageInfo.height },
     { width: tier.width, height: tier.height },
   );
-  assert.ok(image.byteLength > 100_000);
-  assert.ok(image.byteLength < 500_000);
+  assert.equal(image.byteLength, 91_750);
   assert.equal(imageInfo.chunks.includes("ANIM"), false);
   assert.equal(
     [...pageSource.matchAll(new RegExp(tier.filename + " " + tier.width + "w", "g"))].length,
@@ -156,11 +166,11 @@ const mobileQualityTest = String.raw`test("mobile uses the project-owner forest 
   assert.match(pageSource, /imagesizes="100vw"/);
   assert.match(
     pageSource,
-    /href="\/scenes\/mobile-forest-stream-v1-720\.webp"/,
+    /href="\/scenes\/mobile-forest-stream-v1-540\.webp"/,
   );
   assert.match(
     pageSource,
-    /mobile-woodland-loop\.css\?v=20260808-mobile-forest-stream-1/,
+    /mobile-woodland-loop\.css\?v=20260808-mobile-forest-stream-540-1/,
   );
   assert.doesNotMatch(pageSource, /mobile-golden-alpine/);
   assert.match(mobileStyles, /opacity:\s*1/);
@@ -172,36 +182,35 @@ const mobileQualityTest = String.raw`test("mobile uses the project-owner forest 
 `;
 
 await update("test/mobile-quality.test.mjs", (source) =>
-  replaceBetween(
-    source,
-    'test("mobile uses responsive high-DPI static generated WebPs", async () => {',
-    'test("restored tabs recover from interrupted blank thinking views", async () => {',
-    mobileQualityTest,
-    "the existing mobile background test",
-  ),
+  replaceMobileQualityTest(source, mobileQualityTest),
 );
 
 await update("test/shared-site-theme.test.mjs", (source) => {
-  let next = source.replaceAll(
-    "20260806-unified-site-theme-1",
-    GUIDE_VERSION,
+  let next = source.replace(
+    /^const VERSION = "[^"]+";/m,
+    `const VERSION = "${GUIDE_VERSION}";`,
   );
   for (const oldAsset of [
     "/scenes/mobile-golden-alpine-v3-720.webp",
     "/scenes/mobile-golden-alpine-v3-1440.webp",
+    "/scenes/mobile-forest-stream-v1-720.webp",
   ]) {
     next = next.replaceAll(oldAsset, MOBILE_ASSET);
   }
   next = next.replaceAll(
     "mobile-golden-alpine-v3",
+    "mobile-forest-stream-v1-540",
+  );
+  next = next.replaceAll(
     "mobile-forest-stream-v1-720",
+    "mobile-forest-stream-v1-540",
   );
   return next;
 });
 
 await update(".github/workflows/verify-mobile-background.yml", (source) =>
-  source.replaceAll(
-    'href="/scenes/mobile-golden-alpine-v3-720.webp"',
+  source.replace(
+    /href="\/scenes\/mobile-[^"]+\.webp"/,
     `href="${MOBILE_ASSET}"`,
   ),
 );
