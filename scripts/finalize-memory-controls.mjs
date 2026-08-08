@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 
 // The memory generator rewrites the core handler; preserve the paid Worker's
-// stable prepared-chat import contract after that generated pass.
+// stable prepared-chat import contract after every generated pass.
 const workerPath = "src/index.js";
 const before = await readFile(workerPath, "utf8");
 let after = before;
