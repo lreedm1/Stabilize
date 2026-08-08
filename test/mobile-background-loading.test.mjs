@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 const read = (path) =>
   readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("mobile clients keep the static image without loading the graphics module chain", async () => {
+test("mobile clients keep the still fallback and skip the graphics module chain", async () => {
   const [appSource, loaderSource, pageSource, packageSource] =
     await Promise.all([
       read("public/app.js"),
@@ -44,6 +44,7 @@ test("mobile clients keep the static image without loading the graphics module c
     /export function modulateTerrain\(value\) \{[\s\S]*scheduleTerrainModulation\(\);[\s\S]*return null;/,
   );
   assert.match(pageSource, /\/app\.js\?v=20260808-full-guest-thread-1/);
+  assert.match(pageSource, /\/mobile-quality\.js\?v=20260802-8/);
 
   const config = JSON.parse(packageSource);
   assert.equal(
@@ -72,30 +73,23 @@ test("mobile clients keep the static image without loading the graphics module c
   assert.equal(loader.shouldLoadInteractiveBackground(dataSaver), false);
 });
 
-test("the production mobile release gate follows built versions and exact image bytes", async () => {
+test("the production mobile release gate verifies exact video bytes and playback wiring", async () => {
   const workflow = await read(
     ".github/workflows/verify-mobile-background.yml",
   );
 
-  assert.doesNotMatch(workflow, /defer-mobile-background\.mjs/);
-  assert.doesNotMatch(workflow, /asset_version=/);
-  assert.ok(
-    workflow.includes(
-      "grep -oE '/app\\.js\\?v=[A-Za-z0-9._-]+' src/page.js",
-    ),
-  );
-  assert.ok(
-    workflow.includes(
-      "grep -oE 'background-loader\\.js\\?v=[A-Za-z0-9._-]+' public/app.js",
-    ),
-  );
-  assert.ok(workflow.includes("scripts/use-mobile-forest-stream.mjs"));
-  assert.ok(workflow.includes('sha256sum "$expected_mobile_file"'));
-  assert.ok(workflow.includes('wc -c < "$expected_mobile_file"'));
-  assert.ok(workflow.includes('live_mobile_sha'));
-  assert.ok(workflow.includes('live_mobile_bytes'));
-  assert.ok(workflow.includes('live_mobile_type'));
-  assert.ok(
-    workflow.includes("Exact forest-stream mobile release is live"),
-  );
+  assert.ok(workflow.includes("scripts/materialize-mobile-forest-stream.mjs"));
+  assert.ok(workflow.includes("MOBILE_VIDEO_ASSET"));
+  assert.ok(workflow.includes('sha256sum "$expected_video_file"'));
+  assert.ok(workflow.includes('wc -c < "$expected_video_file"'));
+  assert.ok(workflow.includes('live_video_sha'));
+  assert.ok(workflow.includes('live_video_bytes'));
+  assert.ok(workflow.includes('live_video_type'));
+  assert.ok(workflow.includes("video/mp4"));
+  assert.ok(workflow.includes("webkit-playsinline"));
+  assert.ok(workflow.includes("video.autoplay = true"));
+  assert.ok(workflow.includes("video.muted = true"));
+  assert.ok(workflow.includes("video.loop = true"));
+  assert.ok(workflow.includes("video.playsInline = true"));
+  assert.ok(workflow.includes("Exact mobile forest video is live"));
 });
