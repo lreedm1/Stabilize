@@ -5,7 +5,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -14,9 +14,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
-          persist-credentials: true
-          fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -32,35 +30,6 @@ jobs:
 
       - name: Validate Worker build
         run: npm run check
-
-      - name: Commit canonical mobile background output
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'agent/mobile-forest-stream-background'
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          test -f public/scenes/mobile-forest-stream-v1-540.webp
-          test "$(wc -c < public/scenes/mobile-forest-stream-v1-540.webp)" -eq 91750
-          printf '%s  %s\n' \
-            'e2396c2f73018151c20f99130ebdde75a85db6248ed5459ea0039f03e84eb23c' \
-            'public/scenes/mobile-forest-stream-v1-540.webp' \
-            | sha256sum --check --strict
-          grep -Fq '/scenes/mobile-forest-stream-v1-540.webp' src/page.js
-          grep -Fq '/scenes/mobile-forest-stream-v1-540.webp' public/guides.css
-          ! grep -Fq 'mobile-golden-alpine' src/page.js
-
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git add -f public/scenes/mobile-forest-stream-v1-540.webp
-          git diff --cached --check
-          if git diff --cached --quiet; then
-            echo 'No generated changes were produced.'
-            exit 1
-          fi
-          git commit -m 'Use the forest stream mobile background [materialized]'
-          npm run verify:clean
-          git push origin HEAD:agent/mobile-forest-stream-background
 
       - name: Verify repository stays clean
         run: npm run verify:clean
