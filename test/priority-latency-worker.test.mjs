@@ -3,30 +3,42 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
 
-function providerResponse(text, serviceTier = "priority") {
-  return Response.json({
-    service_tier: serviceTier,
-    usage: {
-      input_tokens: 1400,
-      input_tokens_details: {
-        cached_tokens: 1024,
-        cache_write_tokens: 0,
-      },
-      output_tokens: 40,
+function providerStream(text, serviceTier = "priority") {
+  const usage = {
+    input_tokens: 1400,
+    input_tokens_details: {
+      cached_tokens: 1024,
+      cache_write_tokens: 0,
     },
-    output: [
-      {
-        type: "message",
-        role: "assistant",
-        content: [
-          {
-            type: "output_text",
-            text,
-            annotations: [],
-          },
-        ],
+    output_tokens: 40,
+  };
+  const output = [
+    {
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text }],
+    },
+  ];
+  const events = [
+    { type: "response.created", response: { status: "in_progress" } },
+    { type: "response.output_text.delta", delta: text },
+    { type: "response.output_text.done", text },
+    {
+      type: "response.completed",
+      response: {
+        status: "completed",
+        service_tier: serviceTier,
+        usage,
+        output,
       },
-    ],
+    },
+  ];
+  const body = events
+    .map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+    .join("");
+  return new Response(body, {
+    status: 200,
+    headers: { "Content-Type": "text/event-stream; charset=utf-8" },
   });
 }
 
@@ -35,7 +47,7 @@ function chatRequest(message) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Accept: "application/json",
+      Accept: "application/x-ndjson, application/json",
     },
     body: JSON.stringify({ message }),
   });
@@ -53,6 +65,22 @@ function chatEnv(model = "gpt-5.6-sol") {
   };
 }
 
+async function doneEvent(response) {
+  assert.equal(response.status, 200);
+  assert.match(
+    response.headers.get("content-type") || "",
+    /application\/x-ndjson/i,
+  );
+  const events = (await response.text())
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  assert.equal(events.some((event) => event.type === "error"), false);
+  const done = events.findLast((event) => event.type === "done");
+  assert.ok(done);
+  return done;
+}
+
 test("GPT-5.6 interactive requests use Fast mode, explicit caching, and adaptive output caps", async () => {
   const originalFetch = globalThis.fetch;
   const originalInfo = console.info;
@@ -61,7 +89,7 @@ test("GPT-5.6 interactive requests use Fast mode, explicit caching, and adaptive
   console.info = (...values) => logs.push(values.join(" "));
   globalThis.fetch = async (_input, init) => {
     bodies.push(JSON.parse(init.body));
-    return providerResponse("Take one reversible step.");
+    return providerStream("Take one reversible step.");
   };
 
   try {
@@ -70,18 +98,20 @@ test("GPT-5.6 interactive requests use Fast mode, explicit caching, and adaptive
       chatEnv(),
       {},
     );
-    assert.equal(ordinary.status, 200);
-    assert.equal((await ordinary.json()).reply, "Take one reversible step.");
+    assert.equal(
+      (await doneEvent(ordinary)).reply,
+      "Take one reversible step.",
+    );
 
     const longForm = await worker.fetch(
       chatRequest("Draft a detailed email explaining the situation."),
       chatEnv(),
       {},
     );
-    assert.equal(longForm.status, 200);
-    await longForm.json();
+    await doneEvent(longForm);
 
     assert.equal(bodies.length, 2);
+    assert.equal(bodies[0].stream, true);
     assert.equal(bodies[0].service_tier, "fast");
     assert.equal(bodies[0].max_output_tokens, 360);
     assert.deepEqual(bodies[0].text, { verbosity: "low" });
@@ -112,7 +142,7 @@ test("older GPT models keep their compatible prompt shape while using Fast mode"
   let body;
   globalThis.fetch = async (_input, init) => {
     body = JSON.parse(init.body);
-    return providerResponse("Use the first small step.");
+    return providerStream("Use the first small step.");
   };
 
   try {
@@ -121,8 +151,7 @@ test("older GPT models keep their compatible prompt shape while using Fast mode"
       chatEnv("gpt-5.4"),
       {},
     );
-    assert.equal(response.status, 200);
-    await response.json();
+    await doneEvent(response);
     assert.equal(body.service_tier, "fast");
     assert.equal(typeof body.instructions, "string");
     assert.equal(body.prompt_cache_options, undefined);
