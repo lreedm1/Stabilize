@@ -25,8 +25,10 @@ test("the composer placeholder is centered horizontally while entered text stays
     worker,
     /\/billing\.css\?v=20260807-free-gpt56-first-50-1/,
   );
-  assert.match(
-    packageSource,
-    /node scripts\/center-composer-placeholder\.mjs/,
+
+  const config = JSON.parse(packageSource);
+  assert.equal(
+    config.scripts["apply:prompt-policy"],
+    "node scripts/apply-priority-latency.mjs",
   );
 });
