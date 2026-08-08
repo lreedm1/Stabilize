@@ -74,7 +74,9 @@ test("signed-in instant is unmetered GPT-5.4 while thinking uses Current then fa
   const providerRequests = [];
   globalThis.fetch = async (_input, init) => {
     const body = JSON.parse(init.body);
-    providerRequests.push({ model: body.model, effort: body.reasoning.effort });
+    if (body.service_tier === "fast") {
+      providerRequests.push({ model: body.model, effort: body.reasoning.effort });
+    }
     return responseWithText("Use the smallest reversible step.");
   };
 
