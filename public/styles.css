@@ -672,3 +672,5 @@ textarea:disabled {
   line-height: 1.4;
   text-align: center;
 }
+
+.streaming-text{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}

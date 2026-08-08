@@ -31,7 +31,10 @@ const payloadCount = after.split(
   "reasoning: { effort: turnReasoningEffort },",
 ).length - 1;
 
-if (selectorCount !== 2 || payloadCount !== 2) {
+// Two adaptive selectors must remain: the streamed path and the JSON path.
+// Later policy passes may also materialize a shared or fallback payload using
+// the selected turn effort, so extra matching payloads are valid.
+if (selectorCount !== 2 || payloadCount < 2) {
   throw new Error(
     `Adaptive reasoning was not preserved across both reply paths: selectors=${selectorCount}, payloads=${payloadCount}`,
   );

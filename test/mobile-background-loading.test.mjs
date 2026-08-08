@@ -20,7 +20,7 @@ test("mobile clients keep the static image without loading the graphics module c
   );
   assert.match(
     appSource,
-    /import \{ modulateTerrain \} from "\.\/background-loader\.js\?v=20260806-static-mobile-background-1"/,
+    /import \{ modulateTerrain \} from "\.\/background-loader\.js\?v=20260807-priority-latency-1"/,
   );
   assert.doesNotMatch(
     loaderSource,
@@ -43,10 +43,12 @@ test("mobile clients keep the static image without loading the graphics module c
     loaderSource,
     /export function modulateTerrain\(value\) \{[\s\S]*scheduleTerrainModulation\(\);[\s\S]*return null;/,
   );
-  assert.match(pageSource, /\/app\.js\?v=20260806-static-mobile-background-1/);
-  assert.match(
-    packageSource,
-    /node scripts\/defer-mobile-background\.mjs/,
+  assert.match(pageSource, /\/app\.js\?v=20260807-priority-latency-1/);
+
+  const config = JSON.parse(packageSource);
+  assert.equal(
+    config.scripts["apply:prompt-policy"],
+    "node scripts/apply-priority-latency.mjs",
   );
 
   const loader = await import(

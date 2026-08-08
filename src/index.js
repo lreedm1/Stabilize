@@ -32,6 +32,12 @@ const OPENAI_REASONING_EFFORTS = new Set([
   "xhigh",
   "max",
 ]);
+const OPENAI_SERVICE_TIERS = new Set(["default", "priority", "fast"]);
+const PROMPT_CACHE_KEY = "stabilize-floor-first-v1";
+const ORDINARY_OUTPUT_TOKEN_LIMIT = 360;
+const LONG_FORM_OUTPUT_TOKEN_LIMIT = 900;
+const LONG_FORM_REQUEST_PATTERN =
+  /\b(?:draft|write|rewrite|compose|email|letter|memo|report|speech|proposal|brief|document|essay|code|script|full version|detailed|comprehensive)\b/i;
 const OPENAI_ACCOUNT_LIMIT_CODES = new Set([
   "credit_balance_exhausted",
   "insufficient_quota",
@@ -174,7 +180,7 @@ function readCookie(request, name) {
   return null;
 }
 
-function emptyMemoryContext() {
+export function emptyMemoryContext() {
   return {
     summary: "",
     recent: [],
@@ -184,13 +190,13 @@ function emptyMemoryContext() {
   };
 }
 
-function accountMemoryStub(env, accountKey) {
+export function accountMemoryStub(env, accountKey) {
   if (!accountKey) return null;
   if (!env?.SESSIONS || typeof env.SESSIONS.getByName !== "function") return null;
   return env.SESSIONS.getByName("google:" + accountKey);
 }
 
-async function readMemoryContext(stub) {
+export async function readMemoryContext(stub) {
   if (!stub || typeof stub.readContext !== "function") {
     return emptyMemoryContext();
   }
@@ -215,7 +221,7 @@ async function readMemoryContext(stub) {
   }
 }
 
-async function readBoundedJson(request) {
+export async function readBoundedJson(request) {
   const declaredLength = Number(request.headers.get("content-length") || 0);
   if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
     throw new HttpError(413, COPY.api.bodyTooLarge);
@@ -392,6 +398,104 @@ function reasoningEnvironment(env, effort) {
   });
 }
 
+function supportsExplicitPromptCaching(model) {
+  const match = /^gpt-(\d+)\.(\d+)/.exec(String(model || ""));
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return major > 5 || (major === 5 && minor >= 6);
+}
+
+function interactiveOutputTokenLimit(latestText, reasoningEffort) {
+  if (reasoningEffort !== "none") return null;
+  return LONG_FORM_REQUEST_PATTERN.test(String(latestText || ""))
+    ? LONG_FORM_OUTPUT_TOKEN_LIMIT
+    : ORDINARY_OUTPUT_TOKEN_LIMIT;
+}
+
+function interactivePrompt(model, route, messages) {
+  const stableInstructions = COPY.model.systemPrompt;
+  const variableInstructions =
+    COPY.model.memoryInstruction +
+    "\n\n" +
+    COPY.model.routeInstruction(route);
+
+  if (!supportsExplicitPromptCaching(model)) {
+    return {
+      instructions: stableInstructions + "\n\n" + variableInstructions,
+      input: messages,
+    };
+  }
+
+  return {
+    prompt_cache_key: PROMPT_CACHE_KEY,
+    prompt_cache_options: { mode: "explicit", ttl: "30m" },
+    input: [
+      {
+        type: "message",
+        role: "system",
+        content: [
+          {
+            type: "input_text",
+            text: stableInstructions,
+            prompt_cache_breakpoint: { mode: "explicit" },
+          },
+          {
+            type: "input_text",
+            text: "\n\n" + variableInstructions,
+          },
+        ],
+      },
+      ...messages,
+    ],
+  };
+}
+
+function chatRequestPayload({
+  model,
+  reasoningEffort,
+  serviceTier,
+  route,
+  messages,
+  latestText,
+}) {
+  const outputLimit = interactiveOutputTokenLimit(
+    latestText,
+    reasoningEffort,
+  );
+  return {
+    model,
+    service_tier: serviceTier,
+    reasoning: { effort: reasoningEffort },
+    ...(outputLimit ? { max_output_tokens: outputLimit } : {}),
+    text: { verbosity: "low" },
+    ...interactivePrompt(model, route, messages),
+    store: true,
+  };
+}
+
+function usageNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.round(number) : 0;
+}
+
+function logInteractiveUsage(result, model, requestedServiceTier) {
+  const usage = result?.usage || {};
+  const inputDetails = usage.input_tokens_details || {};
+  console.info(
+    JSON.stringify({
+      event: "openai_chat_usage",
+      model: String(model || "").slice(0, 128),
+      requestedServiceTier,
+      actualServiceTier: safeProviderField(result?.serviceTier),
+      inputTokens: usageNumber(usage.input_tokens),
+      cachedTokens: usageNumber(inputDetails.cached_tokens),
+      cacheWriteTokens: usageNumber(inputDetails.cache_write_tokens),
+      outputTokens: usageNumber(usage.output_tokens),
+    }),
+  );
+}
+
 function openAIConfig(env) {
   const apiKey = String(env.OPENAI_API_KEY || "");
   if (!apiKey) {
@@ -404,9 +508,13 @@ function openAIConfig(env) {
   const requestedReasoningEffort = String(
     env.OPENAI_REASONING_EFFORT || "none",
   );
+  const serviceTier = String(env.OPENAI_SERVICE_TIER || "fast")
+    .trim()
+    .toLowerCase();
   if (
     !/^[A-Za-z0-9._:-]+$/.test(model) ||
-    !OPENAI_REASONING_EFFORTS.has(requestedReasoningEffort)
+    !OPENAI_REASONING_EFFORTS.has(requestedReasoningEffort) ||
+    !OPENAI_SERVICE_TIERS.has(serviceTier)
   ) {
     const error = new Error("OpenAI configuration is invalid");
     error.name = "InvalidOpenAIConfiguration";
@@ -417,7 +525,7 @@ function openAIConfig(env) {
     model,
     requestedReasoningEffort,
   );
-  return { apiKey, model, reasoningEffort };
+  return { apiKey, model, reasoningEffort, serviceTier };
 }
 
 function responseText(responseBody) {
@@ -500,6 +608,56 @@ function publicOpenAIError(error) {
   return { status: 503, message: COPY.api.temporarilyUnavailable };
 }
 
+function chatErrorResponse(error, path) {
+  if (error instanceof HttpError) {
+    return jsonResponse({ error: error.message }, error.status);
+  }
+
+  if (error instanceof OpenAIRequestError) {
+    const publicError = publicOpenAIError(error);
+    const reference = errorReference(error.clientRequestId);
+    console.error(
+      JSON.stringify({
+        event: "openai_request_failed",
+        error: error.name,
+        failure: error.failure,
+        status: error.status || null,
+        code: error.code,
+        type: error.type,
+        providerRequestId: error.providerRequestId,
+        clientRequestId: error.clientRequestId,
+        retryAfterSeconds: error.retryAfterSeconds,
+        reference,
+        path,
+      }),
+    );
+    const headers = publicError.retryAfterSeconds
+      ? { "Retry-After": String(publicError.retryAfterSeconds) }
+      : {};
+    return jsonResponse(
+      { error: publicError.message, reference },
+      publicError.status,
+      headers,
+    );
+  }
+
+  const clientRequestId = crypto.randomUUID();
+  const reference = errorReference(clientRequestId);
+  console.error(
+    JSON.stringify({
+      event: "request_failed",
+      error: error instanceof Error ? error.name : "UnknownError",
+      clientRequestId,
+      reference,
+      path,
+    }),
+  );
+  return jsonResponse(
+    { error: COPY.api.temporarilyUnavailable, reference },
+    503,
+  );
+}
+
 async function callOpenAI(payload, apiKey, timeoutMs, errorName) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -547,6 +705,8 @@ async function callOpenAI(payload, apiKey, timeoutMs, errorName) {
 
   return {
     text: responseText(responseBody),
+    usage: responseBody?.usage || null,
+    serviceTier: safeProviderField(responseBody?.service_tier),
     providerRequestId,
     clientRequestId,
   };
@@ -620,7 +780,7 @@ async function openAIStream(payload, apiKey, timeoutMs, errorName) {
     });
   }
 
-  return { response, controller, timeout, providerRequestId, clientRequestId };
+  return { response, controller, timeout, providerRequestId, clientRequestId, usage: null, serviceTier: null };
 }
 
 function streamFailureDiagnostic(error) {
@@ -664,7 +824,10 @@ function parseOpenAIStreamEvent(eventBlock, result) {
   }
 }
 
-function streamEventText(event) {
+function streamEventText(event, result) {
+  if (event?.response?.usage) result.usage = event.response.usage;
+  const actualTier = safeProviderField(event?.response?.service_tier);
+  if (actualTier) result.serviceTier = actualTier;
   if (
     event?.type === "response.output_text.done" &&
     typeof event.text === "string"
@@ -724,7 +887,7 @@ async function* openAITextDeltas(result) {
       return event.delta;
     }
 
-    const eventText = streamEventText(event);
+    const eventText = streamEventText(event, result);
     if (eventText) finalText = eventText;
     if (event.type === "response.incomplete") {
       incompleteReason = safeProviderField(
@@ -793,25 +956,22 @@ function shouldUseNonStreamingFallback(error) {
   return true;
 }
 
-async function generateFallbackReply(messages, route, env) {
-  const { apiKey, model, reasoningEffort } = openAIConfig(env);
+async function generateFallbackReply(messages, route, env, latestText) {
+  const { apiKey, model, reasoningEffort, serviceTier } = openAIConfig(env);
   const result = await callOpenAI(
-    {
+    chatRequestPayload({
       model,
-      reasoning: { effort: reasoningEffort },
-      instructions:
-        COPY.model.systemPrompt +
-        "\n\n" +
-        COPY.model.memoryInstruction +
-        "\n\n" +
-        COPY.model.routeInstruction(route),
-      input: messages,
-      store: true,
-    },
+      reasoningEffort,
+      serviceTier,
+      route,
+      messages,
+      latestText,
+    }),
     apiKey,
     60_000,
     "OpenAIFallbackHttpError",
   );
+  logInteractiveUsage(result, model, serviceTier);
 
   const reply = validateModelReply(result.text);
   if (!reply) {
@@ -859,24 +1019,18 @@ function streamChatReply(messages, route, env, latestText, stub, ctx) {
         await writeReplyDeltas(writer, demo);
       } else {
         try {
-          const { apiKey, model, reasoningEffort } = openAIConfig(env);
+          const { apiKey, model, reasoningEffort, serviceTier } =
+            openAIConfig(env);
           const turnReasoningEffort = reasoningEffort;
           const result = await openAIStream(
-            {
+            chatRequestPayload({
               model,
-              reasoning: { effort: turnReasoningEffort },
-              ...(turnReasoningEffort === "none"
-                ? { max_output_tokens: 500 }
-                : {}),
-              instructions:
-                COPY.model.systemPrompt +
-                "\n\n" +
-                COPY.model.memoryInstruction +
-                "\n\n" +
-                COPY.model.routeInstruction(route),
-              input: messages,
-              store: true,
-            },
+              reasoningEffort: turnReasoningEffort,
+              serviceTier,
+              route,
+              messages,
+              latestText,
+            }),
             apiKey,
             60_000,
             "OpenAIHttpError",
@@ -886,6 +1040,7 @@ function streamChatReply(messages, route, env, latestText, stub, ctx) {
             reply += delta;
             await writer.write(streamEvent({ type: "delta", delta }));
           }
+          logInteractiveUsage(result, model, serviceTier);
         } catch (streamError) {
           if (reply || !shouldUseNonStreamingFallback(streamError)) {
             throw streamError;
@@ -898,7 +1053,7 @@ function streamChatReply(messages, route, env, latestText, stub, ctx) {
               diagnostic: streamFailureDiagnostic(streamError),
             }),
           );
-          reply = await generateFallbackReply(messages, route, env);
+          reply = await generateFallbackReply(messages, route, env, latestText);
           await writeReplyDeltas(writer, reply);
         }
       }
@@ -1141,8 +1296,14 @@ async function handleNewConversation(request, env, accountKey) {
   return jsonResponse({ ok: true });
 }
 
-async function handleChat(request, env, ctx, accountKey) {
-  const body = await readBoundedJson(request);
+export async function handlePreparedChat(
+  request,
+  env,
+  ctx,
+  accountKey,
+  body,
+  preparedMemory = null,
+) {
   env = reasoningEnvironment(
     env,
     requestedReasoningEffort(
@@ -1171,7 +1332,9 @@ async function handleChat(request, env, ctx, accountKey) {
     return jsonResponse({ route, ...fixed });
   }
 
-  const memory = await readMemoryContext(stub);
+  const memory = privateChat
+    ? emptyMemoryContext()
+    : preparedMemory || (await readMemoryContext(stub));
 
   route = classifyInput(latestText, {
     awaitingSafetyAnswer: clientAwaiting || memory.awaitingSafetyAnswer,
@@ -1213,6 +1376,33 @@ async function handleChat(request, env, ctx, accountKey) {
     showEmergency: false,
     awaitingSafetyAnswer: false,
   });
+}
+
+async function handleChat(request, env, ctx, accountKey) {
+  const body = await readBoundedJson(request);
+  return handlePreparedChat(request, env, ctx, accountKey, body);
+}
+
+export async function preparedChatResponse(
+  request,
+  body,
+  env,
+  ctx,
+  accountKey,
+  preparedMemory,
+) {
+  try {
+    return await handlePreparedChat(
+      request,
+      env,
+      ctx,
+      accountKey,
+      body,
+      preparedMemory,
+    );
+  } catch (error) {
+    return chatErrorResponse(error, new URL(request.url).pathname);
+  }
 }
 
 function authNotice(code) {

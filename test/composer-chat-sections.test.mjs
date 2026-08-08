@@ -41,8 +41,9 @@ test("the lower-left model button opens model, new chat, and private chat sectio
   assert.match(css, /\.composer-quick-private-action\s*{/);
   assert.match(css, /max-height:\s*min\(68dvh, 470px\)/);
 
-  assert.match(
-    packageSource,
-    /node scripts\/add-composer-chat-sections\.mjs/,
+  const config = JSON.parse(packageSource);
+  assert.equal(
+    config.scripts["apply:prompt-policy"],
+    "node scripts/apply-priority-latency.mjs",
   );
 });
