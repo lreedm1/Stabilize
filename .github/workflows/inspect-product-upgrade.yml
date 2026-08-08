@@ -1,0 +1,74 @@
+name: Inspect product upgrade payload
+
+on:
+  push:
+    branches:
+      - agent/no-brainer-product-upgrades
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/agent/no-brainer-product-upgrades' || github.head_ref == 'agent/no-brainer-product-upgrades'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Decode and inspect payload
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const zlib = require('node:zlib');
+
+          const parts = fs.readdirSync('.upgrade-parts')
+            .filter((name) => /^part-\d+\.txt$/.test(name))
+            .sort();
+          if (!parts.length) throw new Error('No payload parts found');
+          const encoded = parts
+            .map((name) => fs.readFileSync(`.upgrade-parts/${name}`, 'utf8').trim())
+            .join('');
+          const raw = Buffer.from(encoded, 'base64');
+          const sha = (value) => crypto.createHash('sha256').update(value).digest('hex');
+          console.log(JSON.stringify({ parts, encodedChars: encoded.length, rawBytes: raw.length, rawSha256: sha(raw), rawPrefix: raw.subarray(0, 32).toString('hex') }, null, 2));
+          fs.writeFileSync('/tmp/upgrade-payload.raw', raw);
+
+          const attempts = [
+            ['identity', () => raw],
+            ['brotli', () => zlib.brotliDecompressSync(raw)],
+            ['gunzip', () => zlib.gunzipSync(raw)],
+            ['inflate', () => zlib.inflateSync(raw)],
+            ['inflateRaw', () => zlib.inflateRawSync(raw)],
+          ];
+
+          for (const [name, decode] of attempts) {
+            try {
+              const out = decode();
+              fs.writeFileSync(`/tmp/upgrade-payload.${name}`, out);
+              const preview = out.subarray(0, 240).toString('utf8').replace(/[^\x20-\x7e\n\r\t]/g, '.');
+              console.log(`CANDIDATE ${name}: ${out.length} bytes sha256=${sha(out)} prefix=${out.subarray(0, 32).toString('hex')}`);
+              console.log(`PREVIEW ${name}:\n${preview}`);
+            } catch (error) {
+              console.log(`CANDIDATE ${name}: failed (${error.code || error.name}: ${error.message})`);
+            }
+          }
+          NODE
+
+          echo '--- file types ---'
+          file /tmp/upgrade-payload.* || true
+          echo '--- tar listings ---'
+          for payload in /tmp/upgrade-payload.*; do
+            echo "### $payload"
+            tar -tf "$payload" 2>/dev/null | head -80 || true
+          done
+          echo '--- zip listings ---'
+          for payload in /tmp/upgrade-payload.*; do
+            echo "### $payload"
+            unzip -l "$payload" 2>/dev/null | head -80 || true
+          done
