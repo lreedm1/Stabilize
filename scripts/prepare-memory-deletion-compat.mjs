@@ -71,15 +71,17 @@ async function alignStreamingMaterializers() {
   const oldPolicyCheck = String.raw`if (!workerAfter.includes("return streamChatReply(messages, route, env, latestText, stub, ctx);")) {
   throw new Error("Streaming policy did not replace the chat completion response");
 }`;
-  const newPolicyCheck = String.raw`const generationFencedStreamCompletion = \`    return streamChatReply(
-      messages,
-      route,
-      env,
-      latestText,
-      stub,
-      ctx,
-      memory.generation,
-    );\`;
+  const newPolicyCheck = `const generationFencedStreamCompletion = [
+  "    return streamChatReply(",
+  "      messages,",
+  "      route,",
+  "      env,",
+  "      latestText,",
+  "      stub,",
+  "      ctx,",
+  "      memory.generation,",
+  "    );",
+].join("\\n");
 
 if (
   !workerAfter.includes(
@@ -115,10 +117,10 @@ if (
 async function makeMemoryMaterializerCacheAgnostic() {
   const path = "scripts/apply-memory-deletion.mjs";
   let source = await read(path);
-  const newBlock = String.raw`  if (!source.includes('src="/app.js?v=20260807-memory-deletion-1"')) {
+  const newBlock = `  if (!source.includes('src="/app.js?v=20260807-memory-deletion-1"')) {
     const next = source.replace(
       /<script type="module" src="\\/app\\.js\\?v=[^"]+"><\\/script>/,
-      \`<script type="module" src="/app.js?v=20260807-memory-deletion-1"></script>\`,
+      '<script type="module" src="/app.js?v=20260807-memory-deletion-1"></script>',
     );
     if (next === source) {
       throw new Error("Could not locate memory deletion app cache bust");
