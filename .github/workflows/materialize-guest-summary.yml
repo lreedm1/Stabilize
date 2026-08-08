@@ -1,0 +1,105 @@
+name: Materialize guest rolling summary
+
+on:
+  push:
+    branches:
+      - agent/guest-summary-5k
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: materialize-guest-summary
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the feature branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/guest-summary-5k
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Reconstruct the guest-summary generator
+        shell: bash
+        run: |
+          cat > /tmp/guest-summary-chunks.sha256 <<'SUMS'
+          2a09f50ec5f420d619184581666c1b50e4a657b618944847538ad4577c820347  tmp/guest-summary-generator/chunk-00.txt
+          3458b18ecc703ce9a34f87cb11b114344554594a056346721e437b15012a0c4b  tmp/guest-summary-generator/chunk-01.txt
+          58c93a2e0813f92aa16f7ab80e5106222f53c0e0581d86074f58c0f71b1ef35b  tmp/guest-summary-generator/chunk-02.txt
+          SUMS
+          sha256sum --check /tmp/guest-summary-chunks.sha256
+          cat tmp/guest-summary-generator/chunk-*.txt \
+            | base64 --decode \
+            | gzip --decompress \
+            > scripts/add-guest-summary.mjs
+          echo '8ea95e9ce25c99622074acb9d13ec0796fa8ceedfefed26a1fcfdb69e4a8e842  scripts/add-guest-summary.mjs' \
+            | sha256sum --check
+          node --check scripts/add-guest-summary.mjs
+
+      - name: Add the generator to the canonical policy pipeline
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = "package.json";
+          const packageJson = JSON.parse(fs.readFileSync(path, "utf8"));
+          const stage = "node scripts/add-guest-summary.mjs";
+          if (!packageJson.scripts["apply:prompt-policy"].includes(stage)) {
+            packageJson.scripts["apply:prompt-policy"] += ` && ${stage}`;
+          }
+          fs.writeFileSync(path, JSON.stringify(packageJson, null, 2) + "\n");
+          NODE
+
+      - name: Install dependencies and materialize the feature
+        run: npm ci
+
+      - name: Prove generation is idempotent
+        shell: bash
+        run: |
+          npm run apply:prompt-policy
+          git add -N .
+          git diff --binary > /tmp/guest-summary-first.diff
+          npm run apply:prompt-policy
+          git diff --binary > /tmp/guest-summary-second.diff
+          cmp /tmp/guest-summary-first.diff /tmp/guest-summary-second.diff
+
+      - name: Run full regression suites
+        run: npm test
+
+      - name: Validate the Worker bundle
+        run: npm run check
+
+      - name: Remove one-shot materialization scaffolding
+        shell: bash
+        run: |
+          rm -rf tmp/guest-summary-generator
+          rm -f .github/workflows/materialize-guest-summary.yml
+
+      - name: Commit the canonical implementation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Add 5k-token guest rolling summaries"
+
+      - name: Verify the committed tree stays clean
+        shell: bash
+        run: |
+          npm run apply:prompt-policy
+          git diff --exit-code
+          npm run verify:clean
+
+      - name: Push the completed feature branch
+        run: git push origin HEAD:agent/guest-summary-5k
