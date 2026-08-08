@@ -1,4 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 const path = process.argv[2] || "scripts/add-memory-deletion-and-guest-session.mjs";
 let source = readFileSync(path, "utf8");
@@ -10,8 +12,12 @@ if (!source.includes(target) && !source.includes(replacement)) {
 }
 source = source.split(target).join(replacement);
 
+const here = dirname(fileURLToPath(import.meta.url));
+const compatibilityBlock = readFileSync(
+  join(here, "compatibility-block.txt"),
+  "utf8",
+);
 const compatibilityMarker = 'const readmePath = "README.md";\n';
-const compatibilityBlock = `replaceOnce(\n  "scripts/apply-streaming-policy.mjs",\n  \`if (!workerAfter.includes("return streamChatReply(messages, route, env, latestText, stub, ctx);")) {\\n  throw new Error("Streaming policy did not replace the chat completion response");\\n}\`,\n  \`const hasExistingStreamingCall =\\n  workerAfter.includes("function streamChatReply(") &&\\n  workerAfter.includes("return streamChatReply(") &&\\n  workerAfter.includes("application/x-ndjson");\\n\\nif (\\n  !workerAfter.includes(\\n    "return streamChatReply(messages, route, env, latestText, stub, ctx);",\\n  ) &&\\n  !hasExistingStreamingCall\\n) {\\n  throw new Error("Streaming policy did not replace the chat completion response");\\n}\`,\n  "streaming memory-generation compatibility",\n);\n\nreplaceOnce(\n  "scripts/harden-openai-streaming.mjs",\n  \`function streamChatReply(messages, route, env, latestText, stub, ctx) {\\n\`,\n  \`function streamChatReply(\\n  messages,\\n  route,\\n  env,\\n  latestText,\\n  stub,\\n  memoryGeneration,\\n  ctx,\\n) {\\n\`,\n  "hardened stream memory-generation signature",\n);\nreplaceOnce(\n  "scripts/harden-openai-streaming.mjs",\n  \`      const recordResult = await recordExchange(stub, {\\n        user: latestText,\\n        assistant: validated,\\n        awaitingSafetyAnswer: false,\\n      });\\n\`,\n  \`      const recordResult = await recordExchange(stub, {\\n        user: latestText,\\n        assistant: validated,\\n        awaitingSafetyAnswer: false,\\n        expectedGeneration: memoryGeneration,\\n      });\\n\`,\n  "hardened stream stale-write guard",\n);\nreplaceOnce(\n  "scripts/harden-openai-streaming.mjs",\n  \`function streamChatReply\\\\(messages, route, env, latestText, stub, ctx\\\\)\`,\n  \`function streamChatReply\\\\([\\\\s\\\\S]*?\\\\)\\\\s*\`,\n  "hardened stream signature matcher",\n);\n\nreplaceOnce(\n  "scripts/apply-private-chat.mjs",\n  \`  if (!text.includes("awaitingSafetyAnswer: currentAwaitingSafetyAnswer(),\\\\n        privateChat,")) {\\n    const anchor = "        awaitingSafetyAnswer: currentAwaitingSafetyAnswer(),";\\n    requireText(text, anchor, "the generated chat request body");\\n    text = text.replace(anchor, \\\`\\${anchor}\\\\n        privateChat,\\\`);\\n  }\`,\n  \`  const chatRequestAlreadyCarriesPrivateFlag =\\n    text.includes(\\n      "awaitingSafetyAnswer: currentAwaitingSafetyAnswer(),\\\\n        privateChat,",\\n    ) ||\\n    (text.includes("function buildChatRequestBody(") &&\\n      text.includes("\\\\n      privateChat,\\\\n"));\\n  if (!chatRequestAlreadyCarriesPrivateFlag) {\\n    const anchor = "        awaitingSafetyAnswer: currentAwaitingSafetyAnswer(),";\\n    requireText(text, anchor, "the generated chat request body");\\n    text = text.replace(anchor, \\\`\\${anchor}\\\\n        privateChat,\\\`);\\n  }\`,\n  "private-chat bounded request compatibility",\n);\n\n`;
 if (!source.includes(compatibilityBlock)) {
   if (!source.includes(compatibilityMarker)) {
     throw new Error("Could not locate the streaming compatibility insertion point");
