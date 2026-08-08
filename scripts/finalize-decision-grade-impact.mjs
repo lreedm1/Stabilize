@@ -72,6 +72,10 @@ for (const path of [
   await update(path, (source) =>
     source
       .replace(
+        /\/finalize-full-guest-conversation\\\.mjs\$\//gu,
+        "/finalize-decision-grade-impact\\.mjs$/",
+      )
+      .replace(
         /\/finalize-account-preflight\\\.mjs\$\//gu,
         "/finalize-decision-grade-impact\\.mjs$/",
       )
