@@ -1,2 +1,27 @@
-error=ConnectTimeout: HTTPSConnectionPool(host='docs.legis.wisconsin.gov', port=443): Max retries exceeded with url: /document/acts/2025/1.pdf (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x7fc3b4618770>, 'Connection to docs.legis.wisconsin.gov timed out. (connect timeout=20)'))
-elapsed=20.106
+url=https://legiscan.com/WI/bill/AB94/2025
+status=403
+final_url=https://legiscan.com/WI/bill/AB94/2025
+bytes=5539
+content_type=text/html; charset=UTF-8
+pdf=False
+contains_chaptered=False
+elapsed=0.144
+
+url=https://legiscan.com/WI/text/AB94/2025
+status=403
+final_url=https://legiscan.com/WI/text/AB94/2025
+bytes=5539
+content_type=text/html; charset=UTF-8
+pdf=False
+contains_chaptered=False
+elapsed=0.157
+
+url=https://legiscan.com/WI/text/AB94/id/3199083/Wisconsin-2025-AB94-Chaptered.pdf
+status=403
+final_url=https://legiscan.com/WI/text/AB94/id/3199083/Wisconsin-2025-AB94-Chaptered.pdf
+bytes=5723
+content_type=text/html; charset=UTF-8
+pdf=False
+contains_chaptered=True
+elapsed=0.142
+
