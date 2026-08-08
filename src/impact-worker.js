@@ -4,9 +4,9 @@ import worker, {
   FeedbackInbox,
   SessionMemory,
 } from "./memory-prompt-worker.js";
-import { ImpactAnalytics } from "./impact-analytics.js";
+import { ImpactAnalytics } from "./impact-analytics-latency.js";
+import { chatResponse } from "./chat-latency-events.js";
 import {
-  chatResponse,
   enhanceHomePage,
   enhancePrivacyPage,
   impactEventResponse,
