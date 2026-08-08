@@ -80,6 +80,7 @@ function normalizePrepareOptions(options) {
   const freePeriod = String(options?.freePeriod || "").trim();
   const paidLimit = Number(options?.paidLimit);
   const freeLimit = Number(options?.freeLimit);
+  const includeMemoryGeneration = options?.includeMemoryGeneration === true;
 
   if (
     !defaultModel ||
@@ -107,6 +108,7 @@ function normalizePrepareOptions(options) {
     freePeriod,
     paidLimit,
     freeLimit,
+    includeMemoryGeneration,
   };
 }
 
@@ -137,6 +139,18 @@ export class BillingAccount extends DurableObject {
         );
       `);
       this.ctx.storage.sql.exec(`
+        CREATE TABLE IF NOT EXISTS account_context_state (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          memory_generation INTEGER NOT NULL DEFAULT 0 CHECK (memory_generation >= 0),
+          updated_at INTEGER NOT NULL
+        );
+      `);
+      this.ctx.storage.sql.exec(`
+        INSERT OR IGNORE INTO account_context_state (
+          id, memory_generation, updated_at
+        ) VALUES (1, 0, 0);
+      `);
+      this.ctx.storage.sql.exec(`
         INSERT OR IGNORE INTO model_usage (
           tier, period, usage_count, updated_at
         )
@@ -145,6 +159,37 @@ export class BillingAccount extends DurableObject {
         WHERE usage_period GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
           AND usage_count > 0;
       `);
+    });
+  }
+
+  memoryGeneration() {
+    const row = this.ctx.storage.sql
+      .exec(
+        "SELECT memory_generation FROM account_context_state WHERE id = 1",
+      )
+      .toArray()[0];
+    return Math.max(0, Number(row?.memory_generation) || 0);
+  }
+
+  async setMemoryGeneration(value) {
+    const supplied = Number(value);
+    if (!Number.isSafeInteger(supplied) || supplied < 0) {
+      throw new Error("Invalid memory generation");
+    }
+
+    return this.ctx.storage.transactionSync(() => {
+      const current = this.memoryGeneration();
+      const generation = Math.max(current, supplied);
+      if (generation !== current) {
+        this.ctx.storage.sql.exec(
+          `UPDATE account_context_state
+           SET memory_generation = ?, updated_at = ?
+           WHERE id = 1`,
+          generation,
+          Date.now(),
+        );
+      }
+      return generation;
     });
   }
 
@@ -341,6 +386,9 @@ export class BillingAccount extends DurableObject {
       const status = String(billing?.subscription_status || "none");
       const paid = ACTIVE_STATUSES.has(status);
       const storedModel = cleanModelId(billing?.selected_model);
+      const contextFields = config.includeMemoryGeneration
+        ? { memoryGeneration: this.memoryGeneration() }
+        : {};
 
       if (paid) {
         const model = config.allowedModels.has(storedModel)
@@ -358,6 +406,7 @@ export class BillingAccount extends DurableObject {
             fallback: false,
             paid: true,
             reservationMade: false,
+            ...contextFields,
           };
         }
 
@@ -374,6 +423,7 @@ export class BillingAccount extends DurableObject {
           fallback: false,
           paid: true,
           reservationMade: reservation.allowed,
+          ...contextFields,
         };
       }
 
@@ -391,6 +441,7 @@ export class BillingAccount extends DurableObject {
           fallback: false,
           paid: false,
           reservationMade: true,
+          ...contextFields,
         };
       }
 
@@ -405,6 +456,7 @@ export class BillingAccount extends DurableObject {
         fallback: true,
         paid: false,
         reservationMade: false,
+        ...contextFields,
       };
     });
   }

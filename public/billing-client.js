@@ -356,3 +356,271 @@ for (const button of document.querySelectorAll(
   if (!(button instanceof HTMLButtonElement)) continue;
   button.addEventListener("click", () => startComposerPrivateChat(button));
 }
+
+/* Signed-in account-context prefetch */
+const accountContextSignedIn =
+  document.documentElement.dataset.signedIn === "true";
+const ACCOUNT_CONTEXT_TOKEN_PATTERN =
+  /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+const ACCOUNT_CONTEXT_MAX_TOKEN_CHARS = 16_384;
+const ACCOUNT_CONTEXT_MAX_MESSAGES = 8;
+const ACCOUNT_CONTEXT_MAX_MESSAGE_CHARS = 1_600;
+const accountContextFetch = globalThis.fetch.bind(globalThis);
+let accountContextToken = "";
+let accountContextExpiresAt = 0;
+let accountContextGeneration = 0;
+let accountContextTurnCount = 0;
+let accountContextPendingTurns = 0;
+let accountContextMinimumTurnCount = 0;
+let accountContextDeltas = [];
+let accountContextRefreshPromise = null;
+
+function resetAccountContextClient() {
+  accountContextToken = "";
+  accountContextExpiresAt = 0;
+  accountContextGeneration = 0;
+  accountContextTurnCount = 0;
+  accountContextPendingTurns = 0;
+  accountContextMinimumTurnCount = 0;
+  accountContextDeltas = [];
+}
+
+function normalizeAccountContextDeltas(messages) {
+  if (!Array.isArray(messages)) return [];
+  const cleaned = messages
+    .filter(
+      (message) =>
+        message && ["user", "assistant"].includes(message.role),
+    )
+    .map((message) => ({
+      role: message.role,
+      content: String(message.content || "")
+        .trim()
+        .slice(0, ACCOUNT_CONTEXT_MAX_MESSAGE_CHARS),
+    }))
+    .filter((message) => message.content)
+    .slice(-ACCOUNT_CONTEXT_MAX_MESSAGES);
+
+  const alternating = [];
+  for (const message of cleaned) {
+    const previous = alternating.at(-1);
+    if (previous?.role === message.role) {
+      previous.content = (previous.content + "\n" + message.content).slice(
+        0,
+        ACCOUNT_CONTEXT_MAX_MESSAGE_CHARS,
+      );
+    } else {
+      alternating.push({ ...message });
+    }
+  }
+  return alternating.slice(-ACCOUNT_CONTEXT_MAX_MESSAGES);
+}
+
+function appendAccountContextDelta(role, content) {
+  accountContextDeltas = normalizeAccountContextDeltas([
+    ...accountContextDeltas,
+    { role, content },
+  ]);
+}
+
+function currentAccountContextToken() {
+  if (
+    !accountContextSignedIn ||
+    !accountContextToken ||
+    Date.now() + 5_000 >= accountContextExpiresAt
+  ) {
+    return "";
+  }
+  return accountContextToken;
+}
+
+async function refreshAccountContext(minimumTurnCount = 0) {
+  if (!accountContextSignedIn) return null;
+  const minimum = Number(minimumTurnCount);
+  if (Number.isSafeInteger(minimum) && minimum >= 0) {
+    accountContextMinimumTurnCount = Math.max(
+      accountContextMinimumTurnCount,
+      minimum,
+    );
+  }
+  if (accountContextRefreshPromise) return accountContextRefreshPromise;
+
+  accountContextRefreshPromise = (async () => {
+    try {
+      const response = await accountContextFetch("/api/account/context", {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      });
+      if (!response.ok) return null;
+      const result = await response.json().catch(() => ({}));
+      const token = String(result?.token || "");
+      const expiresInSeconds = Number(result?.expiresInSeconds);
+      const generation = Number(result?.generation);
+      const turnCount = Number(result?.turnCount);
+      if (
+        token.length < 80 ||
+        token.length > ACCOUNT_CONTEXT_MAX_TOKEN_CHARS ||
+        !ACCOUNT_CONTEXT_TOKEN_PATTERN.test(token) ||
+        !Number.isFinite(expiresInSeconds) ||
+        expiresInSeconds < 60 ||
+        expiresInSeconds > 3_600 ||
+        !Number.isSafeInteger(generation) ||
+        generation < 0 ||
+        !Number.isSafeInteger(turnCount) ||
+        turnCount < 0
+      ) {
+        return null;
+      }
+
+      const generationChanged =
+        Boolean(accountContextToken) &&
+        generation !== accountContextGeneration;
+      if (generationChanged) {
+        accountContextDeltas = [];
+        accountContextPendingTurns = 0;
+        accountContextMinimumTurnCount = 0;
+      }
+      accountContextToken = token;
+      accountContextExpiresAt = Date.now() + expiresInSeconds * 1_000;
+      accountContextGeneration = generation;
+      accountContextTurnCount = turnCount;
+      if (
+        turnCount >= accountContextMinimumTurnCount &&
+        !generationChanged
+      ) {
+        accountContextDeltas = [];
+        accountContextPendingTurns = 0;
+        accountContextMinimumTurnCount = turnCount;
+      }
+      return result;
+    } catch {
+      return null;
+    } finally {
+      accountContextRefreshPromise = null;
+    }
+  })();
+  return accountContextRefreshPromise;
+}
+
+function absoluteRequestUrl(input) {
+  if (input instanceof Request) return input.url;
+  if (input instanceof URL) return input.href;
+  return new URL(String(input || ""), window.location.href).href;
+}
+
+async function requestBodyObject(input, init) {
+  try {
+    if (input instanceof Request) return await input.clone().json();
+    if (typeof init?.body === "string") return JSON.parse(init.body);
+    const request = new Request(absoluteRequestUrl(input), init);
+    return await request.clone().json();
+  } catch {
+    return null;
+  }
+}
+
+async function requestWithAccountContext(input, init) {
+  const request = input instanceof Request
+    ? input.clone()
+    : new Request(absoluteRequestUrl(input), init);
+  const body = await request.clone().json().catch(() => null);
+  if (!body || body.privateChat === true) {
+    return { request, message: "", privateChat: body?.privateChat === true };
+  }
+
+  const token = currentAccountContextToken();
+  if (token) {
+    body.accountContextToken = token;
+    const existing = Array.isArray(body.messages) ? body.messages : [];
+    body.messages = normalizeAccountContextDeltas([
+      ...existing,
+      ...accountContextDeltas,
+    ]);
+  } else {
+    delete body.accountContextToken;
+  }
+  const headers = new Headers(request.headers);
+  headers.delete("content-length");
+  return {
+    request: new Request(request, {
+      headers,
+      body: JSON.stringify(body),
+    }),
+    message: String(body.message || "").trim(),
+    privateChat: false,
+  };
+}
+
+async function replyFromAccountContextResponse(response) {
+  if (!response.ok) return "";
+  const contentType = String(response.headers.get("content-type") || "")
+    .toLowerCase();
+  if (contentType.includes("application/json")) {
+    const result = await response.json().catch(() => ({}));
+    return String(result?.reply || "").trim();
+  }
+  if (!contentType.includes("application/x-ndjson")) return "";
+
+  const text = await response.text().catch(() => "");
+  let reply = "";
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const event = JSON.parse(line);
+      if (event?.type === "done" && typeof event.reply === "string") {
+        reply = event.reply.trim();
+      }
+    } catch {
+      // A malformed observer line does not affect the visible response.
+    }
+  }
+  return reply;
+}
+
+async function observeAccountContextResponse(response, message) {
+  const reply = await replyFromAccountContextResponse(response);
+  if (!message || !reply) return;
+  appendAccountContextDelta("user", message);
+  appendAccountContextDelta("assistant", reply);
+  accountContextPendingTurns += 1;
+  const minimumTurnCount =
+    accountContextTurnCount + accountContextPendingTurns;
+  await refreshAccountContext(minimumTurnCount);
+}
+
+const accountContextWrappedFetch = globalThis.fetch.bind(globalThis);
+globalThis.fetch = async (input, init) => {
+  const path = chatRequestPath(input);
+  if (accountContextSignedIn && path === "/api/chat") {
+    const prepared = await requestWithAccountContext(input, init);
+    const response = await accountContextWrappedFetch(prepared.request);
+    if (!prepared.privateChat) {
+      try {
+        const observer = response.clone();
+        void observeAccountContextResponse(observer, prepared.message);
+      } catch {
+        // The visible response remains usable if observation is unavailable.
+      }
+    }
+    return response;
+  }
+
+  const controlBody =
+    accountContextSignedIn && path === "/api/conversation/new"
+      ? await requestBodyObject(input, init)
+      : null;
+  const response = await accountContextWrappedFetch(input, init);
+  if (
+    accountContextSignedIn &&
+    response.ok &&
+    (path === "/api/account/memory" ||
+      (path === "/api/conversation/new" && controlBody?.privateChat !== true))
+  ) {
+    resetAccountContextClient();
+    void refreshAccountContext();
+  }
+  return response;
+};
+
+if (accountContextSignedIn) void refreshAccountContext();
