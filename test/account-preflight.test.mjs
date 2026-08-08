@@ -32,6 +32,7 @@ test("signed-in quota and subscription are checked before send", async () => {
     paidWorker,
     /billing-client\.js\?v=20260808-account-preflight-1/,
   );
+  assert.doesNotMatch(paidWorker, /body\.accountBillingPreflight/);
   assert.match(billingClient, /normalizeAccountBillingPreflight/);
   assert.match(billingClient, /installAccountBillingPreflight/);
   assert.match(billingClient, /scheduleAccountContextRefresh/);
