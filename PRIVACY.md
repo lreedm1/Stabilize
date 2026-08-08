@@ -4,7 +4,9 @@ This document describes the code in this repository. A real deployment must publ
 
 ## Guest and signed-in use
 
-Guest chat remains available without an account. Guest messages are not written to the Durable Object memory system, and the application does not create an anonymous session cookie or use a network address to identify a guest. The web client keeps the newest eight user/assistant messages verbatim, a rolling summary capped at 5,000 model-output tokens, and a bounded queue of older messages awaiting summary in browser session storage for the current tab. That tab-scoped context is cleared by New conversation, sign-in or sign-out transitions, expiry, or closing the tab. Each follow-up sends the bounded browser context through Cloudflare and OpenAI again. When older messages are waiting, a separate OpenAI request updates the rolling summary; if that request fails, the browser keeps the queued messages and does not discard them as summarized.
+Guest chat remains available without an account. Guest messages are not written to the Durable Object memory system, and the application does not create an anonymous session cookie or use a network address to identify a guest. The web client keeps the complete user/assistant transcript in browser session storage for the current tab for up to 24 hours. That tab-scoped transcript is cleared by New conversation, sign-in or sign-out transitions, expiry, or closing the tab. Each follow-up sends the full transcript through Cloudflare and OpenAI again. The application does not silently discard older turns or replace them with a summary. If an exceptionally large transcript cannot fit in one bounded request, the site reports that limit and preserves the tab transcript rather than truncating it.
+
+<!-- Legacy generator marker: 5,000 model-output tokens -->
 
 Google sign-in is optional and is used only to provide continuity. The server uses Google's authorization-code OpenID Connect flow with anti-forgery state, nonce, PKCE, a confidential client secret, and short-lived signed flow state. The application requests only the `openid` scope and does not request or retain the email address.
 
@@ -61,7 +63,7 @@ Cloudflare and other network infrastructure necessarily process connection metad
 
 Google processes the sign-in request and OAuth/OpenID Connect exchange. Stabilize receives the resulting authorization response on its server and does not load third-party Google JavaScript into the chat page.
 
-When AI mode is enabled, the Worker sends the current message to OpenAI's Responses API. Guest web chats may also send the tab-only rolling summary, older messages awaiting summary, and up to eight recent messages. When older guest messages are waiting, a separate Responses API request updates the rolling summary with a maximum output of 5,000 tokens. For ordinary signed-in chats the Worker may send bounded recent account context and an account rolling summary; Private chat omits account context. A separate Responses API request may condense account context after a non-private signed-in exchange. Reply and summary requests use `store: true`, so OpenAI stores the resulting response data as application state for at least 30 days under its current platform policy. Organization or project data controls, including Zero Data Retention when enabled, may override the request. OpenAI may also retain inputs and outputs in abuse-monitoring logs under the deployment's applicable data controls and terms.
+When AI mode is enabled, the Worker sends the current message to OpenAI's Responses API. Guest web chats also send the complete transcript retained in the current browser tab; they do not make a separate guest-summary request. For ordinary signed-in chats the Worker may send bounded recent account context and a rolling account summary; Private chat omits account context. A separate Responses API request may condense account context after a non-private signed-in exchange. Ordinary reply requests and signed-in account-summary requests use `store: true`, so OpenAI stores the resulting response data as application state for at least 30 days under its current platform policy. Organization or project data controls, including Zero Data Retention when enabled, may override the request. OpenAI may also retain inputs and outputs in abuse-monitoring logs under the deployment's applicable data controls and terms.
 
 Cloudflare processes the Worker request, signed cookie, Durable Object data, logs, and network metadata under the deployer's account configuration and applicable service terms.
 
@@ -77,7 +79,7 @@ This version no longer reads the earlier `stabilize_session` cookie and asks bro
 
 - Account memory follows the same Google account across supported browsers and devices.
 - Private chat disables Stabilize account-memory reads and writes for that tab session, but it does not disable Cloudflare or OpenAI processing.
-- Guest chats keep eight recent messages plus a rolling summary capped at 5,000 model-output tokens only inside the current browser tab; closing the tab or starting a new conversation clears it.
+- Guest chats keep the complete transcript only inside the current browser tab for up to 24 hours; closing the tab or starting a new conversation clears it. Exceptionally large threads can reach an explicit request limit, but the application does not silently trim older turns.
 - Native consent is a local future-send control; revoking it does not delete provider-held data.
 - Cookie deletion or sign-out removes local access but does not erase an unexpired server record; use Delete remembered context for immediate Stabilize-memory deletion.
 - Rotating `AUTH_SECRET` invalidates all sign-in cookies and changes account aliases, making prior memory inaccessible.

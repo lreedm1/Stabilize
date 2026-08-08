@@ -18,7 +18,7 @@ import { SessionMemory } from "./session-memory.js";
 
 export { SessionMemory };
 
-const MAX_BODY_BYTES = 256_000;
+const MAX_BODY_BYTES = 2_000_000;
 const MAX_MESSAGE_CHARS = 4_000;
 const MAX_MESSAGES = 12;
 const MAX_SUMMARY_CHARS = 1_000;
@@ -306,6 +306,19 @@ function normalizeMessages(messages) {
   }));
 }
 
+function normalizeGuestConversation(messages) {
+  if (!Array.isArray(messages)) return [];
+  return messages
+    .filter((message) => message && ["user", "assistant"].includes(message.role))
+    .map((message) => ({
+      role: message.role,
+      content: String(message.content || "")
+        .trim()
+        .slice(0, MAX_MESSAGE_CHARS),
+    }))
+    .filter((message) => message.content);
+}
+
 function latestUserText(body) {
   const direct = String(body?.message || "").trim();
   if (direct) return direct;
@@ -337,7 +350,7 @@ function normalizeGuestSummary(value) {
 }
 
 function normalizeGuestSummaryMessages(messages) {
-  return normalizeMessages(messages).slice(-MAX_GUEST_SUMMARY_MESSAGES);
+  return normalizeGuestConversation(messages);
 }
 
 function guestSummaryMessageBlock(messages) {
@@ -353,6 +366,18 @@ function guestSummaryMessageBlock(messages) {
     .join("\n\n");
 }
 
+function guestConversationInput(messages, latestText) {
+  const normalized = normalizeGuestConversation(messages);
+  const latest = normalized.at(-1);
+  if (latest?.role === "user" && latest.content === latestText) {
+    return normalized;
+  }
+  return [
+    ...normalized,
+    { role: "user", content: latestText },
+  ];
+}
+
 function guestModelInput(body, latestText) {
   const messages = [];
   const summary = normalizeGuestSummary(body?.guestSummary);
@@ -361,7 +386,7 @@ function guestModelInput(body, latestText) {
       role: "user",
       content:
         COPY.model.memoryPrefix +
-        "\nGUEST ROLLING SUMMARY (older messages):\n" +
+        "\nLEGACY GUEST SUMMARY (from a tab opened before full-thread memory):\n" +
         summary,
     });
   }
@@ -372,12 +397,12 @@ function guestModelInput(body, latestText) {
       role: "user",
       content:
         COPY.model.memoryPrefix +
-        "\nOLDER GUEST MESSAGES AWAITING SUMMARY:\n" +
+        "\nLEGACY GUEST MESSAGES (from a tab opened before full-thread memory):\n" +
         olderMessages,
     });
   }
 
-  messages.push(...privateModelInput(body?.messages, latestText));
+  messages.push(...guestConversationInput(body?.messages, latestText));
   return messages;
 }
 
@@ -1598,14 +1623,9 @@ async function handleChat(request, env, ctx, accountKey) {
     return jsonResponse({ route, ...fixed });
   }
 
-  const guestSummaryPromise =
-    signedOut && !privateChat
-      ? generateGuestSummary(
-          body?.guestSummary,
-          body?.guestSummaryMessages,
-          env,
-        )
-      : null;
+  // Guest chats now send their complete current-tab transcript. Legacy v2
+  // summary fields are accepted as read-only migration context, not compacted again.
+  const guestSummaryPromise = null;
   const messages = privateChat
     ? privateModelInput(body?.messages, latestText)
     : signedOut

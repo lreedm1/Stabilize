@@ -45,15 +45,14 @@ const MAX_PERSISTED_REPLY_CHARS = 12_000;
 const PRIVATE_CHAT_STORAGE_KEY = "stabilize:private-chat:v1";
 const MAX_PRIVATE_THREAD_MESSAGES = 6;
 const MAX_PRIVATE_THREAD_MESSAGE_CHARS = 3_000;
-const GUEST_THREAD_STORAGE_KEY = "stabilize:guest-thread:v2";
-const LEGACY_GUEST_THREAD_STORAGE_KEY = "stabilize:guest-thread:v1";
+const GUEST_THREAD_STORAGE_KEY = "stabilize:guest-thread:v3";
+const LEGACY_GUEST_THREAD_STORAGE_KEY = "stabilize:guest-thread:v2";
+const FIRST_GUEST_THREAD_STORAGE_KEY = "stabilize:guest-thread:v1";
 const GUEST_THREAD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-const MAX_GUEST_THREAD_MESSAGES = 8;
-const MAX_GUEST_THREAD_MESSAGE_CHARS = 2_500;
+const MAX_GUEST_THREAD_MESSAGE_CHARS = 4_000;
+// Retained only to read an already-open v2 guest tab without losing its summary.
 const MAX_GUEST_SUMMARY_CHARS = 30_000;
-const MAX_GUEST_SUMMARY_QUEUE_MESSAGES = 128;
-const MAX_GUEST_SUMMARY_BATCH_MESSAGES = 12;
-const MAX_CHAT_REQUEST_BYTES = 240_000;
+const MAX_CHAT_REQUEST_BYTES = 1_900_000;
 
 chatLog.setAttribute("aria-atomic", "false");
 chatLog.setAttribute("aria-label", "Current conversation");
@@ -150,10 +149,9 @@ let activeAssistantOutput = null;
 let privateChat = false;
 let privateThreadMessages = [];
 let guestThreadMessages = [];
-let guestThreadSummary = "";
-let guestSummaryMessages = [];
+let guestLegacySummary = "";
+let guestLegacyMessages = [];
 let pendingLocalThreadSnapshot = null;
-let activeGuestSummaryBatch = [];
 
 function buildOutcomeActionPrompt(instruction, previousReply) {
   const request = String(instruction || "").trim();
@@ -399,6 +397,7 @@ function clearGuestThreadStorage() {
   try {
     sessionStorage.removeItem(GUEST_THREAD_STORAGE_KEY);
     sessionStorage.removeItem(LEGACY_GUEST_THREAD_STORAGE_KEY);
+    sessionStorage.removeItem(FIRST_GUEST_THREAD_STORAGE_KEY);
   } catch {
     // Storage can be unavailable in hardened or private browser contexts.
   }
@@ -413,9 +412,9 @@ function cloneThreadMessages(messages) {
     : [];
 }
 
-function normalizeGuestMessages(messages, limit = Number.POSITIVE_INFINITY) {
+function normalizeGuestMessages(messages) {
   if (!Array.isArray(messages)) return [];
-  const cleaned = messages
+  return messages
     .filter(
       (message) =>
         message && ["user", "assistant"].includes(message.role),
@@ -427,42 +426,20 @@ function normalizeGuestMessages(messages, limit = Number.POSITIVE_INFINITY) {
         .slice(0, MAX_GUEST_THREAD_MESSAGE_CHARS),
     }))
     .filter((message) => message.content);
-
-  const alternating = [];
-  for (const message of cleaned) {
-    const previous = alternating.at(-1);
-    if (previous?.role === message.role) {
-      previous.content = (previous.content + "\n" + message.content).slice(
-        0,
-        MAX_GUEST_THREAD_MESSAGE_CHARS,
-      );
-    } else {
-      alternating.push({ ...message });
-    }
-  }
-
-  return Number.isFinite(limit) ? alternating.slice(-limit) : alternating;
 }
 
 function normalizeGuestThread(messages) {
-  return normalizeGuestMessages(messages, MAX_GUEST_THREAD_MESSAGES);
+  return normalizeGuestMessages(messages);
 }
 
 function normalizeGuestSummary(value) {
   return String(value || "").trim().slice(0, MAX_GUEST_SUMMARY_CHARS);
 }
 
-function normalizeGuestSummaryQueue(messages) {
-  return normalizeGuestMessages(
-    messages,
-    MAX_GUEST_SUMMARY_QUEUE_MESSAGES,
-  );
-}
-
 function guestThreadIsEmpty() {
   return (
-    !guestThreadSummary &&
-    guestSummaryMessages.length === 0 &&
+    !guestLegacySummary &&
+    guestLegacyMessages.length === 0 &&
     guestThreadMessages.length === 0
   );
 }
@@ -476,24 +453,25 @@ function persistGuestThread() {
     sessionStorage.setItem(
       GUEST_THREAD_STORAGE_KEY,
       JSON.stringify({
-        v: 2,
+        v: 3,
         savedAt: Date.now(),
-        summary: guestThreadSummary,
-        summaryMessages: guestSummaryMessages,
+        legacySummary: guestLegacySummary,
+        legacyMessages: guestLegacyMessages,
         messages: guestThreadMessages,
       }),
     );
     sessionStorage.removeItem(LEGACY_GUEST_THREAD_STORAGE_KEY);
+    sessionStorage.removeItem(FIRST_GUEST_THREAD_STORAGE_KEY);
   } catch {
-    // The current page still keeps the bounded context in memory.
+    // The active page still keeps the complete thread in memory.
   }
 }
 
 function initializeGuestThread() {
   if (signedIn || privateChat) {
     guestThreadMessages = [];
-    guestThreadSummary = "";
-    guestSummaryMessages = [];
+    guestLegacySummary = "";
+    guestLegacyMessages = [];
     clearGuestThreadStorage();
     return;
   }
@@ -501,10 +479,11 @@ function initializeGuestThread() {
   try {
     const currentRaw = sessionStorage.getItem(GUEST_THREAD_STORAGE_KEY);
     const legacyRaw = sessionStorage.getItem(LEGACY_GUEST_THREAD_STORAGE_KEY);
-    const record = JSON.parse(currentRaw || legacyRaw || "null");
+    const firstRaw = sessionStorage.getItem(FIRST_GUEST_THREAD_STORAGE_KEY);
+    const record = JSON.parse(currentRaw || legacyRaw || firstRaw || "null");
     const age = Date.now() - Number(record?.savedAt);
     if (
-      ![1, 2].includes(record?.v) ||
+      ![1, 2, 3].includes(record?.v) ||
       !Number.isFinite(age) ||
       age < 0 ||
       age > GUEST_THREAD_MAX_AGE_MS
@@ -514,12 +493,16 @@ function initializeGuestThread() {
     }
 
     guestThreadMessages = normalizeGuestThread(record.messages);
-    guestThreadSummary =
-      record.v === 2 ? normalizeGuestSummary(record.summary) : "";
-    guestSummaryMessages =
-      record.v === 2
-        ? normalizeGuestSummaryQueue(record.summaryMessages)
-        : [];
+    guestLegacySummary = normalizeGuestSummary(
+      record.v === 3 ? record.legacySummary : record.v === 2 ? record.summary : "",
+    );
+    guestLegacyMessages = normalizeGuestMessages(
+      record.v === 3
+        ? record.legacyMessages
+        : record.v === 2
+          ? record.summaryMessages
+          : [],
+    );
 
     if (guestThreadIsEmpty()) clearGuestThreadStorage();
     else persistGuestThread();
@@ -530,9 +513,8 @@ function initializeGuestThread() {
 
 function resetGuestThread() {
   guestThreadMessages = [];
-  guestThreadSummary = "";
-  guestSummaryMessages = [];
-  activeGuestSummaryBatch = [];
+  guestLegacySummary = "";
+  guestLegacyMessages = [];
   if (pendingLocalThreadSnapshot?.type === "guest") {
     pendingLocalThreadSnapshot = null;
   }
@@ -548,21 +530,10 @@ function appendGuestThreadMessage(role, content) {
     .slice(0, MAX_GUEST_THREAD_MESSAGE_CHARS);
   if (!clean) return;
 
-  const combined = normalizeGuestMessages([
+  guestThreadMessages = normalizeGuestThread([
     ...guestThreadMessages,
     { role, content: clean },
   ]);
-  const overflowCount = Math.max(
-    0,
-    combined.length - MAX_GUEST_THREAD_MESSAGES,
-  );
-  if (overflowCount > 0) {
-    guestSummaryMessages = normalizeGuestSummaryQueue([
-      ...guestSummaryMessages,
-      ...combined.slice(0, overflowCount),
-    ]);
-  }
-  guestThreadMessages = combined.slice(-MAX_GUEST_THREAD_MESSAGES);
   persistGuestThread();
 }
 
@@ -581,7 +552,6 @@ function appendLocalThreadMessage(role, content) {
 }
 
 function beginLocalThreadSnapshot() {
-  activeGuestSummaryBatch = [];
   if (privateChat) {
     pendingLocalThreadSnapshot = {
       type: "private",
@@ -592,8 +562,8 @@ function beginLocalThreadSnapshot() {
   if (!signedIn) {
     pendingLocalThreadSnapshot = {
       type: "guest",
-      summary: guestThreadSummary,
-      summaryMessages: cloneThreadMessages(guestSummaryMessages),
+      legacySummary: guestLegacySummary,
+      legacyMessages: cloneThreadMessages(guestLegacyMessages),
       messages: cloneThreadMessages(guestThreadMessages),
     };
     return;
@@ -603,36 +573,6 @@ function beginLocalThreadSnapshot() {
 
 function commitLocalThreadSnapshot() {
   pendingLocalThreadSnapshot = null;
-  activeGuestSummaryBatch = [];
-}
-
-function sameThreadMessages(left, right) {
-  return (
-    left.length === right.length &&
-    left.every(
-      (message, index) =>
-        message.role === right[index]?.role &&
-        message.content === right[index]?.content,
-    )
-  );
-}
-
-function applyGuestSummaryResult(result) {
-  if (signedIn || privateChat || result?.guestSummaryUpdated !== true) return;
-  const summary = normalizeGuestSummary(result.guestSummary);
-  if (!summary || activeGuestSummaryBatch.length === 0) return;
-
-  const currentPrefix = guestSummaryMessages.slice(
-    0,
-    activeGuestSummaryBatch.length,
-  );
-  if (!sameThreadMessages(currentPrefix, activeGuestSummaryBatch)) return;
-
-  guestThreadSummary = summary;
-  guestSummaryMessages = guestSummaryMessages.slice(
-    activeGuestSummaryBatch.length,
-  );
-  persistGuestThread();
 }
 
 function rollbackLocalUser(content) {
@@ -644,11 +584,11 @@ function rollbackLocalUser(content) {
     return;
   }
   if (pendingLocalThreadSnapshot?.type === "guest" && !signedIn && !privateChat) {
-    guestThreadSummary = normalizeGuestSummary(
-      pendingLocalThreadSnapshot.summary,
+    guestLegacySummary = normalizeGuestSummary(
+      pendingLocalThreadSnapshot.legacySummary,
     );
-    guestSummaryMessages = normalizeGuestSummaryQueue(
-      pendingLocalThreadSnapshot.summaryMessages,
+    guestLegacyMessages = normalizeGuestMessages(
+      pendingLocalThreadSnapshot.legacyMessages,
     );
     guestThreadMessages = normalizeGuestThread(
       pendingLocalThreadSnapshot.messages,
@@ -667,7 +607,6 @@ function rollbackLocalUser(content) {
     guestThreadMessages.pop();
     persistGuestThread();
   }
-  activeGuestSummaryBatch = [];
 }
 
 function restoreGuestConversation() {
@@ -1017,55 +956,36 @@ function currentAwaitingSafetyAnswer() {
 
 function buildChatRequestBody(clean) {
   let messages =
-    privateChat || !signedIn ? [...activeLocalThreadMessages()] : undefined;
+    privateChat || !signedIn
+      ? cloneThreadMessages(activeLocalThreadMessages())
+      : undefined;
   if (messages?.at(-1)?.role === "user" && messages.at(-1).content === clean) {
     messages.pop();
   }
 
   const isGuest = !signedIn && !privateChat;
-  const guestSummary = isGuest && guestThreadSummary
-    ? guestThreadSummary
-    : undefined;
-  let guestSummaryMessages = isGuest
-    ? cloneThreadMessages(
-        guestSummaryMessagesForRequest(),
-      )
-    : undefined;
-
-  const build = () =>
-    JSON.stringify({
-      message: clean,
-      awaitingSafetyAnswer: currentAwaitingSafetyAnswer(),
-      privateChat,
-      messages,
-      guestSummary,
-      guestSummaryMessages,
-    });
-
-  let serialized = build();
-  while (
-    Array.isArray(guestSummaryMessages) &&
-    guestSummaryMessages.length > 0 &&
-    new TextEncoder().encode(serialized).byteLength > MAX_CHAT_REQUEST_BYTES
-  ) {
-    guestSummaryMessages.pop();
-    serialized = build();
+  const payload = {
+    message: clean,
+    awaitingSafetyAnswer: currentAwaitingSafetyAnswer(),
+    privateChat,
+    messages,
+  };
+  if (isGuest && guestLegacySummary) {
+    payload.guestSummary = guestLegacySummary;
   }
-  while (
-    Array.isArray(messages) &&
-    messages.length > 0 &&
-    new TextEncoder().encode(serialized).byteLength > MAX_CHAT_REQUEST_BYTES
-  ) {
-    messages.shift();
-    serialized = build();
+  if (isGuest && guestLegacyMessages.length > 0) {
+    payload.guestSummaryMessages = cloneThreadMessages(guestLegacyMessages);
   }
 
-  activeGuestSummaryBatch = cloneThreadMessages(guestSummaryMessages);
+  const serialized = JSON.stringify(payload);
+  const byteLength = new TextEncoder().encode(serialized).byteLength;
+  if (byteLength > MAX_CHAT_REQUEST_BYTES) {
+    const error = new Error("Guest conversation exceeds the request limit");
+    error.publicMessage =
+      "This guest conversation is too large to send as one request. Start a new conversation to continue; Stabilize has not silently discarded the earlier messages.";
+    throw error;
+  }
   return serialized;
-}
-
-function guestSummaryMessagesForRequest() {
-  return guestSummaryMessages.slice(0, MAX_GUEST_SUMMARY_BATCH_MESSAGES);
 }
 
 async function sendMessage(text) {
@@ -1108,7 +1028,6 @@ async function sendMessage(text) {
       modulateTerrain(reply);
       awaitingSafetyAnswer = needsSafetyAnswer;
       awaitingSafetyAnswerSince = needsSafetyAnswer ? Date.now() : null;
-      applyGuestSummaryResult(result);
       persistLatestAnswer(reply, route, needsSafetyAnswer);
       commitLocalThreadSnapshot();
       lastSubmittedText = "";
@@ -1137,7 +1056,6 @@ async function sendMessage(text) {
     modulateTerrain(reply);
     awaitingSafetyAnswer = needsSafetyAnswer;
     awaitingSafetyAnswerSince = needsSafetyAnswer ? Date.now() : null;
-    applyGuestSummaryResult(result);
     persistLatestAnswer(reply, route, needsSafetyAnswer);
     commitLocalThreadSnapshot();
     lastSubmittedText = "";
@@ -1146,7 +1064,9 @@ async function sendMessage(text) {
     rollbackLocalUser(clean);
     input.value = clean;
     lastSubmittedText = "";
-    const message = error?.streamingError ? error.message : copy.unexpectedError;
+    const message =
+      error?.publicMessage ||
+      (error?.streamingError ? error.message : copy.unexpectedError);
     const reference = error?.streamingError ? error.reference : "";
     showOutput(requestErrorMessage(message, reference), "error-output");
   } finally {
