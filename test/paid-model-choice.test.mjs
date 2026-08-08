@@ -54,11 +54,22 @@ test("automatic free model routing and subscriber choice share a resilient left-
     workerSource,
     /if \(!state\.entitled\) return redirect\("\/\?billing=error"/,
   );
-  assert.match(workerSource, /modelEnvironment\(env, selectedModel\)/);
+
+  const chatStart = workerSource.indexOf("async function paidChatResponse(");
+  const chatEnd = workerSource.indexOf("function responseWithModelUsage", chatStart);
+  assert.ok(chatStart >= 0 && chatEnd > chatStart, "paid chat handler is missing");
+  const paidChat = workerSource.slice(chatStart, chatEnd);
+  assert.match(paidChat, /stub\.prepareChat\(chatPreparationOptions\(env\)\)/);
+  assert.match(paidChat, /const \[preparation, memory\] = await Promise\.all/);
+  assert.match(paidChat, /modelEnvironment\(env, preparation\.model\)/);
+  assert.match(paidChat, /preparedChatResponse\(/);
+  assert.match(paidChat, /stub\.refundUsage\(preparation\.tier, preparation\.period\)/);
+  assert.match(paidChat, /fallback: preparation\.fallback/);
+  assert.doesNotMatch(paidChat, /readBillingState\(/);
+  assert.doesNotMatch(paidChat, /reserveUsage\(/);
+
   assert.match(workerSource, /freeDailyModelMessageLimit\(env\)/);
   assert.match(workerSource, /dailyUsagePeriod\(\)/);
-  assert.match(workerSource, /stub\.reserveUsage\(tier, period, limit\)/);
-  assert.match(workerSource, /stub\.refundUsage\(tier, period\)/);
   assert.match(workerSource, /freeLimit[\s\S]*GPT-5\.6 Instant messages/);
   assert.match(workerSource, /allowance resets at 00:00 UTC/);
 
@@ -74,7 +85,10 @@ test("automatic free model routing and subscriber choice share a resilient left-
 
   assert.match(accountSource, /CREATE TABLE IF NOT EXISTS model_usage/);
   assert.match(accountSource, /PRIMARY KEY \(tier, period\)/);
-  assert.match(accountSource, /tier === "free"/);
+  assert.match(accountSource, /async prepareChat\(options\)/);
+  assert.match(accountSource, /this\.ctx\.storage\.transactionSync/);
+  assert.match(accountSource, /model: config\.freeModel/);
+  assert.match(accountSource, /model: config\.fallbackModel/);
   assert.match(accountSource, /freeUsagePeriod/);
   assert.match(accountSource, /paidUsagePeriod/);
   assert.doesNotMatch(accountSource, /Model choice is not active/);
@@ -110,11 +124,12 @@ test("automatic free model routing and subscriber choice share a resilient left-
 
   assert.match(pickerPolicy, /Added the left-side composer model picker/);
   assert.match(pickerPolicy, /20260804-composer-model-picker-1/);
-  assert.match(packageSource, /apply-free-gpt56-config\.mjs/);
-  assert.match(packageSource, /node scripts\/add-composer-model-picker\.mjs/);
-  assert.match(
-    packageSource,
-    /node scripts\/enable-free-daily-model-choice\.mjs/,
+  assert.match(freePolicy, /FREE_DAILY_MODEL_MESSAGE_LIMIT/);
+
+  const packageJson = JSON.parse(packageSource);
+  assert.equal(
+    packageJson.scripts["apply:prompt-policy"],
+    "node scripts/apply-priority-latency.mjs",
   );
   assert.match(
     wranglerSource,
