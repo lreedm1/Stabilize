@@ -11,7 +11,7 @@ if (!source.includes(target) && !source.includes(replacement)) {
 source = source.split(target).join(replacement);
 
 const compatibilityMarker = 'const readmePath = "README.md";\n';
-const compatibilityBlock = `replaceOnce(\n  "scripts/apply-streaming-policy.mjs",\n  \`if (!workerAfter.includes("return streamChatReply(messages, route, env, latestText, stub, ctx);")) {\\n\`,\n  \`if (\n  !workerAfter.includes(\n    "return streamChatReply(messages, route, env, latestText, stub, ctx);",\n  ) &&\n  !workerAfter.includes(\n    "return streamChatReply(messages, route, env, latestText, stub, memory.generation, ctx);",\n  )\n) {\\n\`,\n  "streaming memory-generation compatibility",\n);\n\n`;
+const compatibilityBlock = `replaceOnce(\n  "scripts/apply-streaming-policy.mjs",\n  \`if (!workerAfter.includes("return streamChatReply(messages, route, env, latestText, stub, ctx);")) {\\n  throw new Error("Streaming policy did not replace the chat completion response");\\n}\`,\n  \`const hasExistingStreamingCall =\\n  workerAfter.includes("function streamChatReply(") &&\\n  workerAfter.includes("return streamChatReply(") &&\\n  workerAfter.includes("application/x-ndjson");\\n\\nif (\\n  !workerAfter.includes(\\n    "return streamChatReply(messages, route, env, latestText, stub, ctx);",\\n  ) &&\\n  !hasExistingStreamingCall\\n) {\\n  throw new Error("Streaming policy did not replace the chat completion response");\\n}\`,\n  "streaming memory-generation compatibility",\n);\n\n`;
 if (!source.includes(compatibilityBlock)) {
   if (!source.includes(compatibilityMarker)) {
     throw new Error("Could not locate the streaming compatibility insertion point");
