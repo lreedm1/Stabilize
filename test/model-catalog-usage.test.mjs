@@ -35,9 +35,10 @@ test("only GPT-5.4 and Current remain selectable, with instant responses by defa
   assert.match(billingSource, /"gpt-5\.6-sol\|Current"/);
   assert.match(indexSource, /function requestedReasoningEffort\(body, model, fallbackEffort\)/);
   assert.match(indexSource, /effectiveReasoningEffort\(String\(model/);
-  assert.equal(
-    (indexSource.match(/const turnReasoningEffort = reasoningEffort;/g) || []).length,
-    2,
+  assert.match(indexSource, /async function prepareInteractiveOpenAIRequest\(/);
+  assert.ok(
+    (indexSource.match(/effectiveReasoningEffort\(/g) || []).length >= 4,
+    "adaptive and explicit reply paths must preserve model-specific reasoning",
   );
   assert.match(pageSource, /reasoning-choice\.js\?v=20260807-instant-thinking-2-fastest-1/);
 
@@ -59,6 +60,6 @@ test("only GPT-5.4 and Current remain selectable, with instant responses by defa
   const packageJson = JSON.parse(packageSource);
   assert.equal(
     packageJson.scripts["apply:prompt-policy"],
-    "node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/add-guest-summary.mjs",
+    "node scripts/prepare-luna-adaptive-routing.mjs && node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/add-guest-summary.mjs && node scripts/apply-luna-adaptive-routing.mjs",
   );
 });

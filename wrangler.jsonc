@@ -107,9 +107,12 @@
     "IMPACT_ESTIMATED_CHAT_COST_MICROS": "0",
     "IMPACT_MONTHLY_RECURRING_REVENUE_CENTS": "0",
     "IMPACT_MONTHLY_RECURRING_COST_CENTS": "0",
-    "FREE_PLAN_PRIMARY_MODEL": "gpt-5.6-sol",
+    "FREE_PLAN_PRIMARY_MODEL": "gpt-5.6-luna",
     "FREE_PLAN_FALLBACK_MODEL": "gpt-5.4",
-    "OPENAI_SERVICE_TIER": "fast"
+    "OPENAI_SERVICE_TIER": "fast",
+    "OPENAI_COMPLEX_MODEL": "gpt-5.6-sol",
+    "OPENAI_COMPLEXITY_MODEL": "gpt-5.6-luna",
+    "OPENAI_ADAPTIVE_ROUTING": "true"
   },
   "secrets": {
     "required": [

@@ -16,7 +16,8 @@ const BASE_ENV = {
   OPENAI_REASONING_EFFORT: "none",
   OPENAI_SERVICE_TIER: "fast",
   MODEL_CHOICES: "gpt-5.4|GPT-5.4,gpt-5.6-sol|Current",
-  FREE_PLAN_PRIMARY_MODEL: "gpt-5.6-sol",
+  FREE_PLAN_PRIMARY_MODEL: "gpt-5.6-luna",
+  OPENAI_ADAPTIVE_ROUTING: "false",
   FREE_PLAN_FALLBACK_MODEL: "gpt-5.4",
   FREE_DAILY_MODEL_MESSAGE_LIMIT: "2",
   PAID_MONTHLY_MESSAGE_LIMIT: "200",
@@ -67,7 +68,7 @@ function chatRequest(message, { cookie = "", reasoningEffort = "none" } = {}) {
   });
 }
 
-test("guest Fastest response uses GPT-5.6 Fast", async () => {
+test("guest automatic response uses GPT-5.6 Luna", async () => {
   const originalFetch = globalThis.fetch;
   const providerRequests = [];
   globalThis.fetch = async (_input, init) => {
@@ -84,10 +85,10 @@ test("guest Fastest response uses GPT-5.6 Fast", async () => {
     assert.equal(response.status, 200);
     const providerRequest = providerRequests.find(
       (candidate) =>
-        candidate.model === "gpt-5.6-sol" &&
+        candidate.model === "gpt-5.6-luna" &&
         candidate.service_tier === "fast",
     );
-    assert.ok(providerRequest, "guest chat did not issue a GPT-5.6 Fast request");
+    assert.ok(providerRequest, "guest chat did not issue a GPT-5.6 Luna request");
     assert.equal(providerRequest.reasoning.effort, "none");
     assert.equal((await response.json()).reply, "Use one reversible step.");
   } finally {
@@ -95,7 +96,7 @@ test("guest Fastest response uses GPT-5.6 Fast", async () => {
   }
 });
 
-test("signed-in first messages use GPT-5.6 and then fall back to GPT-5.4", async () => {
+test("signed-in automatic messages use Luna and then fall back to GPT-5.4", async () => {
   const user = await identity("gpt56-fast-first-signed-in-user");
   const originalFetch = globalThis.fetch;
   const providerRequests = [];
@@ -118,7 +119,7 @@ test("signed-in first messages use GPT-5.6 and then fall back to GPT-5.4", async
       {},
     );
     assert.equal(fastest.status, 200);
-    assert.equal(fastest.headers.get("X-Stabilize-Model-Selected"), "gpt-5.6-sol");
+    assert.equal(fastest.headers.get("X-Stabilize-Model-Selected"), "gpt-5.6-luna");
     assert.equal(fastest.headers.get("X-Stabilize-Model-Usage-Used"), "1");
 
     const thinking = await worker.fetch(
@@ -130,7 +131,7 @@ test("signed-in first messages use GPT-5.6 and then fall back to GPT-5.4", async
       {},
     );
     assert.equal(thinking.status, 200);
-    assert.equal(thinking.headers.get("X-Stabilize-Model-Selected"), "gpt-5.6-sol");
+    assert.equal(thinking.headers.get("X-Stabilize-Model-Selected"), "gpt-5.6-luna");
     assert.equal(thinking.headers.get("X-Stabilize-Model-Usage-Used"), "2");
 
     const fallback = await worker.fetch(
@@ -146,8 +147,8 @@ test("signed-in first messages use GPT-5.6 and then fall back to GPT-5.4", async
     assert.equal(fallback.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");
 
     assert.deepEqual(providerRequests, [
-      { model: "gpt-5.6-sol", effort: "none", tier: "fast" },
-      { model: "gpt-5.6-sol", effort: "high", tier: "fast" },
+      { model: "gpt-5.6-luna", effort: "none", tier: "fast" },
+      { model: "gpt-5.6-luna", effort: "high", tier: "fast" },
       { model: "gpt-5.4", effort: "none", tier: "fast" },
     ]);
     assert.equal((await user.billing.readState()).freeUsageCount, 2);
@@ -156,7 +157,7 @@ test("signed-in first messages use GPT-5.6 and then fall back to GPT-5.4", async
   }
 });
 
-test("the free homepage presents GPT-5.6 Fast first", async () => {
+test("the free homepage presents GPT-5.6 Adaptive", async () => {
   const user = await identity("gpt56-fast-first-page-user");
   const page = await worker.fetch(
     new Request("https://stabilize.info/", {
@@ -167,8 +168,8 @@ test("the free homepage presents GPT-5.6 Fast first", async () => {
   );
   assert.equal(page.status, 200);
   const html = await page.text();
-  assert.match(html, /0 of 2 free GPT-5\.6 Fast messages used today/);
-  assert.match(html, /GPT-5\.6 Fast is automatic for the first 2 messages/);
+  assert.match(html, /0 of 2 free GPT-5\.6 Adaptive messages used today/);
+  assert.match(html, /GPT-5\.6 Adaptive is automatic for the first 2 messages/);
   assert.match(html, /<span class="composer-model-current">5\.6<\/span>/);
   assert.doesNotMatch(html, /id="composer-model-choice" name="model"/);
 });

@@ -22,9 +22,12 @@ test("model replies stream through NDJSON while fixed routes remain deterministi
   assert.match(workerSource, /service_tier: serviceTier/);
   assert.match(workerSource, /text: \{ verbosity: "low" \}/);
   assert.match(workerSource, /reasoningEffort: String\(/);
+  assert.match(workerSource, /async function prepareInteractiveOpenAIRequest\(/);
+  assert.match(workerSource, /const lunaCandidate = settledOpenAIRequest\(/);
+  assert.match(workerSource, /const decisionPromise = decideAdaptiveModel\(\{/);
   assert.ok(
-    (workerSource.match(/turnReasoningEffort/g) || []).length >= 2,
-    "adaptive turn reasoning should remain present in both reply paths",
+    (workerSource.match(/effectiveReasoningEffort\(/g) || []).length >= 4,
+    "adaptive turn reasoning should remain model-specific in both reply paths",
   );
   assert.match(
     workerSource,

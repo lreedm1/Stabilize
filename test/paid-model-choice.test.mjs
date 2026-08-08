@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("GPT-5.6 fast-first routing and subscriber choice share a resilient left-side picker", async () => {
+test("GPT-5.6 adaptive routing and subscriber choice share a resilient left-side picker", async () => {
   const [
     workerSource,
     accountSource,
@@ -78,7 +78,7 @@ test("GPT-5.6 fast-first routing and subscriber choice share a resilient left-si
 
   assert.match(workerSource, /freeDailyModelMessageLimit\(env\)/);
   assert.match(workerSource, /dailyUsagePeriod\(\)/);
-  assert.match(workerSource, /freeLimit[\s\S]*GPT-5\.6 Fast messages/);
+  assert.match(workerSource, /freeLimit[\s\S]*GPT-5\.6 Adaptive messages/);
   assert.match(workerSource, /allowance resets at 00:00 UTC/);
 
   assert.match(workerSource, /function composerModelPickerMarkup\(/);
@@ -137,13 +137,13 @@ test("GPT-5.6 fast-first routing and subscriber choice share a resilient left-si
   const packageJson = JSON.parse(packageSource);
   assert.equal(
     packageJson.scripts["apply:prompt-policy"],
-    "node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/add-guest-summary.mjs",
+    "node scripts/prepare-luna-adaptive-routing.mjs && node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/add-guest-summary.mjs && node scripts/apply-luna-adaptive-routing.mjs",
   );
   assert.match(
     wranglerSource,
     /"FREE_DAILY_MODEL_MESSAGE_LIMIT": "50"/,
   );
   assert.match(setupGuide, /https:\/\/stabilize\.info\/api\/stripe\/webhook/);
-  assert.match(setupGuide, /50 GPT-5\.6 Fast messages per UTC day/);
+  assert.match(setupGuide, /50 GPT-5\.6 Adaptive messages per UTC day/);
   assert.match(setupGuide, /200 non-default-model messages per UTC month/);
 });

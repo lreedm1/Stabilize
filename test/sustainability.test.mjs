@@ -11,7 +11,7 @@ test("the About page states the product limits and funding problem honestly", as
   assert.match(about, /has not been clinically validated/i);
   assert.match(about, /cannot predict a\s+crisis/i);
   assert.match(about, /Impact requires sustainability/);
-  assert.match(about, /50 GPT-5\.6 Fast\s+messages per UTC day/i);
+  assert.match(about, /50 (?:adaptive )?GPT-5\.6\s+messages per UTC day/i);
   assert.match(about, /paid model-allowance subscription\s+enables subscriber model choice/i);
   assert.match(about, /200 non-default-model messages per UTC month/i);
   assert.match(about, /href="\/sustainability\.html"/);
@@ -27,7 +27,7 @@ test("the public sustainability page provides a real revenue route with firm bou
 
   assert.match(page, /action="\/billing\/checkout" method="post"/);
   assert.match(page, /Support Stabilize and upgrade model allowance/);
-  assert.match(page, /50 GPT-5\.6 Fast messages per UTC day/i);
+  assert.match(page, /50 GPT-5\.6 Adaptive messages per UTC day/i);
   assert.match(page, /200 non-default-model messages per UTC month/i);
   assert.match(page, /organizational pilots/i);
   assert.match(page, /fixed monthly ceiling/i);

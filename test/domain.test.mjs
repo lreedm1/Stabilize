@@ -96,24 +96,28 @@ test("repository and public descriptions match the current model policy", async 
     "gpt-5.4|GPT-5.4,gpt-5.6-sol|Current",
   );
   assert.equal(config.vars.FREE_DAILY_MODEL_MESSAGE_LIMIT, "50");
-  assert.equal(config.vars.FREE_PLAN_PRIMARY_MODEL, "gpt-5.6-sol");
+  assert.equal(config.vars.FREE_PLAN_PRIMARY_MODEL, "gpt-5.6-luna");
+  assert.equal(config.vars.OPENAI_COMPLEX_MODEL, "gpt-5.6-sol");
+  assert.equal(config.vars.OPENAI_COMPLEXITY_MODEL, "gpt-5.6-luna");
+  assert.equal(config.vars.OPENAI_ADAPTIVE_ROUTING, "true");
   assert.equal(config.vars.FREE_PLAN_FALLBACK_MODEL, "gpt-5.4");
   assert.equal(config.vars.PAID_MONTHLY_MESSAGE_LIMIT, "200");
 
   for (const description of [readme, setupGuide, about, sustainability]) {
     assert.match(description, /50|Fifty/);
-    assert.match(description, /GPT-5\.6 Fast/);
+    assert.match(description, /GPT-5\.6 Adaptive/);
     assert.match(description, /GPT-5\.4/);
     assert.match(description, /200/);
     assert.doesNotMatch(description, /20 (?:messages|non-default-model)/i);
-    assert.doesNotMatch(description, /GPT-5 mini|GPT-5\.1|GPT-5\.6 Luna|GPT-5\.6 Terra/);
+    assert.doesNotMatch(description, /GPT-5 mini|GPT-5\.1|GPT-5\.6 Terra/);
   }
 
-  assert.match(readme, /FREE_PLAN_PRIMARY_MODEL=gpt-5\.6-sol/);
+  assert.match(readme, /FREE_PLAN_PRIMARY_MODEL=gpt-5\.6-luna/);
+  assert.match(readme, /OPENAI_COMPLEX_MODEL=gpt-5\.6-sol/);
   assert.match(readme, /FREE_PLAN_FALLBACK_MODEL=gpt-5\.4/);
   assert.match(setupGuide, /fixed urgent routes and failed provider requests do not consume/i);
-  assert.match(about, /Signed-in free accounts receive 50 GPT-5\.6 Fast/);
-  assert.match(sustainability, /free GPT-5\.6 Fast-first policy intact/);
+  assert.match(about, /Signed-in free accounts receive 50 adaptive GPT-5\.6/);
+  assert.match(sustainability, /free GPT-5\.6 Adaptive policy intact/);
 });
 
 test("all public guide pages use stabilize.info canonicals and remain indexable", async () => {
@@ -167,7 +171,7 @@ test("the About page preserves the origin while stating evidence and sustainabil
   assert.match(about, /has not been clinically validated/i);
   assert.match(about, /preserve agency/i);
   assert.match(about, /Impact requires sustainability/i);
-  assert.match(about, /50 GPT-5\.6 Fast\s+messages per UTC day/i);
+  assert.match(about, /50 adaptive GPT-5\.6\s+messages per UTC day/i);
   assert.match(about, /current paid model-allowance subscription\s+enables subscriber model choice/i);
   assert.match(about, /not emergency care/i);
   assert.match(enhancer, /href=\"\/about\.html\"/);

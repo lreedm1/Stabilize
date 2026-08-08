@@ -17,7 +17,7 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 - demo mode that works without an API key
 - optional Google sign-in for cross-device memory; guest chats keep eight recent messages plus a 5,000-output-token rolling summary in the current tab without entering Stabilize's server-side account memory
 - no full transcript database; account memory uses a rolling summary with a bounded recent-message buffer
-- guest and signed-in fast replies begin on GPT-5.6 Fast; signed-in free accounts receive 50 GPT-5.6 messages per UTC day before GPT-5.4 fallback
+- automatic guest and signed-in free replies start GPT-5.6 Luna alongside a parallel complexity gate; when the gate selects GPT-5.6 Sol, the buffered Luna candidate is discarded before any answer is shown
 - an optional subscription for a larger monthly non-default-model allowance and subscriber model choice
 - privacy-bounded response, outcome, reliability, and usage measurement without prompt or reply text in impact analytics
 - safety, privacy, billing, UI, Worker, and release tests
@@ -30,13 +30,13 @@ The language model is not the only safety layer. Selected urgent phrases are rou
 
 The checked-in runtime configuration is intended to describe the deployed policy directly:
 
-- **Guest:** ordinary chats begin on GPT-5.6 Fast. The newest eight messages plus a rolling summary capped at 5,000 model-output tokens stay in the current browser tab and are sent with follow-ups, but they do not use Stabilize account memory or an account-based allowance.
-- **Signed-in free account:** the first **50** completed ordinary messages per UTC day use GPT-5.6 Fast (`gpt-5.6-sol`), including Fastest response. The selected thinking level changes reasoning effort, not the initial model. After the allowance, requests continue on GPT-5.4. The allowance resets at `00:00 UTC`.
+- **Guest:** ordinary chats use GPT-5.6 Adaptive. Stabilize starts GPT-5.6 Luna and a small complexity decision in parallel; Luna is buffered until the decision completes, and GPT-5.6 Sol replaces it before output when the stronger model is needed. The newest eight messages plus a rolling summary capped at 5,000 model-output tokens stay in the current browser tab and are sent with follow-ups, but they do not use Stabilize account memory or an account-based allowance.
+- **Signed-in free account:** the first **50** completed ordinary messages per UTC day use GPT-5.6 Adaptive: Luna starts in parallel with the complexity gate and Sol replaces it before output when needed. The selected thinking level is one input to that decision. After the allowance, requests continue on GPT-5.4. The allowance resets at `00:00 UTC`.
 - **Subscriber:** the account may choose GPT-5.4 or **Current** (`gpt-5.6-sol`). Up to **200** non-default-model messages are available per UTC month; GPT-5.4 does not consume that monthly allowance.
 - **Thinking level:** the user may choose supported reasoning levels independently of the model allowance. The Worker validates the requested level for the selected model; the maximum level is available only for Current.
 - **Urgent fixed routes and failed provider requests:** these do not consume the free or subscriber model allowance.
 
-The public labels intentionally use **GPT-5.6 Fast**, **GPT-5.4**, **Current**, and thinking-level names. Internal API model IDs remain in configuration and code.
+The public labels intentionally use **GPT-5.6 Adaptive**, **GPT-5.4**, **Current**, and thinking-level names. Internal API model IDs remain in configuration and code.
 
 ## Project map
 
@@ -84,12 +84,15 @@ OPENAI_MODEL=gpt-5.4
 OPENAI_REASONING_EFFORT=none
 MODEL_CHOICES=gpt-5.4|GPT-5.4,gpt-5.6-sol|Current
 FREE_DAILY_MODEL_MESSAGE_LIMIT=50
-FREE_PLAN_PRIMARY_MODEL=gpt-5.6-sol
+FREE_PLAN_PRIMARY_MODEL=gpt-5.6-luna
+OPENAI_COMPLEX_MODEL=gpt-5.6-sol
+OPENAI_COMPLEXITY_MODEL=gpt-5.6-luna
+OPENAI_ADAPTIVE_ROUTING=true
 FREE_PLAN_FALLBACK_MODEL=gpt-5.4
 PAID_MONTHLY_MESSAGE_LIMIT=200
 ```
 
-`OPENAI_MODEL` remains the GPT-5.4 fallback and subscriber base model. `FREE_PLAN_PRIMARY_MODEL` supplies the GPT-5.6 Fast initial route for guests and the first 50 signed-in free messages; `FREE_PLAN_FALLBACK_MODEL` handles the signed-in daily-limit fallback. `MODEL_CHOICES` defines the subscriber-facing model catalog. The browser may request a supported thinking level; `OPENAI_REASONING_EFFORT` is the safe server fallback when that preference is missing or invalid.
+`OPENAI_MODEL` remains the GPT-5.4 fallback and subscriber base model. `FREE_PLAN_PRIMARY_MODEL` is the buffered Luna candidate for guests and the first 50 signed-in free messages. `OPENAI_COMPLEXITY_MODEL` runs the parallel model decision, and `OPENAI_COMPLEX_MODEL` supplies Sol when that decision requires the stronger model. `FREE_PLAN_FALLBACK_MODEL` handles the signed-in daily-limit fallback. `MODEL_CHOICES` defines the subscriber-facing model catalog. The browser may request a supported thinking level; `OPENAI_REASONING_EFFORT` is the safe server fallback when that preference is missing or invalid.
 
 The same deployed OpenAI key also powers low-reasoning memory compaction for signed-in users. Guest and private chats do not enter the Stabilize account-memory or Durable Object compaction path. Guest web chats can use a separate OpenAI summary request whose result returns to and remains in the current browser tab.
 

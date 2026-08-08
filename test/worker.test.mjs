@@ -114,6 +114,7 @@ function createEnv(overrides = {}) {
     DEMO_MODE: "true",
     OPENAI_MODEL: "gpt-5.6-sol",
     OPENAI_REASONING_EFFORT: "max",
+    OPENAI_ADAPTIVE_ROUTING: "false",
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: "test-google-client-secret",
     AUTH_SECRET,
@@ -339,12 +340,17 @@ test("private chat neither reads nor writes signed-in memory", async () => {
 
     assert.equal(response.status, 200);
     assert.equal((await response.json()).reply, "Private reply without account context.");
-    assert.equal(providerBody.input.length, 1);
+    assert.equal(providerBody.input.length, 2);
+    assert.equal(providerBody.input[0].role, "system");
+    assert.equal(providerBody.input.at(-1).role, "user");
     assert.equal(
-      providerBody.input[0].content,
+      providerBody.input.at(-1).content,
       "Answer this without using or updating memory.",
     );
-    assert.doesNotMatch(JSON.stringify(providerBody.input), /remembered/i);
+    assert.doesNotMatch(
+      JSON.stringify(providerBody.input),
+      /I prefer remembered concise plans|Remember this active thread|This is remembered recent context/i,
+    );
     assert.deepEqual(memory.states.get(identity.objectName), before);
   } finally {
     globalThis.fetch = originalFetch;
@@ -500,16 +506,27 @@ test("chat endpoint calls OpenAI with store enabled", async () => {
     assert.deepEqual(providerBody.text, { verbosity: "low" });
     assert.equal(providerBody.store, true);
     assert.equal("max_output_tokens" in providerBody, false);
-    assert.equal(providerBody.input[0].role, "user");
-    assert.equal(providerBody.input[0].content, "Help me plan one next step.");
-    assert.match(providerBody.instructions, /route ORDINARY/i);
-    assert.match(providerBody.instructions, /Floor supports; answer leads/i);
-    assert.match(providerBody.instructions, /current evidence wins/i);
-    assert.match(providerBody.instructions, /Systems > willpower/i);
+    assert.equal(providerBody.prompt_cache_key, "stabilize-floor-first-v1");
+    assert.deepEqual(providerBody.prompt_cache_options, {
+      mode: "explicit",
+      ttl: "30m",
+    });
+    assert.equal(providerBody.input[0].role, "system");
+    assert.equal(providerBody.input.at(-1).role, "user");
+    assert.equal(
+      providerBody.input.at(-1).content,
+      "Help me plan one next step.",
+    );
+    const stableInstructions = providerBody.input[0].content[0].text;
+    const variableInstructions = providerBody.input[0].content[1].text;
+    assert.match(variableInstructions, /route ORDINARY/i);
+    assert.match(stableInstructions, /Floor supports; answer leads/i);
+    assert.match(stableInstructions, /current evidence wins/i);
+    assert.match(stableInstructions, /Systems > willpower/i);
     assert.ok(COPY.model.systemPrompt.length < 3_200);
-    assert.match(providerBody.instructions, /220 words or fewer/i);
-    assert.match(providerBody.instructions, /document-ready content/i);
-    assert.match(providerBody.instructions, /PRIOR CONTEXT MEMORY/i);
+    assert.match(stableInstructions, /220 words or fewer/i);
+    assert.match(stableInstructions, /document-ready content/i);
+    assert.match(variableInstructions, /PRIOR CONTEXT MEMORY/i);
 
     const logged = logs.join("\n");
     assert.doesNotMatch(logged, /chat_session|ipAlias|sessionAlias/);
@@ -866,10 +883,12 @@ test("remembered summary is supplied as untrusted context", async () => {
     );
 
     assert.equal(response.status, 200);
-    assert.match(providerBody.input[0].content, /PRIOR CONTEXT MEMORY/);
-    assert.match(providerBody.input[0].content, /prefers short plans/);
+    assert.equal(providerBody.input[0].role, "system");
+    const conversationInput = providerBody.input.slice(1);
+    assert.match(conversationInput[0].content, /PRIOR CONTEXT MEMORY/);
+    assert.match(conversationInput[0].content, /prefers short plans/);
     assert.match(
-      providerBody.input.at(-1).content,
+      conversationInput.at(-1).content,
       /What should I do next\?$/,
     );
   } finally {

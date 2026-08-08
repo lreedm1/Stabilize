@@ -180,13 +180,13 @@ function modelUsageCopy(usage) {
     : usage.used +
         " of " +
         usage.limit +
-        " free GPT-5.6 Fast messages used today. GPT-5.4 takes over after this allowance. The allowance resets at 00:00 UTC.";
+        " free GPT-5.6 Adaptive messages used today. GPT-5.4 takes over after this allowance. The allowance resets at 00:00 UTC.";
 }
 
 function updateSelectedModelDisplay(model) {
   const value = String(model || "");
   if (!value) return;
-  const label = value === "gpt-5.6-sol"
+  const label = ["gpt-5.6-luna", "gpt-5.6-sol"].includes(value)
     ? "5.6"
     : value === "gpt-5.4"
       ? "5.4"
@@ -210,7 +210,7 @@ function updateModelUsageDisplay(usage) {
     node.dataset.modelUsagePeriod = usage.period;
   }
   if (usage.tier === "free" && usage.selectedModel) {
-    const label = usage.selectedModel === "gpt-5.6-sol"
+    const label = ["gpt-5.6-luna", "gpt-5.6-sol"].includes(usage.selectedModel)
       ? "5.6"
       : usage.selectedModel === "gpt-5.4"
         ? "5.4"
@@ -255,7 +255,7 @@ function showModelFallbackNotice(defaultModel, limit = 50) {
   notice.textContent =
     "You used today’s " +
     limit +
-    " GPT-5.6 Fast messages. Stabilize used GPT-5.4 for this message; it was still sent.";
+    " GPT-5.6 Adaptive messages. Stabilize used GPT-5.4 for this message; it was still sent.";
   for (const select of document.querySelectorAll(
     '#model-choice, #composer-model-choice',
   )) {

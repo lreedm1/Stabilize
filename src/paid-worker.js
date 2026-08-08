@@ -172,7 +172,7 @@ function chatPreparationOptions(env, body = {}) {
     env.FREE_PLAN_FALLBACK_MODEL || defaultModel || "gpt-5.4",
   );
   const freeModel = String(
-    env.FREE_PLAN_PRIMARY_MODEL || "gpt-5.6-sol",
+    env.FREE_PLAN_PRIMARY_MODEL || "gpt-5.6-luna",
   );
   const allowedModels = [...new Set([
     ...choices.map((choice) => choice.id),
@@ -200,13 +200,13 @@ function billingNotice(url, reconciled) {
       : "Payment is being confirmed. Refresh shortly if the larger allowance is not active yet.";
   }
   if (state === "cancelled") {
-    return "Checkout was cancelled. Your free GPT-5.6 Fast allowance is unchanged.";
+    return "Checkout was cancelled. Your free GPT-5.6 Adaptive allowance is unchanged.";
   }
   if (state === "error") {
     return "Billing could not complete that request. Try again from the model menu.";
   }
   if (url.searchParams.get("model") === "automatic") {
-    return "Guest and signed-in Fastest responses begin on GPT-5.6 Fast. Signed-in accounts switch to GPT-5.4 after the daily allowance.";
+    return "Guest and signed-in automatic responses start GPT-5.6 Luna alongside a parallel complexity check. GPT-5.6 Sol replaces the buffered Luna answer when the stronger model is needed. Signed-in accounts switch to GPT-5.4 after the daily allowance.";
   }
   if (url.searchParams.get("model") === "limit") {
     return "That subscriber model allowance has been reached. Choose GPT-5.4 or manage billing.";
@@ -214,7 +214,7 @@ function billingNotice(url, reconciled) {
   return "";
 }
 
-function modelChoiceState(state, choices, defaultModel) {
+function modelChoiceState(state, choices, defaultModel, freeModel) {
   const choiceEnvironment = {
     MODEL_CHOICES: choices
       .map((choice) => choice.id + "|" + choice.label)
@@ -222,11 +222,9 @@ function modelChoiceState(state, choices, defaultModel) {
     OPENAI_MODEL: defaultModel,
   };
   const paid = state.entitled === true;
-  const automaticFreeModel = choices.some(
-    (choice) => choice.id === "gpt-5.6-sol",
-  )
-    ? "gpt-5.6-sol"
-    : defaultModel;
+  const automaticFreeModel = String(
+    freeModel || "gpt-5.6-luna",
+  );
   const selected = paid
     ? isAllowedModel(choiceEnvironment, state.selectedModel)
       ? state.selectedModel
@@ -235,7 +233,7 @@ function modelChoiceState(state, choices, defaultModel) {
   const selectedChoice = choices.find((choice) => choice.id === selected);
   const currentLabel = paid
     ? selectedChoice?.label || "GPT-5.4"
-    : "GPT-5.6 Fast";
+    : "GPT-5.6 Adaptive";
   const currentPeriod = paid ? usagePeriod() : dailyUsagePeriod();
   const storedPeriod = paid
     ? state.paidUsagePeriod || state.usagePeriod
@@ -274,7 +272,7 @@ function modelUsageCopy({ paid, used, freeLimit, paidLimit }) {
     : used +
         " of " +
         freeLimit +
-        " free GPT-5.6 Fast messages used today. GPT-5.4 takes over after this allowance. The allowance resets at 00:00 UTC.";
+        " free GPT-5.6 Adaptive messages used today. GPT-5.4 takes over after this allowance. The allowance resets at 00:00 UTC.";
 }
 
 function billingMenuMarkup({
@@ -283,6 +281,7 @@ function billingMenuMarkup({
   state,
   choices,
   defaultModel,
+  freeModel,
   freeLimit,
   paidLimit,
 }) {
@@ -291,12 +290,12 @@ function billingMenuMarkup({
       '<h2 id="billing-heading">AI model</h2>' +
       "<p>Sign in for " +
       freeLimit +
-      " GPT-5.6 Fast messages each UTC day before GPT-5.4 fallback. Guest chats also begin on GPT-5.6 Fast.</p>" +
+      " GPT-5.6 Adaptive messages each UTC day before GPT-5.4 fallback. Automatic chats start Luna and a complexity check together; Sol replaces Luna before output when needed.</p>" +
       '<a class="billing-primary billing-link" href="/auth/google">Sign in to choose a model</a>' +
       "</section>";
   }
 
-  const choice = modelChoiceState(state, choices, defaultModel);
+  const choice = modelChoiceState(state, choices, defaultModel, freeModel);
   const usage = modelUsageCopy({
     paid: choice.paid,
     used: choice.used,
@@ -317,9 +316,9 @@ function billingMenuMarkup({
   if (!choice.paid) {
     return '<section class="billing-menu" aria-labelledby="billing-heading">' +
       '<h2 id="billing-heading">AI model</h2>' +
-      "<p>GPT-5.6 Fast is automatic for the first " +
+      "<p>GPT-5.6 Adaptive is automatic for the first " +
       freeLimit +
-      " messages each UTC day. GPT-5.4 takes over afterward.</p>" +
+      " messages each UTC day. Luna starts beside a complexity check; Sol replaces the buffered Luna answer before output when needed. GPT-5.4 takes over afterward.</p>" +
       '<p class="billing-usage" data-model-usage="true" aria-live="polite">' +
       escapeHtml(usage) +
       "</p>" +
@@ -358,10 +357,11 @@ function composerModelPickerMarkup({
   state,
   choices,
   defaultModel,
+  freeModel,
   freeLimit,
   paidLimit,
 }) {
-  const choice = modelChoiceState(state, choices, defaultModel);
+  const choice = modelChoiceState(state, choices, defaultModel, freeModel);
   const buttonLabel = compactModelTileLabel(choice.selected);
   let modelPanel = "";
 
@@ -369,7 +369,7 @@ function composerModelPickerMarkup({
     modelPanel =
       "<p>Sign in for " +
       freeLimit +
-      " GPT-5.6 Fast messages each UTC day before GPT-5.4 fallback. Guest chats also begin on GPT-5.6 Fast.</p>" +
+      " GPT-5.6 Adaptive messages each UTC day before GPT-5.4 fallback. Automatic chats start Luna and a complexity check together; Sol replaces Luna before output when needed.</p>" +
       '<a class="billing-primary billing-link" href="/auth/google">Sign in to choose a model</a>';
   } else if (!choice.paid) {
     const usage = modelUsageCopy({
@@ -384,9 +384,9 @@ function composerModelPickerMarkup({
           "</form>"
       : "";
     modelPanel =
-      "<p>GPT-5.6 Fast is automatic for the first " +
+      "<p>GPT-5.6 Adaptive is automatic for the first " +
       freeLimit +
-      " messages each UTC day. GPT-5.4 takes over afterward.</p>" +
+      " messages each UTC day. Luna starts beside a complexity check; Sol replaces the buffered Luna answer before output when needed. GPT-5.4 takes over afterward.</p>" +
       '<p class="billing-usage" data-model-usage="true" aria-live="polite">' +
       escapeHtml(usage) +
       "</p>" +
@@ -465,6 +465,9 @@ async function injectBillingPage(response, request, env, authSession, state, rec
     env.OPENAI_MODEL || choices[0]?.id || "gpt-5.4",
   );
   const configured = stripeConfigured(env);
+  const freeModel = String(
+    env.FREE_PLAN_PRIMARY_MODEL || "gpt-5.6-luna",
+  );
   const freeLimit = freeDailyModelMessageLimit(env);
   const paidLimit = monthlyModelMessageLimit(env);
   const markup = "";
@@ -474,6 +477,7 @@ async function injectBillingPage(response, request, env, authSession, state, rec
     state,
     choices,
     defaultModel,
+    freeModel,
     freeLimit,
     paidLimit,
   });
@@ -647,7 +651,7 @@ async function paidChatResponse(request, env, ctx) {
       request,
       modelEnvironment(
         env,
-        String(env.FREE_PLAN_PRIMARY_MODEL || "gpt-5.6-sol"),
+        String(env.FREE_PLAN_PRIMARY_MODEL || "gpt-5.6-luna"),
       ),
       ctx,
     );
@@ -771,7 +775,9 @@ function responseWithPreparationTiming(
     "X-Stabilize-Preparation-Ms",
     String(Math.max(0, Number(preparationMs) || 0)),
   );
-  headers.set("X-Stabilize-Model-Selected", String(model || ""));
+  if (!headers.has("X-Stabilize-Model-Selected")) {
+    headers.set("X-Stabilize-Model-Selected", String(model || ""));
+  }
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -788,7 +794,9 @@ function responseWithModelUsage(
   headers.set("X-Stabilize-Model-Usage-Used", String(used));
   headers.set("X-Stabilize-Model-Usage-Limit", String(limit));
   headers.set("X-Stabilize-Model-Usage-Period", period);
-  headers.set("X-Stabilize-Model-Selected", model);
+  if (!headers.has("X-Stabilize-Model-Selected")) {
+    headers.set("X-Stabilize-Model-Selected", model);
+  }
   if (fallback) headers.set("X-Stabilize-Model-Fallback", "daily-limit");
   return new Response(response.body, {
     status: response.status,

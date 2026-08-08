@@ -1,11 +1,11 @@
 # Stripe model-allowance setup
 
-Stabilize begins guest and signed-in free chats on GPT-5.6 Fast, with a 50-message daily signed-in allowance before GPT-5.4 fallback, plus an optional Stripe subscription for a larger monthly non-default-model allowance.
+Stabilize uses GPT-5.6 Adaptive for guest chats and the first 50 signed-in free messages per UTC day. Luna begins alongside a parallel complexity decision; when that decision selects Sol, the buffered Luna candidate is discarded before output and Sol answers instead. GPT-5.4 remains the signed-in daily-limit fallback, and an optional Stripe subscription provides a larger monthly non-default-model allowance.
 
 The current behavior is:
 
-- guests begin ordinary chats on GPT-5.6 Fast
-- signed-in free accounts receive 50 GPT-5.6 Fast messages per UTC day, including Fastest response, then continue on GPT-5.4
+- guest ordinary chats start Luna and the complexity gate in parallel, with Sol replacing Luna before output when needed
+- signed-in free accounts receive 50 GPT-5.6 Adaptive messages per UTC day, then continue on GPT-5.4
 - subscribers can choose GPT-5.4 or Current (`gpt-5.6-sol`) and receive 200 non-default-model messages per UTC month
 - GPT-5.4 does not consume the subscriber monthly allowance
 - fixed urgent routes and failed provider requests do not consume either allowance
@@ -73,22 +73,25 @@ OPENAI_MODEL=gpt-5.4
 OPENAI_REASONING_EFFORT=none
 MODEL_CHOICES=gpt-5.4|GPT-5.4,gpt-5.6-sol|Current
 FREE_DAILY_MODEL_MESSAGE_LIMIT=50
-FREE_PLAN_PRIMARY_MODEL=gpt-5.6-sol
+FREE_PLAN_PRIMARY_MODEL=gpt-5.6-luna
+OPENAI_COMPLEX_MODEL=gpt-5.6-sol
+OPENAI_COMPLEXITY_MODEL=gpt-5.6-luna
+OPENAI_ADAPTIVE_ROUTING=true
 FREE_PLAN_FALLBACK_MODEL=gpt-5.4
 PAID_MONTHLY_MESSAGE_LIMIT=200
 ```
 
-The free GPT-5.6 Fast daily allowance remains available even when Stripe is not configured. Only upgrade and billing-management controls depend on valid Stripe secrets, the recurring Price, and the public origin. Checkout errors appear in the browser instead of failing silently.
+The free GPT-5.6 Adaptive daily allowance remains available even when Stripe is not configured. Only upgrade and billing-management controls depend on valid Stripe secrets, the recurring Price, and the public origin. Checkout errors appear in the browser instead of failing silently.
 
 ## Access and model routing
 
 ### Guest
 
-A guest ordinary chat uses GPT-5.6 Fast. Guest usage is not written to Stabilize account memory and does not participate in an account-based model allowance.
+A guest ordinary chat starts a buffered GPT-5.6 Luna response and the complexity decision simultaneously. If Sol is needed, Luna is aborted and never shown. Guest usage is not written to Stabilize account memory and does not participate in an account-based model allowance.
 
 ### Signed-in free account
 
-The first 50 completed ordinary messages per UTC day use GPT-5.6 Fast (`gpt-5.6-sol`), including Fastest response. A selected thinking level changes reasoning effort while remaining on GPT-5.6. When the allowance is exhausted, the request continues on GPT-5.4 with instant reasoning. The daily counter resets at `00:00 UTC`.
+The first 50 completed ordinary messages per UTC day use GPT-5.6 Adaptive. Luna and the complexity gate start together; Sol replaces Luna before output when required. A selected thinking level is included in the complexity decision. When the allowance is exhausted, the request continues on GPT-5.4 with instant reasoning. The daily counter resets at `00:00 UTC`.
 
 The guest and free-account model tile shows GPT-5.6 by default. A saved historical model preference does not override the automatic free route.
 
@@ -118,7 +121,7 @@ Run the **Deploy Stabilize to Cloudflare** GitHub Action or deploy with Wrangler
 Expected signed-in free flow:
 
 1. Sign in with Google.
-2. Send a Fastest response message and confirm GPT-5.6 Fast is selected and the daily count increases.
+2. Send a simple message and confirm Luna answers, then send a complex multi-constraint message and confirm Sol answers without any Luna delta appearing; both should increase the daily count once.
 3. Choose a thinking level, send a message, and confirm GPT-5.6 remains selected with the requested effort.
 4. Reload the page and confirm the count remains.
 5. In a test environment with a reduced free limit, exhaust the allowance and confirm the next request succeeds on GPT-5.4 with the fallback notice.
@@ -133,7 +136,7 @@ Expected subscriber flow:
 5. Choose **Current**, send an ordinary message, and confirm the monthly count increases.
 6. Choose **GPT-5.4**, send an ordinary message, and confirm the monthly count does not increase.
 7. Open **Manage billing** and verify the customer portal works.
-8. Cancel the test subscription and confirm the account returns to the free GPT-5.6 Fast-first policy after Stripe sends the subscription update.
+8. Cancel the test subscription and confirm the account returns to the free GPT-5.6 Adaptive policy after Stripe sends the subscription update.
 
 ## Operational notes
 

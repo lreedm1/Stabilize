@@ -14,6 +14,10 @@ import {
 import { renderPage } from "./page.js";
 import { classifyInput, fixedReplyForRoute } from "./safety.js";
 import { selectReasoningEffort } from "./reasoning-policy.js";
+import {
+  adaptiveRoutingConfig,
+  decideAdaptiveModel,
+} from "./adaptive-model-routing.js";
 import { SessionMemory } from "./session-memory.js";
 
 export { SessionMemory };
@@ -720,8 +724,14 @@ function chatErrorResponse(error, path) {
   );
 }
 
-async function callOpenAI(payload, apiKey, timeoutMs, errorName) {
-  const controller = new AbortController();
+async function callOpenAI(
+  payload,
+  apiKey,
+  timeoutMs,
+  errorName,
+  requestController = null,
+) {
+  const controller = requestController || new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const clientRequestId = crypto.randomUUID();
 
@@ -786,10 +796,11 @@ function isUnsolicitedSafetyCheck(value) {
   );
 }
 
-function streamHeaders() {
+function streamHeaders(extra = {}) {
   return apiHeaders({
     "Content-Type": "application/x-ndjson; charset=utf-8",
     "X-Accel-Buffering": "no",
+    ...extra,
   });
 }
 
@@ -797,8 +808,14 @@ function streamEvent(value) {
   return new TextEncoder().encode(JSON.stringify(value) + "\n");
 }
 
-async function openAIStream(payload, apiKey, timeoutMs, errorName) {
-  const controller = new AbortController();
+async function openAIStream(
+  payload,
+  apiKey,
+  timeoutMs,
+  errorName,
+  requestController = null,
+) {
+  const controller = requestController || new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const clientRequestId = crypto.randomUUID();
 
@@ -1009,6 +1026,206 @@ async function* openAITextDeltas(result) {
   }
 }
 
+function modelOverrideEnvironment(env, model) {
+  return new Proxy(env, {
+    get(target, property, receiver) {
+      if (property === "OPENAI_MODEL") return model;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}
+
+function settledOpenAIRequest(promise) {
+  return promise.then(
+    (value) => ({ ok: true, value }),
+    (error) => ({ ok: false, error }),
+  );
+}
+
+function discardOpenAIStream(controller, candidatePromise) {
+  try {
+    controller.abort("sol-selected");
+  } catch {
+    // The candidate may already be complete.
+  }
+  void candidatePromise.then(async (candidate) => {
+    if (!candidate.ok) return;
+    clearTimeout(candidate.value.timeout);
+    try {
+      await candidate.value.response.body?.cancel();
+    } catch {
+      // The aborted candidate body can already be closed.
+    }
+  });
+}
+
+function logAdaptiveRouting(selection) {
+  if (!selection?.adaptive) return;
+  console.info(
+    JSON.stringify({
+      event: "adaptive_model_selected",
+      decision: selection.decision,
+      decisionSource: selection.decisionSource,
+      model: String(selection.model || "").slice(0, 128),
+      routerModel: String(selection.routerModel || "").slice(0, 128),
+      latencyMs: Math.max(0, Number(selection.latencyMs) || 0),
+    }),
+  );
+}
+
+function adaptiveMetadata(selection) {
+  return selection?.adaptive
+    ? {
+        adaptiveRouting: true,
+        modelDecision: selection.decision,
+        modelDecisionSource: selection.decisionSource,
+        escalated: selection.model === selection.solModel,
+      }
+    : {};
+}
+
+async function prepareInteractiveOpenAIRequest({
+  mode,
+  messages,
+  route,
+  env,
+  latestText,
+}) {
+  const base = openAIConfig(env);
+  const adaptive = adaptiveRoutingConfig(env, base.model);
+  const requestFor = (model, controller = null) => {
+    const selectedEffort = effectiveReasoningEffort(
+      model,
+      base.reasoningEffort,
+    );
+    const payload = chatRequestPayload({
+      model,
+      reasoningEffort: selectedEffort,
+      serviceTier: base.serviceTier,
+      route,
+      messages,
+      latestText,
+    });
+    return mode === "stream"
+      ? openAIStream(
+          payload,
+          base.apiKey,
+          60_000,
+          "OpenAIHttpError",
+          controller,
+        )
+      : callOpenAI(
+          payload,
+          base.apiKey,
+          60_000,
+          "OpenAIHttpError",
+          controller,
+        );
+  };
+
+  if (!adaptive) {
+    return {
+      result: await requestFor(base.model),
+      model: base.model,
+      reasoningEffort: base.reasoningEffort,
+      serviceTier: base.serviceTier,
+      adaptive: false,
+      decision: "explicit",
+      decisionSource: "explicit-model",
+    };
+  }
+
+  const lunaController = new AbortController();
+  const lunaCandidate = settledOpenAIRequest(
+    requestFor(adaptive.lunaModel, lunaController),
+  );
+  const decisionPromise = decideAdaptiveModel({
+    env,
+    configuredModel: base.model,
+    messages,
+    route,
+    latestText,
+    reasoningEffort: base.reasoningEffort,
+    apiKey: base.apiKey,
+    serviceTier: base.serviceTier,
+    callOpenAI,
+  });
+
+  const selection = await decisionPromise;
+  logAdaptiveRouting(selection);
+
+  if (selection.model === adaptive.solModel) {
+    if (mode === "stream") {
+      discardOpenAIStream(lunaController, lunaCandidate);
+    } else {
+      try {
+        lunaController.abort("sol-selected");
+      } catch {
+        // The buffered Luna candidate may already be complete.
+      }
+    }
+    try {
+      return {
+        ...selection,
+        result: await requestFor(adaptive.solModel),
+        reasoningEffort: effectiveReasoningEffort(
+          adaptive.solModel,
+          base.reasoningEffort,
+        ),
+        serviceTier: base.serviceTier,
+      };
+    } catch (error) {
+      if (error && typeof error === "object") {
+        error.adaptiveSelection = selection;
+      }
+      throw error;
+    }
+  }
+
+  const luna = await lunaCandidate;
+  if (luna.ok) {
+    return {
+      ...selection,
+      result: luna.value,
+      reasoningEffort: effectiveReasoningEffort(
+        adaptive.lunaModel,
+        base.reasoningEffort,
+      ),
+      serviceTier: base.serviceTier,
+    };
+  }
+
+  console.warn(
+    JSON.stringify({
+      event: "adaptive_luna_candidate_failed",
+      diagnostic: streamFailureDiagnostic(luna.error),
+    }),
+  );
+  const solSelection = {
+    ...selection,
+    decision: "sol",
+    decisionSource: "sol-fallback-after-luna-error",
+    model: adaptive.solModel,
+  };
+  logAdaptiveRouting(solSelection);
+  try {
+    return {
+      ...solSelection,
+      result: await requestFor(adaptive.solModel),
+      reasoningEffort: effectiveReasoningEffort(
+        adaptive.solModel,
+        base.reasoningEffort,
+      ),
+      serviceTier: base.serviceTier,
+    };
+  } catch (error) {
+    if (error && typeof error === "object") {
+      error.adaptiveSelection = solSelection;
+    }
+    throw error;
+  }
+}
+
 function shouldUseNonStreamingFallback(error) {
   if (!(error instanceof OpenAIRequestError)) return true;
   if (OPENAI_ACCOUNT_LIMIT_CODES.has(error.code)) return false;
@@ -1072,47 +1289,59 @@ function streamChatReply(
 
   const produce = async () => {
     let reply = "";
+    let selectedModel = String(env.OPENAI_MODEL || "");
+    let selection = null;
     try {
-      await writer.write(
-        streamEvent({
-          type: "meta",
-          route,
-          reasoningEffort: String(
-            env.OPENAI_REASONING_EFFORT || "none",
-          ),
-        }),
-      );
       const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
 
       if (demoMode) {
+        await writer.write(
+          streamEvent({
+            type: "meta",
+            route,
+            model: null,
+            reasoningEffort: String(
+              env.OPENAI_REASONING_EFFORT || "none",
+            ),
+          }),
+        );
         const demo = demoReply(route, latestText);
         reply = demo;
         await writeReplyDeltas(writer, demo);
       } else {
         try {
-          const { apiKey, model, reasoningEffort, serviceTier } =
-            openAIConfig(env);
-          const turnReasoningEffort = reasoningEffort;
-          const result = await openAIStream(
-            chatRequestPayload({
-              model,
-              reasoningEffort: turnReasoningEffort,
-              serviceTier,
+          selection = await prepareInteractiveOpenAIRequest({
+            mode: "stream",
+            messages,
+            route,
+            env,
+            latestText,
+          });
+          selectedModel = selection.model;
+          await writer.write(
+            streamEvent({
+              type: "meta",
               route,
-              messages,
-              latestText,
+              model: selectedModel,
+              reasoningEffort: selection.reasoningEffort,
+              ...adaptiveMetadata(selection),
             }),
-            apiKey,
-            60_000,
-            "OpenAIHttpError",
           );
 
-          for await (const delta of openAITextDeltas(result)) {
+          for await (const delta of openAITextDeltas(selection.result)) {
             reply += delta;
             await writer.write(streamEvent({ type: "delta", delta }));
           }
-          logInteractiveUsage(result, model, serviceTier);
+          logInteractiveUsage(
+            selection.result,
+            selectedModel,
+            selection.serviceTier,
+          );
         } catch (streamError) {
+          if (streamError?.adaptiveSelection?.adaptive) {
+            selection = streamError.adaptiveSelection;
+            selectedModel = selection.model;
+          }
           if (reply || !shouldUseNonStreamingFallback(streamError)) {
             throw streamError;
           }
@@ -1121,10 +1350,32 @@ function streamChatReply(
             JSON.stringify({
               event: "openai_stream_fallback_used",
               route,
+              model: selectedModel,
               diagnostic: streamFailureDiagnostic(streamError),
             }),
           );
-          reply = await generateFallbackReply(messages, route, env, latestText);
+          const fallbackFromLuna =
+            selection?.adaptive &&
+            selectedModel === selection.lunaModel;
+          const fallbackModel = fallbackFromLuna
+            ? selection.solModel
+            : selectedModel;
+          selectedModel = fallbackModel;
+          reply = await generateFallbackReply(
+            messages,
+            route,
+            modelOverrideEnvironment(env, fallbackModel),
+            latestText,
+          );
+          if (fallbackFromLuna) {
+            selection = {
+              ...selection,
+              decision: "sol",
+              decisionSource: "sol-fallback-after-luna-stream-error",
+              model: fallbackModel,
+            };
+            logAdaptiveRouting(selection);
+          }
           await writeReplyDeltas(writer, reply);
         }
       }
@@ -1168,8 +1419,10 @@ function streamChatReply(
           type: "done",
           route,
           reply: validated,
+          model: selectedModel || null,
           showEmergency: false,
           awaitingSafetyAnswer: false,
+          ...adaptiveMetadata(selection),
           ...guestSummaryFields(guestSummaryResult),
         }),
       );
@@ -1184,6 +1437,7 @@ function streamChatReply(
         JSON.stringify({
           event: "openai_stream_failed",
           route,
+          model: selectedModel,
           diagnostic,
           reference,
         }),
@@ -1216,47 +1470,56 @@ function streamChatReply(
 
   const task = produce();
   if (!schedule(ctx, task)) void task;
-  return new Response(readable, { status: 200, headers: streamHeaders() });
+  const config = adaptiveRoutingConfig(
+    env,
+    String(env.OPENAI_MODEL || ""),
+  );
+  return new Response(readable, {
+    status: 200,
+    headers: streamHeaders({
+      ...(config
+        ? {
+            "X-Stabilize-Model-Routing": "adaptive",
+            "X-Stabilize-Model-Planned": config.lunaModel,
+          }
+        : {}),
+    }),
+  });
 }
 
 async function generateReply(messages, route, env, latestText) {
   const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
-  if (demoMode) return demoReply(route, latestText);
+  if (demoMode) {
+    return {
+      reply: demoReply(route, latestText),
+      model: null,
+      adaptive: false,
+      decision: "demo",
+      decisionSource: "demo",
+    };
+  }
 
-  const { apiKey, model, reasoningEffort, serviceTier } = openAIConfig(env);
-  const turnReasoningEffort = reasoningEffort;
-  const result = await callOpenAI(
-    {
-      model,
-      service_tier: serviceTier,
-      reasoning: { effort: turnReasoningEffort },
-      ...(turnReasoningEffort === "none"
-        ? { max_output_tokens: 500 }
-        : {}),
-      text: { verbosity: "low" },
-      instructions:
-        COPY.model.systemPrompt +
-        "\n\n" +
-        COPY.model.memoryInstruction +
-        "\n\n" +
-        COPY.model.routeInstruction(route),
-      input: messages,
-      store: true,
-    },
-    apiKey,
-    60_000,
-    "OpenAIHttpError",
+  const selection = await prepareInteractiveOpenAIRequest({
+    mode: "nonstream",
+    messages,
+    route,
+    env,
+    latestText,
+  });
+  logInteractiveUsage(
+    selection.result,
+    selection.model,
+    selection.serviceTier,
   );
-  logInteractiveUsage(result, model, serviceTier);
 
-  const reply = validateModelReply(result.text);
+  let reply = validateModelReply(selection.result.text);
   if (!reply) {
     throw new OpenAIRequestError({
       name: "OpenAIInvalidReplyError",
       failure: "invalid_output",
       status: 502,
-      providerRequestId: result.providerRequestId,
-      clientRequestId: result.clientRequestId,
+      providerRequestId: selection.result.providerRequestId,
+      clientRequestId: selection.result.clientRequestId,
     });
   }
   if (
@@ -1264,9 +1527,13 @@ async function generateReply(messages, route, env, latestText) {
     isNeutralGreeting(latestText) &&
     isUnsolicitedSafetyCheck(reply)
   ) {
-    return "Hi. What’s happening right now?";
+    reply = "Hi. What’s happening right now?";
   }
-  return reply;
+  return {
+    reply,
+    model: selection.model,
+    ...adaptiveMetadata(selection),
+  };
 }
 
 function sanitizeSummaryText(value, maxChars) {
@@ -1507,10 +1774,10 @@ export async function handlePreparedChat(
     );
   }
 
-  const reply = await generateReply(messages, route, env, latestText);
+  const generated = await generateReply(messages, route, env, latestText);
   const result = await recordExchange(stub, {
     user: latestText,
-    assistant: reply,
+    assistant: generated.reply,
     awaitingSafetyAnswer: false,
     expectedGeneration: memory.generation,
   });
@@ -1519,12 +1786,26 @@ export async function handlePreparedChat(
     schedule(ctx, compactSession(stub, env));
   }
 
-  return jsonResponse({
-    route,
-    reply,
-    showEmergency: false,
-    awaitingSafetyAnswer: false,
-  });
+  return jsonResponse(
+    {
+      route,
+      reply: generated.reply,
+      model: generated.model,
+      showEmergency: false,
+      awaitingSafetyAnswer: false,
+      ...(generated.adaptiveRouting
+        ? {
+            adaptiveRouting: true,
+            modelDecision: generated.modelDecision,
+            modelDecisionSource: generated.modelDecisionSource,
+          }
+        : {}),
+    },
+    200,
+    generated.model
+      ? { "X-Stabilize-Model-Selected": generated.model }
+      : {},
+  );
 }
 
 async function handleDeleteMemory(env, accountKey) {
@@ -1629,13 +1910,13 @@ async function handleChat(request, env, ctx, accountKey) {
     );
   }
 
-  const [reply, guestSummaryResult] = await Promise.all([
+  const [generated, guestSummaryResult] = await Promise.all([
     generateReply(messages, route, env, latestText),
     guestSummaryPromise,
   ]);
   const result = await recordExchange(stub, {
     user: latestText,
-    assistant: reply,
+    assistant: generated.reply,
     awaitingSafetyAnswer: false,
     expectedGeneration: memory.generation,
   });
@@ -1644,13 +1925,27 @@ async function handleChat(request, env, ctx, accountKey) {
     schedule(ctx, compactSession(stub, env));
   }
 
-  return jsonResponse({
-    route,
-    reply,
-    showEmergency: false,
-    awaitingSafetyAnswer: false,
-    ...guestSummaryFields(guestSummaryResult),
-  });
+  return jsonResponse(
+    {
+      route,
+      reply: generated.reply,
+      model: generated.model,
+      showEmergency: false,
+      awaitingSafetyAnswer: false,
+      ...(generated.adaptiveRouting
+        ? {
+            adaptiveRouting: true,
+            modelDecision: generated.modelDecision,
+            modelDecisionSource: generated.modelDecisionSource,
+          }
+        : {}),
+      ...guestSummaryFields(guestSummaryResult),
+    },
+    200,
+    generated.model
+      ? { "X-Stabilize-Model-Selected": generated.model }
+      : {},
+  );
 }
 
 export async function preparedChatResponse(

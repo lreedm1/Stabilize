@@ -30,7 +30,7 @@ test("remembered risk is timestamped and devalued with age", async () => {
   assert.match(workerSource, /function isNeutralGreeting\(/);
   assert.match(workerSource, /function isUnsolicitedSafetyCheck\(/);
   assert.match(workerSource, /route === "ORDINARY"/);
-  assert.match(workerSource, /return "Hi\. What’s happening right now\?"/);
+  assert.match(workerSource, /(?:return|reply =) "Hi\. What’s happening right now\?"/);
 
   assert.match(clientSource, /SAFETY_ANSWER_MAX_AGE_MS = 2 \* 60 \* 60 \* 1000/);
   assert.match(clientSource, /function currentAwaitingSafetyAnswer\(\)/);

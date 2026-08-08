@@ -178,7 +178,7 @@ test("the homepage places the current model picker left of the message form", as
   );
 });
 
-test("a free signed-in user gets GPT-5.6 Fast before GPT-5.4 fallback", async () => {
+test("a free signed-in user gets GPT-5.6 Luna before GPT-5.4 fallback", async () => {
   const user = await identity("free-daily-model-user");
   const limitedEnv = {
     ...TEST_ENV,
@@ -186,7 +186,8 @@ test("a free signed-in user gets GPT-5.6 Fast before GPT-5.4 fallback", async ()
     OPENAI_REASONING_EFFORT: "none",
     OPENAI_SERVICE_TIER: "fast",
     MODEL_CHOICES: "gpt-5.4|GPT-5.4,gpt-5.6-sol|Current",
-    FREE_PLAN_PRIMARY_MODEL: "gpt-5.6-sol",
+    FREE_PLAN_PRIMARY_MODEL: "gpt-5.6-luna",
+    OPENAI_ADAPTIVE_ROUTING: "false",
     FREE_PLAN_FALLBACK_MODEL: "gpt-5.4",
     FREE_DAILY_MODEL_MESSAGE_LIMIT: "2",
   };
@@ -198,7 +199,7 @@ test("a free signed-in user gets GPT-5.6 Fast before GPT-5.4 fallback", async ()
     {},
   );
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /0 of 2 free GPT-5\.6 Fast messages used today/);
+  assert.match(await page.text(), /0 of 2 free GPT-5\.6 Adaptive messages used today/);
 
   const originalFetch = globalThis.fetch;
   const providerRequests = [];
@@ -230,7 +231,7 @@ test("a free signed-in user gets GPT-5.6 Fast before GPT-5.4 fallback", async ()
         {},
       );
       assert.equal(response.status, 200);
-      assert.equal(response.headers.get("X-Stabilize-Model-Selected"), "gpt-5.6-sol");
+      assert.equal(response.headers.get("X-Stabilize-Model-Selected"), "gpt-5.6-luna");
       assert.equal(response.headers.get("X-Stabilize-Model-Usage-Used"), String(index + 1));
     }
 
@@ -255,8 +256,8 @@ test("a free signed-in user gets GPT-5.6 Fast before GPT-5.4 fallback", async ()
     assert.equal(fallback.headers.get("X-Stabilize-Model-Fallback"), "daily-limit");
     assert.equal(fallback.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");
     assert.deepEqual(providerRequests, [
-      { model: "gpt-5.6-sol", effort: "none" },
-      { model: "gpt-5.6-sol", effort: "high" },
+      { model: "gpt-5.6-luna", effort: "none" },
+      { model: "gpt-5.6-luna", effort: "high" },
       { model: "gpt-5.4", effort: "none" },
     ]);
   } finally {
