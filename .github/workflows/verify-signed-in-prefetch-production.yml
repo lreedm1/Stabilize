@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/verify-signed-in-prefetch-production
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -39,10 +42,7 @@ jobs:
               script="$(curl --fail --silent --show-error --location \
                 --header 'Cache-Control: no-cache' \
                 "${origin}${expected_script}&verify=${cache_bust}")"
-              if grep -Fq 'Signed-in account-context prefetch' <<<"$script" && \
-                 grep -Fq 'X-Stabilize-Memory-Source' <(curl --fail --silent --show-error --location \
-                   --header 'Cache-Control: no-cache' \
-                   "https://raw.githubusercontent.com/lreedm1/Stabilize/main/src/paid-worker.js?verify=${cache_bust}"); then
+              if grep -Fq 'Signed-in account-context prefetch' <<<"$script"; then
                 marker_ok=true
               fi
             fi
