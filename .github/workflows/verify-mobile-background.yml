@@ -1,4 +1,4 @@
-name: Verify mobile static background release
+name: Verify mobile video background release
 
 on:
   push:
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   verify-mobile-background:
-    name: Verify exact mobile background release
+    name: Verify exact mobile video release
     runs-on: ubuntu-latest
     timeout-minutes: 12
 
@@ -26,49 +26,55 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Verify the exact mobile background release is live
+      - name: Materialize the canonical mobile media
+        run: node scripts/materialize-mobile-forest-stream.mjs
+
+      - name: Verify the exact mobile video background is live
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
-          expected_app_path="$(
-            grep -oE '/app\.js\?v=[A-Za-z0-9._-]+' src/page.js \
+          expected_script_path="$(
+            grep -oE '/mobile-quality\.js\?v=[A-Za-z0-9._-]+' src/page.js \
               | tail -n 1 \
               || true
           )"
-          expected_loader_name="$(
-            grep -oE 'background-loader\.js\?v=[A-Za-z0-9._-]+' public/app.js \
-              | head -n 1 \
-              || true
-          )"
-          expected_loader_path="${expected_loader_name:+/${expected_loader_name}}"
-          expected_loader_import=".${expected_loader_path}"
-          expected_mobile_asset="$(
+          expected_poster_asset="$(
             sed -n 's/^const MOBILE_ASSET = "\([^"]*\)";$/\1/p' \
               scripts/use-mobile-forest-stream.mjs \
               | head -n 1 \
               || true
           )"
-          expected_mobile_file="public${expected_mobile_asset}"
+          expected_video_asset="$(
+            sed -n 's/^const MOBILE_VIDEO_ASSET = "\([^"]*\)";$/\1/p' \
+              scripts/use-mobile-forest-stream.mjs \
+              | head -n 1 \
+              || true
+          )"
+          expected_poster_file="public${expected_poster_asset}"
+          expected_video_file="public${expected_video_asset}"
 
-          if [[ -z "$expected_app_path" \
-            || -z "$expected_loader_path" \
-            || -z "$expected_mobile_asset" \
-            || ! -f "$expected_mobile_file" ]]; then
-            echo "::error::Could not derive the expected application, loader, and mobile image from the checked-out release."
+          if [[ -z "$expected_script_path" \
+            || -z "$expected_poster_asset" \
+            || -z "$expected_video_asset" \
+            || ! -f "$expected_poster_file" \
+            || ! -f "$expected_video_file" ]]; then
+            echo "::error::Could not derive the expected mobile script, poster, and video from the checked-out release."
             exit 1
           fi
 
-          expected_mobile_sha="$(sha256sum "$expected_mobile_file" | awk '{print $1}')"
-          expected_mobile_bytes="$(wc -c < "$expected_mobile_file" | tr -d '[:space:]')"
+          expected_poster_sha="$(sha256sum "$expected_poster_file" | awk '{print $1}')"
+          expected_poster_bytes="$(wc -c < "$expected_poster_file" | tr -d '[:space:]')"
+          expected_video_sha="$(sha256sum "$expected_video_file" | awk '{print $1}')"
+          expected_video_bytes="$(wc -c < "$expected_video_file" | tr -d '[:space:]')"
 
           publish_status() {
             local state="$1"
             local description="$2"
             local payload
-            payload="$(printf '{"state":"%s","context":"verification/mobile-static-background","description":"%s","target_url":"%s/%s/actions/runs/%s"}' \
+            payload="$(printf '{"state":"%s","context":"verification/mobile-video-background","description":"%s","target_url":"%s/%s/actions/runs/%s"}' \
               "$state" \
               "$description" \
               "$GITHUB_SERVER_URL" \
@@ -86,113 +92,96 @@ jobs:
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
 
-          publish_status \
-            pending \
-            "Waiting for the exact forest-stream mobile release"
+          publish_status pending "Waiting for the exact mobile forest video"
 
           for attempt in {1..36}; do
             cache_key="${GITHUB_SHA}-${attempt}"
             : > "$tmpdir/live.html"
-            : > "$tmpdir/app.js"
-            : > "$tmpdir/background-loader.js"
-            : > "$tmpdir/mobile.headers"
-            : > "$tmpdir/mobile.webp"
+            : > "$tmpdir/mobile-quality.js"
+            : > "$tmpdir/poster.headers"
+            : > "$tmpdir/poster.webp"
+            : > "$tmpdir/video.headers"
+            : > "$tmpdir/video.mp4"
 
             html_status="$(
               curl --max-time 20 --silent --show-error \
                 --header "Cache-Control: no-cache" \
                 --output "$tmpdir/live.html" \
                 --write-out "%{http_code}" \
-                "https://stabilize.info/?mobile-background-release=${cache_key}" \
+                "https://stabilize.info/?mobile-video-release=${cache_key}" \
                 || true
             )"
-            app_status="$(
+            script_status="$(
               curl --max-time 20 --silent --show-error \
                 --header "Cache-Control: no-cache" \
-                --output "$tmpdir/app.js" \
+                --output "$tmpdir/mobile-quality.js" \
                 --write-out "%{http_code}" \
-                "https://stabilize.info${expected_app_path}&release=${cache_key}" \
+                "https://stabilize.info${expected_script_path}&release=${cache_key}" \
                 || true
             )"
-            loader_status="$(
+            poster_status="$(
               curl --max-time 20 --silent --show-error \
                 --header "Cache-Control: no-cache" \
-                --output "$tmpdir/background-loader.js" \
+                --dump-header "$tmpdir/poster.headers" \
+                --output "$tmpdir/poster.webp" \
                 --write-out "%{http_code}" \
-                "https://stabilize.info${expected_loader_path}&release=${cache_key}" \
+                "https://stabilize.info${expected_poster_asset}?release=${cache_key}" \
                 || true
             )"
-            mobile_status="$(
-              curl --max-time 20 --silent --show-error \
+            video_status="$(
+              curl --max-time 30 --silent --show-error \
                 --header "Cache-Control: no-cache" \
-                --dump-header "$tmpdir/mobile.headers" \
-                --output "$tmpdir/mobile.webp" \
+                --dump-header "$tmpdir/video.headers" \
+                --output "$tmpdir/video.mp4" \
                 --write-out "%{http_code}" \
-                "https://stabilize.info${expected_mobile_asset}?release=${cache_key}" \
+                "https://stabilize.info${expected_video_asset}?release=${cache_key}" \
                 || true
             )"
 
-            live_app_path="$(
-              grep -oE '/app\.js\?v=[A-Za-z0-9._-]+' "$tmpdir/live.html" \
-                | tail -n 1 \
-                || true
-            )"
-            live_mobile_assets="$(
-              grep -oE '/scenes/mobile-[^" ]+\.webp' "$tmpdir/live.html" \
-                | sort -u \
-                | paste -sd, - \
-                || true
-            )"
-            mobile_ref_count="$(
-              (grep -oF "$expected_mobile_asset" "$tmpdir/live.html" || true) \
-                | wc -l \
-                | tr -d '[:space:]'
-            )"
-            live_mobile_bytes="$(wc -c < "$tmpdir/mobile.webp" | tr -d '[:space:]')"
-            live_mobile_sha="$(sha256sum "$tmpdir/mobile.webp" | awk '{print $1}')"
-            live_mobile_type="$(
+            live_poster_bytes="$(wc -c < "$tmpdir/poster.webp" | tr -d '[:space:]')"
+            live_poster_sha="$(sha256sum "$tmpdir/poster.webp" | awk '{print $1}')"
+            live_video_bytes="$(wc -c < "$tmpdir/video.mp4" | tr -d '[:space:]')"
+            live_video_sha="$(sha256sum "$tmpdir/video.mp4" | awk '{print $1}')"
+            live_video_type="$(
               awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' \
-                "$tmpdir/mobile.headers" \
+                "$tmpdir/video.headers" \
                 | tail -n 1 \
                 || true
             )"
 
-            echo "Mobile release attempt ${attempt}: html=${html_status:-000} app=${app_status:-000} loader=${loader_status:-000} image=${mobile_status:-000}; live-app=${live_app_path:-missing}; live-mobile=${live_mobile_assets:-missing}; image-bytes=${live_mobile_bytes:-0}; image-sha=${live_mobile_sha:0:12}."
+            echo "Mobile video attempt ${attempt}: html=${html_status:-000} script=${script_status:-000} poster=${poster_status:-000} video=${video_status:-000}; poster-bytes=${live_poster_bytes:-0}; video-bytes=${live_video_bytes:-0}; video-sha=${live_video_sha:0:12}; video-type=${live_video_type:-missing}."
 
             if [[ "$html_status" == "200" \
-              && "$app_status" == "200" \
-              && "$loader_status" == "200" \
-              && "$mobile_status" == "200" \
-              && "$live_app_path" == "$expected_app_path" \
-              && "$mobile_ref_count" -ge 2 \
-              && "$live_mobile_bytes" == "$expected_mobile_bytes" \
-              && "$live_mobile_sha" == "$expected_mobile_sha" ]] \
-              && grep -Fq 'imagesrcset="' "$tmpdir/live.html" \
-              && grep -Fq 'imagesizes="100vw"' "$tmpdir/live.html" \
-              && grep -Fq "href=\"${expected_mobile_asset}\"" "$tmpdir/live.html" \
-              && grep -Fq "${expected_mobile_asset} 540w" "$tmpdir/live.html" \
-              && grep -Fq "from \"${expected_loader_import}\"" "$tmpdir/app.js" \
-              && ! grep -Fq 'from "./terrain.js"' "$tmpdir/app.js" \
-              && grep -Fq 'import("./terrain.js")' "$tmpdir/background-loader.js" \
-              && grep -Fq '(max-width: 980px) and (orientation: portrait)' "$tmpdir/background-loader.js" \
-              && grep -Fq '(hover: none) and (pointer: coarse)' "$tmpdir/background-loader.js" \
-              && grep -Fq 'navigator?.connection?.saveData' "$tmpdir/background-loader.js" \
-              && grep -Fq 'requestIdleCallback' "$tmpdir/background-loader.js" \
-              && [[ "$live_mobile_type" == image/webp* ]] \
-              && grep -Fqi 'strict-transport-security: max-age=31536000; includeSubDomains' "$tmpdir/mobile.headers" \
-              && grep -Fqi 'etag:' "$tmpdir/mobile.headers"; then
-              echo "Production serves the exact forest-stream image and the expected static mobile rendering path."
-              publish_status \
-                success \
-                "Exact forest-stream mobile release is live"
+              && "$script_status" == "200" \
+              && "$poster_status" == "200" \
+              && "$video_status" == "200" \
+              && "$live_poster_bytes" == "$expected_poster_bytes" \
+              && "$live_poster_sha" == "$expected_poster_sha" \
+              && "$live_video_bytes" == "$expected_video_bytes" \
+              && "$live_video_sha" == "$expected_video_sha" \
+              && "$live_video_type" == video/mp4* ]] \
+              && grep -Fq "$expected_script_path" "$tmpdir/live.html" \
+              && grep -Fq "$expected_poster_asset" "$tmpdir/live.html" \
+              && grep -Fq "$expected_video_asset" "$tmpdir/mobile-quality.js" \
+              && grep -Fq 'video.autoplay = true' "$tmpdir/mobile-quality.js" \
+              && grep -Fq 'video.muted = true' "$tmpdir/mobile-quality.js" \
+              && grep -Fq 'video.defaultMuted = true' "$tmpdir/mobile-quality.js" \
+              && grep -Fq 'video.loop = true' "$tmpdir/mobile-quality.js" \
+              && grep -Fq 'video.playsInline = true' "$tmpdir/mobile-quality.js" \
+              && grep -Fq 'webkit-playsinline' "$tmpdir/mobile-quality.js" \
+              && grep -Fq 'video.addEventListener("playing"' "$tmpdir/mobile-quality.js" \
+              && grep -Fq 'await mobileVideo.play()' "$tmpdir/mobile-quality.js" \
+              && grep -Fq 'video-waiting-for-interaction' "$tmpdir/mobile-quality.js" \
+              && grep -Fqi 'strict-transport-security: max-age=31536000; includeSubDomains' "$tmpdir/video.headers" \
+              && grep -Fqi 'etag:' "$tmpdir/video.headers"; then
+              echo "Production serves the exact muted H.264 mobile loop and its still fallback."
+              publish_status success "Exact mobile forest video is live"
               exit 0
             fi
 
             sleep 10
           done
 
-          publish_status \
-            failure \
-            "Exact forest-stream mobile release is not live"
-          echo "::error::Production never served the checked-out page, loader path, and exact forest-stream image bytes together."
+          publish_status failure "Exact mobile forest video is not live"
+          echo "::error::Production never served the checked-out mobile video bytes and autoplay wiring together."
           exit 1
