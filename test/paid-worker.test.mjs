@@ -154,7 +154,19 @@ test("the homepage places the current model picker left of the message form", as
   assert.ok(chatFormIndex > pickerIndex);
   assert.match(
     html,
-    /<span class="composer-model-current">GPT-5\.1<\/span>/,
+    /<h3 id="composer-quick-model-heading">Model<\/h3>/,
+  );
+  assert.match(
+    html,
+    /<h3 id="composer-quick-new-heading">New chat<\/h3>[\s\S]*data-composer-new-chat[\s\S]*>New chat<\/button>/,
+  );
+  assert.match(
+    html,
+    /<h3 id="composer-quick-private-heading">New private chat<\/h3>[\s\S]*data-composer-new-private-chat[\s\S]*>New private chat<\/button>/,
+  );
+  assert.match(
+    html,
+    /<span class="composer-model-current">5\.1<\/span>/,
   );
   assert.match(
     html,
@@ -166,51 +178,39 @@ test("the homepage places the current model picker left of the message form", as
   );
 });
 
-test("a free signed-in user can select a model for the daily allowance", async () => {
+test("a free signed-in user automatically gets GPT-5.6 before GPT-5.4 fallback", async () => {
   const user = await identity("free-daily-model-user");
+  await user.billing.setSelectedModel("gpt-5.4");
 
+  const limitedEnv = {
+    ...TEST_ENV,
+    OPENAI_MODEL: "gpt-5.4",
+    OPENAI_REASONING_EFFORT: "none",
+    MODEL_CHOICES: "gpt-5.4|GPT-5.4,gpt-5.6-sol|Current",
+    FREE_PLAN_PRIMARY_MODEL: "gpt-5.6-sol",
+    FREE_PLAN_FALLBACK_MODEL: "gpt-5.4",
+    FREE_DAILY_MODEL_MESSAGE_LIMIT: "2",
+  };
   const page = await worker.fetch(
     new Request("https://stabilize.info/", {
       headers: { Cookie: user.cookie },
     }),
-    TEST_ENV,
+    limitedEnv,
     {},
   );
   assert.equal(page.status, 200);
-  const html = await page.text();
-  assert.match(html, /0 of 20 free model-select messages used today/);
-  assert.match(html, /id="composer-model-choice" name="model"/);
-  assert.doesNotMatch(
-    html,
-    /Subscribe to choose another model/,
+  assert.match(
+    await page.text(),
+    /0 of 2 free GPT-5\.6 Instant messages used today/,
   );
 
-  const selection = await worker.fetch(
-    new Request("https://stabilize.info/account/model", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Cookie: user.cookie,
-        Origin: "https://stabilize.info",
-        "Sec-Fetch-Site": "same-origin",
-      },
-      body: new URLSearchParams({ model: "gpt-5.1" }),
-    }),
-    TEST_ENV,
-    {},
-  );
-  assert.equal(selection.status, 303);
-  assert.equal(selection.headers.get("location"), "/?model=saved");
-  assert.equal((await user.billing.readState()).selectedModel, "gpt-5.1");
-
-  const limitedEnv = {
-    ...TEST_ENV,
-    FREE_DAILY_MODEL_MESSAGE_LIMIT: "2",
-  };
   const originalFetch = globalThis.fetch;
-  let providerBody;
+  const providerModels = [];
   globalThis.fetch = async (_input, init) => {
-    providerBody = JSON.parse(init.body);
+    const body = JSON.parse(init.body);
+    if (body.reasoning?.effort === "none") {
+      providerModels.push(body.model);
+    }
     return responseWithText("Use the smallest reversible step.");
   };
 
@@ -225,18 +225,17 @@ test("a free signed-in user can select a model for the daily allowance", async (
             Cookie: user.cookie,
             Origin: "https://stabilize.info",
           },
-          body: JSON.stringify({
-            message: `Give me one reversible next step for option ${index + 1}.`,
-          }),
+          body: JSON.stringify({ message: `Give me step ${index + 1}.` }),
         }),
         limitedEnv,
         {},
       );
       assert.equal(response.status, 200);
+      assert.equal(response.headers.get("X-Stabilize-Model-Selected"), "gpt-5.6-sol");
       assert.equal((await response.json()).reply, "Use the smallest reversible step.");
     }
 
-    const blocked = await worker.fetch(
+    const fallback = await worker.fetch(
       new Request("https://stabilize.info/api/chat", {
         method: "POST",
         headers: {
@@ -245,20 +244,25 @@ test("a free signed-in user can select a model for the daily allowance", async (
           Cookie: user.cookie,
           Origin: "https://stabilize.info",
         },
-        body: JSON.stringify({ message: "Give me one more next step." }),
+        body: JSON.stringify({ message: "Give me one more step." }),
       }),
       limitedEnv,
       {},
     );
-    assert.equal(blocked.status, 429);
-    assert.match(
-      (await blocked.json()).error,
-      /daily free model-select limit of 2 messages has been reached/i,
+    assert.equal(fallback.status, 200);
+    assert.equal(fallback.headers.get("X-Stabilize-Model-Fallback"), "daily-limit");
+    assert.equal(
+      fallback.headers.get("X-Stabilize-Model-Selected"),
+      limitedEnv.OPENAI_MODEL,
     );
-    assert.equal(providerBody.model, "gpt-5.1");
+    assert.equal((await fallback.json()).reply, "Use the smallest reversible step.");
+    assert.deepEqual(providerModels, [
+      "gpt-5.6-sol",
+      "gpt-5.6-sol",
+      limitedEnv.OPENAI_MODEL,
+    ]);
 
     const state = await user.billing.readState();
-    assert.match(state.freeUsagePeriod, /^\d{4}-\d{2}-\d{2}$/);
     assert.equal(state.freeUsageCount, 2);
     assert.equal(state.paidUsageCount, 0);
   } finally {

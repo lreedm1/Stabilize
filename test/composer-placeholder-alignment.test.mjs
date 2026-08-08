@@ -23,7 +23,7 @@ test("the composer placeholder is centered horizontally while entered text stays
   );
   assert.match(
     worker,
-    /\/billing\.css\?v=20260805-centered-placeholder-2/,
+    /\/billing\.css\?v=20260807-free-gpt56-first-50-1/,
   );
   assert.match(
     packageSource,

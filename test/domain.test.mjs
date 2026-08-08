@@ -6,19 +6,44 @@ const repositoryFile = (path) =>
   readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("stabilize.info is the only production domain", async () => {
-  const [configText, router, page, sitemap, robots, workflow] = await Promise.all([
+  const [configText, router, page, sitemap, robots, workflow, staticHeaders] =
+    await Promise.all([
     repositoryFile("wrangler.jsonc"),
     repositoryFile("src/domain-router.js"),
     repositoryFile("src/page.js"),
     repositoryFile("public/sitemap.xml"),
     repositoryFile("public/robots.txt"),
     repositoryFile(".github/workflows/deploy-cloudflare.yml"),
+    repositoryFile("public/_headers"),
   ]);
   const config = JSON.parse(configText);
 
   assert.equal(config.main, "src/domain-router.js");
   assert.equal(config.vars.PUBLIC_ORIGIN, "https://stabilize.info");
-  assert.equal(config.assets.run_worker_first, true);
+  assert.deepEqual(config.assets.run_worker_first, [
+    "/*",
+    "!/*.css",
+    "!/*.js",
+    "!/*.mjs",
+    "!/*.map",
+    "!/*.ico",
+    "!/*.png",
+    "!/*.jpg",
+    "!/*.jpeg",
+    "!/*.gif",
+    "!/*.webp",
+    "!/*.avif",
+    "!/*.svg",
+    "!/*.woff",
+    "!/*.woff2",
+    "!/site.webmanifest",
+    "!/fonts/*",
+    "!/scenes/*"
+  ]);
+  assert.match(
+    staticHeaders,
+    /Strict-Transport-Security:\s*max-age=31536000; includeSubDomains/,
+  );
   assert.deepEqual(config.routes, [
     { pattern: "stabilize.info/*", zone_name: "stabilize.info" },
   ]);

@@ -205,6 +205,19 @@ export class SessionMemory extends DurableObject {
     };
   }
 
+  async startNewConversation() {
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec("DELETE FROM recent_messages");
+      this.ctx.storage.sql.exec(
+        `UPDATE memory_state
+         SET awaiting_safety_answer = 0
+         WHERE id = 1`,
+      );
+    });
+
+    return { started: true };
+  }
+
   async getCompactionSnapshot() {
     const state = this.ctx.storage.sql
       .exec(

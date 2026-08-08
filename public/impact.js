@@ -10,6 +10,17 @@ const URGENT_ROUTES = new Set([
   "MEDICAL_EMERGENCY",
   "SAFETY_UNCLEAR",
 ]);
+const FOLLOWUP_ACTION_EVENT = "stabilize:followup-actions";
+const FOLLOWUP_REPLY_PATTERNS = [
+  /\b(message|text|email|reply|apolog(?:y|ize)|boundary|send it)\b/i,
+  /\b(decision|decide|choice|choose|compare|option|trade-?off|pros? and cons?)\b/i,
+  /\b(work|school|class|assignment|project|deadline|application|internship|meeting)\b/i,
+  /\b(money|budget|rent|housing|apartment|cost|debt|bill|financial|afford)\b/i,
+  /\b(friend|social|lonely|alone|isolation|reach out|connection|meet people|community)\b/i,
+];
+const FOLLOWUP_CUE_PATTERN =
+  /\b(want me to|would you like|i can (?:help|draft|compare|make|plan)|next step|choose|which|option|draft|compare|plan)\b/i;
+
 const originalFetch = window.fetch.bind(window);
 const enhancedTurns = new Set();
 const conversationPromptedTurns = new Set();
@@ -192,14 +203,15 @@ window.fetch = async (input, init) => {
   return response;
 };
 
-function potentiallyResolving(text) {
+function modelReplyNeedsFollowups(text, route) {
+  const cleanRoute = String(route || "UNKNOWN").trim().toUpperCase();
+  if (URGENT_ROUTES.has(cleanRoute)) return false;
   const content = String(text || "").trim();
-  if (content.length < 10) return false;
-  if (/^(?:hi|hello|hey)[.!]?\s/i.test(content) && content.length < 140) {
-    return false;
-  }
-  if (content.length < 180 && /[?]\s*$/.test(content)) return false;
-  return true;
+  if (content.length < 80) return false;
+  const hasRelevantDomain = FOLLOWUP_REPLY_PATTERNS.some((pattern) =>
+    pattern.test(content),
+  );
+  return hasRelevantDomain && FOLLOWUP_CUE_PATTERN.test(content);
 }
 
 async function postImpactState(turn, event, value, promptVersion) {
@@ -285,29 +297,6 @@ function hideOutcomeCard(card) {
   }
 }
 
-function renderAnsweredState(card, continuationButtons, value) {
-  card.replaceChildren();
-
-  const message = document.createElement("p");
-  message.className = "impact-thanks";
-  message.textContent = "Thanks — that is enough for this check.";
-  card.appendChild(message);
-
-  if (value !== "yes" && continuationButtons.length) {
-    const label = document.createElement("p");
-    label.className = "impact-continuation-label";
-    label.textContent = "Continue with one option:";
-
-    const actions = document.createElement("div");
-    actions.className = "impact-actions impact-continuation-actions";
-    for (const originalButton of continuationButtons) {
-      originalButton.classList.add("impact-choice", "impact-continuation-choice");
-      actions.appendChild(originalButton);
-    }
-    card.append(label, actions);
-  }
-}
-
 function enhanceOutcomeCheck(check) {
   if (
     !(check instanceof HTMLElement) ||
@@ -317,60 +306,40 @@ function enhanceOutcomeCheck(check) {
   }
 
   const turn = latestTurn;
-  if (
-    !turn?.turnId ||
-    !turn.completed ||
-    enhancedTurns.has(turn.turnId) ||
-    URGENT_ROUTES.has(turn.route)
-  ) {
-    return;
-  }
+  if (!turn?.turnId || !turn.completed) return;
 
   const responseText = latestAssistantText(check);
-  if (!potentiallyResolving(responseText)) return;
-  const continuationButtons = [...check.querySelectorAll("button")].slice(0, 3);
-  if (!continuationButtons.length) return;
+  const followupButtons = [...check.querySelectorAll("button")]
+    .filter((item) => item instanceof HTMLButtonElement)
+    .slice(0, 3);
+  const shouldSurface =
+    !enhancedTurns.has(turn.turnId) &&
+    followupButtons.length > 0 &&
+    modelReplyNeedsFollowups(responseText, turn.route);
 
   check.dataset.impactEnhanced = "true";
-  check.classList.add("impact-outcome-card");
-  check.setAttribute("aria-label", "Did you choose a next step?");
+  hideOutcomeCard(check);
+  if (!shouldSurface) return;
+
   enhancedTurns.add(turn.turnId);
-
-  const question = document.createElement("p");
-  question.className = "impact-question";
-  question.textContent = "Did you choose a next step?";
-
-  const actions = document.createElement("div");
-  actions.className = "impact-actions impact-next-step-actions";
-  for (const [label, value] of [
-    ["Yes", "yes"],
-    ["Partly", "partly"],
-    ["No", "no"],
-  ]) {
-    const choice = button(label, value);
-    choice.addEventListener("click", () => {
-      for (const sibling of actions.querySelectorAll("button")) {
-        sibling.disabled = true;
-      }
-      void postNextStep(turn, value);
-      renderAnsweredState(check, continuationButtons, value);
-    });
-    actions.appendChild(choice);
+  for (const followupButton of followupButtons) {
+    followupButton.addEventListener(
+      "click",
+      () => {
+        void postNextStep(turn, "yes");
+      },
+      { once: true },
+    );
   }
 
-  const privacy = document.createElement("p");
-  privacy.className = "impact-privacy-note";
-  privacy.append("One structured answer only — message text isn’t recorded. ");
-  const privacyLink = document.createElement("a");
-  privacyLink.href = "/privacy#outcome-measurement";
-  privacyLink.textContent = "Privacy details";
-  privacy.appendChild(privacyLink);
-
-  const dismiss = button("Skip", "skip", "impact-skip");
-  dismiss.setAttribute("aria-label", "Dismiss outcome question");
-  dismiss.addEventListener("click", () => hideOutcomeCard(check));
-
-  check.replaceChildren(question, actions, privacy, dismiss);
+  window.dispatchEvent(
+    new CustomEvent(FOLLOWUP_ACTION_EVENT, {
+      detail: {
+        turnId: turn.turnId,
+        buttons: followupButtons,
+      },
+    }),
+  );
   void postNextStep(turn, "shown");
 }
 

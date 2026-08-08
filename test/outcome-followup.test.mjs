@@ -24,5 +24,6 @@ test("follow-up actions change with the response and always call the model", asy
   );
   assert.match(clientScript, /selectOutcomeActionSet\(route, previousReply\)/);
   assert.match(clientScript, /route: record\.route/);
-  assert.match(pageSource, /app\.js\?v=20260804-new-conversation-1/);
+  assert.match(pageSource, /app\.js\?v=20260806-static-mobile-background-1/);
+
 });

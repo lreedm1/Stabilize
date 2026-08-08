@@ -23,7 +23,7 @@ test("the current conversation keeps prior user and assistant turns visible", as
   );
   assert.match(
     clientScript,
-    /appendUserOutput\(visibleUserText\);[\s\S]*showOutput\(copy\.thinking/,
+    /appendUserOutput\(visibleUserText\);[\s\S]*showOutput\(pendingReplyCopy\(\), "thinking-output", "thinking"\)/,
   );
   assert.match(clientScript, /nextVisibleUserText = label/);
   assert.match(clientScript, /chatLog\.scrollTop = chatLog\.scrollHeight/);

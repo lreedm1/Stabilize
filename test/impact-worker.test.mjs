@@ -395,8 +395,8 @@ test("canonical and file privacy routes receive the outcome and feedback disclos
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(html, /id="outcome-measurement"/);
-    assert.match(html, /Did you choose a next step/);
-    assert.match(html, /prior conversation helped the user move forward/);
+    assert.match(html, /up to three optional action buttons beside/);
+    assert.match(html, /prior conversation helped\s+the\s+user move forward/);
     assert.match(html, /random browser, tab, and conversation identifiers/);
     assert.match(html, /response-quality/);
     assert.match(html, /does not\s+place the user's message/);

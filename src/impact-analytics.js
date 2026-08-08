@@ -101,6 +101,7 @@ export class ImpactAnalytics extends DurableObject {
           occurred_at INTEGER NOT NULL,
           session_hash TEXT NOT NULL,
           browser_hash TEXT NOT NULL,
+          conversation_hash TEXT,
           account_type TEXT NOT NULL,
           route TEXT,
           status TEXT NOT NULL DEFAULT 'started',
@@ -157,6 +158,23 @@ export class ImpactAnalytics extends DurableObject {
         CREATE INDEX IF NOT EXISTS message_feedback_rating
           ON message_feedback (rating, occurred_at);
       `);
+
+      const chatTurnColumns = this.ctx.storage.sql
+        .exec("PRAGMA table_info(chat_turns)")
+        .toArray();
+      if (
+        !chatTurnColumns.some(
+          (column) => column.name === "conversation_hash",
+        )
+      ) {
+        this.ctx.storage.sql.exec(
+          "ALTER TABLE chat_turns ADD COLUMN conversation_hash TEXT",
+        );
+      }
+      this.ctx.storage.sql.exec(
+        `CREATE INDEX IF NOT EXISTS chat_turns_conversation
+         ON chat_turns (conversation_hash, occurred_at)`,
+      );
     });
   }
 
@@ -172,19 +190,22 @@ export class ImpactAnalytics extends DurableObject {
     const turnId = boundedText(record?.turnId, 64);
     const sessionHash = boundedText(record?.sessionHash, 128);
     const browserHash = boundedText(record?.browserHash, 128);
+    const conversationHash =
+      boundedText(record?.conversationHash, 128) || sessionHash;
     if (!turnId || !sessionHash || !browserHash) return false;
 
     const occurredAt = timestamp(record?.occurredAt);
     this.ctx.storage.sql.exec(
       `INSERT INTO chat_turns (
-         turn_id, occurred_at, session_hash, browser_hash,
+         turn_id, occurred_at, session_hash, browser_hash, conversation_hash,
          account_type, route, status, model, estimated_cost_micros
-       ) VALUES (?, ?, ?, ?, ?, NULL, 'started', ?, ?)
+       ) VALUES (?, ?, ?, ?, ?, ?, NULL, 'started', ?, ?)
        ON CONFLICT(turn_id) DO NOTHING`,
       turnId,
       occurredAt,
       sessionHash,
       browserHash,
+      conversationHash,
       boundedText(record?.accountType, 24) || "guest",
       boundedText(record?.model, 128) || null,
       boundedInteger(record?.estimatedCostMicros, 0, 100_000_000, 0),
@@ -524,17 +545,18 @@ export class ImpactAnalytics extends DurableObject {
       )
       .one();
 
-    const chatSessionRows = this.ctx.storage.sql
+    const conversationRows = this.ctx.storage.sql
       .exec(
-        `SELECT session_hash, COUNT(*) AS count
+        `SELECT COALESCE(conversation_hash, session_hash) AS conversation_hash,
+                COUNT(*) AS count
          FROM chat_turns
          WHERE occurred_at >= ?
-         GROUP BY session_hash`,
+         GROUP BY COALESCE(conversation_hash, session_hash)`,
         since,
       )
       .toArray();
-    const chatSessions = chatSessionRows.length;
-    const multiTurnSessions = chatSessionRows.filter(
+    const conversations = conversationRows.length;
+    const multiTurnConversations = conversationRows.filter(
       (row) => Number(row.count || 0) >= 2,
     ).length;
 
@@ -589,6 +611,27 @@ export class ImpactAnalytics extends DurableObject {
       0,
     );
 
+    const dailyUsage = this.ctx.storage.sql
+      .exec(
+        `SELECT CAST(occurred_at / 86400000 AS INTEGER) AS day_number,
+                COUNT(DISTINCT browser_hash) AS users,
+                COUNT(*) AS messages
+         FROM chat_turns
+         WHERE occurred_at >= ? AND occurred_at < ?
+         GROUP BY day_number
+         ORDER BY day_number ASC`,
+        since,
+        now,
+      )
+      .toArray()
+      .map((row) => ({
+        date: new Date(Number(row.day_number) * DAY_MS)
+          .toISOString()
+          .slice(0, 10),
+        users: Number(row.users || 0),
+        messages: Number(row.messages || 0),
+      }));
+
     return {
       since,
       now,
@@ -628,9 +671,9 @@ export class ImpactAnalytics extends DurableObject {
       completedChats,
       failedChats,
       chatCompletionRate: rate(completedChats, chats),
-      chatSessions,
-      multiTurnSessions,
-      secondMessageRate: rate(multiTurnSessions, chatSessions),
+      conversations,
+      multiTurnConversations,
+      secondMessageRate: rate(multiTurnConversations, conversations),
       chatBrowsers,
       returningBrowsers,
       returningBrowserRate: rate(returningBrowsers, chatBrowsers),
@@ -639,6 +682,7 @@ export class ImpactAnalytics extends DurableObject {
       averageResponseMs:
         timedChats > 0 ? Math.round(responseMsTotal / timedChats) : null,
       estimatedCostMicros,
+      dailyUsage,
       estimatedCostPerResolutionMicros:
         resolved > 0 && estimatedCostMicros > 0
           ? Math.round(estimatedCostMicros / resolved)

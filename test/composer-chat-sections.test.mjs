@@ -21,7 +21,7 @@ test("the lower-left model button opens model, new chat, and private chat sectio
   assert.match(worker, /Open model and chat controls\. Current model:/);
   assert.match(
     worker,
-    /billing-client\.js\?v=20260805-centered-placeholder-2/,
+    /billing-client\.js\?v=20260807-free-gpt56-first-50-1/,
   );
 
   assert.match(client, /function startComposerNewChat\(/);

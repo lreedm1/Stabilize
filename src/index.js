@@ -13,6 +13,7 @@ import {
 } from "./auth.js";
 import { renderPage } from "./page.js";
 import { classifyInput, fixedReplyForRoute } from "./safety.js";
+import { selectReasoningEffort } from "./reasoning-policy.js";
 import { SessionMemory } from "./session-memory.js";
 
 export { SessionMemory };
@@ -20,10 +21,8 @@ export { SessionMemory };
 const MAX_BODY_BYTES = 32_000;
 const MAX_MESSAGE_CHARS = 4_000;
 const MAX_MESSAGES = 12;
-const MAX_SUMMARY_CHARS = 1_600;
-// OpenAI counts visible output, hidden reasoning, and formatting tokens here.
-const MAX_MODEL_OUTPUT_TOKENS = 500;
-const MAX_SUMMARY_OUTPUT_TOKENS = 500;
+const MAX_SUMMARY_CHARS = 1_000;
+const MAX_SUMMARY_OUTPUT_TOKENS = 320;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const OPENAI_REASONING_EFFORTS = new Set([
   "none",
@@ -31,6 +30,7 @@ const OPENAI_REASONING_EFFORTS = new Set([
   "medium",
   "high",
   "xhigh",
+  "max",
 ]);
 const OPENAI_ACCOUNT_LIMIT_CODES = new Set([
   "credit_balance_exhausted",
@@ -40,6 +40,20 @@ const OPENAI_ACCOUNT_LIMIT_CODES = new Set([
   "project_spend_limit_exceeded",
 ]);
 const PROVIDER_FIELD_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+
+const FAVICON_CONTENT_TYPES = new Map([
+  ["/favicon.ico", "image/x-icon"],
+  ["/favicon.svg", "image/svg+xml; charset=utf-8"],
+  ["/favicon-16x16.png", "image/png"],
+  ["/favicon-32x32.png", "image/png"],
+  ["/apple-touch-icon.png", "image/png"],
+  ["/stabilize-tab-20260805.ico", "image/x-icon"],
+  ["/stabilize-tab-20260805-16.png", "image/png"],
+  ["/stabilize-tab-20260805-32.png", "image/png"],
+  ["/stabilize-app-20260805-180.png", "image/png"],
+  ["/safari-pinned-tab.svg", "image/svg+xml; charset=utf-8"],
+  ["/site.webmanifest", "application/manifest+json; charset=utf-8"],
+]);
 
 const FIXED_ROUTE_MEMORY = {
   MEDICAL_EMERGENCY:
@@ -116,6 +130,29 @@ function pageHeaders(contentType = "text/html; charset=utf-8", extra = {}) {
   });
   for (const [name, value] of Object.entries(extra)) headers.set(name, value);
   return headers;
+}
+
+async function faviconAssetResponse(request, env, contentType) {
+  if (!["GET", "HEAD"].includes(request.method)) {
+    return new Response(COPY.api.methodNotAllowed, {
+      status: 405,
+      headers: pageHeaders("text/plain; charset=utf-8"),
+    });
+  }
+
+  const asset = await env.ASSETS.fetch(request);
+  if (!asset.ok) return asset;
+
+  const headers = new Headers(asset.headers);
+  headers.set("Content-Type", contentType);
+  headers.set("Cache-Control", "no-store, max-age=0");
+  headers.set("Content-Disposition", "inline");
+  headers.set("X-Content-Type-Options", "nosniff");
+  return new Response(request.method === "HEAD" ? null : asset.body, {
+    status: asset.status,
+    statusText: asset.statusText,
+    headers,
+  });
 }
 
 function jsonResponse(body, status = 200, extraHeaders = {}) {
@@ -252,13 +289,28 @@ function normalizeMessages(messages) {
 
 function latestUserText(body) {
   const direct = String(body?.message || "").trim();
-  if (direct) return direct.slice(0, MAX_MESSAGE_CHARS);
+  if (direct) return direct;
 
   const rawMessages = Array.isArray(body?.messages) ? body.messages : [];
   const latestUser = [...rawMessages]
     .reverse()
     .find((message) => message?.role === "user");
-  return String(latestUser?.content || "").trim().slice(0, MAX_MESSAGE_CHARS);
+  return String(latestUser?.content || "").trim();
+}
+
+function privateModelInput(messages, latestText) {
+  const normalized = normalizeMessages(messages);
+  const latest = normalized.at(-1);
+  if (
+    latest?.role === "user" &&
+    latest.content === latestText
+  ) {
+    return normalized;
+  }
+  return normalizeMessages([
+    ...normalized,
+    { role: "user", content: latestText },
+  ]);
 }
 
 function modelInput(memory, latestText) {
@@ -305,6 +357,41 @@ function validateModelReply(reply) {
   return text;
 }
 
+function effectiveReasoningEffort(model, requestedEffort) {
+  if (requestedEffort === "max") {
+    if (/^gpt-5\.6(?:-|$)/.test(model)) return "max";
+    if (/^gpt-5\.(?:2|3|4|5)(?:-|$)/.test(model)) return "xhigh";
+    return "high";
+  }
+  if (
+    requestedEffort === "xhigh" &&
+    !/^gpt-5\.(?:2|3|4|5|6)(?:-|$)/.test(model)
+  ) {
+    return "high";
+  }
+  return requestedEffort;
+}
+
+function requestedReasoningEffort(body, model, fallbackEffort) {
+  const effort = String(
+    body?.reasoningEffort || fallbackEffort || "none",
+  )
+    .trim()
+    .toLowerCase();
+  if (!OPENAI_REASONING_EFFORTS.has(effort)) return "none";
+  return effectiveReasoningEffort(String(model || ""), effort);
+}
+
+function reasoningEnvironment(env, effort) {
+  const selected = OPENAI_REASONING_EFFORTS.has(effort) ? effort : "none";
+  return new Proxy(env, {
+    get(target, property, receiver) {
+      if (property === "OPENAI_REASONING_EFFORT") return selected;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}
+
 function openAIConfig(env) {
   const apiKey = String(env.OPENAI_API_KEY || "");
   if (!apiKey) {
@@ -313,17 +400,23 @@ function openAIConfig(env) {
     throw error;
   }
 
-  const model = String(env.OPENAI_MODEL || "gpt-5.6-sol");
-  const reasoningEffort = String(env.OPENAI_REASONING_EFFORT || "medium");
+  const model = String(env.OPENAI_MODEL || "gpt-5.4");
+  const requestedReasoningEffort = String(
+    env.OPENAI_REASONING_EFFORT || "none",
+  );
   if (
     !/^[A-Za-z0-9._:-]+$/.test(model) ||
-    !OPENAI_REASONING_EFFORTS.has(reasoningEffort)
+    !OPENAI_REASONING_EFFORTS.has(requestedReasoningEffort)
   ) {
     const error = new Error("OpenAI configuration is invalid");
     error.name = "InvalidOpenAIConfiguration";
     throw error;
   }
 
+  const reasoningEffort = effectiveReasoningEffort(
+    model,
+    requestedReasoningEffort,
+  );
   return { apiKey, model, reasoningEffort };
 }
 
@@ -459,15 +552,253 @@ async function callOpenAI(payload, apiKey, timeoutMs, errorName) {
   };
 }
 
-async function generateReply(messages, route, env, latestText) {
-  const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
-  if (demoMode) return demoReply(route, latestText);
+function isNeutralGreeting(value) {
+  return /^(?:hi|hello|hey|hiya|good morning|good afternoon|good evening)[!.? ]*$/i.test(
+    String(value || "").trim(),
+  );
+}
 
+function isUnsolicitedSafetyCheck(value) {
+  return /(?:hurt yourself|kill yourself|safe right now|immediate danger|next few hours)/i.test(
+    String(value || ""),
+  );
+}
+
+function streamHeaders() {
+  return apiHeaders({
+    "Content-Type": "application/x-ndjson; charset=utf-8",
+    "X-Accel-Buffering": "no",
+  });
+}
+
+function streamEvent(value) {
+  return new TextEncoder().encode(JSON.stringify(value) + "\n");
+}
+
+async function openAIStream(payload, apiKey, timeoutMs, errorName) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const clientRequestId = crypto.randomUUID();
+
+  let response;
+  try {
+    response = await fetch(OPENAI_RESPONSES_URL, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + apiKey,
+        "Content-Type": "application/json",
+        "X-Client-Request-Id": clientRequestId,
+      },
+      body: JSON.stringify({ ...payload, stream: true }),
+      signal: controller.signal,
+    });
+  } catch {
+    clearTimeout(timeout);
+    throw new OpenAIRequestError({
+      name: errorName,
+      failure: controller.signal.aborted ? "timeout" : "connection",
+      clientRequestId,
+    });
+  }
+
+  const providerRequestId = safeProviderField(
+    response.headers.get("x-request-id"),
+  );
+  if (!response.ok) {
+    clearTimeout(timeout);
+    const responseBody = await response.json().catch(() => ({}));
+    const fields = providerErrorFields(responseBody);
+    throw new OpenAIRequestError({
+      name: errorName,
+      failure: "http",
+      status: response.status,
+      code: fields.code,
+      type: fields.type,
+      providerRequestId,
+      clientRequestId,
+      retryAfterSeconds: retryAfterSeconds(response.headers.get("retry-after")),
+    });
+  }
+
+  return { response, controller, timeout, providerRequestId, clientRequestId };
+}
+
+function streamFailureDiagnostic(error) {
+  if (error instanceof OpenAIRequestError) {
+    return {
+      category: String(error.failure || "request").slice(0, 40),
+      status: Number.isFinite(error.status) ? error.status : null,
+      code: safeProviderField(error.code),
+      type: safeProviderField(error.type),
+      name: String(error.name || "OpenAIRequestError").slice(0, 60),
+    };
+  }
+  return {
+    category: "runtime",
+    status: null,
+    code: null,
+    type: null,
+    name: String(error instanceof Error ? error.name : "UnknownError").slice(0, 60),
+  };
+}
+
+function parseOpenAIStreamEvent(eventBlock, result) {
+  const lines = String(eventBlock || "").split(/\r\n|\n|\r/);
+  const dataLines = lines
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).replace(/^ /, ""));
+  const data = (dataLines.length ? dataLines.join("\n") : eventBlock).trim();
+  if (!data || data === "[DONE]") return null;
+
+  try {
+    return JSON.parse(data);
+  } catch {
+    throw new OpenAIRequestError({
+      name: "OpenAIStreamParseError",
+      failure: "invalid_output",
+      status: 502,
+      code: "invalid_sse_event",
+      providerRequestId: result.providerRequestId,
+      clientRequestId: result.clientRequestId,
+    });
+  }
+}
+
+function streamEventText(event) {
+  if (
+    event?.type === "response.output_text.done" &&
+    typeof event.text === "string"
+  ) {
+    return event.text;
+  }
+  if (
+    ["response.completed", "response.incomplete"].includes(event?.type)
+  ) {
+    return responseText(event.response);
+  }
+  return "";
+}
+
+function throwForFailedStreamEvent(event, result) {
+  if (!["response.failed", "error"].includes(event?.type)) return;
+  const failure = event?.response?.error || event?.error || {};
+  throw new OpenAIRequestError({
+    name: "OpenAIHttpError",
+    failure: "http",
+    status: 502,
+    code: safeProviderField(failure.code),
+    type: safeProviderField(failure.type),
+    providerRequestId: result.providerRequestId,
+    clientRequestId: result.clientRequestId,
+  });
+}
+
+async function* openAITextDeltas(result) {
+  if (!result.response.body) {
+    throw new OpenAIRequestError({
+      name: "OpenAIInvalidReplyError",
+      failure: "invalid_output",
+      status: 502,
+      code: "missing_stream_body",
+      providerRequestId: result.providerRequestId,
+      clientRequestId: result.clientRequestId,
+    });
+  }
+
+  const reader = result.response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let emittedText = "";
+  let finalText = "";
+  let incompleteReason = null;
+
+  const consume = (eventBlock) => {
+    const event = parseOpenAIStreamEvent(eventBlock, result);
+    if (!event) return null;
+    throwForFailedStreamEvent(event, result);
+
+    if (
+      event.type === "response.output_text.delta" &&
+      typeof event.delta === "string"
+    ) {
+      return event.delta;
+    }
+
+    const eventText = streamEventText(event);
+    if (eventText) finalText = eventText;
+    if (event.type === "response.incomplete") {
+      incompleteReason = safeProviderField(
+        event.response?.incomplete_details?.reason,
+      ) || "response_incomplete";
+    }
+    return null;
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split(/\r\n\r\n|\n\n|\r\r/);
+      buffer = events.pop() || "";
+
+      for (const eventBlock of events) {
+        const delta = consume(eventBlock);
+        if (!delta) continue;
+        emittedText += delta;
+        yield delta;
+      }
+    }
+
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      const delta = consume(buffer);
+      if (delta) {
+        emittedText += delta;
+        yield delta;
+      }
+    }
+
+    if (!emittedText && finalText) {
+      emittedText = finalText;
+      yield finalText;
+    }
+
+    if (!emittedText) {
+      throw new OpenAIRequestError({
+        name: "OpenAIInvalidReplyError",
+        failure: "invalid_output",
+        status: 502,
+        code: incompleteReason || "empty_stream",
+        providerRequestId: result.providerRequestId,
+        clientRequestId: result.clientRequestId,
+      });
+    }
+  } finally {
+    clearTimeout(result.timeout);
+    try {
+      reader.releaseLock();
+    } catch {
+      // The provider or client may already have closed the stream.
+    }
+  }
+}
+
+function shouldUseNonStreamingFallback(error) {
+  if (!(error instanceof OpenAIRequestError)) return true;
+  if (OPENAI_ACCOUNT_LIMIT_CODES.has(error.code)) return false;
+  if (error.type === "insufficient_quota") return false;
+  if ([401, 403, 404, 429].includes(error.status)) return false;
+  if (error.failure === "timeout") return false;
+  return true;
+}
+
+async function generateFallbackReply(messages, route, env) {
   const { apiKey, model, reasoningEffort } = openAIConfig(env);
   const result = await callOpenAI(
     {
       model,
-      reasoning: { effort: reasoningEffort, context: "current_turn" },
+      reasoning: { effort: reasoningEffort },
       instructions:
         COPY.model.systemPrompt +
         "\n\n" +
@@ -475,7 +806,209 @@ async function generateReply(messages, route, env, latestText) {
         "\n\n" +
         COPY.model.routeInstruction(route),
       input: messages,
-      max_output_tokens: MAX_MODEL_OUTPUT_TOKENS,
+      store: true,
+    },
+    apiKey,
+    60_000,
+    "OpenAIFallbackHttpError",
+  );
+
+  const reply = validateModelReply(result.text);
+  if (!reply) {
+    throw new OpenAIRequestError({
+      name: "OpenAIInvalidReplyError",
+      failure: "invalid_output",
+      status: 502,
+      code: "empty_fallback",
+      providerRequestId: result.providerRequestId,
+      clientRequestId: result.clientRequestId,
+    });
+  }
+  return reply;
+}
+
+async function writeReplyDeltas(writer, text) {
+  const chunks = String(text || "").match(/\S+\s*/g) || [String(text || "")];
+  for (const delta of chunks) {
+    if (!delta) continue;
+    await writer.write(streamEvent({ type: "delta", delta }));
+  }
+}
+
+function streamChatReply(messages, route, env, latestText, stub, ctx) {
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+
+  const produce = async () => {
+    let reply = "";
+    try {
+      await writer.write(
+        streamEvent({
+          type: "meta",
+          route,
+          reasoningEffort: String(
+            env.OPENAI_REASONING_EFFORT || "none",
+          ),
+        }),
+      );
+      const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
+
+      if (demoMode) {
+        const demo = demoReply(route, latestText);
+        reply = demo;
+        await writeReplyDeltas(writer, demo);
+      } else {
+        try {
+          const { apiKey, model, reasoningEffort } = openAIConfig(env);
+          const turnReasoningEffort = reasoningEffort;
+          const result = await openAIStream(
+            {
+              model,
+              reasoning: { effort: turnReasoningEffort },
+              ...(turnReasoningEffort === "none"
+                ? { max_output_tokens: 500 }
+                : {}),
+              instructions:
+                COPY.model.systemPrompt +
+                "\n\n" +
+                COPY.model.memoryInstruction +
+                "\n\n" +
+                COPY.model.routeInstruction(route),
+              input: messages,
+              store: true,
+            },
+            apiKey,
+            60_000,
+            "OpenAIHttpError",
+          );
+
+          for await (const delta of openAITextDeltas(result)) {
+            reply += delta;
+            await writer.write(streamEvent({ type: "delta", delta }));
+          }
+        } catch (streamError) {
+          if (reply || !shouldUseNonStreamingFallback(streamError)) {
+            throw streamError;
+          }
+
+          console.warn(
+            JSON.stringify({
+              event: "openai_stream_fallback_used",
+              route,
+              diagnostic: streamFailureDiagnostic(streamError),
+            }),
+          );
+          reply = await generateFallbackReply(messages, route, env);
+          await writeReplyDeltas(writer, reply);
+        }
+      }
+
+      let validated = validateModelReply(reply);
+      if (
+        validated &&
+        route === "ORDINARY" &&
+        typeof isNeutralGreeting === "function" &&
+        typeof isUnsolicitedSafetyCheck === "function" &&
+        isNeutralGreeting(latestText) &&
+        isUnsolicitedSafetyCheck(validated)
+      ) {
+        validated = "Hi. What’s happening right now?";
+      }
+      if (!validated) {
+        throw new OpenAIRequestError({
+          name: "OpenAIInvalidReplyError",
+          failure: "invalid_output",
+          status: 502,
+          code: "invalid_validated_reply",
+          clientRequestId: crypto.randomUUID(),
+        });
+      }
+
+      const recordResult = await recordExchange(stub, {
+        user: latestText,
+        assistant: validated,
+        awaitingSafetyAnswer: false,
+      });
+      if (recordResult?.shouldCompact && stub && ctx) {
+        schedule(ctx, compactSession(stub, env));
+      }
+
+      await writer.write(
+        streamEvent({
+          type: "done",
+          route,
+          reply: validated,
+          showEmergency: false,
+          awaitingSafetyAnswer: false,
+        }),
+      );
+    } catch (error) {
+      const diagnostic = streamFailureDiagnostic(error);
+      const clientRequestId =
+        error instanceof OpenAIRequestError
+          ? error.clientRequestId
+          : crypto.randomUUID();
+      const reference = errorReference(clientRequestId);
+      console.error(
+        JSON.stringify({
+          event: "openai_stream_failed",
+          route,
+          diagnostic,
+          reference,
+        }),
+      );
+
+      const publicError =
+        error instanceof OpenAIRequestError
+          ? publicOpenAIError(error)
+          : { message: COPY.api.temporarilyUnavailable };
+      try {
+        await writer.write(
+          streamEvent({
+            type: "error",
+            error: publicError.message,
+            reference,
+            diagnostic,
+          }),
+        );
+      } catch {
+        // The browser may have left while the provider request was running.
+      }
+    } finally {
+      try {
+        await writer.close();
+      } catch {
+        // Closing an already-aborted browser stream is harmless.
+      }
+    }
+  };
+
+  const task = produce();
+  if (!schedule(ctx, task)) void task;
+  return new Response(readable, { status: 200, headers: streamHeaders() });
+}
+
+async function generateReply(messages, route, env, latestText) {
+  const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
+  if (demoMode) return demoReply(route, latestText);
+
+  const { apiKey, model, reasoningEffort } = openAIConfig(env);
+  const turnReasoningEffort = reasoningEffort;
+  const result = await callOpenAI(
+    {
+      model,
+      reasoning: { effort: turnReasoningEffort },
+      ...(turnReasoningEffort === "none"
+        ? { max_output_tokens: 500 }
+        : {}),
+      text: { verbosity: "low" },
+      instructions:
+        COPY.model.systemPrompt +
+        "\n\n" +
+        COPY.model.memoryInstruction +
+        "\n\n" +
+        COPY.model.routeInstruction(route),
+      input: messages,
       store: true,
     },
     apiKey,
@@ -492,6 +1025,13 @@ async function generateReply(messages, route, env, latestText) {
       providerRequestId: result.providerRequestId,
       clientRequestId: result.clientRequestId,
     });
+  }
+  if (
+    route === "ORDINARY" &&
+    isNeutralGreeting(latestText) &&
+    isUnsolicitedSafetyCheck(reply)
+  ) {
+    return "Hi. What’s happening right now?";
   }
   return reply;
 }
@@ -518,7 +1058,7 @@ async function generateSummary(snapshot, env) {
   const result = await callOpenAI(
     {
       model,
-      reasoning: { effort: "low", context: "current_turn" },
+      reasoning: { effort: "low" },
       instructions: COPY.model.summaryPrompt,
       input: [{ role: "user", content: input }],
       max_output_tokens: MAX_SUMMARY_OUTPUT_TOKENS,
@@ -590,12 +1130,35 @@ async function recordFixedRoute(
   });
 }
 
+async function handleNewConversation(request, env, accountKey) {
+  const body = await readBoundedJson(request);
+  if (body?.privateChat !== true) {
+    const stub = accountMemoryStub(env, accountKey);
+    if (stub && typeof stub.startNewConversation === "function") {
+      await stub.startNewConversation();
+    }
+  }
+  return jsonResponse({ ok: true });
+}
+
 async function handleChat(request, env, ctx, accountKey) {
   const body = await readBoundedJson(request);
+  env = reasoningEnvironment(
+    env,
+    requestedReasoningEffort(
+      body,
+      env.OPENAI_MODEL,
+      env.OPENAI_REASONING_EFFORT,
+    ),
+  );
+  const privateChat = body?.privateChat === true;
   const latestText = latestUserText(body);
   if (!latestText) throw new HttpError(400, COPY.api.messageRequired);
+  if (latestText.length > MAX_MESSAGE_CHARS) {
+    throw new HttpError(400, COPY.api.messageTooLong);
+  }
 
-  const stub = accountMemoryStub(env, accountKey);
+  const stub = privateChat ? null : accountMemoryStub(env, accountKey);
   const clientAwaiting = body?.awaitingSafetyAnswer === true;
   let route = classifyInput(latestText, {
     awaitingSafetyAnswer: clientAwaiting,
@@ -621,8 +1184,17 @@ async function handleChat(request, env, ctx, accountKey) {
     return jsonResponse({ route, ...fixed });
   }
 
-  const messages = modelInput(memory, latestText);
+  const messages = privateChat
+    ? privateModelInput(body?.messages, latestText)
+    : modelInput(memory, latestText);
   if (!messages.length) throw new HttpError(400, COPY.api.invalidConversation);
+
+  const acceptsStreaming = (request.headers.get("accept") || "")
+    .toLowerCase()
+    .includes("application/x-ndjson");
+  if (acceptsStreaming) {
+    return streamChatReply(messages, route, env, latestText, stub, ctx);
+  }
 
   const reply = await generateReply(messages, route, env, latestText);
   const result = await recordExchange(stub, {
@@ -668,6 +1240,14 @@ const worker = {
     const url = new URL(request.url);
 
     try {
+      if (FAVICON_CONTENT_TYPES.has(url.pathname)) {
+        return faviconAssetResponse(
+          request,
+          env,
+          FAVICON_CONTENT_TYPES.get(url.pathname),
+        );
+      }
+
       if (url.pathname === "/" || url.pathname === "/index.html") {
         if (!["GET", "HEAD"].includes(request.method)) {
           return new Response(COPY.api.methodNotAllowed, {
@@ -761,12 +1341,27 @@ const worker = {
           {
             ok: configured,
             mode: demoMode ? "demo" : "openai",
-            model: demoMode ? null : String(env.OPENAI_MODEL || "gpt-5.6-sol"),
+            model: demoMode ? null : String(env.OPENAI_MODEL || "gpt-5.4"),
+            reasoningEffort: demoMode
+              ? null
+              : String(env.OPENAI_REASONING_EFFORT || "none"),
+            verbosity: demoMode ? null : "low",
             memory: Boolean(env.SESSIONS),
             authentication: googleAuthConfigured(env),
           },
           configured ? 200 : 503,
         );
+      }
+
+      if (url.pathname === "/api/conversation/new") {
+        if (request.method !== "POST") {
+          return jsonResponse({ error: COPY.api.methodNotAllowed }, 405);
+        }
+        if (!sameOriginOrNonBrowser(request)) {
+          return jsonResponse({ error: COPY.api.crossOriginRequest }, 403);
+        }
+        const authSession = await readAuthSession(request, env);
+        return await handleNewConversation(request, env, authSession?.accountKey);
       }
 
       if (url.pathname === "/api/chat") {

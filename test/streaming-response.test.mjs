@@ -18,6 +18,11 @@ test("model replies stream through NDJSON while fixed routes remain deterministi
   assert.match(workerSource, /await recordExchange\(stub/);
   assert.match(workerSource, /selectReasoningEffort/);
   assert.equal(
+    (workerSource.match(/max_output_tokens: 500/g) || []).length,
+    2,
+  );
+  assert.match(workerSource, /reasoningEffort: String\(/);
+  assert.equal(
     (
       workerSource.match(
         /reasoning:\s*\{ effort: turnReasoningEffort \}/g,

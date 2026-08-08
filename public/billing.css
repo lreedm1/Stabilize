@@ -343,3 +343,215 @@
     transition: none;
   }
 }
+
+/* Exact 5.x model tile */
+.composer-model-button {
+  width: 66px;
+  min-width: 66px;
+  height: 64px;
+  min-height: 64px;
+  padding: 6px 5px;
+}
+
+.composer-model-current {
+  margin-top: 3px;
+  overflow: visible;
+  font-size: clamp(0.9rem, 0.85rem + 0.25vw, 1rem);
+  font-weight: 820;
+  letter-spacing: -0.035em;
+  text-overflow: clip;
+}
+
+@media (max-width: 600px) {
+  .composer-model-button {
+    width: 64px;
+    min-width: 64px;
+  }
+
+  .composer-model-current {
+    font-size: 0.95rem;
+  }
+}
+
+/* Balanced 42px composer bar */
+.composer-model-button,
+.composer-dock textarea,
+.composer-dock #send-button {
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
+}
+
+.composer-model-button {
+  border-radius: 10px;
+  padding: 2px 5px;
+}
+
+.composer-model-kicker {
+  display: none;
+}
+
+.composer-model-current {
+  margin-top: 0;
+  line-height: 1;
+}
+
+.composer-model-button::after {
+  display: none;
+  content: none;
+}
+
+.composer-dock textarea {
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 1rem;
+  line-height: 20px;
+}
+
+.composer-dock textarea::placeholder {
+  line-height: 20px;
+}
+
+.composer-dock #send-button {
+  border-radius: 10px;
+  padding-inline: 14px;
+}
+
+/* Composer chat sections */
+.composer-quick-panel {
+  width: min(350px, calc(100vw - 24px));
+  padding: 12px 14px;
+}
+
+.composer-quick-panel > h2 {
+  margin-bottom: 2px;
+}
+
+.composer-quick-section {
+  border-top: 1px solid var(--line);
+  padding: 11px 0;
+}
+
+.composer-quick-section:first-of-type {
+  border-top: 0;
+  padding-top: 8px;
+}
+
+.composer-quick-section:last-of-type {
+  padding-bottom: 2px;
+}
+
+.composer-quick-section h3 {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 790;
+  letter-spacing: -0.01em;
+}
+
+.composer-quick-section p {
+  margin-bottom: 8px;
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.composer-quick-model .billing-usage {
+  margin-top: 8px;
+}
+
+.composer-quick-action {
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+  color: var(--accent-dark);
+}
+
+.composer-quick-action:hover,
+.composer-quick-action:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.composer-quick-private-action {
+  border-color: var(--accent);
+}
+
+.composer-quick-status {
+  margin: 9px 0 0;
+  color: var(--accent-dark);
+  font-size: 0.7rem;
+  font-weight: 680;
+  text-align: center;
+}
+
+.composer-quick-status[hidden] {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .composer-quick-panel {
+    width: min(330px, calc(100vw - 18px));
+    max-height: min(68dvh, 470px);
+  }
+}
+
+/* Horizontally centered composer placeholder */
+.composer-dock textarea {
+  text-align: left;
+}
+
+.composer-dock textarea::placeholder {
+  text-align: center;
+}
+
+/* Free thinking-level selector */
+.thinking-choice {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 11px;
+}
+
+.thinking-choice-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.thinking-choice label {
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 760;
+}
+
+.thinking-choice-free {
+  color: var(--accent-dark);
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.thinking-choice select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.thinking-choice-description,
+.billing-menu .thinking-choice-description,
+.composer-model-panel .thinking-choice-description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+
+.composer-model-current {
+  white-space: normal;
+}

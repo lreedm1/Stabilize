@@ -44,3 +44,20 @@ test("signed-out users get a one-time memory reminder on their second send", asy
   assert.match(reminderSource, /sessionStorage\.setItem/);
   assert.match(reminderSource, /PROMPT_SHOWN_KEY/);
 });
+
+
+test("the prompt limit is 4,000 characters", async () => {
+  const [pageSource, workerSource, copySource] = await Promise.all([
+    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/index.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/copy.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(pageSource, /id="message-input"[\s\S]*maxlength="4000"/);
+  assert.match(workerSource, /const MAX_MESSAGE_CHARS = 4_000/);
+  assert.match(workerSource, /latestText.length > MAX_MESSAGE_CHARS/);
+  assert.match(copySource, /Please keep your message to 4,000 characters or fewer/);
+  assert.doesNotMatch(workerSource, /MAX_MODEL_OUTPUT_TOKENS/);
+  assert.match(copySource, /Keep ordinary responses to 220 words or fewer/);
+  assert.match(copySource, /For requested document-ready content, use the length needed/);
+});

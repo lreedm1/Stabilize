@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("free and subscriber model choice share a resilient left-side picker", async () => {
+test("automatic free model routing and subscriber choice share a resilient left-side picker", async () => {
   const [
     workerSource,
     accountSource,
@@ -45,7 +45,7 @@ test("free and subscriber model choice share a resilient left-side picker", asyn
   );
   assert.match(
     workerSource,
-    /src="\/billing-client\.js\?v=20260804-composer-model-picker-1"/,
+    /src="\/billing-client\.js\?v=[A-Za-z0-9._-]+"/,
   );
   assert.match(workerSource, /form action="\/account\/model"/);
   assert.match(workerSource, /select id="model-choice" name="model"/);
@@ -59,7 +59,7 @@ test("free and subscriber model choice share a resilient left-side picker", asyn
   assert.match(workerSource, /dailyUsagePeriod\(\)/);
   assert.match(workerSource, /stub\.reserveUsage\(tier, period, limit\)/);
   assert.match(workerSource, /stub\.refundUsage\(tier, period\)/);
-  assert.match(workerSource, /20 free model-select messages/);
+  assert.match(workerSource, /freeLimit[\s\S]*GPT-5\.6 Instant messages/);
   assert.match(workerSource, /allowance resets at 00:00 UTC/);
 
   assert.match(workerSource, /function composerModelPickerMarkup\(/);
@@ -110,10 +110,7 @@ test("free and subscriber model choice share a resilient left-side picker", asyn
 
   assert.match(pickerPolicy, /Added the left-side composer model picker/);
   assert.match(pickerPolicy, /20260804-composer-model-picker-1/);
-  assert.match(
-    freePolicy,
-    /Enabled 20 free daily model-select messages for signed-in users/,
-  );
+  assert.match(packageSource, /apply-free-gpt56-config\.mjs/);
   assert.match(packageSource, /node scripts\/add-composer-model-picker\.mjs/);
   assert.match(
     packageSource,
@@ -121,9 +118,9 @@ test("free and subscriber model choice share a resilient left-side picker", asyn
   );
   assert.match(
     wranglerSource,
-    /"FREE_DAILY_MODEL_MESSAGE_LIMIT": "20"/,
+    /"FREE_DAILY_MODEL_MESSAGE_LIMIT": "50"/,
   );
   assert.match(setupGuide, /https:\/\/stabilize\.info\/api\/stripe\/webhook/);
-  assert.match(setupGuide, /20 free model-select messages per UTC day/);
+  assert.match(setupGuide, /50 free GPT-5.6 Instant messages per UTC day/);
   assert.match(setupGuide, /200 non-default-model messages per UTC month/);
 });

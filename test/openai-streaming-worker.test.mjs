@@ -157,7 +157,7 @@ test("a malformed provider stream recovers through one non-streaming request", a
       });
     }
     assert.equal("stream" in request, false);
-    assert.deepEqual(request.reasoning, { effort: "medium" });
+    assert.deepEqual(request.reasoning, { effort: "xhigh" });
     return outputResponse(answer);
   };
 
