@@ -158,6 +158,39 @@ function preparedMemoryFromAccountContext(context, body) {
   };
 }
 
+function boundedBillingPreflight(value) {
+  if (!value || typeof value !== "object") return null;
+  const model = String(value.model || "").trim().slice(0, 128);
+  const tier = value.tier === null ? null : String(value.tier || "").trim();
+  const period = value.period === null ? null : String(value.period || "").trim();
+  const used = Math.max(0, Number(value.used) || 0);
+  const limit = Math.max(0, Number(value.limit) || 0);
+  const suppliedRemaining = Number(value.remaining);
+  const remaining = Number.isFinite(suppliedRemaining)
+    ? Math.max(0, suppliedRemaining)
+    : Math.max(0, limit - used);
+  const subscriptionStatus = String(
+    value.subscriptionStatus || "none",
+  )
+    .trim()
+    .slice(0, 32);
+  if (!model || ![null, "free", "paid"].includes(tier)) return null;
+  return {
+    allowed: value.allowed === true,
+    reason: value.reason === null ? null : String(value.reason || "").slice(0, 32),
+    model,
+    tier,
+    period,
+    used,
+    limit,
+    remaining: tier === null ? null : remaining,
+    fallback: value.fallback === true,
+    paid: value.paid === true,
+    subscriptionStatus,
+    checkedAt: Date.now(),
+  };
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -640,7 +673,7 @@ async function injectBillingPage(response, request, env, authSession, state, rec
   if ((markup || composerModelPicker) && !html.includes('src="/billing-client.js')) {
     html = html.replace(
       "</body>",
-      '    <script type="module" src="/billing-client.js?v=20260808-signed-in-prefetch-1"></script>\n  </body>',
+      '    <script type="module" src="/billing-client.js?v=20260808-account-preflight-1"></script>\n  </body>',
     );
   }
   if (notice) {
@@ -725,24 +758,37 @@ async function accountContextResponse(request, env) {
   }
 
   const accountStub = billingStub(env, authSession.accountKey);
-  const memory = await readMemoryContext(
+  const memoryPromise = readMemoryContext(
     accountMemoryStub(env, authSession.accountKey),
   );
+  const billingPromise =
+    accountStub && typeof accountStub.previewChat === "function"
+      ? accountStub.previewChat(chatPreparationOptions(env))
+      : Promise.resolve(null);
+  const [memory, billingPreview] = await Promise.all([
+    memoryPromise,
+    billingPromise,
+  ]);
   await syncBillingMemoryGeneration(accountStub, memory.generation);
   const token = await createAccountContextToken(
     authSession.accountKey,
     boundedAccountContext(memory),
     env,
   );
+  const billing = boundedBillingPreflight(billingPreview);
   return jsonResponse(
     {
       token,
       expiresInSeconds: ACCOUNT_CONTEXT_TOKEN_SECONDS,
       generation: Math.max(0, Number(memory.generation) || 0),
       turnCount: Math.max(0, Number(memory.turnCount) || 0),
+      billing,
     },
     200,
-    { "X-Stabilize-Memory-Source": "durable-object" },
+    {
+      "X-Stabilize-Memory-Source": "durable-object",
+      "X-Stabilize-Billing-Source": billing ? "prefetched" : "unavailable",
+    },
   );
 }
 

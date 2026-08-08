@@ -372,6 +372,105 @@ export class BillingAccount extends DurableObject {
     );
   }
 
+  async previewChat(options) {
+    const config = normalizePrepareOptions(options);
+
+    return this.ctx.storage.transactionSync(() => {
+      const billing = this.ctx.storage.sql
+        .exec(
+          `SELECT subscription_status, selected_model
+           FROM billing_state
+           WHERE id = 1`,
+        )
+        .toArray()[0];
+      const status = String(billing?.subscription_status || "none");
+      const paid = ACTIVE_STATUSES.has(status);
+      const storedModel = cleanModelId(billing?.selected_model);
+      const contextFields = config.includeMemoryGeneration
+        ? { memoryGeneration: this.memoryGeneration() }
+        : {};
+
+      if (paid) {
+        const model = config.allowedModels.has(storedModel)
+          ? storedModel
+          : config.defaultModel;
+        if (model === config.defaultModel) {
+          return {
+            allowed: true,
+            reason: null,
+            model,
+            tier: null,
+            period: null,
+            used: 0,
+            limit: 0,
+            remaining: null,
+            fallback: false,
+            paid: true,
+            reservationMade: false,
+            subscriptionStatus: status,
+            ...contextFields,
+          };
+        }
+
+        const usage = this.ctx.storage.sql
+          .exec(
+            `SELECT usage_count
+             FROM model_usage
+             WHERE tier = 'paid' AND period = ?`,
+            config.paidPeriod,
+          )
+          .toArray()[0];
+        const used = usage
+          ? Math.max(0, Number(usage.usage_count) || 0)
+          : 0;
+        const allowed = used < config.paidLimit;
+        return {
+          allowed,
+          reason: allowed ? null : "limit",
+          model,
+          tier: "paid",
+          period: config.paidPeriod,
+          used,
+          limit: config.paidLimit,
+          remaining: Math.max(0, config.paidLimit - used),
+          fallback: false,
+          paid: true,
+          reservationMade: false,
+          subscriptionStatus: status,
+          ...contextFields,
+        };
+      }
+
+      const usage = this.ctx.storage.sql
+        .exec(
+          `SELECT usage_count
+           FROM model_usage
+           WHERE tier = 'free' AND period = ?`,
+          config.freePeriod,
+        )
+        .toArray()[0];
+      const used = usage
+        ? Math.max(0, Number(usage.usage_count) || 0)
+        : 0;
+      const fallback = used >= config.freeLimit;
+      return {
+        allowed: true,
+        reason: fallback ? "fallback" : null,
+        model: fallback ? config.fallbackModel : config.freeModel,
+        tier: "free",
+        period: config.freePeriod,
+        used,
+        limit: config.freeLimit,
+        remaining: Math.max(0, config.freeLimit - used),
+        fallback,
+        paid: false,
+        reservationMade: false,
+        subscriptionStatus: status,
+        ...contextFields,
+      };
+    });
+  }
+
   async prepareChat(options) {
     const config = normalizePrepareOptions(options);
 
