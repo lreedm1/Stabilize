@@ -1,6 +1,17 @@
 # Stripe model-allowance setup
 
-Stabilize lets every signed-in user choose an allowed AI model. Free accounts receive 20 non-default-model messages per UTC day. Stripe-hosted Checkout sells a larger recurring allowance, and Stripe's hosted customer portal handles cancellation and payment-method management. Card numbers are never handled by the Worker.
+Stabilize uses an automatic model ladder for signed-in free accounts and an optional Stripe subscription for a larger monthly non-default-model allowance.
+
+The current behavior is:
+
+- guests use GPT-5.4 for ordinary chats
+- signed-in free accounts automatically receive 50 GPT-5.6 Instant messages per UTC day, then continue on GPT-5.4
+- subscribers can choose GPT-5.4 or Current (`gpt-5.6-sol`) and receive 200 non-default-model messages per UTC month
+- GPT-5.4 does not consume the subscriber monthly allowance
+- fixed urgent routes and failed provider requests do not consume either allowance
+- thinking level is a separate, free control and does not consume an additional allowance
+
+Stripe-hosted Checkout sells the recurring subscriber allowance, and Stripe's hosted customer portal handles cancellation and payment-method management. Card numbers are never handled by the Worker.
 
 ## Stripe resources created in test mode
 
@@ -8,7 +19,7 @@ The connected Stripe sandbox contains:
 
 - Product: `prod_V01MClXaF8xqB5`
 - Product name: **Stabilize Model Choice**
-- Description: choose additional AI models, with up to 200 paid-model messages per month
+- Description: choose an additional AI model, with up to 200 paid-model messages per month
 - Tax code: `txcd_10103100`
 - Default monthly Price: `price_1U01Jp96tfbPOBGIbQNXDlPx`
 - Amount: **$10.00 USD per month**
@@ -29,7 +40,7 @@ Checkout Session creation uses:
 - Stripe-hosted success and cancellation URLs on `stabilize.info`
 - promotion codes when Stripe permits them
 
-The upgrade form has a normal HTML POST fallback. The browser client also requests a short-lived Checkout URL as JSON and then navigates directly to the allowlisted `checkout.stripe.com` host. This makes the button reliable in mobile and embedded browsers while keeping card entry on Stripe.
+The upgrade form has a normal HTML POST fallback. The browser client may also request a short-lived Checkout URL as JSON and then navigate directly to the allowlisted `checkout.stripe.com` host. This keeps card entry on Stripe and improves reliability in mobile and embedded browsers.
 
 Stripe customer and subscription IDs returned by Checkout and webhook events are stored under Stabilize's existing one-way Google account alias.
 
@@ -44,7 +55,7 @@ The Stripe webhook endpoint is enabled for:
 - `customer.subscription.paused`
 - `customer.subscription.resumed`
 
-`checkout.session.completed` grants the larger subscriber allowance. Subscription lifecycle events keep that allowance accurate after cancellation, pausing, resuming, failed renewal states, or other subscription changes. The canonical webhook URL must be used directly; Stripe should not have to follow the legacy-domain redirect.
+`checkout.session.completed` grants the subscriber allowance. Subscription lifecycle events keep that allowance accurate after cancellation, pausing, resuming, failed renewal states, or other subscription changes. The canonical webhook URL must be used directly.
 
 ## Cloudflare secrets and variables
 
@@ -55,58 +66,80 @@ In **Cloudflare → Workers & Pages → stabilize → Settings → Variables and
 
 Both must be stored as **Secret** values. The publishable key is not required because Checkout is created server-side and hosted by Stripe.
 
-The committed non-secret limits are:
+The committed non-secret model-policy values are:
 
-- `FREE_DAILY_MODEL_MESSAGE_LIMIT=20`
-- `PAID_MONTHLY_MESSAGE_LIMIT=200`
+```text
+OPENAI_MODEL=gpt-5.4
+OPENAI_REASONING_EFFORT=none
+MODEL_CHOICES=gpt-5.4|GPT-5.4,gpt-5.6-sol|Current
+FREE_DAILY_MODEL_MESSAGE_LIMIT=50
+FREE_PLAN_PRIMARY_MODEL=gpt-5.6-sol
+FREE_PLAN_FALLBACK_MODEL=gpt-5.4
+PAID_MONTHLY_MESSAGE_LIMIT=200
+```
 
-The free model picker remains available even when Stripe is not configured. Only the upgrade and billing-management controls depend on valid Stripe secrets, the recurring Price, and the public origin. Checkout errors appear in the browser instead of failing silently.
+The automatic free ladder remains available even when Stripe is not configured. Only upgrade and billing-management controls depend on valid Stripe secrets, the recurring Price, and the public origin. Checkout errors appear in the browser instead of failing silently.
 
-## Access and model selection
+## Access and model routing
 
-Every signed-in user can save any model on the configured allowlist. On each ordinary chat request, the Worker reads the selected model from the account's Billing Durable Object and passes that exact model to the OpenAI Responses API.
+### Guest
 
-The current configured choices are:
+A guest ordinary chat uses the configured fallback model, currently GPT-5.4. Guest usage is not written to Stabilize account memory and does not participate in an account-based model allowance.
 
-- **GPT-5.4** — the default; always available and does not consume either allowance
-- **GPT-5 mini**
-- **GPT-5.1**
-- **GPT-5.6 Luna**
-- **GPT-5.6 Terra**
-- **GPT-5.6 Sol**
+### Signed-in free account
 
-Free signed-in accounts receive **20 free model-select messages per UTC day**. The daily counter resets at `00:00 UTC`.
+For each UTC day, the first 50 completed ordinary responses automatically use `gpt-5.6-sol` with `reasoning.effort: none`, shown publicly as **GPT-5.6 Instant**. After the daily allowance is used, ordinary chats continue on GPT-5.4. The daily counter resets at `00:00 UTC`.
 
-Accounts with an `active` or `trialing` subscription receive **200 non-default-model messages per UTC month**. Free daily and subscriber monthly counters are stored separately, so canceling and later reactivating a subscription does not erase prior monthly usage.
+The free-account UI presents this as an automatic ladder rather than a model picker. A saved historical model preference does not override the automatic free route.
 
-Each successful non-default-model response returns the reserved count to the browser, which updates every visible usage counter immediately. Reloading the page reads the same persisted count from the Billing Durable Object. Failed provider requests and fixed safety-route replies are refunded and do not consume the applicable allowance.
+### Subscriber
+
+An account with an `active` or `trialing` subscription may choose from the configured model catalog:
+
+- **GPT-5.4** — always available and does not consume the monthly non-default-model allowance
+- **Current** — API model `gpt-5.6-sol`; consumes the subscriber allowance when used
+
+Subscribers receive 200 non-default-model messages per UTC month. Free daily and subscriber monthly counters are stored separately, so changing subscription state does not erase the other counter.
+
+### Thinking level
+
+The browser offers supported thinking levels independently of model billing. The Worker validates the requested effort against the selected model. The strongest `max` level is available only for Current; unsupported or invalid values fall back safely.
+
+### Counting and refunds
+
+A successful ordinary provider response reserves and then confirms the applicable count. Failed provider requests are refunded. Fixed safety, medical, shelter, and medication routes are answered before ordinary model generation and do not consume the free or subscriber allowance.
+
+Each counted response returns the selected model, tier, period, used count, and limit in response headers so the browser can update visible usage immediately. Reloading reads the persisted count from the Billing Durable Object.
 
 ## Deploy and test
 
 Run the **Deploy Stabilize to Cloudflare** GitHub Action or deploy with Wrangler. Test billing in Stripe test mode first.
 
-Expected free flow:
+Expected signed-in free flow:
 
 1. Sign in with Google.
-2. Use the **Model** button to the left of the message box.
-3. Choose an allowed model and save it.
-4. Send up to 20 non-default-model messages that UTC day and confirm the visible count increases after each completed reply.
-5. Reload the page and confirm the count remains.
-6. After the allowance is used, switch to **GPT-5.4** or return after `00:00 UTC`.
+2. Open the model control and confirm it explains the automatic GPT-5.6 Instant → GPT-5.4 ladder.
+3. Send an ordinary message and confirm the selected model is GPT-5.6 Instant and the daily count increases.
+4. Reload the page and confirm the count remains.
+5. In a test environment with a reduced free limit, exhaust the allowance and confirm the next ordinary response succeeds on GPT-5.4 with the fallback notice.
+6. Confirm the daily period resets at `00:00 UTC`.
 
 Expected subscriber flow:
 
-1. Open the model panel or three-bar menu.
+1. Open the model panel or site menu.
 2. Select **Upgrade model allowance**.
 3. Complete Stripe Checkout with a Stripe test card.
 4. Return to Stabilize and confirm the subscriber allowance is shown.
-5. Open **Manage billing** and verify the customer portal works.
-6. Cancel the test subscription and confirm the account returns to the free daily allowance after Stripe sends the subscription update; the saved model choice remains available.
+5. Choose **Current**, send an ordinary message, and confirm the monthly count increases.
+6. Choose **GPT-5.4**, send an ordinary message, and confirm the monthly count does not increase.
+7. Open **Manage billing** and verify the customer portal works.
+8. Cancel the test subscription and confirm the account returns to the automatic free ladder after Stripe sends the subscription update.
 
 ## Operational notes
 
-- Model selection requires sign-in so the daily allowance can be enforced without using IP addresses.
+- Account-based allowances require sign-in so they can be enforced without using IP addresses.
 - Billing form submissions accept a same-origin browser request even when an embedded browser reports the opaque origin `null`; requests marked cross-site by Fetch Metadata remain blocked.
-- The larger allowance is granted only for `active` and `trialing` subscription status.
+- The subscriber allowance is granted only for `active` and `trialing` subscription status.
 - The sandbox Price and keys must be used together. A live secret key cannot create Checkout with a test-mode Price.
 - Do not launch live payments without creating live-mode Stripe resources and reviewing pricing, refunds, taxes, terms, privacy disclosures, support procedures, and applicable app-store or payments rules.
+- When model IDs, labels, limits, or routing behavior change, update this guide, `README.md`, `wrangler.jsonc`, public sustainability copy, and the corresponding regression tests together.
