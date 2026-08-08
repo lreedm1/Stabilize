@@ -143,6 +143,8 @@ test("the free homepage presents GPT-5.4 Fastest response and the Current thinki
   const html = await page.text();
   assert.match(html, /0 of 2 free Current thinking messages used today/);
   assert.match(html, /Fastest response uses GPT-5.4/);
-  assert.match(html, /<span class="composer-model-current">5.4</span>/);
+  assert.ok(
+    html.includes('<span class="composer-model-current">5.4</span>'),
+  );
   assert.doesNotMatch(html, /id="composer-model-choice" name="model"/);
 });
