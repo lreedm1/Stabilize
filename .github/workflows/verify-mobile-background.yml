@@ -106,7 +106,7 @@ jobs:
                 && grep -Fq 'requestIdleCallback' <<<"$loader" \
                 && grep -Fq 'imagesrcset="' <<<"$html" \
                 && grep -Fq 'imagesizes="100vw"' <<<"$html" \
-                && grep -Fq 'href="/scenes/mobile-golden-alpine-v3-720.webp"' <<<"$html" \
+                && grep -Fq 'href="/scenes/mobile-forest-stream-v1-540.webp"' <<<"$html" \
                 && grep -Fqi 'strict-transport-security: max-age=31536000; includeSubDomains' <<<"$static_headers" \
                 && grep -Fqi 'etag:' <<<"$static_headers" \
                 && grep -Eqi '^cf-cache-status: (HIT|MISS|REVALIDATED|EXPIRED|UPDATING|BYPASS)$' <<<"$static_headers"; then
