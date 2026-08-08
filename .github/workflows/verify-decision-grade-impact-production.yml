@@ -1,0 +1,104 @@
+name: Verify decision-grade impact production
+
+on:
+  push:
+    branches:
+      - agent/verify-decision-grade-impact-production
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify production stream carries provider usage
+        shell: bash
+        run: |
+          set -euo pipefail
+          origin="https://stabilize.info"
+
+          for attempt in $(seq 1 60); do
+            headers="$(mktemp)"
+            body="$(mktemp)"
+            session_id="$(python -c 'import uuid; print(uuid.uuid4())')"
+            browser_id="$(python -c 'import uuid; print(uuid.uuid4())')"
+            conversation_id="$(python -c 'import uuid; print(uuid.uuid4())')"
+            status="$(
+              curl --max-time 90 --silent --show-error \
+                --request POST \
+                --header 'Content-Type: application/json' \
+                --header 'Accept: application/x-ndjson, application/json' \
+                --header 'Cache-Control: no-cache' \
+                --header "X-Stabilize-Session-Id: ${session_id}" \
+                --header "X-Stabilize-Browser-Id: ${browser_id}" \
+                --header "X-Stabilize-Conversation-Id: ${conversation_id}" \
+                --data '{"message":"Reply with one brief greeting."}' \
+                --dump-header "$headers" \
+                --output "$body" \
+                --write-out '%{http_code}' \
+                "${origin}/api/chat?verify-decision-grade-impact=${GITHUB_SHA}-${attempt}" || true
+            )"
+            content_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$headers" | tail -n 1)"
+            turn_id="$(awk -F': ' 'tolower($1) == "x-stabilize-turn-id" { gsub("\r", "", $2); print $2 }' "$headers" | tail -n 1)"
+            impact_version="$(awk -F': ' 'tolower($1) == "x-stabilize-impact-version" { gsub("\r", "", $2); print $2 }' "$headers" | tail -n 1)"
+
+            if [[ "$status" == "200" && "$content_type" == application/x-ndjson* ]] && \
+               node - "$body" "$turn_id" "$impact_version" <<'NODE'
+          const fs = require('node:fs');
+          const [path, turnId, impactVersion] = process.argv.slice(2);
+          if (!/^[0-9a-f-]{36}$/i.test(turnId || '')) process.exit(1);
+          if (impactVersion !== 'next-step-v1') process.exit(1);
+          const lines = fs.readFileSync(path, 'utf8').split(/\r?\n/).filter(Boolean);
+          let done = null;
+          let streamed = '';
+          for (const line of lines) {
+            const event = JSON.parse(line);
+            if (event.type === 'error') process.exit(1);
+            if (event.type === 'delta' && typeof event.delta === 'string') {
+              streamed += event.delta;
+            }
+            if (event.type === 'done') done = event;
+          }
+          const usage = done?.analytics;
+          const valid =
+            streamed.trim().length > 0 &&
+            typeof done?.reply === 'string' &&
+            done.reply.trim().length > 0 &&
+            usage &&
+            /^gpt-/.test(String(usage.model || '')) &&
+            usage.requestedServiceTier === 'fast' &&
+            ['priority', 'fast'].includes(usage.actualServiceTier) &&
+            Number.isFinite(usage.inputTokens) && usage.inputTokens > 0 &&
+            Number.isFinite(usage.cachedInputTokens) && usage.cachedInputTokens >= 0 &&
+            Number.isFinite(usage.cacheWriteTokens) && usage.cacheWriteTokens >= 0 &&
+            Number.isFinite(usage.reasoningTokens) && usage.reasoningTokens >= 0 &&
+            Number.isFinite(usage.outputTokens) && usage.outputTokens > 0;
+          if (!valid) process.exit(1);
+          console.log(JSON.stringify({
+            model: usage.model,
+            requestedServiceTier: usage.requestedServiceTier,
+            actualServiceTier: usage.actualServiceTier,
+            inputTokens: usage.inputTokens,
+            cachedInputTokens: usage.cachedInputTokens,
+            cacheWriteTokens: usage.cacheWriteTokens,
+            reasoningTokens: usage.reasoningTokens,
+            outputTokens: usage.outputTokens,
+            turnIdPresent: true,
+            impactVersion,
+          }));
+          NODE
+            then
+              rm -f "$headers" "$body"
+              echo "Decision-grade provider usage is live in production."
+              exit 0
+            fi
+
+            echo "attempt=${attempt} status=${status} content_type=${content_type:-none} turn_id=$([[ -n "$turn_id" ]] && echo present || echo absent) impact_version=${impact_version:-none}"
+            rm -f "$headers" "$body"
+            sleep 5
+          done
+
+          echo "Production did not expose complete decision-grade usage metadata." >&2
+          exit 1
