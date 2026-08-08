@@ -5,6 +5,3 @@ node_modules/
 .nightly/
 .DS_Store
 npm-debug.log*
-
-# Generated from the project-owner payload during install/build.
-public/scenes/mobile-forest-stream-v1-540.webp
