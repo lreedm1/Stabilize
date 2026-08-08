@@ -38,11 +38,18 @@ jobs:
         run: |
           cat > /tmp/guest-summary-chunks.sha256 <<'SUMS'
           b4823615fd64a4005e123f6ca31db669c7ca62fdf3011016de387f66c43e23ba  tmp/guest-summary-generator/chunk-00.txt
-          16a6dd16bf20c3e0635a01e60f4579ee4eb270b9910ffb989d707b0ceb2a5eb8  tmp/guest-summary-generator/chunk-01.txt
+          e41ae093db35377df60f176b694ac159cb222d942a3f7eb7028743c9389917a5  tmp/guest-summary-generator/chunk-01-0.txt
+          a890016feed355ec63ad81d3dd4dad251d95c096d4b4142f87746182b1b84793  tmp/guest-summary-generator/chunk-01-1.txt
+          c770084dae092442c4f6a6695ee50ed861eac9185a367bd97737a29aac785cf6  tmp/guest-summary-generator/chunk-01-2.txt
           ee31df57e05f82cde61249bc2895285b815375604f0e2d4c93d9a155ecf33984  tmp/guest-summary-generator/chunk-02.txt
           SUMS
           sha256sum --check /tmp/guest-summary-chunks.sha256
-          cat tmp/guest-summary-generator/chunk-*.txt \
+          cat \
+            tmp/guest-summary-generator/chunk-00.txt \
+            tmp/guest-summary-generator/chunk-01-0.txt \
+            tmp/guest-summary-generator/chunk-01-1.txt \
+            tmp/guest-summary-generator/chunk-01-2.txt \
+            tmp/guest-summary-generator/chunk-02.txt \
             | base64 --decode \
             | gzip --decompress \
             > scripts/add-guest-summary.mjs
