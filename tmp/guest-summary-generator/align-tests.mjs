@@ -76,6 +76,12 @@ replaceRequired(
   \`  assert.match(\n    workerSource,\n    /return streamChatReply\\\\([\\\\s\\\\S]*memory\\\\.generation,[\\\\s\\\\S]*guestSummaryPromise,[\\\\s\\\\S]*\\\\);/,\n  );\`,
   "guest-summary streaming invocation expectation",
 );
+replaceRequired(
+  "test/worker.test.mjs",
+  \`        "Content-Length": "32001",\`,
+  \`        "Content-Length": "256001",\`,
+  "guest-summary request-size boundary expectation",
+);
 
 `;
   source =
