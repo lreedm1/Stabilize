@@ -1,0 +1,32 @@
+name: Temporary Wisconsin Acts Build
+
+on:
+  push:
+    paths:
+      - ".github/workflows/build-wi-acts-temp.yml"
+      - "scripts/build_wi_acts_temp.py"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install PDF text extraction
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+      - name: Build and validate compilation
+        run: python3 scripts/build_wi_acts_temp.py
+      - name: Commit generated compilation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add generated/Wisconsin_2025-2026_Enacted_Bill_Text.txt
+          git commit -m "[skip acts build] Generate Wisconsin 2025-2026 enacted text"
+          git push
