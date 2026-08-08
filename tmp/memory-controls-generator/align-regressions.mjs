@@ -17,12 +17,13 @@ function replaceRequired(text, oldText, newText, label, path) {
 
 const basePipeline = '"node scripts/apply-priority-latency.mjs",';
 const completePipeline =
-  '"node scripts/apply-priority-latency.mjs && node scripts/add-memory-deletion-and-guest-session.mjs",';
+  '"node scripts/apply-priority-latency.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs",';
 
 for (const path of [
   "test/composer-chat-sections.test.mjs",
   "test/composer-placeholder-alignment.test.mjs",
   "test/daily-usage-dashboard.test.mjs",
+  "test/mobile-background-loading.test.mjs",
   "test/model-catalog-usage.test.mjs",
   "test/navigation-model-placement.test.mjs",
   "test/paid-model-choice.test.mjs",
