@@ -27,7 +27,7 @@ test("the public sustainability page provides a real revenue route with firm bou
 
   assert.match(page, /action="\/billing\/checkout" method="post"/);
   assert.match(page, /Support Stabilize and upgrade model allowance/);
-  assert.match(page, /50 GPT-5\.6 Instant messages per UTC day/i);
+  assert.match(page, /50 Current thinking messages per UTC day/i);
   assert.match(page, /200 non-default-model messages per UTC month/i);
   assert.match(page, /organizational pilots/i);
   assert.match(page, /fixed monthly ceiling/i);

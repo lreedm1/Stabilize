@@ -174,6 +174,16 @@ test("BillingAccount prepares model selection and quota reservation atomically",
     freeLimit: 1,
   };
 
+  const fastDefault = await stub.prepareChat({
+    ...options,
+    freeModel: "gpt-5.4",
+  });
+  assert.equal(fastDefault.allowed, true);
+  assert.equal(fastDefault.model, "gpt-5.4");
+  assert.equal(fastDefault.tier, null);
+  assert.equal(fastDefault.reservationMade, false);
+  assert.equal(fastDefault.used, 0);
+
   const free = await stub.prepareChat(options);
   assert.equal(free.allowed, true);
   assert.equal(free.model, "gpt-5.6-sol");
