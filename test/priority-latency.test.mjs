@@ -39,14 +39,18 @@ test("signed-in chat preparation uses one billing RPC and overlaps it with memor
   assert.match(core, /export async function readMemoryContext\(/);
   assert.match(billing, /async prepareChat\(options\)/);
   assert.match(billing, /this\.ctx\.storage\.transactionSync/);
-  assert.match(paid, /const \[preparation, memory\] = await Promise\.all\(\[/);
-  assert.match(paid, /stub\.prepareChat\(chatPreparationOptions\(env\)\)/);
-  assert.match(paid, /readMemoryContext\(memoryStub\)/);
-  assert.match(paid, /preparedChatResponse\(/);
-  assert.doesNotMatch(
-    paid,
-    /const state = await readBillingState\(stub\);[\s\S]*?async function paidChatResponse/,
-  );
+
+  const start = paid.indexOf("async function paidChatResponse(");
+  const end = paid.indexOf("function responseWithModelUsage", start);
+  assert.ok(start >= 0 && end > start, "paid chat handler is missing");
+  const paidChat = paid.slice(start, end);
+
+  assert.match(paidChat, /const \[preparation, memory\] = await Promise\.all\(\[/);
+  assert.match(paidChat, /stub\.prepareChat\(chatPreparationOptions\(env\)\)/);
+  assert.match(paidChat, /readMemoryContext\(memoryStub\)/);
+  assert.match(paidChat, /preparedChatResponse\(/);
+  assert.doesNotMatch(paidChat, /readBillingState\(/);
+  assert.doesNotMatch(paidChat, /reserveUsage\(/);
 });
 
 test("streaming paints plain text at most once per frame and renders Markdown once at completion", async () => {
