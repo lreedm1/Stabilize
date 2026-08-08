@@ -46,7 +46,7 @@ test("signed-in quota and subscription are checked before send", async () => {
   const packageJson = JSON.parse(packageSource);
   assert.match(
     packageJson.scripts["apply:prompt-policy"],
-    /apply-account-preflight\.mjs$/,
+    /finalize-account-preflight\.mjs$/,
   );
   assert.match(
     packageJson.scripts["test:node"],
