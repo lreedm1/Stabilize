@@ -16,12 +16,9 @@ export {
 };
 
 const CANONICAL_ORIGIN = "https://stabilize.info";
+const CANONICAL_HOST = "stabilize.info";
 const HSTS_VALUE = "max-age=31536000; includeSubDomains";
-const REDIRECT_HOSTS = new Set([
-  "reedlokken.com",
-  "www.reedlokken.com",
-  "www.stabilize.info",
-]);
+const REDIRECT_HOSTS = new Set(["www.stabilize.info"]);
 
 function redirectToCanonical(request) {
   const incoming = new URL(request.url);
@@ -35,6 +32,18 @@ function redirectToCanonical(request) {
     headers: {
       "Cache-Control": "public, max-age=3600",
       Location: canonical.toString(),
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+function unknownHostResponse() {
+  return new Response("Not found.", {
+    status: 404,
+    headers: {
+      "Cache-Control": "no-store",
+      "Content-Type": "text/plain; charset=utf-8",
       "Referrer-Policy": "no-referrer",
       "X-Content-Type-Options": "nosniff",
     },
@@ -64,6 +73,9 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const hostname = url.hostname.toLowerCase();
+    if (hostname !== CANONICAL_HOST && !REDIRECT_HOSTS.has(hostname)) {
+      return unknownHostResponse();
+    }
     if (url.protocol !== "https:" || REDIRECT_HOSTS.has(hostname)) {
       return redirectToCanonical(request);
     }
