@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: materialize-signed-in-prefetch-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   materialize-and-test:
