@@ -7,39 +7,91 @@ import {
   readAuthSession,
 } from "../src/auth.js";
 
-function createMemoryNamespace() {
-  const state = {
-    summary: "The user prefers small reversible steps.",
-    recent: [
-      { role: "user", content: "I need to call the pharmacy." },
-      { role: "assistant", content: "Write down the medication name first." },
-    ],
+function freshMemory(overrides = {}) {
+  return {
+    summary: "",
+    recent: [],
     awaitingSafetyAnswer: false,
-    turnCount: 4,
+    turnCount: 0,
     updatedAt: Date.now(),
-    generation: 7,
+    generation: 0,
+    ...overrides,
   };
-  let readCalls = 0;
+}
+
+function createMemoryNamespace() {
+  const states = new Map();
+  const readCounts = new Map();
   const writes = [];
 
+  function stateFor(name) {
+    if (!states.has(name)) states.set(name, freshMemory());
+    return states.get(name);
+  }
+
   return {
-    reads: () => readCalls,
+    states,
     writes,
-    getByName() {
+    seed(name, overrides) {
+      states.set(name, freshMemory(overrides));
+    },
+    reads(name = null) {
+      if (name) return readCounts.get(name) || 0;
+      return [...readCounts.values()].reduce((sum, count) => sum + count, 0);
+    },
+    getByName(name) {
       return {
         async readContextForRequest() {
-          readCalls += 1;
-          return structuredClone(state);
+          readCounts.set(name, (readCounts.get(name) || 0) + 1);
+          return structuredClone(stateFor(name));
         },
         async recordExchange(exchange) {
-          writes.push(structuredClone(exchange));
+          const state = stateFor(name);
+          const expected = Number(exchange?.expectedGeneration);
+          if (
+            Number.isSafeInteger(expected) &&
+            expected !== state.generation
+          ) {
+            return {
+              recorded: false,
+              stale: true,
+              shouldCompact: false,
+              turnCount: state.turnCount,
+              generation: state.generation,
+            };
+          }
+          writes.push({ name, exchange: structuredClone(exchange) });
+          state.recent = [
+            ...state.recent,
+            { role: "user", content: exchange.user },
+            { role: "assistant", content: exchange.assistant },
+          ].slice(-8);
+          state.turnCount += 1;
+          state.updatedAt = Date.now();
           return {
             recorded: true,
             stale: false,
             shouldCompact: false,
-            turnCount: state.turnCount + writes.length,
+            turnCount: state.turnCount,
             generation: state.generation,
           };
+        },
+        async deleteRememberedContext() {
+          const state = stateFor(name);
+          state.summary = "";
+          state.recent = [];
+          state.awaitingSafetyAnswer = false;
+          state.turnCount = 0;
+          state.updatedAt = null;
+          state.generation += 1;
+          return { deleted: true, generation: state.generation };
+        },
+        async startNewConversation() {
+          const state = stateFor(name);
+          state.recent = [];
+          state.awaitingSafetyAnswer = false;
+          state.generation += 1;
+          return { started: true, generation: state.generation };
         },
         async getCompactionSnapshot() {
           return null;
@@ -50,9 +102,22 @@ function createMemoryNamespace() {
 }
 
 function createBillingNamespace() {
+  const generations = new Map();
   return {
-    getByName() {
+    generation(name) {
+      return generations.get(name) || 0;
+    },
+    getByName(name) {
       return {
+        async setMemoryGeneration(value) {
+          const supplied = Number(value);
+          const current = generations.get(name) || 0;
+          const next = Number.isSafeInteger(supplied)
+            ? Math.max(current, supplied)
+            : current;
+          generations.set(name, next);
+          return next;
+        },
         async prepareChat(options) {
           return {
             allowed: true,
@@ -65,6 +130,7 @@ function createBillingNamespace() {
             fallback: false,
             paid: false,
             reservationMade: true,
+            memoryGeneration: generations.get(name) || 0,
           };
         },
         async refundUsage() {
@@ -88,11 +154,12 @@ function createBillingNamespace() {
 
 function createEnv() {
   const sessions = createMemoryNamespace();
+  const billing = createBillingNamespace();
   return {
     env: {
       ASSETS: { fetch: async () => new Response("asset") },
       SESSIONS: sessions,
-      BILLING: createBillingNamespace(),
+      BILLING: billing,
       DEMO_MODE: "false",
       OPENAI_API_KEY: "test-openai-key",
       OPENAI_MODEL: "gpt-5.4",
@@ -111,6 +178,7 @@ function createEnv() {
         "signed-in-prefetch-test-secret-with-at-least-thirty-two-characters",
     },
     sessions,
+    billing,
   };
 }
 
@@ -122,7 +190,11 @@ async function identity(env, subject) {
     env,
   );
   assert.ok(session);
-  return { cookie, accountKey: session.accountKey };
+  return {
+    cookie,
+    accountKey: session.accountKey,
+    objectName: `google:${session.accountKey}`,
+  };
 }
 
 function responseWithText(text) {
@@ -137,11 +209,8 @@ function responseWithText(text) {
   });
 }
 
-test("a signed context token removes the memory Durable Object read from chat preparation", async () => {
-  const setup = createEnv();
-  const account = await identity(setup.env, "prefetched-memory-user");
-
-  const contextResponse = await worker.fetch(
+async function fetchContext(setup, account) {
+  const response = await worker.fetch(
     new Request("https://stabilize.test/api/account/context", {
       headers: {
         Accept: "application/json",
@@ -151,19 +220,49 @@ test("a signed context token removes the memory Durable Object read from chat pr
     setup.env,
     {},
   );
-  assert.equal(contextResponse.status, 200);
+  assert.equal(response.status, 200);
   assert.equal(
-    contextResponse.headers.get("X-Stabilize-Memory-Source"),
+    response.headers.get("X-Stabilize-Memory-Source"),
     "durable-object",
   );
-  const contextResult = await contextResponse.json();
+  return response.json();
+}
+
+function chatRequest(account, body) {
+  return new Request("https://stabilize.test/api/chat", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Cookie: account.cookie,
+      Origin: "https://stabilize.test",
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+test("a signed context token removes the memory Durable Object read from chat preparation", async () => {
+  const setup = createEnv();
+  const account = await identity(setup.env, "prefetched-memory-user");
+  setup.sessions.seed(account.objectName, {
+    summary: "The user prefers small reversible steps.",
+    recent: [
+      { role: "user", content: "I need to call the pharmacy." },
+      { role: "assistant", content: "Write down the medication name first." },
+    ],
+    turnCount: 4,
+    generation: 7,
+  });
+
+  const contextResult = await fetchContext(setup, account);
   assert.deepEqual(Object.keys(contextResult).sort(), [
     "expiresInSeconds",
     "token",
   ]);
   assert.match(contextResult.token, /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
   assert.equal(contextResult.expiresInSeconds, 900);
-  assert.equal(setup.sessions.reads(), 1);
+  assert.equal(setup.sessions.reads(account.objectName), 1);
+  assert.equal(setup.billing.generation(account.objectName), 7);
 
   const originalFetch = globalThis.fetch;
   let providerBody;
@@ -174,22 +273,13 @@ test("a signed context token removes the memory Durable Object read from chat pr
 
   try {
     const response = await worker.fetch(
-      new Request("https://stabilize.test/api/chat", {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          Cookie: account.cookie,
-          Origin: "https://stabilize.test",
-        },
-        body: JSON.stringify({
-          message: "What is the next step?",
-          accountContextToken: contextResult.token,
-          messages: [
-            { role: "user", content: "I found the prescription bottle." },
-            { role: "assistant", content: "Keep it beside you for the call." },
-          ],
-        }),
+      chatRequest(account, {
+        message: "What is the next step?",
+        accountContextToken: contextResult.token,
+        messages: [
+          { role: "user", content: "I found the prescription bottle." },
+          { role: "assistant", content: "Keep it beside you for the call." },
+        ],
       }),
       setup.env,
       {},
@@ -201,7 +291,7 @@ test("a signed context token removes the memory Durable Object read from chat pr
       "prefetched",
     );
     assert.equal(response.headers.get("X-Stabilize-Model-Selected"), "gpt-5.6-sol");
-    assert.equal(setup.sessions.reads(), 1);
+    assert.equal(setup.sessions.reads(account.objectName), 1);
     const input = JSON.stringify(providerBody.input);
     assert.match(input, /small reversible steps/);
     assert.match(input, /I need to call the pharmacy/);
@@ -209,7 +299,10 @@ test("a signed context token removes the memory Durable Object read from chat pr
     assert.match(input, /What is the next step/);
     assert.equal(providerBody.service_tier, "fast");
     assert.equal(setup.sessions.writes.length, 1);
-    assert.equal(setup.sessions.writes[0].expectedGeneration, 7);
+    assert.equal(
+      setup.sessions.writes[0].exchange.expectedGeneration,
+      7,
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -218,23 +311,15 @@ test("a signed context token removes the memory Durable Object read from chat pr
 test("an invalid context token safely falls back to the Durable Object", async () => {
   const setup = createEnv();
   const account = await identity(setup.env, "invalid-prefetch-token-user");
+  setup.sessions.seed(account.objectName, { generation: 7 });
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => responseWithText("Use the first small step.");
 
   try {
     const response = await worker.fetch(
-      new Request("https://stabilize.test/api/chat", {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          Cookie: account.cookie,
-          Origin: "https://stabilize.test",
-        },
-        body: JSON.stringify({
-          message: "Give me one step.",
-          accountContextToken: "not-a-valid-token",
-        }),
+      chatRequest(account, {
+        message: "Give me one step.",
+        accountContextToken: "not-a-valid-token",
       }),
       setup.env,
       {},
@@ -245,7 +330,107 @@ test("an invalid context token safely falls back to the Durable Object", async (
       response.headers.get("X-Stabilize-Memory-Source"),
       "durable-object",
     );
-    assert.equal(setup.sessions.reads(), 1);
+    assert.equal(setup.sessions.reads(account.objectName), 1);
+    assert.equal(setup.billing.generation(account.objectName), 7);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a context token cannot be replayed into another signed-in account", async () => {
+  const setup = createEnv();
+  const first = await identity(setup.env, "first-prefetch-account");
+  const second = await identity(setup.env, "second-prefetch-account");
+  setup.sessions.seed(first.objectName, {
+    summary: "ALPHA PRIVATE CONTEXT",
+    generation: 2,
+  });
+  setup.sessions.seed(second.objectName, {
+    summary: "BETA CURRENT CONTEXT",
+    generation: 0,
+  });
+  const firstContext = await fetchContext(setup, first);
+
+  const originalFetch = globalThis.fetch;
+  let providerBody;
+  globalThis.fetch = async (_input, init) => {
+    providerBody = JSON.parse(init.body);
+    return responseWithText("Use the current account context.");
+  };
+
+  try {
+    const response = await worker.fetch(
+      chatRequest(second, {
+        message: "What context do you have?",
+        accountContextToken: firstContext.token,
+      }),
+      setup.env,
+      {},
+    );
+    assert.equal(response.status, 200);
+    assert.equal(
+      response.headers.get("X-Stabilize-Memory-Source"),
+      "durable-object",
+    );
+    const input = JSON.stringify(providerBody.input);
+    assert.match(input, /BETA CURRENT CONTEXT/);
+    assert.doesNotMatch(input, /ALPHA PRIVATE CONTEXT/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("deleting memory revokes an older prefetched token across signed-in requests", async () => {
+  const setup = createEnv();
+  const account = await identity(setup.env, "revoked-prefetch-account");
+  setup.sessions.seed(account.objectName, {
+    summary: "CONTEXT THAT MUST BE DELETED",
+    generation: 4,
+  });
+  const oldContext = await fetchContext(setup, account);
+  assert.equal(setup.billing.generation(account.objectName), 4);
+
+  const deletion = await worker.fetch(
+    new Request("https://stabilize.test/api/account/memory", {
+      method: "DELETE",
+      headers: {
+        Accept: "application/json",
+        Cookie: account.cookie,
+        Origin: "https://stabilize.test",
+      },
+    }),
+    setup.env,
+    {},
+  );
+  assert.equal(deletion.status, 200);
+  assert.equal((await deletion.json()).generation, 5);
+  assert.equal(setup.billing.generation(account.objectName), 5);
+
+  const originalFetch = globalThis.fetch;
+  let providerBody;
+  globalThis.fetch = async (_input, init) => {
+    providerBody = JSON.parse(init.body);
+    return responseWithText("The deleted context is not present.");
+  };
+
+  try {
+    const response = await worker.fetch(
+      chatRequest(account, {
+        message: "Start fresh.",
+        accountContextToken: oldContext.token,
+      }),
+      setup.env,
+      {},
+    );
+    assert.equal(response.status, 200);
+    assert.equal(
+      response.headers.get("X-Stabilize-Memory-Source"),
+      "durable-object",
+    );
+    assert.doesNotMatch(
+      JSON.stringify(providerBody.input),
+      /CONTEXT THAT MUST BE DELETED/,
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
