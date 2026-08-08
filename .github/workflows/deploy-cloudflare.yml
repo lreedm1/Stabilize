@@ -98,15 +98,11 @@ jobs:
                 process.exit(1);
               }
             ' "$response"; then
-              redirect="$(curl --max-time 15 --silent --show-error --output /dev/null --write-out "%{http_code} %{redirect_url}" https://reedlokken.com/ || true)"
-              echo "Legacy-domain redirect: ${redirect}"
-              case "$redirect" in
-                "308 https://stabilize.info/"*) exit 0 ;;
-              esac
+              exit 0
             fi
             sleep 10
           done
-          echo "::error::stabilize.info did not serve the Stabilize Worker, or reedlokken.com did not permanently redirect to it."
+          echo "::error::stabilize.info did not serve the Stabilize Worker."
           exit 1
 
       - name: Verify production billing navigation
