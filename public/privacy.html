@@ -39,7 +39,8 @@
       <h1>What the current prototype remembers</h1>
       <p class="lede">
         Stabilize does not create server-side account memory for guest chats. The current web
-        tab keeps a bounded guest transcript so follow-up messages can use earlier context, while
+        tab keeps eight recent messages plus a rolling summary capped at 5,000 model-output tokens
+        so follow-up messages can use earlier context, while
         the native iOS app does not intentionally save a prompt or reply on the device. OpenAI
         provider storage still applies as described below.
       </p>
@@ -47,13 +48,15 @@
       <h2>Guest web use</h2>
       <p>
         When you use Stabilize on the web without signing in, the application does not retain an
-        account-linked server-side conversation history. A bounded transcript of up to eight recent
-        user and assistant messages is stored in session storage for the current browser tab for up
-        to 24 hours. It is used to restore the tab after a refresh and is included with later guest
-        messages so the model can follow the conversation. New conversation, signing in or out,
-        expiry, or closing the tab clears that browser record. The transcript still travels through
-        Cloudflare and, for ordinary AI replies, is processed and stored by OpenAI under the provider
-        behavior below each time it is sent.
+        account-linked server-side conversation history. The current browser tab stores the newest
+        eight user and assistant messages, a rolling summary capped at 5,000 model-output tokens,
+        and a bounded queue of older messages waiting to be summarized for up to 24 hours. The
+        context restores after a refresh and is included with later guest messages so the model can
+        follow the conversation. When older messages are waiting, a separate OpenAI request updates
+        the summary. If that request fails, the queued messages stay in the tab and are not treated
+        as summarized. New conversation, signing in or out, expiry, or closing the tab clears the
+        browser record. The context still travels through Cloudflare and is processed and stored by
+        OpenAI under the provider behavior below each time it is sent.
       </p>
 
       <h2>Native iOS app</h2>

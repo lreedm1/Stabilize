@@ -961,7 +961,7 @@ test("chat endpoint rejects oversized declared bodies", async () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Content-Length": "32001",
+        "Content-Length": "256001",
       },
       body: "{}",
     }),

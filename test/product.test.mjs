@@ -54,7 +54,10 @@ test("the homepage gives a short product promise", async () => {
 
   assert.match(pageSource, /Get unstuck\./);
   assert.match(pageSource, /page\.promise/);
-  assert.match(pageSource, /Guest chats stay in this browser tab only/);
+  assert.match(
+    pageSource,
+    /Guest chats keep eight recent messages plus a tab-only rolling summary/,
+  );
   assert.doesNotMatch(pageSource, /data-example-message=/);
   assert.doesNotMatch(pageSource, /example-starts/);
   assert.match(
@@ -161,10 +164,15 @@ test("guest conversations persist only within the current tab", async () => {
   assert.match(clientScript, /activeLocalThreadMessages\(\)/);
   assert.match(clientScript, /privateChat \|\| !signedIn/);
   assert.match(clientScript, /restoreGuestConversation\(\)/);
-  assert.match(clientScript, /MAX_CHAT_REQUEST_BYTES = 28_000/);
+  assert.match(clientScript, /MAX_CHAT_REQUEST_BYTES = 240_000/);
+  assert.match(clientScript, /MAX_GUEST_SUMMARY_CHARS = 30_000/);
+  assert.match(clientScript, /MAX_GUEST_SUMMARY_BATCH_MESSAGES = 12/);
+  assert.match(clientScript, /guestSummaryMessages/);
+  assert.match(clientScript, /guestSummaryUpdated/);
   assert.match(clientScript, /new TextEncoder\(\)\.encode\(serialized\)\.byteLength/);
   assert.doesNotMatch(clientScript, /localStorage/);
-  assert.match(privacyPage, /up to eight recent/i);
+  assert.match(privacyPage, /newest\s+eight/i);
+  assert.match(privacyPage, /5,000 model-output tokens/i);
   assert.match(privacyPage, /current browser tab/i);
   assert.match(privacyPage, /included with later guest\s+messages/i);
 });

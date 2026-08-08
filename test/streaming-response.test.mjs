@@ -36,7 +36,7 @@ test("model replies stream through NDJSON while fixed routes remain deterministi
   );
   assert.match(
     workerSource,
-    /return streamChatReply\(messages, route, env, latestText, stub, ctx\)/,
+    /return streamChatReply\([\s\S]*memory\.generation,[\s\S]*guestSummaryPromise,[\s\S]*\);/,
   );
 
   assert.match(clientSource, /async function readStreamingResponse\(/);
