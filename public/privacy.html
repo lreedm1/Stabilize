@@ -84,7 +84,11 @@
         the account menu to immediately clear the rolling summary, recent-message buffer, pending
         safety-answer state, and retention alarm. A generation check prevents an older in-flight
         response from recreating the deleted memory. Billing and usage records are separate. This
-        local deletion does not shorten the separate OpenAI storage period.
+        local deletion does not shorten the separate OpenAI storage period. To reduce signed-in
+        response delay, the page also requests a bounded, short-lived HMAC-signed memory snapshot.
+        That opaque token is kept only in the page's active JavaScript memory, returned with a later
+        chat request, refreshed after successful replies, and not written to localStorage or
+        sessionStorage. Invalid or expired tokens fall back to the Durable Object.
       </p>
 
       <h2>Private chat</h2>

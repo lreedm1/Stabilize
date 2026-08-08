@@ -6,7 +6,11 @@ import originalWorker, {
   readBoundedJson,
   readMemoryContext,
 } from "./index.js";
-import { readAuthSession } from "./auth.js";
+import {
+  createAccountContextToken,
+  readAccountContextToken,
+  readAuthSession,
+} from "./auth.js";
 import { fixedReplyForRoute } from "./safety.js";
 import { BillingAccount } from "./billing-account.js";
 import {
@@ -29,6 +33,119 @@ import {
 export { SessionMemory, BillingAccount };
 
 const ACCOUNT_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+const ACCOUNT_CONTEXT_VERSION = 1;
+const ACCOUNT_CONTEXT_TOKEN_SECONDS = 15 * 60;
+const ACCOUNT_CONTEXT_SUMMARY_BYTES = 1_000;
+const ACCOUNT_CONTEXT_MESSAGE_BYTES = 1_800;
+const ACCOUNT_CONTEXT_RECENT_MESSAGES = 4;
+const ACCOUNT_CONTEXT_MERGED_MESSAGES = 10;
+const accountContextEncoder = new TextEncoder();
+
+function truncateUtf8(value, maxBytes) {
+  const text = String(value || "").trim();
+  if (!text || accountContextEncoder.encode(text).byteLength <= maxBytes) {
+    return text;
+  }
+
+  const points = Array.from(text);
+  let low = 0;
+  let high = points.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    const candidate = points.slice(0, middle).join("");
+    if (accountContextEncoder.encode(candidate).byteLength <= maxBytes) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return points.slice(0, low).join("").trim();
+}
+
+function normalizeAccountContextMessages(
+  messages,
+  limit = ACCOUNT_CONTEXT_MERGED_MESSAGES,
+) {
+  if (!Array.isArray(messages)) return [];
+  const cleaned = messages
+    .filter(
+      (message) =>
+        message && ["user", "assistant"].includes(message.role),
+    )
+    .map((message) => ({
+      role: message.role,
+      content: truncateUtf8(
+        message.content,
+        ACCOUNT_CONTEXT_MESSAGE_BYTES,
+      ),
+    }))
+    .filter((message) => message.content)
+    .slice(-limit);
+
+  const alternating = [];
+  for (const message of cleaned) {
+    const previous = alternating.at(-1);
+    if (previous?.role === message.role) {
+      previous.content = truncateUtf8(
+        previous.content + "
+" + message.content,
+        ACCOUNT_CONTEXT_MESSAGE_BYTES,
+      );
+    } else {
+      alternating.push({ ...message });
+    }
+  }
+  return alternating.slice(-limit);
+}
+
+function boundedAccountContext(memory) {
+  const generation = Number(memory?.generation);
+  return {
+    v: ACCOUNT_CONTEXT_VERSION,
+    fetchedAt: Date.now(),
+    summary: truncateUtf8(
+      memory?.summary,
+      ACCOUNT_CONTEXT_SUMMARY_BYTES,
+    ),
+    recent: normalizeAccountContextMessages(
+      memory?.recent,
+      ACCOUNT_CONTEXT_RECENT_MESSAGES,
+    ),
+    awaitingSafetyAnswer: memory?.awaitingSafetyAnswer === true,
+    turnCount: Math.max(0, Number(memory?.turnCount) || 0),
+    updatedAt: Number(memory?.updatedAt) || null,
+    generation:
+      Number.isSafeInteger(generation) && generation >= 0 ? generation : 0,
+  };
+}
+
+function preparedMemoryFromAccountContext(context, localMessages) {
+  const generation = Number(context?.generation);
+  if (
+    context?.v !== ACCOUNT_CONTEXT_VERSION ||
+    !Number.isSafeInteger(generation) ||
+    generation < 0
+  ) {
+    return null;
+  }
+
+  return {
+    summary: truncateUtf8(
+      context.summary,
+      ACCOUNT_CONTEXT_SUMMARY_BYTES,
+    ),
+    recent: normalizeAccountContextMessages(
+      [...(Array.isArray(context.recent) ? context.recent : []),
+       ...(Array.isArray(localMessages) ? localMessages : [])],
+      ACCOUNT_CONTEXT_MERGED_MESSAGES,
+    ),
+    awaitingSafetyAnswer: context.awaitingSafetyAnswer === true,
+    turnCount: Math.max(0, Number(context.turnCount) || 0),
+    updatedAt: Number(context.updatedAt) || null,
+    generation,
+  };
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -573,6 +690,32 @@ async function rootResponse(request, env, ctx) {
   return injectBillingPage(response, request, env, authSession, state, reconciled);
 }
 
+async function accountContextResponse(request, env) {
+  if (request.method !== "GET") {
+    return jsonResponse({ error: "Method not allowed." }, 405);
+  }
+  const authSession = await readAuthSession(request, env);
+  if (!authSession) {
+    return jsonResponse({ error: "Sign in to use account memory." }, 401);
+  }
+
+  const memory = await readMemoryContext(
+    accountMemoryStub(env, authSession.accountKey),
+  );
+  const token = await createAccountContextToken(
+    boundedAccountContext(memory),
+    env,
+  );
+  return jsonResponse(
+    {
+      token,
+      expiresInSeconds: ACCOUNT_CONTEXT_TOKEN_SECONDS,
+    },
+    200,
+    { "X-Stabilize-Memory-Source": "durable-object" },
+  );
+}
+
 async function checkoutResponse(request, env) {
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405);
   if (!sameOriginOrNonBrowser(request)) return jsonResponse({ error: "Cross-origin request rejected." }, 403);
@@ -669,6 +812,17 @@ async function paidChatResponse(request, env, ctx) {
   const memoryStub = body?.privateChat === true
     ? null
     : accountMemoryStub(env, authSession.accountKey);
+  const memoryStartedAt = Date.now();
+  const prefetchedMemoryPromise = body?.privateChat === true
+    ? Promise.resolve(null)
+    : readAccountContextToken(
+        String(body?.accountContextToken || ""),
+        env,
+      )
+        .then((context) =>
+          preparedMemoryFromAccountContext(context, body?.messages),
+        )
+        .catch(() => null);
   const billingStartedAt = Date.now();
   const billingPreparation = stub
     .prepareChat(chatPreparationOptions(env, body))
@@ -676,17 +830,34 @@ async function paidChatResponse(request, env, ctx) {
       value,
       durationMs: Date.now() - billingStartedAt,
     }));
-  const memoryStartedAt = Date.now();
-  const memoryPreparation = readMemoryContext(memoryStub).then((value) => ({
-    value,
-    durationMs: Date.now() - memoryStartedAt,
-  }));
+  const memoryPreparation = body?.privateChat === true
+    ? Promise.resolve({
+        value: emptyMemoryContext(),
+        durationMs: 0,
+        source: "private",
+      })
+    : prefetchedMemoryPromise.then(async (prefetchedMemory) => {
+        if (prefetchedMemory) {
+          return {
+            value: prefetchedMemory,
+            durationMs: Date.now() - memoryStartedAt,
+            source: "prefetched",
+          };
+        }
+        const value = await readMemoryContext(memoryStub);
+        return {
+          value,
+          durationMs: Date.now() - memoryStartedAt,
+          source: "durable-object",
+        };
+      });
   const [billingResult, memoryResult] = await Promise.all([
     billingPreparation,
     memoryPreparation,
   ]);
   const preparation = billingResult.value;
   const memory = memoryResult.value;
+  const memorySource = memoryResult.source || "durable-object";
   const preparationMs = Date.now() - requestStartedAt;
   console.info(
     JSON.stringify({
@@ -694,6 +865,7 @@ async function paidChatResponse(request, env, ctx) {
       authMs,
       billingMs: billingResult.durationMs,
       memoryMs: memoryResult.durationMs,
+      memorySource,
       preparationMs,
       model: String(preparation?.model || "").slice(0, 128),
       paid: preparation?.paid === true,
@@ -731,6 +903,7 @@ async function paidChatResponse(request, env, ctx) {
     authMs,
     billingMs: billingResult.durationMs,
     memoryMs: memoryResult.durationMs,
+    memorySource,
     preparationMs,
     model: preparation.model,
   });
@@ -756,7 +929,14 @@ async function paidChatResponse(request, env, ctx) {
 
 function responseWithPreparationTiming(
   response,
-  { authMs, billingMs, memoryMs, preparationMs, model },
+  {
+    authMs,
+    billingMs,
+    memoryMs,
+    memorySource,
+    preparationMs,
+    model,
+  },
 ) {
   const headers = new Headers(response.headers);
   const timing = [
@@ -772,6 +952,10 @@ function responseWithPreparationTiming(
     String(Math.max(0, Number(preparationMs) || 0)),
   );
   headers.set("X-Stabilize-Model-Selected", String(model || ""));
+  headers.set(
+    "X-Stabilize-Memory-Source",
+    String(memorySource || "durable-object"),
+  );
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -830,6 +1014,9 @@ const worker = {
       }
       if (url.pathname === "/api/stripe/webhook") {
         return await webhookResponse(request, env);
+      }
+      if (url.pathname === "/api/account/context") {
+        return await accountContextResponse(request, env);
       }
       if (url.pathname === "/api/chat") {
         return await paidChatResponse(request, env, ctx);

@@ -8,6 +8,7 @@ export const LEGACY_SESSION_COOKIE_NAME = "stabilize_session";
 const OAUTH_COOKIE_NAME = "stabilize_oauth";
 const AUTH_SESSION_SECONDS = 30 * 24 * 60 * 60;
 const OAUTH_STATE_SECONDS = 10 * 60;
+const ACCOUNT_CONTEXT_TOKEN_SECONDS = 15 * 60;
 const AUTH_SECRET_MIN_CHARS = 32;
 const ACCOUNT_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const GOOGLE_SUB_PATTERN = /^[A-Za-z0-9_-]{1,255}$/;
@@ -15,6 +16,8 @@ const GOOGLE_CLIENT_ID_PATTERN =
   /^[A-Za-z0-9_-]{6,240}\.apps\.googleusercontent\.com$/;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+let cachedHmacSecret = null;
+let cachedHmacKeyPromise = null;
 
 export class GoogleAuthConfigurationError extends Error {
   constructor() {
@@ -79,13 +82,30 @@ function randomValue(byteLength = 32) {
 }
 
 async function hmacKey(secret) {
-  return crypto.subtle.importKey(
+  const normalized = String(secret || "");
+  if (cachedHmacSecret === normalized && cachedHmacKeyPromise) {
+    return cachedHmacKeyPromise;
+  }
+
+  const keyPromise = crypto.subtle.importKey(
     "raw",
-    encoder.encode(secret),
+    encoder.encode(normalized),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign", "verify"],
   );
+  cachedHmacSecret = normalized;
+  cachedHmacKeyPromise = keyPromise;
+
+  try {
+    return await keyPromise;
+  } catch (error) {
+    if (cachedHmacKeyPromise === keyPromise) {
+      cachedHmacSecret = null;
+      cachedHmacKeyPromise = null;
+    }
+    throw error;
+  }
 }
 
 async function hmac(secret, purpose, value) {
@@ -105,9 +125,14 @@ async function signToken(payload, secret, purpose) {
   return `${encodedPayload}.${base64UrlEncode(signature)}`;
 }
 
-async function verifyToken(token, secret, purpose) {
+async function verifyToken(
+  token,
+  secret,
+  purpose,
+  maxLength = 4_096,
+) {
   const text = String(token || "");
-  if (!text || text.length > 4_096) return null;
+  if (!text || text.length > maxLength) return null;
 
   const parts = text.split(".");
   if (parts.length !== 2) return null;
@@ -280,6 +305,54 @@ export async function readAuthSession(request, env, nowMs = Date.now()) {
   }
 
   return { accountKey: payload.a };
+}
+
+export async function createAccountContextToken(
+  context,
+  env,
+  nowMs = Date.now(),
+) {
+  const { authSecret } = googleConfig(env);
+  const issuedAt = Math.floor(nowMs / 1_000);
+  return signToken(
+    {
+      v: 1,
+      iat: issuedAt,
+      exp: issuedAt + ACCOUNT_CONTEXT_TOKEN_SECONDS,
+      c: context,
+    },
+    authSecret,
+    "account-context",
+  );
+}
+
+export async function readAccountContextToken(
+  token,
+  env,
+  nowMs = Date.now(),
+) {
+  if (!token) return null;
+  const { authSecret } = googleConfig(env);
+  const payload = await verifyToken(
+    token,
+    authSecret,
+    "account-context",
+    16_384,
+  );
+  const now = Math.floor(nowMs / 1_000);
+  if (
+    payload?.v !== 1 ||
+    !Number.isSafeInteger(payload.iat) ||
+    !Number.isSafeInteger(payload.exp) ||
+    payload.iat > now + 60 ||
+    payload.exp <= now ||
+    payload.exp - payload.iat !== ACCOUNT_CONTEXT_TOKEN_SECONDS ||
+    !payload.c ||
+    typeof payload.c !== "object"
+  ) {
+    return null;
+  }
+  return payload.c;
 }
 
 export async function beginGoogleSignIn(request, env) {

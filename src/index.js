@@ -1344,6 +1344,9 @@ export async function handlePreparedChat(
   }
 
   const stub = privateChat ? null : accountMemoryStub(env, accountKey);
+  const memory = privateChat
+    ? emptyMemoryContext()
+    : preparedMemory || (await readMemoryContext(stub));
   const clientAwaiting = body?.awaitingSafetyAnswer === true;
   let route = classifyInput(latestText, {
     awaitingSafetyAnswer: clientAwaiting,
@@ -1351,14 +1354,15 @@ export async function handlePreparedChat(
   let fixed = fixedReplyForRoute(route);
 
   if (fixed) {
-    const task = recordFixedRoute(stub, route, fixed);
+    const task = recordFixedRoute(
+      stub,
+      route,
+      fixed,
+      memory.generation,
+    );
     if (!schedule(ctx, task)) await task;
     return jsonResponse({ route, ...fixed });
   }
-
-  const memory = privateChat
-    ? emptyMemoryContext()
-    : preparedMemory || (await readMemoryContext(stub));
 
   route = classifyInput(latestText, {
     awaitingSafetyAnswer: clientAwaiting || memory.awaitingSafetyAnswer,
@@ -1366,7 +1370,12 @@ export async function handlePreparedChat(
   fixed = fixedReplyForRoute(route);
 
   if (fixed) {
-    const task = recordFixedRoute(stub, route, fixed);
+    const task = recordFixedRoute(
+      stub,
+      route,
+      fixed,
+      memory.generation,
+    );
     if (!schedule(ctx, task)) await task;
     return jsonResponse({ route, ...fixed });
   }
@@ -1380,7 +1389,15 @@ export async function handlePreparedChat(
     .toLowerCase()
     .includes("application/x-ndjson");
   if (acceptsStreaming) {
-    return streamChatReply(messages, route, env, latestText, stub, ctx);
+    return streamChatReply(
+      messages,
+      route,
+      env,
+      latestText,
+      stub,
+      memory.generation,
+      ctx,
+    );
   }
 
   const reply = await generateReply(messages, route, env, latestText);
@@ -1388,6 +1405,7 @@ export async function handlePreparedChat(
     user: latestText,
     assistant: reply,
     awaitingSafetyAnswer: false,
+    expectedGeneration: memory.generation,
   });
 
   if (result?.shouldCompact && stub && ctx) {
