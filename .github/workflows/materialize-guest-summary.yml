@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/guest-summary-5k
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
