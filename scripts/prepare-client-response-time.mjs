@@ -10,6 +10,21 @@ if (alignedShareTest !== shareTest) {
   await writeFile(shareTestPath, alignedShareTest);
 }
 
+const impactWorkerTestPath = "test/impact-worker.test.mjs";
+const impactWorkerTest = await readFile(impactWorkerTestPath, "utf8");
+const alignedImpactWorkerTest = impactWorkerTest
+  .replace(
+    "/Outcomes, latency, provider usage, reliability, and cost\\./",
+    "/Outcomes, actual browser latency, provider usage, reliability, and cost\\./",
+  )
+  .replace(
+    "/random browser, tab, and conversation identifiers/",
+    "/random browser, tab, and conversation\\s+identifiers/",
+  );
+if (alignedImpactWorkerTest !== impactWorkerTest) {
+  await writeFile(impactWorkerTestPath, alignedImpactWorkerTest);
+}
+
 const path = "src/impact-dashboard.js";
 const source = await readFile(path, "utf8");
 
