@@ -1,0 +1,17 @@
+True-HD portrait mobile background source
+
+Source page:
+https://www.pexels.com/video/a-narrow-trail-beside-a-flowing-stream-4333152/
+
+Original file used for the derivative:
+https://videos.pexels.com/video-files/4333149/4333149-uhd_3840_2160_30fps.mp4
+
+Creator credited by Pexels: Kelly
+Original resolution: 3840 x 2160
+
+The included 1440 x 2560 MP4 and WebP poster are cropped and encoded derivatives used by Stabilize. Pexels states that its photos and videos may be used free of charge, may be modified, and do not require attribution, subject to the Pexels license and prohibited-use terms in force when downloaded.
+
+License reference:
+https://www.pexels.com/license/
+
+Retrieved: 2026-08-09
