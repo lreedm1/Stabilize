@@ -9,6 +9,14 @@ on:
       - scripts/finalize-decision-grade-impact.mjs
       - .github/workflows/verify-mobile-video.yml
       - .github/workflows/materialize-selected-mobile-4k-video-v22.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - scripts/use-selected-mobile-4k-video-v22.mjs
+      - scripts/finalize-decision-grade-impact.mjs
+      - .github/workflows/verify-mobile-video.yml
+      - .github/workflows/materialize-selected-mobile-4k-video-v22.yml
   workflow_dispatch:
 
 permissions:
