@@ -72,6 +72,32 @@ jobs:
             "$work/mobile-forest-stream-video-v14-retina-2160.mp4" \
             "$work/mobile-forest-stream-v14-retina-2160.webp"
 
+          # The canonical generator rebuilds this regression test on every test
+          # run. Align its embedded cache-tag expectation before materializing it.
+          python - <<'PY'
+          from pathlib import Path
+
+          generator_path = Path("scripts/use-mobile-forest-stream.mjs")
+          generator = generator_path.read_text()
+          start_marker = "const mobileQualityTest = String.raw`"
+          end_marker = 'await update("test/mobile-quality.test.mjs"'
+          start = generator.find(start_marker)
+          end = generator.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit("Could not find the generated mobile quality test")
+
+          old = "20260808-mobile-forest-stream-540-1"
+          new = "20260809-mobile-video-v14-retina-autoplay-1"
+          before = generator[:start]
+          test_template = generator[start:end]
+          after = generator[end:]
+          if old in test_template:
+              test_template = test_template.replace(old, new, 1)
+          elif new not in test_template:
+              raise SystemExit("Could not align the mobile style regression tag")
+          generator_path.write_text(before + test_template + after)
+          PY
+
           # Materialize canonical generated expectations after the release
           # script updates the persistent style version and exact asset checks.
           npm run apply:prompt-policy
