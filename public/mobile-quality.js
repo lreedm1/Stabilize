@@ -1,11 +1,7 @@
 const MOBILE_BACKGROUND_QUERY =
   "(max-width: 980px) and (orientation: portrait)";
-const VIDEO_PARTS = Array.from(
-  { length: 5 },
-  (_, index) =>
-    `/scenes/mobile-forest-stream-loop-v1.part${String(index).padStart(2, "0")}.b64`,
-);
-const EXPECTED_VIDEO_BYTES = 43_100;
+const VIDEO_ASSET =
+  "/scenes/mobile-forest-stream-video-v4-1080.mp4";
 const POSTER_ASSET = "/scenes/mobile-forest-stream-v1-540.webp";
 
 const mobilePortrait = globalThis.matchMedia?.(MOBILE_BACKGROUND_QUERY);
@@ -14,8 +10,7 @@ const terrain = document.querySelector("#terrain-background");
 const pageShell = document.querySelector(".page-shell");
 
 let backgroundVideo = null;
-let videoObjectUrl = "";
-let videoLoadPromise = null;
+let gestureListenersInstalled = false;
 
 function markPosterReady() {
   terrain?.classList.add("is-photo-ready");
@@ -40,12 +35,16 @@ if (backdropImage instanceof HTMLImageElement) {
 }
 
 function removeGestureListeners() {
+  if (!gestureListenersInstalled) return;
+  gestureListenersInstalled = false;
   window.removeEventListener("pointerdown", resumeAfterGesture, true);
   window.removeEventListener("touchstart", resumeAfterGesture, true);
   window.removeEventListener("keydown", resumeAfterGesture, true);
 }
 
 function addGestureListeners() {
+  if (gestureListenersInstalled) return;
+  gestureListenersInstalled = true;
   window.addEventListener("pointerdown", resumeAfterGesture, {
     capture: true,
     passive: true,
@@ -80,53 +79,16 @@ function markVideoPlaying() {
   removeGestureListeners();
 }
 
-function decodeVideoParts(encodedParts) {
-  const encoded = encodedParts.join("").replace(/\s+/g, "");
-  const binary = atob(encoded);
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
+function ensureBackgroundVideo() {
+  if (backgroundVideo instanceof HTMLVideoElement) {
+    return backgroundVideo;
   }
 
-  if (bytes.byteLength !== EXPECTED_VIDEO_BYTES) {
-    throw new Error(
-      `Unexpected mobile background video size: ${bytes.byteLength}`,
-    );
+  const existing = document.querySelector("#mobile-background-video");
+  if (existing instanceof HTMLVideoElement) {
+    backgroundVideo = existing;
+    return backgroundVideo;
   }
-
-  const fileType = String.fromCharCode(...bytes.subarray(4, 8));
-  if (fileType !== "ftyp") {
-    throw new Error("Mobile background payload is not an MP4 file");
-  }
-
-  return bytes;
-}
-
-async function fetchVideoParts() {
-  const responses = await Promise.all(
-    VIDEO_PARTS.map((url) =>
-      fetch(url, {
-        cache: "force-cache",
-        credentials: "same-origin",
-      }),
-    ),
-  );
-
-  for (const response of responses) {
-    if (!response.ok) {
-      throw new Error(
-        `Mobile background payload request failed with ${response.status}`,
-      );
-    }
-  }
-
-  return Promise.all(responses.map((response) => response.text()));
-}
-
-function buildBackgroundVideo(bytes) {
-  const blob = new Blob([bytes], { type: "video/mp4" });
-  videoObjectUrl = URL.createObjectURL(blob);
 
   const video = document.createElement("video");
   video.id = "mobile-background-video";
@@ -144,6 +106,7 @@ function buildBackgroundVideo(bytes) {
   video.setAttribute("loop", "");
   video.setAttribute("playsinline", "");
   video.setAttribute("webkit-playsinline", "");
+  video.setAttribute("preload", "auto");
   video.setAttribute("aria-hidden", "true");
   video.setAttribute("tabindex", "-1");
   video.setAttribute("x-webkit-airplay", "deny");
@@ -166,8 +129,16 @@ function buildBackgroundVideo(bytes) {
   });
 
   video.addEventListener("playing", markVideoPlaying);
-  video.addEventListener("error", () => showPoster("video-failed"));
-  video.src = videoObjectUrl;
+  video.addEventListener("timeupdate", () => {
+    if (video.currentTime > 0 && !video.paused) markVideoPlaying();
+  });
+  video.addEventListener("error", () => {
+    showPoster("video-failed");
+    addGestureListeners();
+  });
+
+  video.src = VIDEO_ASSET;
+  backgroundVideo = video;
 
   if (pageShell instanceof HTMLElement) {
     pageShell.before(video);
@@ -179,46 +150,35 @@ function buildBackgroundVideo(bytes) {
   return video;
 }
 
-async function ensureBackgroundVideo() {
-  if (backgroundVideo instanceof HTMLVideoElement) {
-    return backgroundVideo;
-  }
-
-  if (!videoLoadPromise) {
-    document.documentElement.dataset.mobileBackground = "video-loading";
-    videoLoadPromise = fetchVideoParts()
-      .then(decodeVideoParts)
-      .then((bytes) => {
-        backgroundVideo = buildBackgroundVideo(bytes);
-        return backgroundVideo;
-      })
-      .catch((error) => {
-        videoLoadPromise = null;
-        showPoster("video-failed");
-        console.warn("Mobile background video could not load.", error);
-        throw error;
-      });
-  }
-
-  return videoLoadPromise;
-}
-
-async function startVideo() {
+function startVideo() {
   if (!mobilePortrait?.matches || document.hidden) return;
 
+  const video = ensureBackgroundVideo();
+  video.muted = true;
+  video.defaultMuted = true;
+  video.playsInline = true;
+  document.documentElement.dataset.mobileBackground = "video-loading";
+
+  let playback;
   try {
-    const video = await ensureBackgroundVideo();
-    video.muted = true;
-    video.defaultMuted = true;
-    video.playsInline = true;
-    const playback = video.play();
-    if (playback && typeof playback.then === "function") {
-      await playback;
-    }
-    if (!video.paused) markVideoPlaying();
+    playback = video.play();
   } catch {
     showPoster("video-awaiting-gesture");
     addGestureListeners();
+    return;
+  }
+
+  if (playback && typeof playback.then === "function") {
+    playback
+      .then(() => {
+        if (!video.paused) markVideoPlaying();
+      })
+      .catch(() => {
+        showPoster("video-awaiting-gesture");
+        addGestureListeners();
+      });
+  } else if (!video.paused) {
+    markVideoPlaying();
   }
 }
 
@@ -230,13 +190,38 @@ function stopVideo() {
 }
 
 function resumeAfterGesture() {
-  void startVideo();
+  if (!mobilePortrait?.matches || document.hidden) return;
+
+  const video = ensureBackgroundVideo();
+  video.muted = true;
+  video.defaultMuted = true;
+  video.playsInline = true;
+
+  let playback;
+  try {
+    playback = video.play();
+  } catch {
+    showPoster("video-awaiting-gesture");
+    return;
+  }
+
+  if (playback && typeof playback.then === "function") {
+    playback
+      .then(() => {
+        if (!video.paused) markVideoPlaying();
+      })
+      .catch(() => showPoster("video-awaiting-gesture"));
+  } else if (!video.paused) {
+    markVideoPlaying();
+  }
 }
 
 mobilePortrait?.addEventListener?.("change", (event) => {
   if (event.matches) {
-    void startVideo();
+    addGestureListeners();
+    startVideo();
   } else {
+    removeGestureListeners();
     stopVideo();
   }
 });
@@ -245,19 +230,14 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     backgroundVideo?.pause();
   } else {
-    void startVideo();
+    startVideo();
   }
 });
 
-window.addEventListener("pageshow", () => void startVideo());
-window.addEventListener("pagehide", (event) => {
-  backgroundVideo?.pause();
-  if (!event.persisted && videoObjectUrl) {
-    URL.revokeObjectURL(videoObjectUrl);
-  }
-});
+window.addEventListener("pageshow", startVideo);
+window.addEventListener("pagehide", () => backgroundVideo?.pause());
 
 if (mobilePortrait?.matches) {
   addGestureListeners();
-  void startVideo();
+  startVideo();
 }
