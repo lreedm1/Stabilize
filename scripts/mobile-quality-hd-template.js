@@ -1,8 +1,7 @@
 const MOBILE_BACKGROUND_QUERY =
   "(max-width: 980px) and (orientation: portrait)";
 const VIDEO_ASSET = "/media/mobile-forest-stream-video-v4-1080.mp4";
-const SMOOTH_VIDEO_ASSET =
-  "/scenes/mobile-forest-stream-video-v12-720.mp4";
+const SMOOTH_VIDEO_ASSET = "/scenes/mobile-forest-stream-video-v12-720.mp4";
 const RETINA_VIDEO_ASSET =
   "/scenes/mobile-forest-stream-video-v14-retina-2160.mp4";
 const RETINA_POSTER_ASSET =
