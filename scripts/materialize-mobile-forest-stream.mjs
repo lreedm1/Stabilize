@@ -351,3 +351,37 @@ console.log(
   `Validated ${noTapMotionPath}: 1440x2560, ${noTapMotion.byteLength} bytes, sha256=${noTapMotionSha256}`,
 );
 // no-tap-mobile-motion-v17-hq-validation-end
+
+// mobile-water-sprite-v18-validation-start
+const waterSpritePath = "public/scenes/mobile-forest-stream-water-sprite-v18-540.webp";
+const waterSpriteExpectedBytes = 3_269_272;
+const waterSpriteExpectedSha256 = "3b7012fa79d46a65da6b124ca66742f3e6e6f0fce7cafda8f6ec9bea0504e509";
+const waterSprite = await readFile(waterSpritePath);
+if (waterSprite.byteLength !== waterSpriteExpectedBytes) {
+  throw new Error(
+    `Unexpected mobile water sprite size: ${waterSprite.byteLength}; expected ${waterSpriteExpectedBytes}`,
+  );
+}
+const waterSpriteSha256 = createHash("sha256")
+  .update(waterSprite)
+  .digest("hex");
+if (waterSpriteSha256 !== waterSpriteExpectedSha256) {
+  throw new Error(`Mobile water sprite checksum mismatch: ${waterSpriteSha256}`);
+}
+const waterSpriteInfo = webpInfo(waterSprite);
+if (
+  waterSpriteInfo.width !== 3240 ||
+  waterSpriteInfo.height !== 4800 ||
+  waterSpriteInfo.animated
+) {
+  throw new Error(
+    `Unexpected mobile water sprite: ${waterSpriteInfo.width}x${waterSpriteInfo.height}, animated=${waterSpriteInfo.animated}`,
+  );
+}
+if (!waterSprite.includes(Buffer.from("ALPH", "ascii"))) {
+  throw new Error("Mobile water sprite is missing its alpha channel");
+}
+console.log(
+  `Validated ${waterSpritePath}: 3240x4800, ${waterSprite.byteLength} bytes, sha256=${waterSpriteSha256}`,
+);
+// mobile-water-sprite-v18-validation-end

@@ -76,3 +76,15 @@
   Cross-Origin-Resource-Policy: same-origin
   X-Content-Type-Options: nosniff
 # no-tap-mobile-motion-v17-hq-end
+
+# mobile-motion-canvas-v18-start
+/mobile-motion-canvas.js
+  Content-Type: text/javascript; charset=utf-8
+  Cache-Control: no-store, max-age=0
+
+/scenes/mobile-forest-stream-water-sprite-v18-540.webp
+  Content-Type: image/webp
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+# mobile-motion-canvas-v18-end

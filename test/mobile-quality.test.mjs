@@ -53,42 +53,50 @@ function webpInfo(buffer) {
   return { width, height, chunks };
 }
 
-test("portrait mobile moves without a media gesture", async () => {
-  const tier = {
-    filename: "mobile-forest-stream-motion-v17-hq-1440.webp",
-    width: 1440,
-    height: 2560,
-  };
-  const [pageSource, mobileStyles, image] = await Promise.all([
-    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/mobile-woodland-loop.css", import.meta.url), "utf8"),
-    readFile(new URL("../public/scenes/" + tier.filename, import.meta.url)),
-  ]);
-  const imageInfo = webpInfo(image);
+test("portrait mobile draws water through a canvas without media autoplay", async () => {
+  const [pageSource, mobileStyles, clientSource, poster, sprite] =
+    await Promise.all([
+      readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+      readFile(new URL("../public/mobile-woodland-loop.css", import.meta.url), "utf8"),
+      readFile(new URL("../public/mobile-motion-canvas.js", import.meta.url), "utf8"),
+      readFile(new URL("../public/scenes/mobile-forest-stream-v14-retina-2160.webp", import.meta.url)),
+      readFile(new URL("../public/scenes/mobile-forest-stream-water-sprite-v18-540.webp", import.meta.url)),
+    ]);
+
+  const posterInfo = webpInfo(poster);
+  const spriteInfo = webpInfo(sprite);
   assert.deepEqual(
-    { width: imageInfo.width, height: imageInfo.height },
-    { width: tier.width, height: tier.height },
+    { width: posterInfo.width, height: posterInfo.height },
+    { width: 2160, height: 3840 },
   );
-  assert.equal(image.byteLength, 15000242);
-  assert.equal(imageInfo.chunks.includes("ANIM"), true);
-  assert.equal(imageInfo.chunks.includes("ANMF"), true);
+  assert.equal(posterInfo.chunks.includes("ANIM"), false);
+  assert.deepEqual(
+    { width: spriteInfo.width, height: spriteInfo.height },
+    { width: 3240, height: 4800 },
+  );
+  assert.equal(spriteInfo.chunks.includes("ALPH"), true);
+  assert.equal(spriteInfo.chunks.includes("ANIM"), false);
+  assert.ok(sprite.byteLength > 1_000_000);
+  assert.ok(sprite.byteLength < 10_000_000);
+
   assert.equal(
-    [...pageSource.matchAll(new RegExp(tier.filename + " " + tier.width + "w", "g"))].length,
+    [...pageSource.matchAll(/mobile-forest-stream-v14-retina-2160\.webp 2160w/g)].length,
     2,
   );
-  assert.match(pageSource, /<source[\s\S]*sizes="100vw"[\s\S]*srcset=/);
-  assert.match(pageSource, /<link[\s\S]*rel="preload"[\s\S]*imagesrcset=/);
-  assert.match(pageSource, /imagesizes="100vw"/);
-  assert.ok(pageSource.includes('href="/scenes/mobile-forest-stream-motion-v17-hq-1440.webp"'));
+  assert.ok(pageSource.includes('href="/scenes/mobile-forest-stream-water-sprite-v18-540.webp"'));
+  assert.match(pageSource, /id="mobile-motion-canvas"/);
+  assert.match(pageSource, /mobile-motion-canvas\.js\?v=20260809-mobile-motion-canvas-v18-1/);
   assert.doesNotMatch(pageSource, /id="mobile-background-video"/);
   assert.doesNotMatch(pageSource, /mobile-quality\.js/);
-  assert.match(
-    pageSource,
-    /mobile-woodland-loop\.css\?v=20260809-mobile-motion-v17-hq-no-tap-1/,
-  );
-  assert.match(mobileStyles, /no-tap-mobile-motion-v16-start/);
-  assert.match(mobileStyles, /object-fit:\s*cover/);
-  assert.match(mobileStyles, /mobile-background-video[\s\S]*display:\s*none/);
+  assert.match(mobileStyles, /mobile-motion-canvas-v18-start/);
+  assert.match(mobileStyles, /\.mobile-motion-canvas\.is-ready/);
+
+  assert.match(clientSource, /const FRAME_RATE = 6/);
+  assert.match(clientSource, /context = canvas\.getContext\("2d"/);
+  assert.match(clientSource, /ctx\.drawImage\(/);
+  assert.match(clientSource, /setTimeout\(step/);
+  assert.doesNotMatch(clientSource, /\.play\(/);
+  assert.doesNotMatch(clientSource, /HTMLVideoElement/);
 });
 
 test("restored tabs recover from interrupted blank thinking views", async () => {
