@@ -1,0 +1,108 @@
+name: Build native Retina mobile water v20
+
+on:
+  push:
+    branches:
+      - agent/mobile-retina-water-v20
+    paths:
+      - scripts/generate-mobile-retina-water-v20.py
+      - scripts/apply-mobile-retina-water-v20.mjs
+      - .github/workflows/build-mobile-retina-water-v20.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out the Retina water branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/mobile-retina-water-v20
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install media and image tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg webp
+          python -m pip install --disable-pip-version-check pillow
+          npm ci --ignore-scripts
+
+      - name: Make Retina water the final canonical pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/finalize-decision-grade-impact.mjs")
+          source = path.read_text()
+          import_line = 'await import("./apply-mobile-retina-water-v20.mjs");\n'
+          if import_line not in source:
+              boundary = source.rfind("console.log(")
+              if boundary < 0:
+                  raise SystemExit("Could not locate the finalizer log boundary")
+              source = source[:boundary] + import_line + "\n" + source[boundary:]
+          path.write_text(source)
+          PY
+
+      - name: Generate native 2160-source strips
+        shell: bash
+        run: python scripts/generate-mobile-retina-water-v20.py
+
+      - name: Materialize the final canonical release
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/apply-mobile-retina-water-v20.mjs
+          npm run apply:prompt-policy
+
+      - name: Commit canonical generated output
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Native Retina output is already committed."
+          else
+            git commit -m 'Render mobile water from native Retina strips'
+          fi
+
+      - name: Run complete regression and Worker build gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+      - name: Publish the verified Retina branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:agent/mobile-retina-water-v20
+
+      - name: Upload Retina strip evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-retina-water-v20-evidence
+          path: public/scenes/mobile-forest-stream-water-strip-v20-retina-*.webp
+          if-no-files-found: warn
+          retention-days: 7
