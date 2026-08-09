@@ -7,6 +7,12 @@ on:
     paths:
       - scripts/apply-mobile-autoplay-v15.py
       - .github/workflows/apply-mobile-autoplay-v15.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - scripts/apply-mobile-autoplay-v15.py
+      - .github/workflows/apply-mobile-autoplay-v15.yml
   workflow_dispatch:
 
 permissions:
@@ -20,6 +26,7 @@ jobs:
       - name: Check out release branch
         uses: actions/checkout@v6
         with:
+          ref: agent/mobile-video-no-gesture-retina-fallback
           fetch-depth: 1
           persist-credentials: true
 
