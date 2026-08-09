@@ -1,0 +1,234 @@
+name: Verify native Retina mobile water v20
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - public/mobile-motion-canvas.js
+      - public/scenes/mobile-forest-stream-water-strip-v20-retina-*.webp
+      - src/page.js
+      - .github/workflows/verify-mobile-retina-water-v20.yml
+  workflow_dispatch:
+
+concurrency:
+  group: verify-mobile-retina-water-v20-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  verify-production-retina:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Playwright WebKit
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps webkit
+
+      - name: Verify exact Retina assets and visible 3x motion
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          publish_status() {
+            local state="$1"
+            local description="$2"
+            local payload
+            payload="$(printf '{"state":"%s","context":"verification/mobile-retina-water-v20","description":"%s","target_url":"%s/%s/actions/runs/%s"}' \
+              "$state" \
+              "$description" \
+              "$GITHUB_SERVER_URL" \
+              "$GITHUB_REPOSITORY" \
+              "$GITHUB_RUN_ID")"
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --data "$payload" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+          }
+
+          publish_status pending "Waiting for native Retina mobile water"
+          trap 'publish_status failure "Native Retina mobile water verification failed" || true' ERR
+
+          first_strip="/scenes/mobile-forest-stream-water-strip-v20-retina-01.webp"
+          expected_strip_file="public${first_strip}"
+          expected_strip_bytes="$(wc -c < "$expected_strip_file" | tr -d '[:space:]')"
+          expected_strip_sha="$(sha256sum "$expected_strip_file" | awk '{print $1}')"
+          expected_client_path="$(
+            grep -oE '/mobile-motion-canvas\.js\?v=[A-Za-z0-9._-]+' src/page.js \
+              | tail -n 1
+          )"
+
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          live=false
+          for attempt in {1..36}; do
+            key="${RELEASE_SHA}-${attempt}"
+            html_status="$(curl --silent --show-error --compressed --max-time 25 \
+              --header 'Cache-Control: no-cache' \
+              --output "$tmpdir/live.html" --write-out '%{http_code}' \
+              "https://stabilize.info/?retina-water-release=${key}" || true)"
+            client_status="$(curl --silent --show-error --compressed --max-time 25 \
+              --header 'Cache-Control: no-cache' \
+              --output "$tmpdir/client.js" --write-out '%{http_code}' \
+              "https://stabilize.info${expected_client_path}&release=${key}" || true)"
+            strip_status="$(curl --silent --show-error --max-time 30 \
+              --header 'Cache-Control: no-cache' \
+              --output "$tmpdir/strip.webp" --write-out '%{http_code}' \
+              "https://stabilize.info${first_strip}?release=${key}" || true)"
+            live_strip_bytes="$(wc -c < "$tmpdir/strip.webp" | tr -d '[:space:]')"
+            live_strip_sha="$(sha256sum "$tmpdir/strip.webp" | awk '{print $1}')"
+
+            echo "Retina release attempt ${attempt}: html=${html_status:-000} client=${client_status:-000} strip=${strip_status:-000} bytes=${live_strip_bytes:-0}/${expected_strip_bytes}."
+            if [[ "$html_status" == 200 \
+              && "$client_status" == 200 \
+              && "$strip_status" == 200 \
+              && "$live_strip_bytes" == "$expected_strip_bytes" \
+              && "$live_strip_sha" == "$expected_strip_sha" ]] \
+              && grep -Fq "$expected_client_path" "$tmpdir/live.html" \
+              && grep -Fq "$first_strip" "$tmpdir/live.html" \
+              && grep -Fq 'const RETINA_COMPOSITION_WIDTH = 2160;' "$tmpdir/client.js" \
+              && grep -Fq 'const RETINA_COMPOSITION_HEIGHT = 3840;' "$tmpdir/client.js" \
+              && grep -Fq 'const RETINA_FRAME_WIDTH = 800;' "$tmpdir/client.js" \
+              && grep -Fq 'const RETINA_FRAME_HEIGHT = 2400;' "$tmpdir/client.js" \
+              && grep -Fq '"retina-2160"' "$tmpdir/client.js"; then
+              live=true
+              break
+            fi
+            sleep 10
+          done
+          [[ "$live" == true ]]
+
+          node --input-type=module <<'NODE'
+          import { webkit } from "playwright";
+
+          const browser = await webkit.launch({ headless: true });
+          try {
+            const context = await browser.newContext({
+              viewport: { width: 390, height: 844 },
+              screen: { width: 390, height: 844 },
+              deviceScaleFactor: 3,
+              isMobile: true,
+              hasTouch: true,
+              userAgent:
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) " +
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 " +
+                "Mobile/15E148 Safari/604.1",
+            });
+            const page = await context.newPage();
+            page.on("console", (message) =>
+              console.log(`browser:${message.type()}: ${message.text()}`),
+            );
+            page.on("pageerror", (error) =>
+              console.error(`browser-pageerror: ${error.message}`),
+            );
+
+            await page.goto(
+              `https://stabilize.info/?retina-webkit-release=${process.env.RELEASE_SHA}`,
+              { waitUntil: "domcontentloaded", timeout: 60_000 },
+            );
+            await page.waitForFunction(
+              () =>
+                document.documentElement.dataset.mobileMotion === "canvas-playing" &&
+                document.documentElement.dataset.mobileMotionQuality === "retina-2160",
+              undefined,
+              { timeout: 60_000 },
+            );
+
+            const sample = () =>
+              page.evaluate(() => {
+                const canvas = document.querySelector("#mobile-motion-canvas");
+                if (!(canvas instanceof HTMLCanvasElement)) {
+                  throw new Error("The mobile motion canvas is missing.");
+                }
+                const context = canvas.getContext("2d");
+                if (!context) throw new Error("The canvas has no 2D context.");
+                const pixels = context.getImageData(
+                  0,
+                  0,
+                  canvas.width,
+                  canvas.height,
+                ).data;
+                let hash = 2166136261;
+                let nontransparent = 0;
+                for (let index = 0; index < pixels.length; index += 128) {
+                  hash ^= pixels[index];
+                  hash = Math.imul(hash, 16777619);
+                  hash ^= pixels[index + 1];
+                  hash = Math.imul(hash, 16777619);
+                  hash ^= pixels[index + 2];
+                  hash = Math.imul(hash, 16777619);
+                  hash ^= pixels[index + 3];
+                  hash = Math.imul(hash, 16777619);
+                  if (pixels[index + 3] > 0) nontransparent += 1;
+                }
+                const rect = canvas.getBoundingClientRect();
+                return {
+                  hash: hash >>> 0,
+                  nontransparent,
+                  backingWidth: canvas.width,
+                  backingHeight: canvas.height,
+                  cssWidth: rect.width,
+                  cssHeight: rect.height,
+                  horizontalScale: canvas.width / rect.width,
+                  verticalScale: canvas.height / rect.height,
+                  quality:
+                    document.documentElement.dataset.mobileMotionQuality,
+                  state: document.documentElement.dataset.mobileMotion,
+                  opacity: getComputedStyle(canvas).opacity,
+                  ready: canvas.classList.contains("is-ready"),
+                };
+              });
+
+            await page.waitForTimeout(350);
+            const first = await sample();
+            await page.waitForTimeout(850);
+            const second = await sample();
+            console.log(JSON.stringify({ first, second }, null, 2));
+
+            for (const result of [first, second]) {
+              if (result.quality !== "retina-2160") {
+                throw new Error(`Unexpected motion quality: ${result.quality}`);
+              }
+              if (result.state !== "canvas-playing") {
+                throw new Error(`Unexpected motion state: ${result.state}`);
+              }
+              if (!result.ready || result.opacity !== "1") {
+                throw new Error("The Retina canvas is not visibly ready.");
+              }
+              if (result.horizontalScale < 2.9 || result.verticalScale < 2.9) {
+                throw new Error(
+                  `Canvas backing scale is below 3x: ${result.horizontalScale}x${result.verticalScale}`,
+                );
+              }
+              if (result.nontransparent === 0) {
+                throw new Error("The Retina canvas did not paint water pixels.");
+              }
+            }
+            if (first.hash === second.hash) {
+              throw new Error("The Retina water frame did not change.");
+            }
+          } finally {
+            await browser.close();
+          }
+          NODE
+
+          trap - ERR
+          publish_status success "Native 2160-source water is live at 3x"
