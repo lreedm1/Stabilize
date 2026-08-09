@@ -1,0 +1,397 @@
+name: Evaluate true-resolution mobile background candidates v21
+
+on:
+  push:
+    branches:
+      - agent/mobile-resolution-diagnostic-v20
+    paths:
+      - .github/workflows/evaluate-mobile-background-candidates-v21.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/evaluate-mobile-background-candidates-v21.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate-candidates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: agent/mobile-resolution-diagnostic-v20
+          persist-credentials: false
+
+      - name: Install Chromium and media tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Discover media from rendered source pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/mobile-candidates-v21
+          cat > scripts/discover-mobile-background-candidates-v21.mjs <<'NODE'
+          import { chromium } from "playwright";
+          import { writeFile } from "node:fs/promises";
+
+          const output = "/tmp/mobile-candidates-v21";
+          const candidates = [
+            {
+              name: "pexels-trail-stream-close",
+              page: "https://www.pexels.com/video/a-narrow-trail-beside-a-flowing-stream-4333152/",
+            },
+            {
+              name: "pexels-trail-stream-wide",
+              page: "https://www.pexels.com/video/a-narrow-trail-beside-a-flowing-stream-4333156/",
+            },
+            {
+              name: "pexels-mossy-woodland",
+              page: "https://www.pexels.com/video/stream-flowing-in-mossy-woodland-6918262/",
+            },
+            {
+              name: "pexels-lush-stream",
+              page: "https://www.pexels.com/video/serene-forest-stream-with-lush-greenery-27612234/",
+            },
+            {
+              name: "pixabay-mountain-river",
+              page: "https://pixabay.com/videos/nature-river-mountain-forest-water-328650/",
+            },
+            {
+              name: "pixabay-forest-reflection",
+              page: "https://pixabay.com/videos/forest-stream-water-reflection-345609/",
+            },
+          ];
+
+          function normalize(value) {
+            if (typeof value !== "string") return "";
+            return value
+              .replaceAll("\\u002F", "/")
+              .replaceAll("\\u0026", "&")
+              .replaceAll("\\/", "/")
+              .replaceAll("&amp;", "&")
+              .trim();
+          }
+
+          function mediaLike(value) {
+            const url = normalize(value);
+            return (
+              /^https?:/i.test(url) &&
+              (/(?:\.mp4|\.m3u8)(?:[?#]|$)/i.test(url) ||
+                /videos\.pexels\.com|cdn\.pixabay\.com\/video/i.test(url))
+            );
+          }
+
+          const browser = await chromium.launch({ headless: true });
+          const records = [];
+          try {
+            for (const candidate of candidates) {
+              const context = await browser.newContext({
+                viewport: { width: 1280, height: 900 },
+                userAgent:
+                  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
+                  "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                  "Chrome/126.0.0.0 Safari/537.36",
+              });
+              const page = await context.newPage();
+              const network = new Set();
+              page.on("request", (request) => {
+                const url = normalize(request.url());
+                if (mediaLike(url)) network.add(url);
+              });
+
+              let status = 0;
+              let navigationError = null;
+              try {
+                const response = await page.goto(candidate.page, {
+                  waitUntil: "domcontentloaded",
+                  timeout: 60_000,
+                });
+                status = response?.status() || 0;
+                await page.waitForTimeout(10_000);
+              } catch (error) {
+                navigationError = String(error?.message || error);
+              }
+
+              let dom = { title: "", urls: [], videos: [], htmlLength: 0 };
+              try {
+                dom = await page.evaluate(() => {
+                  const urls = new Set();
+                  const add = (value) => {
+                    if (typeof value !== "string") return;
+                    const clean = value
+                      .replaceAll("\\u002F", "/")
+                      .replaceAll("\\u0026", "&")
+                      .replaceAll("\\/", "/")
+                      .replaceAll("&amp;", "&")
+                      .trim();
+                    if (/^https?:/i.test(clean)) urls.add(clean);
+                  };
+
+                  const videos = [];
+                  for (const video of document.querySelectorAll("video")) {
+                    videos.push({
+                      currentSrc: video.currentSrc,
+                      src: video.getAttribute("src") || "",
+                      poster: video.poster,
+                      width: video.videoWidth,
+                      height: video.videoHeight,
+                    });
+                    add(video.currentSrc);
+                    add(video.getAttribute("src"));
+                  }
+                  for (const element of document.querySelectorAll(
+                    "source, a, meta, [data-video-url], [data-src], [data-href]",
+                  )) {
+                    for (const attribute of [
+                      "src",
+                      "href",
+                      "content",
+                      "data-video-url",
+                      "data-src",
+                      "data-href",
+                    ]) {
+                      add(element.getAttribute(attribute));
+                    }
+                  }
+
+                  const html = document.documentElement.innerHTML
+                    .replaceAll("\\u002F", "/")
+                    .replaceAll("\\u0026", "&")
+                    .replaceAll("\\/", "/")
+                    .replaceAll("&amp;", "&");
+                  for (const match of html.matchAll(
+                    /https?:\/\/[^"'<>\\\s]+?(?:\.mp4|\.m3u8)(?:\?[^"'<>\\\s]*)?/gi,
+                  )) {
+                    add(match[0]);
+                  }
+                  return {
+                    title: document.title,
+                    urls: [...urls],
+                    videos,
+                    htmlLength: html.length,
+                  };
+                });
+              } catch (error) {
+                dom = {
+                  title: "",
+                  urls: [],
+                  videos: [],
+                  htmlLength: 0,
+                  evaluationError: String(error?.message || error),
+                };
+              }
+
+              const urls = [...new Set([...network, ...dom.urls].map(normalize))]
+                .filter(mediaLike);
+              await page
+                .screenshot({
+                  path: `${output}/${candidate.name}-page.png`,
+                  fullPage: false,
+                })
+                .catch(() => {});
+              records.push({
+                ...candidate,
+                status,
+                navigationError,
+                ...dom,
+                urls,
+              });
+              console.log(`${candidate.name}: status=${status}, media=${urls.length}`);
+              await context.close();
+            }
+          } finally {
+            await browser.close();
+          }
+
+          await writeFile(
+            `${output}/discovered.json`,
+            JSON.stringify(records, null, 2),
+          );
+          NODE
+
+          node scripts/discover-mobile-background-candidates-v21.mjs
+
+      - name: Probe media and capture native-quality mobile previews
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/mobile-candidates-v21/probe.py <<'PY'
+          from __future__ import annotations
+
+          import html
+          import json
+          import re
+          import subprocess
+          from pathlib import Path
+          from urllib.parse import unquote
+
+          work = Path("/tmp/mobile-candidates-v21")
+          records = json.loads((work / "discovered.json").read_text())
+          user_agent = (
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+              "AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/126.0.0.0 Safari/537.36"
+          )
+
+          def clean(value: str) -> str:
+              return html.unescape(unquote(value)).replace("\\u0026", "&")
+
+          def score(url: str) -> int:
+              lower = url.lower()
+              value = 0
+              value += 120 if ".mp4" in lower else 0
+              value += 80 if "videos.pexels.com/video-files" in lower else 0
+              value += 80 if "cdn.pixabay.com/video" in lower else 0
+              value += 60 if re.search(r"2160|3840|4k|uhd", lower) else 0
+              value += 20 if "large" in lower else 0
+              value -= 30 if re.search(r"360|480|540|720", lower) else 0
+              return value
+
+          def run(command: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
+              try:
+                  return subprocess.run(
+                      command,
+                      text=True,
+                      stdout=subprocess.PIPE,
+                      stderr=subprocess.PIPE,
+                      timeout=timeout,
+                      check=False,
+                  )
+              except subprocess.TimeoutExpired as error:
+                  return subprocess.CompletedProcess(
+                      command,
+                      124,
+                      error.stdout or "",
+                      error.stderr or "timed out",
+                  )
+
+          results = []
+          for record in records:
+              referer = record["page"]
+              urls = sorted(
+                  {clean(url) for url in record.get("urls", [])},
+                  key=score,
+                  reverse=True,
+              )[:18]
+              probes = []
+              for url in urls:
+                  attempt = run(
+                      [
+                          "ffprobe",
+                          "-v", "error",
+                          "-rw_timeout", "15000000",
+                          "-user_agent", user_agent,
+                          "-headers", f"Referer: {referer}\r\n",
+                          "-select_streams", "v:0",
+                          "-show_entries", "stream=codec_name,width,height,r_frame_rate,bit_rate",
+                          "-show_entries", "format=duration,bit_rate",
+                          "-of", "json",
+                          url,
+                      ],
+                      25,
+                  )
+                  if attempt.returncode != 0:
+                      continue
+                  try:
+                      metadata = json.loads(attempt.stdout)
+                      stream = metadata.get("streams", [{}])[0]
+                      width = int(stream.get("width") or 0)
+                      height = int(stream.get("height") or 0)
+                  except (ValueError, TypeError, IndexError, json.JSONDecodeError):
+                      continue
+                  if width <= 0 or height <= 0:
+                      continue
+                  probes.append({
+                      "url": url,
+                      "width": width,
+                      "height": height,
+                      "pixels": width * height,
+                      "metadata": metadata,
+                  })
+
+              probes.sort(
+                  key=lambda item: (
+                      item["pixels"],
+                      1 if item["height"] >= item["width"] else 0,
+                      score(item["url"]),
+                  ),
+                  reverse=True,
+              )
+              selected = probes[0] if probes else None
+              result = {
+                  "name": record["name"],
+                  "page": referer,
+                  "pageStatus": record.get("status"),
+                  "discoveredUrlCount": len(record.get("urls", [])),
+                  "videos": record.get("videos", []),
+                  "probes": probes,
+                  "selected": selected,
+              }
+
+              if selected:
+                  native = work / f"{record['name']}-native.png"
+                  preview = work / f"{record['name']}-mobile-preview.png"
+                  capture = run(
+                      [
+                          "ffmpeg",
+                          "-hide_banner", "-loglevel", "error", "-y",
+                          "-rw_timeout", "15000000",
+                          "-user_agent", user_agent,
+                          "-headers", f"Referer: {referer}\r\n",
+                          "-ss", "1.5",
+                          "-i", selected["url"],
+                          "-frames:v", "1",
+                          str(native),
+                      ],
+                      45,
+                  )
+                  if capture.returncode == 0 and native.is_file():
+                      converted = run(
+                          [
+                              "ffmpeg",
+                              "-hide_banner", "-loglevel", "error", "-y",
+                              "-i", str(native),
+                              "-vf",
+                              "scale=540:960:force_original_aspect_ratio=increase:flags=lanczos,crop=540:960",
+                              "-frames:v", "1",
+                              str(preview),
+                          ],
+                          30,
+                      )
+                      if converted.returncode == 0:
+                          result["preview"] = preview.name
+                      native.unlink(missing_ok=True)
+                  else:
+                      result["captureError"] = capture.stderr[-1200:]
+
+              results.append(result)
+              print(record["name"], "selected" if selected else "unresolved")
+
+          (work / "resolved.json").write_text(json.dumps(results, indent=2))
+          PY
+
+          python /tmp/mobile-candidates-v21/probe.py
+          sha256sum /tmp/mobile-candidates-v21/*.png \
+            /tmp/mobile-candidates-v21/*.json 2>/dev/null \
+            > /tmp/mobile-candidates-v21/sha256.txt || true
+
+      - name: Upload candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-background-candidates-v21
+          path: /tmp/mobile-candidates-v21
+          if-no-files-found: warn
+          retention-days: 7
