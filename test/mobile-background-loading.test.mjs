@@ -1,9 +1,43 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import {
+  MOBILE_VIDEO_ASSET_PATH,
+  MOBILE_VIDEO_BYTES,
+  MOBILE_VIDEO_ETAG,
+  MOBILE_VIDEO_ROUTE,
+  parseSingleByteRange,
+  serveMobileVideo,
+} from "../src/mobile-video-response.js";
 
 const read = (path) =>
   readFile(new URL(`../${path}`, import.meta.url), "utf8");
+
+const readVideo = () =>
+  readFile(
+    new URL(
+      "../public/scenes/mobile-forest-stream-video-v4-1080.mp4",
+      import.meta.url,
+    ),
+  );
+
+function assetEnvironment(video) {
+  return {
+    ASSETS: {
+      async fetch(request) {
+        const url = new URL(request.url);
+        assert.equal(url.pathname, MOBILE_VIDEO_ASSET_PATH);
+        assert.equal(url.search, "");
+        assert.equal(request.method, "GET");
+        assert.equal(request.headers.get("range"), null);
+        return new Response(video, {
+          status: 200,
+          headers: { "Content-Type": "video/mp4" },
+        });
+      },
+    },
+  };
+}
 
 test("mobile clients keep the static image without loading the graphics module chain", async () => {
   const [appSource, loaderSource, pageSource, packageSource] =
@@ -100,23 +134,26 @@ test("the production mobile release gate follows built versions and exact image 
   );
 });
 
-test("portrait mobile uses a direct same-origin MP4 instead of a reconstructed blob", async () => {
-  const [clientSource, materializerSource, headersSource, video] =
-    await Promise.all([
-      read("public/mobile-quality.js"),
-      read("scripts/materialize-mobile-forest-stream.mjs"),
-      read("public/_headers"),
-      readFile(
-        new URL(
-          "../public/scenes/mobile-forest-stream-video-v4-1080.mp4",
-          import.meta.url,
-        ),
-      ),
-    ]);
+test("portrait mobile uses a Worker-served MP4 instead of a reconstructed blob", async () => {
+  const [
+    clientSource,
+    materializerSource,
+    headersSource,
+    routerSource,
+    responderSource,
+    video,
+  ] = await Promise.all([
+    read("public/mobile-quality.js"),
+    read("scripts/materialize-mobile-forest-stream.mjs"),
+    read("public/_headers"),
+    read("src/domain-router.js"),
+    read("src/mobile-video-response.js"),
+    readVideo(),
+  ]);
 
   assert.match(
     clientSource,
-    /const VIDEO_ASSET =[\s\S]*mobile-forest-stream-video-v4-1080\.mp4/,
+    /const VIDEO_ASSET =[\s\S]*\/media\/mobile-forest-stream-video-v4-1080\.mp4/,
   );
   assert.match(clientSource, /video\.src = VIDEO_ASSET/);
   assert.match(clientSource, /video\.autoplay = true/);
@@ -139,10 +176,129 @@ test("portrait mobile uses a direct same-origin MP4 instead of a reconstructed b
     headersSource,
     /\/scenes\/mobile-forest-stream-video-v4-1080\.mp4[\s\S]*Content-Type: video\/mp4/,
   );
+  assert.match(routerSource, /url\.pathname === MOBILE_VIDEO_ROUTE/);
+  assert.match(routerSource, /await serveMobileVideo\(request, canonicalEnv\)/);
+  assert.match(responderSource, /Cloudflare-CDN-Cache-Control/);
+  assert.match(responderSource, /Accept-Ranges/);
+  assert.match(responderSource, /Content-Range/);
+  assert.match(responderSource, /MOBILE_VIDEO_ETAG/);
 
-  assert.ok(video.byteLength > 100_000);
+  assert.equal(video.byteLength, MOBILE_VIDEO_BYTES);
   assert.equal(video.subarray(4, 8).toString("ascii"), "ftyp");
   for (const marker of ["moov", "mdat", "avc1"]) {
     assert.ok(video.includes(Buffer.from(marker, "ascii")));
   }
+});
+
+test("single byte ranges cover Safari startup and resume requests", () => {
+  assert.deepEqual(parseSingleByteRange("bytes=0-1", 1000), {
+    start: 0,
+    end: 1,
+  });
+  assert.deepEqual(parseSingleByteRange("bytes=250-", 1000), {
+    start: 250,
+    end: 999,
+  });
+  assert.deepEqual(parseSingleByteRange("bytes=-250", 1000), {
+    start: 750,
+    end: 999,
+  });
+  assert.deepEqual(parseSingleByteRange("bytes=900-2000", 1000), {
+    start: 900,
+    end: 999,
+  });
+  assert.deepEqual(parseSingleByteRange("bytes=1000-", 1000), {
+    invalid: true,
+  });
+  assert.deepEqual(parseSingleByteRange("bytes=0-1,4-5", 1000), {
+    invalid: true,
+  });
+});
+
+test("the mobile video response has a strong ETag and exact uncached ranges", async () => {
+  const video = await readVideo();
+  const env = assetEnvironment(video);
+  const url = `https://stabilize.info${MOBILE_VIDEO_ROUTE}`;
+
+  const full = await serveMobileVideo(new Request(url), env);
+  assert.equal(full.status, 200);
+  assert.equal(full.headers.get("content-type"), "video/mp4");
+  assert.equal(full.headers.get("accept-ranges"), "bytes");
+  assert.equal(full.headers.get("content-length"), String(MOBILE_VIDEO_BYTES));
+  assert.equal(full.headers.get("etag"), MOBILE_VIDEO_ETAG);
+  assert.equal(full.headers.get("etag").startsWith("W/"), false);
+  assert.match(full.headers.get("cache-control"), /no-store/);
+  assert.equal(full.headers.get("cdn-cache-control"), "no-store");
+  assert.equal(full.headers.get("cloudflare-cdn-cache-control"), "no-store");
+  assert.deepEqual(Buffer.from(await full.arrayBuffer()), video);
+
+  const partial = await serveMobileVideo(
+    new Request(url, { headers: { Range: "bytes=0-1023" } }),
+    env,
+  );
+  assert.equal(partial.status, 206);
+  assert.equal(
+    partial.headers.get("content-range"),
+    `bytes 0-1023/${MOBILE_VIDEO_BYTES}`,
+  );
+  assert.equal(partial.headers.get("content-length"), "1024");
+  assert.equal(partial.headers.get("etag"), MOBILE_VIDEO_ETAG);
+  assert.deepEqual(
+    Buffer.from(await partial.arrayBuffer()),
+    video.subarray(0, 1024),
+  );
+
+  const matchingIfRange = await serveMobileVideo(
+    new Request(url, {
+      headers: {
+        Range: "bytes=1024-2047",
+        "If-Range": MOBILE_VIDEO_ETAG,
+      },
+    }),
+    env,
+  );
+  assert.equal(matchingIfRange.status, 206);
+  assert.equal(
+    matchingIfRange.headers.get("content-range"),
+    `bytes 1024-2047/${MOBILE_VIDEO_BYTES}`,
+  );
+
+  const staleIfRange = await serveMobileVideo(
+    new Request(url, {
+      headers: {
+        Range: "bytes=0-1",
+        "If-Range": '"stale"',
+      },
+    }),
+    env,
+  );
+  assert.equal(staleIfRange.status, 200);
+  assert.equal(
+    staleIfRange.headers.get("content-length"),
+    String(MOBILE_VIDEO_BYTES),
+  );
+
+  const invalid = await serveMobileVideo(
+    new Request(url, { headers: { Range: "bytes=999999-" } }),
+    env,
+  );
+  assert.equal(invalid.status, 416);
+  assert.equal(
+    invalid.headers.get("content-range"),
+    `bytes */${MOBILE_VIDEO_BYTES}`,
+  );
+
+  const unchanged = await serveMobileVideo(
+    new Request(url, { headers: { "If-None-Match": MOBILE_VIDEO_ETAG } }),
+    env,
+  );
+  assert.equal(unchanged.status, 304);
+
+  const head = await serveMobileVideo(
+    new Request(url, { method: "HEAD" }),
+    env,
+  );
+  assert.equal(head.status, 200);
+  assert.equal(head.headers.get("content-length"), String(MOBILE_VIDEO_BYTES));
+  assert.equal((await head.arrayBuffer()).byteLength, 0);
 });
