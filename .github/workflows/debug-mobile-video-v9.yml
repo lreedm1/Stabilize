@@ -1,10 +1,10 @@
-name: Build validated mobile video v11 release
+name: Build smooth mobile video release
 
 on:
   pull_request:
     paths:
-      - scripts/generate-mobile-video-v9-clean.sh
-      - scripts/prepare-mobile-video-v11-release.py
+      - scripts/generate-mobile-video-smooth.sh
+      - scripts/prepare-mobile-video-smooth-release.py
       - .github/workflows/debug-mobile-video-v9.yml
   workflow_dispatch:
 
@@ -14,7 +14,7 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -36,17 +36,19 @@ jobs:
             sudo apt-get install -y ffmpeg
           fi
 
-      - name: Generate and validate the screen-resolution video
+      - name: Generate and strictly validate the smooth video
         shell: bash
-        run: bash scripts/generate-mobile-video-v9-clean.sh /tmp/stabilize-mobile-video-v11-clean
+        run: |
+          bash scripts/generate-mobile-video-smooth.sh \
+            /tmp/stabilize-mobile-video-smooth
 
-      - name: Generate and validate the screen-resolution poster
+      - name: Generate and validate the matching poster
         shell: bash
         run: |
           set -euo pipefail
-          work=/tmp/stabilize-mobile-video-v11-clean
-          video="$work/mobile-forest-stream-video-v11-1536.mp4"
-          poster="$work/mobile-forest-stream-v11-1536.webp"
+          work=/tmp/stabilize-mobile-video-smooth
+          video="$work/mobile-forest-stream-video-v12-720.mp4"
+          poster="$work/mobile-forest-stream-v12-720.webp"
           ffmpeg -hide_banner -v error -y -i "$video" \
             -frames:v 1 -c:v libwebp -quality 86 -compression_level 6 "$poster"
           dimensions="$(
@@ -54,127 +56,58 @@ jobs:
               -show_entries stream=width,height \
               -of csv=s=x:p=0 "$poster"
           )"
-          test "$dimensions" = 1536x2732
+          test "$dimensions" = 720x1280
           test "$(dd if="$poster" bs=1 count=4 status=none)" = RIFF
           test "$(dd if="$poster" bs=1 skip=8 count=4 status=none)" = WEBP
           echo "poster_bytes=$(wc -c < "$poster" | tr -d '[:space:]')"
           sha256sum "$poster"
 
-      - name: Prepare and publish the clean release branch
+      - name: Prepare, test, and publish the release branch
         shell: bash
         run: |
           set -euo pipefail
-          work=/tmp/stabilize-mobile-video-v11-clean
-          cp scripts/prepare-mobile-video-v11-release.py /tmp/prepare-mobile-video-v11-release.py
+          work=/tmp/stabilize-mobile-video-smooth
+          cp scripts/generate-mobile-video-smooth.sh /tmp/generate-mobile-video-smooth.sh
+          cp scripts/prepare-mobile-video-smooth-release.py /tmp/prepare-mobile-video-smooth-release.py
 
           git fetch --no-tags origin main:refs/remotes/origin/main
-          git switch -C agent/mobile-video-v11-generated refs/remotes/origin/main
-
-          python /tmp/prepare-mobile-video-v11-release.py \
-            "$work/mobile-forest-stream-video-v11-1536.mp4" \
-            "$work/mobile-forest-stream-v11-1536.webp"
-
-          python - <<'PY'
-          from pathlib import Path
-
-          client_path = Path("public/mobile-quality.js")
-          client = client_path.read_text()
-          before = '''function configureVideo() {
-            if (!(backgroundVideo instanceof HTMLVideoElement)) return null;
-            backgroundVideo.autoplay = true;
-            backgroundVideo.muted = true;
-            backgroundVideo.defaultMuted = true;
-            backgroundVideo.loop = true;
-            backgroundVideo.playsInline = true;
-            backgroundVideo.preload = "auto";
-            backgroundVideo.poster = POSTER_ASSET;
-            if (!backgroundVideo.getAttribute("src")) {
-              backgroundVideo.src = VIDEO_ASSET;
-            }
-            return backgroundVideo;
-          }'''
-          after = '''function configureVideo() {
-            if (!(backgroundVideo instanceof HTMLVideoElement)) return null;
-            const video = backgroundVideo;
-            video.autoplay = true;
-            video.muted = true;
-            video.defaultMuted = true;
-            video.loop = true;
-            video.playsInline = true;
-            video.preload = "auto";
-            video.poster = POSTER_ASSET;
-            if (!video.getAttribute("src")) {
-              video.src = VIDEO_ASSET;
-            }
-            return video;
-          }'''
-          if before not in client:
-              raise SystemExit("Could not find generated video configuration block")
-          client_path.write_text(client.replace(before, after, 1))
-
-          test_path = Path("test/mobile-background-loading.test.mjs")
-          source = test_path.read_text()
-          source = source.replace(
-              r"mobile-forest-stream-video-v4-1080\.mp4",
-              r"mobile-forest-stream-video-v11-1536\.mp4",
-          )
-          source = source.replace(
-              "mobile-forest-stream-video-v4-1080.mp4",
-              "mobile-forest-stream-video-v11-1536.mp4",
-          )
-          test_path.write_text(source)
-
-          worker_test_path = Path("test/worker.test.mjs")
-          worker_test = worker_test_path.read_text()
-          old_assertion = (
-              '  assert.doesNotMatch(html, /<audio|autoplay|nature-sounds\\.js/);'
-          )
-          new_assertions = '''  assert.doesNotMatch(html, /<audio|nature-sounds\\.js/);
-          assert.match(
-            html,
-            /<video[\\s\\S]*autoplay[\\s\\S]*muted[\\s\\S]*loop[\\s\\S]*playsinline/,
-          );'''
-          if old_assertion not in worker_test:
-              raise SystemExit("Could not find the root-page audio/autoplay assertion")
-          worker_test_path.write_text(
-              worker_test.replace(old_assertion, new_assertions, 1)
-          )
-          PY
+          git switch -C agent/mobile-video-smooth-release refs/remotes/origin/main
 
           npm ci --ignore-scripts
           npm run apply:prompt-policy
 
-          # The Actions token can write ordinary repository content but cannot
-          # create, edit, or delete workflow files. Restore workflows here;
-          # they are updated separately through the repository API.
-          git checkout refs/remotes/origin/main -- .github/workflows
+          cp /tmp/generate-mobile-video-smooth.sh scripts/generate-mobile-video-smooth.sh
+          cp /tmp/prepare-mobile-video-smooth-release.py scripts/prepare-mobile-video-smooth-release.py
+          chmod +x scripts/generate-mobile-video-smooth.sh
+          chmod +x scripts/prepare-mobile-video-smooth-release.py
+
+          python /tmp/prepare-mobile-video-smooth-release.py \
+            "$work/mobile-forest-stream-video-v12-720.mp4" \
+            "$work/mobile-forest-stream-v12-720.webp"
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'Replace corrupt mobile video with a validated screen-resolution release'
-          git push --force origin HEAD:agent/mobile-video-v11-generated
+          git commit -m 'Replace the stuttering mobile background with a smooth baseline video'
 
-      - name: Run full regression and Worker build checks
-        shell: bash
-        run: |
-          set -o pipefail
-          mkdir -p /tmp/mobile-video-v11-test-logs
-          npm test 2>&1 | tee /tmp/mobile-video-v11-test-logs/npm-test.log
-          npm run check 2>&1 | tee /tmp/mobile-video-v11-test-logs/npm-check.log
-          git diff --exit-code 2>&1 | tee /tmp/mobile-video-v11-test-logs/git-diff.log
+          npm test
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
 
-      - name: Upload generated evidence and test logs
+          git push --force origin HEAD:agent/mobile-video-smooth-release
+
+      - name: Upload generated evidence and release logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-video-v11-release-evidence
+          name: smooth-mobile-video-release-evidence
           path: |
-            /tmp/stabilize-mobile-video-v11-clean/mobile-forest-stream-video-v11-1536.mp4
-            /tmp/stabilize-mobile-video-v11-clean/mobile-forest-stream-v11-1536.webp
-            /tmp/stabilize-mobile-video-v11-clean/frame-early.png
-            /tmp/stabilize-mobile-video-v11-clean/frame-late.png
-            /tmp/stabilize-mobile-video-v11-clean/probe.json
-            /tmp/mobile-video-v11-test-logs
+            /tmp/stabilize-mobile-video-smooth/mobile-forest-stream-video-v12-720.mp4
+            /tmp/stabilize-mobile-video-smooth/mobile-forest-stream-v12-720.webp
+            /tmp/stabilize-mobile-video-smooth/frame-early.png
+            /tmp/stabilize-mobile-video-smooth/frame-late.png
+            /tmp/stabilize-mobile-video-smooth/probe.json
+            /tmp/stabilize-mobile-video-smooth/framemd5.txt
           if-no-files-found: warn
           retention-days: 7
