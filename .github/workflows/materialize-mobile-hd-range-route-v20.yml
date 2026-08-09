@@ -62,6 +62,19 @@ jobs:
           }
           for before, after in replacements.items():
               source = source.replace(before, after)
+
+          if "function escapeRegExp(value)" not in source:
+              helper = r'''
+          function escapeRegExp(value) {
+            return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          }
+
+          '''
+              marker = "const responder ="
+              if marker not in source:
+                  raise SystemExit("Could not locate responder boundary")
+              source = source.replace(marker, helper + marker, 1)
+
           path.write_text(source)
           PY
           node --check scripts/apply-mobile-hd-range-route-v20.mjs
