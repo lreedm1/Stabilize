@@ -61,24 +61,47 @@ jobs:
           bash scripts/generate-mobile-water-sprite-v18.sh \
             /tmp/stabilize-mobile-water-sprite-v18
 
-      - name: Make the canonical mobile generator canvas-aware
+      - name: Make the canonical mobile generators canvas-aware
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
 
-          path = Path("scripts/use-mobile-forest-stream.mjs")
-          source = path.read_text()
+          use_path = Path("scripts/use-mobile-forest-stream.mjs")
+          use_source = use_path.read_text()
           marker = '    \'test("portrait mobile moves without a media gesture", async () => {\','
           canvas_marker = (
               '    \'test("portrait mobile draws water through a canvas without media autoplay", async () => {\','
           )
-          if canvas_marker not in source:
-              if marker not in source:
+          if canvas_marker not in use_source:
+              if marker not in use_source:
                   raise SystemExit("Could not find the mobile quality candidate list")
-              source = source.replace(marker, marker + "\n" + canvas_marker, 1)
-          path.write_text(source)
+              use_source = use_source.replace(
+                  marker,
+                  marker + "\n" + canvas_marker,
+                  1,
+              )
+          use_path.write_text(use_source)
+
+          apply_path = Path("scripts/apply-mobile-motion-canvas-v18.mjs")
+          apply_source = apply_path.read_text()
+          old_helper = '''function replaceRequired(source, pattern, replacement, label) {
+            const next = source.replace(pattern, replacement);
+            if (next === source) throw new Error(`Could not replace ${label}`);
+            return next;
+          }'''
+          new_helper = '''function replaceRequired(source, pattern, replacement, label) {
+            if (source.includes(replacement)) return source;
+            const next = source.replace(pattern, replacement);
+            if (next === source) throw new Error(`Could not replace ${label}`);
+            return next;
+          }'''
+          if new_helper not in apply_source:
+              if old_helper not in apply_source:
+                  raise SystemExit("Could not find the canvas replacement helper")
+              apply_source = apply_source.replace(old_helper, new_helper, 1)
+          apply_path.write_text(apply_source)
           PY
 
       - name: Install generated asset and converge canonical output
