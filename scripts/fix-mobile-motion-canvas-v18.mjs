@@ -28,11 +28,7 @@ function replaceMarked(source, start, end, replacement) {
   const pattern = new RegExp(
     `[ \\t]*${escape(start)}[\\s\\S]*?${escape(end)}[ \\t]*(?:\\n|$)`,
   );
-  const next = source.replace(pattern, normalized);
-  if (next === source) {
-    throw new Error(`Could not replace marked block ${start}.`);
-  }
-  return next;
+  return source.replace(pattern, normalized);
 }
 
 await update("public/mobile-motion-canvas.js", (source) => {
@@ -130,6 +126,10 @@ for (const path of [
 }
 
 await update("test/mobile-background-loading.test.mjs", (source) => {
+  const replacementMarker =
+    'test("the production mobile release gate verifies visible canvas motion", async () => {';
+  if (source.includes(replacementMarker)) return source;
+
   const startMarker =
     'test("the production mobile release gate follows built versions and exact image bytes", async () => {';
   const endMarker =
