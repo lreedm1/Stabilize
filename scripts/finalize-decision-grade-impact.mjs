@@ -142,14 +142,12 @@ await update("package.json", (source) => {
 });
 
 // Historical generators can still rewrite the mobile background before this
-// finalizer runs. Reapply the canvas implementation here so every build ends
-// with the no-media-autoplay motion path, regardless of pipeline ordering.
+// finalizer runs. Reapply the selected poster and canvas implementation here,
+// then remove any replacement-scene video layer.
 await import("./apply-mobile-motion-canvas-v18.mjs");
 await import("./fix-mobile-motion-canvas-v18.mjs");
-
-await import("./apply-mobile-hd-background-v20.mjs");
-await import("./fix-mobile-hd-module-scope-v20.mjs");
+await import("./restore-original-mobile-image-v21.mjs");
 
 console.log(
-  "Finalized decision-grade impact compatibility, mobile-video CSP, canonical regression expectations, and visibly opaque canvas mobile motion.",
+  "Finalized decision-grade impact compatibility, canonical regression expectations, and the selected forest-stream mobile scene.",
 );

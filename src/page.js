@@ -136,25 +136,6 @@ export function renderPage(options = {}) {
       type="font/woff2"
       crossorigin
     />
-    <!-- mobile-hd-background-v20-preloads-start -->
-    <link
-      rel="preload"
-      as="image"
-      href="/scenes/mobile-forest-stream-v20-true-hd-1440.webp"
-      imagesrcset="/scenes/mobile-forest-stream-v20-true-hd-1440.webp 1440w"
-      imagesizes="100vw"
-      media="(max-width: 980px) and (orientation: portrait)"
-      type="image/webp"
-      fetchpriority="high"
-    />
-    <link
-      rel="preload"
-      as="video"
-      href="/scenes/mobile-forest-stream-v20-true-hd-1440.mp4"
-      media="(max-width: 980px) and (orientation: portrait)"
-      type="video/mp4"
-    />
-    <!-- mobile-hd-background-v20-preloads-end -->
     <!-- mobile-motion-canvas-v18-preloads-start -->
     <link
       rel="preload"
@@ -182,7 +163,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
     <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
-    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260809-mobile-hd-background-v20-2" />
+    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260809-original-mobile-image-v21-1" />
   </head>
   <body>
     <canvas
@@ -224,22 +205,6 @@ export function renderPage(options = {}) {
       aria-hidden="true"
     ></canvas>
     <!-- mobile-motion-canvas-v18-end -->
-    <!-- mobile-hd-background-v20-start -->
-    <video
-      id="mobile-hd-background"
-      class="mobile-hd-background"
-      autoplay
-      muted
-      loop
-      playsinline
-      preload="auto"
-      poster="/scenes/mobile-forest-stream-v20-true-hd-1440.webp"
-      aria-hidden="true"
-      tabindex="-1"
-    >
-      <source src="/scenes/mobile-forest-stream-v20-true-hd-1440.mp4" type="video/mp4" />
-    </video>
-    <!-- mobile-hd-background-v20-end -->
     <canvas
       id="photo-background"
       class="terrain-background photo-background"
@@ -351,9 +316,6 @@ export function renderPage(options = {}) {
     <!-- mobile-motion-canvas-v18-script-start -->
     <script src="/mobile-motion-canvas.js?v=20260809-mobile-motion-canvas-v19-hd-2" defer></script>
     <!-- mobile-motion-canvas-v18-script-end -->
-    <!-- mobile-hd-background-v20-script-start -->
-    <script type="module" src="/mobile-hd-background-v20.js?v=20260809-mobile-hd-background-v20-2"></script>
-    <!-- mobile-hd-background-v20-script-end -->
   </body>
 </html>`;
 }
