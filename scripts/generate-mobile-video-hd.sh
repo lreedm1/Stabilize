@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-work="${1:-/tmp/stabilize-mobile-video-hd}"
+work="${1:-/tmp/stabilize-mobile-video-retina}"
 mkdir -p "$work"
 
 for tool in ffmpeg ffprobe git base64 python sha256sum; do
@@ -11,7 +11,9 @@ for tool in ffmpeg ffprobe git base64 python sha256sum; do
   }
 done
 
-# Start from the clean 1080x1920 forest still already preserved in the repo.
+# Use the clean 1080x1920 forest master already preserved in the repository.
+# The browser should receive a pre-rendered Retina asset rather than scaling the
+# 1080p stream on every frame, so the final encode is rendered at 2160x3840.
 git fetch --no-tags --depth=1 origin \
   agent/mobile-hq-v1:refs/remotes/origin/agent/mobile-hq-v1
 git show \
@@ -84,16 +86,16 @@ for y in range(height):
         pixels[row + x] = alpha
 
 Path(sys.argv[1]).write_bytes(
-    f'P5\n{width} {height}\n255\n'.encode() + pixels
+    f"P5\n{width} {height}\n255\n".encode() + pixels
 )
 PY
 
-video="$work/mobile-forest-stream-video-v13-1080.mp4"
-poster="$work/mobile-forest-stream-v13-1080.webp"
+video="$work/mobile-forest-stream-video-v14-retina-2160.mp4"
+poster="$work/mobile-forest-stream-v14-retina-2160.webp"
 
-# Compose at source resolution, crop away the generator mark, and encode a
-# direct 1080x1920 constrained-baseline stream. Level 4.0 is sufficient for
-# 1080p24, and no B-frames keeps iOS presentation simple and predictable.
+# Composite at the clean source resolution, crop away the generator mark, then
+# render a 2160x3840 H.264 High-profile asset. The scene is low-motion, so the
+# bitrate cap keeps the initial download bounded while preserving Retina edges.
 ffmpeg -hide_banner -v error -y \
   -loop 1 -framerate 30 -i "$work/still.webp" \
   -stream_loop -1 -i "$work/motion.mp4" \
@@ -107,15 +109,15 @@ ffmpeg -hide_banner -v error -y \
     [mrgb][mask]alphamerge[water];
     [base][water]overlay=shortest=1:format=auto,
       crop=956:1700:62:0,
-      scale=1080:1920:flags=lanczos,
+      scale=2160:3840:flags=lanczos,
       fps=24,
       format=yuv420p[out]
   " \
   -map '[out]' \
   -t 5.0 -an \
-  -c:v libx264 -profile:v baseline -level:v 4.0 \
-  -preset slow -crf 19 -maxrate 4200k -bufsize 8400k \
-  -g 24 -keyint_min 24 -sc_threshold 0 -bf 0 -refs 1 \
+  -c:v libx264 -profile:v high -level:v 5.1 \
+  -preset slow -crf 20 -maxrate 12000k -bufsize 24000k \
+  -g 24 -keyint_min 24 -sc_threshold 0 -bf 2 -refs 3 \
   -pix_fmt yuv420p -tag:v avc1 \
   -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
   -movflags +faststart \
@@ -141,11 +143,11 @@ if len(streams) != 1:
 stream = streams[0]
 expected = {
     "codec_name": "h264",
-    "profile": "Constrained Baseline",
+    "profile": "High",
     "pix_fmt": "yuv420p",
-    "width": 1080,
-    "height": 1920,
-    "level": 40,
+    "width": 2160,
+    "height": 3840,
+    "level": 51,
     "r_frame_rate": "24/1",
     "avg_frame_rate": "24/1",
 }
@@ -168,7 +170,7 @@ audio_streams="$(
 )"
 test -z "$audio_streams"
 
-# Check real decoded cadence, not just container metadata.
+# Verify genuine decoded motion rather than trusting only container metadata.
 ffmpeg -hide_banner -v error -i "$video" \
   -vf "select='between(n,12,35)'" -vsync 0 \
   -f framemd5 "$work/framemd5.txt"
@@ -179,13 +181,13 @@ unique_frames="$(
 test "$unique_frames" -ge 20
 
 ffmpeg -hide_banner -v error -y -ss 0.5 -i "$video" \
-  -frames:v 1 -c:v libwebp -quality 88 -compression_level 6 "$poster"
+  -frames:v 1 -c:v libwebp -quality 90 -compression_level 6 "$poster"
 poster_dimensions="$(
   ffprobe -v error -select_streams v:0 \
     -show_entries stream=width,height \
     -of csv=s=x:p=0 "$poster"
 )"
-test "$poster_dimensions" = 1080x1920
+test "$poster_dimensions" = 2160x3840
 test "$(dd if="$poster" bs=1 count=4 status=none)" = RIFF
 test "$(dd if="$poster" bs=1 skip=8 count=4 status=none)" = WEBP
 
@@ -201,8 +203,8 @@ bytes="$(wc -c < "$video" | tr -d '[:space:]')"
 sha="$(sha256sum "$video" | awk '{print $1}')"
 poster_bytes="$(wc -c < "$poster" | tr -d '[:space:]')"
 poster_sha="$(sha256sum "$poster" | awk '{print $1}')"
-test "$bytes" -gt 800000
-test "$bytes" -lt 8000000
+test "$bytes" -gt 1500000
+test "$bytes" -lt 20000000
 test "$(dd if="$video" bs=1 skip=4 count=4 status=none)" = ftyp
 moov_offset="$(grep -abo -m1 moov "$video" | cut -d: -f1)"
 mdat_offset="$(grep -abo -m1 mdat "$video" | cut -d: -f1)"
