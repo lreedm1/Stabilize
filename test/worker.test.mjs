@@ -1089,7 +1089,7 @@ test("root page renders the simplified chat without audio or a danger shortcut",
   );
   assert.doesNotMatch(html, /sound-toggle|sound-volume|sound-controls/);
   assert.doesNotMatch(html, /danger-button|emergency-panel|emergency-actions/);
-  assert.doesNotMatch(html, /<audio|autoplay|nature-sounds\.js/);
+  assert.doesNotMatch(html, /<audio|nature-sounds\.js/);
   assert.ok(html.includes('placeholder="' + COPY.page.chat.inputPlaceholder + '"'));
   assert.match(html, /id="conversation-surface"[\s\S]*data-view="compose"/);
   assert.ok(html.includes(COPY.page.chat.responseLabel));

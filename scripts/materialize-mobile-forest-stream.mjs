@@ -246,3 +246,70 @@ console.log(
   `Validated ${smoothVideoPath}: 720x1280, ${smoothVideo.byteLength} bytes, sha256=${smoothVideoSha256}`,
 );
 // smooth-mobile-video-v12-validation-end
+
+// retina-mobile-video-v14-validation-start
+const retinaVideoPath = "public/scenes/mobile-forest-stream-video-v14-retina-2160.mp4";
+const retinaVideoExpectedBytes = 5_006_520;
+const retinaVideoExpectedSha256 = "16f5b59a82b6ba8a2820a548c4fd0395d59304dec8bf4c6fcfb68b1d423377ff";
+const retinaPosterPath = "public/scenes/mobile-forest-stream-v14-retina-2160.webp";
+const retinaPosterExpectedBytes = 645_202;
+const retinaPosterExpectedSha256 = "8fe736f3f1d574fc18837eff04825fadb4021035de5f6dbee3c811d0e77fc30d";
+
+const retinaVideo = await readFile(retinaVideoPath);
+if (retinaVideo.byteLength !== retinaVideoExpectedBytes) {
+  throw new Error(
+    `Unexpected Retina mobile video size: ${retinaVideo.byteLength}; expected ${retinaVideoExpectedBytes}`,
+  );
+}
+const retinaVideoSha256 = createHash("sha256")
+  .update(retinaVideo)
+  .digest("hex");
+if (retinaVideoSha256 !== retinaVideoExpectedSha256) {
+  throw new Error(`Retina mobile video checksum mismatch: ${retinaVideoSha256}`);
+}
+if (
+  retinaVideo.byteLength < 12 ||
+  retinaVideo.subarray(4, 8).toString("ascii") !== "ftyp"
+) {
+  throw new Error("Retina mobile video is not an MP4 file");
+}
+for (const marker of ["moov", "mdat", "vide", "avc1"]) {
+  if (!retinaVideo.includes(Buffer.from(marker, "ascii"))) {
+    throw new Error(`Retina mobile video is missing the ${marker} marker`);
+  }
+}
+if (
+  retinaVideo.includes(Buffer.from("mp4a", "ascii")) ||
+  retinaVideo.includes(Buffer.from("soun", "ascii"))
+) {
+  throw new Error("Retina mobile video must not contain audio");
+}
+
+const retinaPoster = await readFile(retinaPosterPath);
+if (retinaPoster.byteLength !== retinaPosterExpectedBytes) {
+  throw new Error(
+    `Unexpected Retina mobile poster size: ${retinaPoster.byteLength}; expected ${retinaPosterExpectedBytes}`,
+  );
+}
+const retinaPosterSha256 = createHash("sha256")
+  .update(retinaPoster)
+  .digest("hex");
+if (retinaPosterSha256 !== retinaPosterExpectedSha256) {
+  throw new Error(
+    `Retina mobile poster checksum mismatch: ${retinaPosterSha256}`,
+  );
+}
+const retinaPosterInfo = webpInfo(retinaPoster);
+if (
+  retinaPosterInfo.width !== 2160 ||
+  retinaPosterInfo.height !== 3840 ||
+  retinaPosterInfo.animated
+) {
+  throw new Error(
+    `Unexpected Retina mobile poster: ${retinaPosterInfo.width}x${retinaPosterInfo.height}, animated=${retinaPosterInfo.animated}`,
+  );
+}
+console.log(
+  `Validated ${retinaVideoPath}: 2160x3840, ${retinaVideo.byteLength} bytes, sha256=${retinaVideoSha256}`,
+);
+// retina-mobile-video-v14-validation-end

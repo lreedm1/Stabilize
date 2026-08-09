@@ -334,3 +334,51 @@ test("portrait mobile prefers a hardware-friendly direct MP4", async () => {
   }
 });
 // smooth-mobile-video-v12-test-end
+
+// retina-mobile-video-v14-test-start
+test("portrait mobile always autoplays the Retina background", async () => {
+  const [clientSource, pageSource, styleSource, materializerSource, retinaVideo] =
+    await Promise.all([
+      read("public/mobile-quality.js"),
+      read("src/page.js"),
+      read("public/mobile-woodland-loop.css"),
+      read("scripts/materialize-mobile-forest-stream.mjs"),
+      readFile(new URL("../public/scenes/mobile-forest-stream-video-v14-retina-2160.mp4", import.meta.url)),
+    ]);
+
+  assert.match(
+    clientSource,
+    /const RETINA_VIDEO_ASSET =[\s\S]*"\/scenes\/mobile\-forest\-stream\-video\-v14\-retina\-2160\.mp4"/,
+  );
+  assert.match(clientSource, /video\.src = RETINA_VIDEO_ASSET/);
+  assert.match(clientSource, /video\.autoplay = true/);
+  assert.match(clientSource, /video\.muted = true/);
+  assert.match(clientSource, /video\.defaultMuted = true/);
+  assert.match(clientSource, /video\.loop = true/);
+  assert.match(clientSource, /video\.playsInline = true/);
+  assert.match(clientSource, /video\.addEventListener\("pause"/);
+  assert.match(clientSource, /scheduleAutoplayRetry\(video\)/);
+  assert.doesNotMatch(
+    clientSource,
+    /prefersStandardDefinition|prefers-reduced-data|saveData/,
+  );
+
+  assert.match(
+    pageSource,
+    /<video[\s\S]*id="mobile-background-video"[\s\S]*autoplay[\s\S]*muted[\s\S]*loop[\s\S]*playsinline/,
+  );
+  assert.match(pageSource, /src="\/scenes\/mobile\-forest\-stream\-video\-v14\-retina\-2160\.mp4"/);
+  assert.match(pageSource, /poster="\/scenes\/mobile\-forest\-stream\-v14\-retina\-2160\.webp"/);
+  assert.match(pageSource, /mobile-quality\.js\?v=20260809\-mobile\-video\-v14\-retina\-autoplay\-1/);
+  assert.match(styleSource, /retina-mobile-video-v14-start/);
+  assert.match(styleSource, /object-fit:\s*cover/);
+  assert.match(materializerSource, /retina-mobile-video-v14-validation-start/);
+  assert.match(materializerSource, /mobile\-forest\-stream\-video\-v14\-retina\-2160\.mp4/);
+
+  assert.equal(retinaVideo.byteLength, 5006520);
+  assert.equal(retinaVideo.subarray(4, 8).toString("ascii"), "ftyp");
+  for (const marker of ["moov", "mdat", "avc1"]) {
+    assert.ok(retinaVideo.includes(Buffer.from(marker, "ascii")));
+  }
+});
+// retina-mobile-video-v14-test-end

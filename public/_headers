@@ -54,3 +54,17 @@
   Cross-Origin-Resource-Policy: same-origin
   X-Content-Type-Options: nosniff
 # smooth-mobile-video-v12-end
+
+# retina-mobile-video-v14-start
+/scenes/mobile-forest-stream-video-v14-retina-2160.mp4
+  Content-Type: video/mp4
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+
+/scenes/mobile-forest-stream-v14-retina-2160.webp
+  Content-Type: image/webp
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+# retina-mobile-video-v14-end
