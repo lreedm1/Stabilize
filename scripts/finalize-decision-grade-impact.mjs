@@ -147,6 +147,8 @@ await update("package.json", (source) => {
 await import("./apply-mobile-motion-canvas-v18.mjs");
 await import("./fix-mobile-motion-canvas-v18.mjs");
 
+await import("./apply-mobile-hd-background-v20.mjs");
+
 console.log(
   "Finalized decision-grade impact compatibility, mobile-video CSP, canonical regression expectations, and visibly opaque canvas mobile motion.",
 );

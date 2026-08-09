@@ -120,3 +120,42 @@ test("restored tabs recover from interrupted blank thinking views", async () => 
   assert.match(clientScript, /chatLog\.hidden = true/);
   assert.match(clientScript, /lastSubmittedText/);
 });
+
+// mobile-hd-background-v20-quality-test-start
+test("portrait mobile layers a true-HD MP4 over the matched canvas fallback", async () => {
+  const [pageSource, styleSource, clientSource, video, poster] =
+    await Promise.all([
+      readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+      readFile(new URL("../public/mobile-woodland-loop.css", import.meta.url), "utf8"),
+      readFile(new URL("../public/mobile-hd-background-v20.js", import.meta.url), "utf8"),
+      readFile(new URL("../public/scenes/mobile-forest-stream-v20-true-hd-1440.mp4", import.meta.url)),
+      readFile(new URL("../public/scenes/mobile-forest-stream-v20-true-hd-1440.webp", import.meta.url)),
+    ]);
+
+  assert.ok(video.byteLength > 4_000_000);
+  assert.ok(video.byteLength < 30_000_000);
+  assert.equal(video.subarray(4, 8).toString("ascii"), "ftyp");
+  assert.ok(video.includes(Buffer.from("moov", "ascii")));
+  assert.ok(video.includes(Buffer.from("avc1", "ascii")));
+  const posterInfo = webpInfo(poster);
+  assert.deepEqual(
+    { width: posterInfo.width, height: posterInfo.height },
+    { width: 1440, height: 2560 },
+  );
+  assert.equal(
+    [...pageSource.matchAll(/mobile-forest-stream-v14-retina-2160\.webp 2160w/g)]
+      .length,
+    2,
+  );
+  assert.match(pageSource, /id="mobile-hd-background"/);
+  assert.match(pageSource, /autoplay[\s\S]*muted[\s\S]*loop[\s\S]*playsinline/);
+  assert.match(pageSource, /mobile-forest-stream-v20-true-hd-1440\.mp4/);
+  assert.match(pageSource, /mobile-hd-background-v20\.js\?v=20260809-mobile-hd-background-v20-2/);
+  assert.match(styleSource, /mobile-hd-background-v20-start/);
+  assert.match(styleSource, /\.mobile-hd-background[\s\S]*opacity: 1/);
+  assert.match(clientSource, /await video\.play\(\)/);
+  assert.match(clientSource, /playing-true-hd/);
+  assert.match(clientSource, /static-true-hd-poster/);
+  assert.match(clientSource, /navigator\?\.connection\?\.saveData/);
+});
+// mobile-hd-background-v20-quality-test-end
