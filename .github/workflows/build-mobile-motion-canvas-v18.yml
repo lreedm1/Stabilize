@@ -8,6 +8,7 @@ on:
       - scripts/generate-mobile-water-sprite-v18.sh
       - scripts/install-mobile-water-sprite-v18.py
       - scripts/apply-mobile-motion-canvas-v18.mjs
+      - scripts/finalize-decision-grade-impact.mjs
       - public/mobile-motion-canvas.js
       - package.json
       - .github/workflows/build-mobile-motion-canvas-v18.yml
@@ -18,6 +19,7 @@ on:
       - scripts/generate-mobile-water-sprite-v18.sh
       - scripts/install-mobile-water-sprite-v18.py
       - scripts/apply-mobile-motion-canvas-v18.mjs
+      - scripts/finalize-decision-grade-impact.mjs
       - public/mobile-motion-canvas.js
       - package.json
       - .github/workflows/build-mobile-motion-canvas-v18.yml
