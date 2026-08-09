@@ -1,0 +1,97 @@
+name: Build HD autoplay mobile background
+
+on:
+  pull_request:
+    paths:
+      - scripts/generate-mobile-video-hd.sh
+      - scripts/prepare-mobile-video-hd-release.py
+      - scripts/mobile-quality-hd-template.js
+      - .github/workflows/build-mobile-video-hd.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install video tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y ffmpeg
+          fi
+
+      - name: Generate and strictly validate the HD release
+        shell: bash
+        run: |
+          chmod +x scripts/generate-mobile-video-hd.sh
+          bash scripts/generate-mobile-video-hd.sh \
+            /tmp/stabilize-mobile-video-hd
+
+      - name: Prepare, test, and publish the release branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          work=/tmp/stabilize-mobile-video-hd
+          cp scripts/generate-mobile-video-hd.sh /tmp/generate-mobile-video-hd.sh
+          cp scripts/prepare-mobile-video-hd-release.py /tmp/prepare-mobile-video-hd-release.py
+          cp scripts/mobile-quality-hd-template.js /tmp/mobile-quality-hd-template.js
+
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git switch -C agent/mobile-video-hd-autoplay-release refs/remotes/origin/main
+
+          npm ci --ignore-scripts
+          npm run apply:prompt-policy
+
+          cp /tmp/generate-mobile-video-hd.sh scripts/generate-mobile-video-hd.sh
+          cp /tmp/prepare-mobile-video-hd-release.py scripts/prepare-mobile-video-hd-release.py
+          cp /tmp/mobile-quality-hd-template.js scripts/mobile-quality-hd-template.js
+          chmod +x scripts/generate-mobile-video-hd.sh
+          chmod +x scripts/prepare-mobile-video-hd-release.py
+
+          python scripts/prepare-mobile-video-hd-release.py \
+            "$work/mobile-forest-stream-video-v13-1080.mp4" \
+            "$work/mobile-forest-stream-v13-1080.webp"
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Autoplay an adaptive 1080p mobile background'
+
+          npm test
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+          git push --force origin HEAD:agent/mobile-video-hd-autoplay-release
+
+      - name: Upload generated evidence and release logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hd-autoplay-mobile-background-evidence
+          path: |
+            /tmp/stabilize-mobile-video-hd/mobile-forest-stream-video-v13-1080.mp4
+            /tmp/stabilize-mobile-video-hd/mobile-forest-stream-v13-1080.webp
+            /tmp/stabilize-mobile-video-hd/frame-early.png
+            /tmp/stabilize-mobile-video-hd/frame-late.png
+            /tmp/stabilize-mobile-video-hd/probe.json
+            /tmp/stabilize-mobile-video-hd/framemd5.txt
+          if-no-files-found: warn
+          retention-days: 7
