@@ -1,151 +1,39 @@
 const MOBILE_BACKGROUND_QUERY =
   "(max-width: 980px) and (orientation: portrait)";
-const VIDEO_ASSET = "/media/mobile-forest-stream-video-v4-1080.mp4";
-const SMOOTH_VIDEO_ASSET = "/scenes/mobile-forest-stream-video-v12-720.mp4";
-const RETINA_VIDEO_ASSET =
-  "/scenes/mobile-forest-stream-video-v14-retina-2160.mp4";
-const RETINA_POSTER_ASSET =
+const VIDEO_ASSET =
+  "/media/mobile-forest-stream-video-v14-retina-2160.mp4";
+const POSTER_ASSET =
   "/scenes/mobile-forest-stream-v14-retina-2160.webp";
-const SD_POSTER_ASSET = "/scenes/mobile-forest-stream-v12-720.webp";
-const MAX_AUTOPLAY_RETRIES = 8;
+const MAX_AUTOPLAY_RETRIES = 10;
 
 const mobilePortrait = globalThis.matchMedia?.(MOBILE_BACKGROUND_QUERY);
-const backdropImage = document.querySelector("#photo-backdrop-image");
-const terrain = document.querySelector("#terrain-background");
-
-let backgroundVideo = null;
-let activeVideoAsset = RETINA_VIDEO_ASSET;
-let activeVideoLabel = "retina-2160-autoplay";
-let fallbackStep = 0;
-let gestureListenersInstalled = false;
-let autoplayRetryTimer = null;
+const video = document.querySelector("#mobile-background-video");
+let retryTimer = null;
 let autoplayAttempts = 0;
 let requestedPause = false;
+let gestureRecoveryBound = false;
 
-function markPosterReady() {
-  terrain?.classList.add("is-photo-ready");
-  if (document.documentElement.dataset.mobileBackground !== "video-playing") {
-    document.documentElement.dataset.mobileBackground = "poster-ready";
+function setState(state) {
+  document.documentElement.dataset.mobileBackground = state;
+}
+
+function clearRetry() {
+  if (retryTimer !== null) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
   }
 }
 
-if (backdropImage instanceof HTMLImageElement) {
-  if (backdropImage.complete && backdropImage.naturalWidth > 0) {
-    markPosterReady();
-  } else {
-    backdropImage.addEventListener("load", markPosterReady, { once: true });
-    backdropImage.addEventListener(
-      "error",
-      () => {
-        document.documentElement.dataset.mobileBackground = "poster-failed";
-      },
-      { once: true },
-    );
-  }
-}
-
-function clearAutoplayRetry() {
-  if (autoplayRetryTimer !== null) {
-    clearTimeout(autoplayRetryTimer);
-    autoplayRetryTimer = null;
-  }
-}
-
-function markAutoplayBlocked(video, error) {
-  video.classList.add("is-autoplay-blocked");
-  document.documentElement.dataset.mobileBackground = "video-autoplay-blocked";
-  if (error && typeof error.name === "string") {
-    document.documentElement.dataset.mobileVideoAutoplayError = error.name;
-  }
-}
-
-function scheduleAutoplayRetry(video) {
-  if (!mobilePortrait?.matches || document.hidden) return;
-  clearAutoplayRetry();
-  if (autoplayAttempts >= MAX_AUTOPLAY_RETRIES) return;
-  const delay = Math.min(2000, 160 * 2 ** Math.min(autoplayAttempts, 4));
-  autoplayAttempts += 1;
-  autoplayRetryTimer = setTimeout(() => requestPlayback(video), delay);
-}
-
-function setVideoSource(video, asset, poster, label, step) {
-  clearAutoplayRetry();
-  activeVideoAsset = asset;
-  activeVideoLabel = label;
-  fallbackStep = step;
-  video.poster = poster;
-  document.documentElement.dataset.mobileVideoSource = label;
-
-  const declared = video.getAttribute("src") || "";
-  const current = video.currentSrc || video.src || declared;
-  if (!current.endsWith(asset)) {
-    video.src = asset;
-    video.load();
-  }
-}
-
-function useStandardFallback(video, reason = "decode-fallback") {
-  if (activeVideoAsset === SMOOTH_VIDEO_ASSET) return false;
-  document.documentElement.dataset.mobileVideoFallbackReason = reason;
-  video.src = SMOOTH_VIDEO_ASSET;
-  setVideoSource(
-    video,
-    SMOOTH_VIDEO_ASSET,
-    SD_POSTER_ASSET,
-    "smooth-720-fallback",
-    1,
+function eligible() {
+  return (
+    video instanceof HTMLVideoElement &&
+    mobilePortrait?.matches === true &&
+    !document.hidden
   );
-  video.load();
-  return true;
 }
 
-function useLegacyFallback(video) {
-  if (activeVideoAsset === VIDEO_ASSET) return false;
-  video.src = VIDEO_ASSET;
-  setVideoSource(
-    video,
-    VIDEO_ASSET,
-    SD_POSTER_ASSET,
-    "legacy-worker-fallback",
-    2,
-  );
-  video.load();
-  return true;
-}
-
-function markVideoPlaying() {
-  if (
-    !(backgroundVideo instanceof HTMLVideoElement) ||
-    !mobilePortrait?.matches ||
-    backgroundVideo.paused
-  ) {
-    return;
-  }
-  backgroundVideo.classList.remove("is-autoplay-blocked");
-  terrain?.classList.add("is-photo-ready");
-  document.documentElement.dataset.mobileBackground = "video-playing";
-  document.documentElement.dataset.mobileVideoSource =
-    activeVideoLabel || "retina-2160-autoplay";
-  document.documentElement.dataset.mobileVideoQuality =
-    fallbackStep === 0 ? "retina" : "fallback";
-  clearAutoplayRetry();
-  autoplayAttempts = 0;
-}
-
-function handleVideoError() {
-  if (!(backgroundVideo instanceof HTMLVideoElement)) return;
-  if (useStandardFallback(backgroundVideo, "media-error")) {
-    requestPlayback(backgroundVideo);
-    return;
-  }
-  if (useLegacyFallback(backgroundVideo)) {
-    requestPlayback(backgroundVideo);
-    return;
-  }
-  document.documentElement.dataset.mobileBackground = "video-failed";
-}
-
-function configureVideo(video) {
+function configure() {
+  if (!(video instanceof HTMLVideoElement)) return;
   video.autoplay = true;
   video.muted = true;
   video.defaultMuted = true;
@@ -154,192 +42,138 @@ function configureVideo(video) {
   video.preload = "auto";
   video.disablePictureInPicture = true;
   video.disableRemotePlayback = true;
+  video.poster = POSTER_ASSET;
   video.setAttribute("autoplay", "");
   video.setAttribute("muted", "");
   video.setAttribute("loop", "");
   video.setAttribute("playsinline", "");
   video.setAttribute("webkit-playsinline", "true");
   video.setAttribute("preload", "auto");
-  video.setAttribute("aria-hidden", "true");
-  video.setAttribute("tabindex", "-1");
   video.setAttribute("x-webkit-airplay", "deny");
-
-  Object.assign(video.style, {
-    position: "fixed",
-    zIndex: "0",
-    inset: "0",
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    objectPosition: "50% 50%",
-    background: "#173f31",
-    pointerEvents: "none",
-    userSelect: "none",
-    transform: "translate3d(0, 0, 0)",
-    WebkitTransform: "translate3d(0, 0, 0)",
-    backfaceVisibility: "hidden",
-    WebkitBackfaceVisibility: "hidden",
-    contain: "strict",
-  });
-
-  if (video.dataset.stabilizeConfigured !== "true") {
-    video.dataset.stabilizeConfigured = "true";
-    video.addEventListener("playing", markVideoPlaying);
-    video.addEventListener("timeupdate", markVideoPlaying);
-    video.addEventListener("loadedmetadata", () => requestPlayback(video));
-    video.addEventListener("loadeddata", () => requestPlayback(video));
-    video.addEventListener("canplay", () => requestPlayback(video));
-    video.addEventListener("error", handleVideoError);
-    video.addEventListener("pause", () => {
-      if (!requestedPause && mobilePortrait?.matches && !document.hidden) {
-        scheduleAutoplayRetry(video);
-      }
-    });
-    video.addEventListener("ended", () => requestPlayback(video));
-  }
 
   const declared = video.getAttribute("src") || "";
   const current = video.currentSrc || video.src || declared;
-  if (current.endsWith(RETINA_VIDEO_ASSET)) {
-    activeVideoAsset = RETINA_VIDEO_ASSET;
-    activeVideoLabel = "retina-2160-autoplay";
-    fallbackStep = 0;
-    video.poster = RETINA_POSTER_ASSET;
-  } else if (current.endsWith(SMOOTH_VIDEO_ASSET)) {
-    activeVideoAsset = SMOOTH_VIDEO_ASSET;
-    activeVideoLabel = "smooth-720-fallback";
-    fallbackStep = 1;
-    video.poster = SD_POSTER_ASSET;
-  } else if (current.endsWith(VIDEO_ASSET)) {
-    activeVideoAsset = VIDEO_ASSET;
-    activeVideoLabel = "legacy-worker-fallback";
-    fallbackStep = 2;
-    video.poster = SD_POSTER_ASSET;
-  } else {
-    video.src = RETINA_VIDEO_ASSET;
-    setVideoSource(
-      video,
-      RETINA_VIDEO_ASSET,
-      RETINA_POSTER_ASSET,
-      "retina-2160-autoplay",
-      0,
-    );
+  if (!current.endsWith(VIDEO_ASSET)) {
+    video.src = VIDEO_ASSET;
     video.load();
   }
-  return video;
 }
 
-function ensureBackgroundVideo() {
-  if (backgroundVideo instanceof HTMLVideoElement) return backgroundVideo;
-
-  const existing = document.querySelector("#mobile-background-video");
-  if (existing instanceof HTMLVideoElement) {
-    backgroundVideo = configureVideo(existing);
-    return backgroundVideo;
-  }
-
-  const video = document.createElement("video");
-  video.id = "mobile-background-video";
-  video.className = "mobile-background-video";
-  video.src = RETINA_VIDEO_ASSET;
-  video.poster = RETINA_POSTER_ASSET;
-  backgroundVideo = configureVideo(video);
-
-  const pageShell = document.querySelector(".page-shell");
-  if (pageShell instanceof HTMLElement) {
-    pageShell.before(video);
-  } else {
-    document.body.append(video);
-  }
-  return video;
+function markPlaying() {
+  if (!eligible() || video.paused || video.readyState < 2) return;
+  video.classList.add("is-playing");
+  video.classList.remove("is-autoplay-blocked", "is-failed");
+  document.documentElement.dataset.mobileVideoSource = "selected-forest-stream";
+  document.documentElement.dataset.mobileVideoQuality = "4k-2160x3840";
+  setState("video-playing");
+  clearRetry();
+  autoplayAttempts = 0;
 }
 
-function requestPlayback(video, fromGesture = false) {
-  if (!mobilePortrait?.matches || document.hidden) return;
-  video.muted = true;
-  video.defaultMuted = true;
-  video.playsInline = true;
-  document.documentElement.dataset.mobileBackground = "video-loading";
+function revealFallback(state, error = null) {
+  if (!(video instanceof HTMLVideoElement)) return;
+  video.classList.remove("is-playing");
+  if (state === "video-failed") video.classList.add("is-failed");
+  else video.classList.add("is-autoplay-blocked");
+  setState(state);
+  if (error && typeof error.name === "string") {
+    document.documentElement.dataset.mobileVideoAutoplayError = error.name;
+  }
+}
 
-  let playback;
+function scheduleRetry() {
+  if (!eligible() || autoplayAttempts >= MAX_AUTOPLAY_RETRIES) return;
+  clearRetry();
+  const delay = Math.min(2500, 180 * 2 ** Math.min(autoplayAttempts, 4));
+  autoplayAttempts += 1;
+  retryTimer = setTimeout(() => requestPlayback(), delay);
+}
+
+function bindGestureRecovery() {
+  if (gestureRecoveryBound) return;
+  gestureRecoveryBound = true;
+  const recover = () => {
+    autoplayAttempts = 0;
+    requestPlayback(true);
+  };
+  for (const event of ["pointerdown", "touchstart", "keydown"]) {
+    globalThis.addEventListener(event, recover, {
+      capture: true,
+      passive: event !== "keydown",
+    });
+  }
+}
+
+async function requestPlayback(fromGesture = false) {
+  if (!eligible()) return;
+  configure();
+  requestedPause = false;
+  setState("video-loading-4k");
+
   try {
-    playback = video.play();
+    await video.play();
+    markPlaying();
   } catch (error) {
-    markAutoplayBlocked(video, error);
-    scheduleAutoplayRetry(video);
-    return;
-  }
-
-  if (playback && typeof playback.then === "function") {
-    playback
-      .then(markVideoPlaying)
-      .catch((error) => {
-        if (fromGesture) autoplayAttempts = 0;
-        markAutoplayBlocked(video, error);
-        scheduleAutoplayRetry(video);
-      });
-  } else {
-    markVideoPlaying();
+    if (fromGesture) autoplayAttempts = 0;
+    revealFallback("video-autoplay-blocked", error);
+    bindGestureRecovery();
+    scheduleRetry();
   }
 }
 
 function startVideo() {
-  if (!mobilePortrait?.matches || document.hidden) return;
-  const video = ensureBackgroundVideo();
-  requestedPause = false;
-  requestPlayback(video);
-  queueMicrotask(() => requestPlayback(video));
-  requestAnimationFrame(() => requestPlayback(video));
+  if (!eligible()) return;
+  configure();
+  requestPlayback();
+  queueMicrotask(() => requestPlayback());
+  requestAnimationFrame(() => requestPlayback());
 }
 
 function stopVideo() {
-  clearAutoplayRetry();
+  clearRetry();
+  if (!(video instanceof HTMLVideoElement)) return;
   requestedPause = true;
-  backgroundVideo?.pause();
-  document.documentElement.dataset.mobileBackground = "poster-ready";
+  video.pause();
+  video.classList.remove("is-playing");
+  setState("poster-canvas-fallback");
   queueMicrotask(() => {
     requestedPause = false;
   });
 }
 
-function resumeAfterGesture() {
-  if (!mobilePortrait?.matches || document.hidden) return;
-  autoplayAttempts = 0;
-  requestPlayback(ensureBackgroundVideo(), true);
-}
-
-function addGestureListeners() {
-  if (gestureListenersInstalled) return;
-  gestureListenersInstalled = true;
-  window.addEventListener("pointerdown", resumeAfterGesture, {
-    capture: true,
-    passive: true,
+if (video instanceof HTMLVideoElement) {
+  configure();
+  for (const event of ["playing", "timeupdate", "loadeddata", "canplay"]) {
+    video.addEventListener(event, markPlaying);
+  }
+  video.addEventListener("loadedmetadata", () => requestPlayback());
+  video.addEventListener("error", () => {
+    clearRetry();
+    revealFallback("video-failed");
   });
-  window.addEventListener("touchstart", resumeAfterGesture, {
-    capture: true,
-    passive: true,
+  video.addEventListener("pause", () => {
+    if (!requestedPause && eligible()) scheduleRetry();
   });
-  window.addEventListener("keydown", resumeAfterGesture, { capture: true });
+  video.addEventListener("ended", () => requestPlayback());
 }
 
 mobilePortrait?.addEventListener?.("change", (event) => {
   if (event.matches) startVideo();
   else stopVideo();
 });
-
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) stopVideo();
   else startVideo();
 });
 document.addEventListener("DOMContentLoaded", startVideo, { once: true });
-window.addEventListener("load", startVideo, { once: true });
-window.addEventListener("pageshow", startVideo);
-window.addEventListener("focus", startVideo);
-window.addEventListener("online", startVideo);
-window.addEventListener("orientationchange", () => setTimeout(startVideo, 0));
-window.addEventListener("pagehide", stopVideo);
+globalThis.addEventListener("load", startVideo, { once: true });
+globalThis.addEventListener("pageshow", startVideo);
+globalThis.addEventListener("focus", startVideo);
+globalThis.addEventListener("online", startVideo);
+globalThis.addEventListener("orientationchange", () => setTimeout(startVideo, 0));
+globalThis.addEventListener("pagehide", stopVideo);
 
 if (mobilePortrait?.matches) {
-  addGestureListeners();
+  bindGestureRecovery();
   startVideo();
 }
