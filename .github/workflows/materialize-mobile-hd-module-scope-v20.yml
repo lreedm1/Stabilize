@@ -8,6 +8,13 @@ on:
       - scripts/fix-mobile-hd-module-scope-v20.mjs
       - scripts/finalize-decision-grade-impact.mjs
       - .github/workflows/materialize-mobile-hd-module-scope-v20.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - scripts/fix-mobile-hd-module-scope-v20.mjs
+      - scripts/finalize-decision-grade-impact.mjs
+      - .github/workflows/materialize-mobile-hd-module-scope-v20.yml
   workflow_dispatch:
 
 permissions:
