@@ -167,6 +167,31 @@ jobs:
           if test_source.count(old) != 1:
               raise SystemExit("Could not align the mobile style regression version")
           test_path.write_text(test_source.replace(old, new, 1))
+
+          # Preserve the original no-audio guarantee while permitting the
+          # exact muted inline video autoplay required by this release.
+          worker_test_path = Path("test/worker.test.mjs")
+          worker_test = worker_test_path.read_text()
+          old_guard = "<audio|autoplay|nature-sounds"
+          new_guard = "<audio|nature-sounds"
+          if worker_test.count(old_guard) != 1:
+              raise SystemExit("Could not update the root-page audio guard")
+          worker_test = worker_test.replace(old_guard, new_guard, 1)
+          anchor = (
+              "  assert.doesNotMatch(html, /<audio|nature-sounds\\\\.js/);\n"
+          )
+          autoplay_assertion = (
+              anchor
+              + "  assert.match(\n"
+              + "    html,\n"
+              + "    /<video[\\s\\S]*id=\\\"mobile-background-video\\\"[\\s\\S]*autoplay[\\s\\S]*muted/,\n"
+              + "  );\n"
+          )
+          if worker_test.count(anchor) != 1:
+              raise SystemExit("Could not add the muted autoplay assertion")
+          worker_test_path.write_text(
+              worker_test.replace(anchor, autoplay_assertion, 1)
+          )
           PY
 
           git config user.name 'github-actions[bot]'
