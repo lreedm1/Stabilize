@@ -141,6 +141,11 @@ await update("package.json", (source) => {
   return JSON.stringify(packageJson, null, 2) + "\n";
 });
 
+// Historical generators can still rewrite the mobile background before this
+// finalizer runs. Reapply the canvas implementation here so every build ends
+// with the no-media-autoplay motion path, regardless of pipeline ordering.
+await import("./apply-mobile-motion-canvas-v18.mjs");
+
 console.log(
-  "Finalized decision-grade impact compatibility, mobile-video CSP, and canonical regression expectations.",
+  "Finalized decision-grade impact compatibility, mobile-video CSP, canonical regression expectations, and canvas mobile motion.",
 );
