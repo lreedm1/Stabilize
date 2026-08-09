@@ -1,20 +1,13 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const VERSION = "20260809-mobile-hd-background-v20-1";
+const VERSION = "20260809-mobile-hd-background-v20-2";
 const VIDEO_ASSET =
   "/scenes/mobile-forest-stream-v20-true-hd-1440.mp4";
 const POSTER_ASSET =
   "/scenes/mobile-forest-stream-v20-true-hd-1440.webp";
 const POSTER_WIDTH = 1440;
-const STATIC_PAGES = [
-  "public/about.html",
-  "public/floor-first.html",
-  "public/how-it-works.html",
-  "public/privacy.html",
-  "public/safety.html",
-  "public/support.html",
-  "public/sustainability.html",
-];
+const LEGACY_POSTER_ASSET =
+  "/scenes/mobile-forest-stream-v14-retina-2160.webp";
 
 async function update(path, transform) {
   const before = await readFile(path, "utf8");
@@ -101,16 +94,9 @@ await update("src/page.js", (source) => {
     next = next.replace(anchor, `${preloadBlock}\n${anchor}`);
   }
 
-  next = next.replace(
-    /      <source\n        media="\(max-width: 980px\) and \(orientation: portrait\)"\n        type="image\/webp"\n        sizes="100vw"\n        srcset="[\s\S]*?"\n      \/>/,
-    `      <source
-        media="(max-width: 980px) and (orientation: portrait)"
-        type="image/webp"
-        sizes="100vw"
-        srcset="\\n          ${POSTER_ASSET} ${POSTER_WIDTH}w\\n        "
-      />`,
-  );
-
+  // Preserve the existing poster and canvas as one visually matched fallback.
+  // The true-HD video sits above both layers and keeps its own sharp poster
+  // visible even when autoplay is unavailable.
   if (next.includes(videoStart)) {
     next = replaceMarked(next, videoStart, videoEnd, videoBlock);
   } else {
@@ -141,6 +127,9 @@ await update("src/page.js", (source) => {
   if (next.split('id="mobile-hd-background"').length - 1 !== 1) {
     throw new Error("Expected one HD mobile video element");
   }
+  if (next.split(`${LEGACY_POSTER_ASSET} 2160w`).length - 1 !== 2) {
+    throw new Error("The matched legacy poster/canvas fallback changed");
+  }
   return next;
 });
 
@@ -168,12 +157,16 @@ function eligible() {
 function reveal() {
   if (!(video instanceof HTMLVideoElement)) return;
   video.classList.add("is-ready");
+  video.classList.remove("is-poster-fallback");
   setState("playing-true-hd");
 }
 
-function conceal(state = "poster-fallback") {
+function preservePoster(state = "poster-fallback") {
   if (!(video instanceof HTMLVideoElement)) return;
-  video.classList.remove("is-ready");
+  // Keep the element opaque. Before decoded frames arrive, the browser renders
+  // the 1440x2560 poster; after playback has begun, the last sharp frame stays
+  // visible during a stall instead of exposing the older soft canvas beneath.
+  video.classList.add("is-poster-fallback");
   setState(state);
 }
 
@@ -204,7 +197,9 @@ async function start() {
 
   if (!eligible()) {
     video.pause();
-    conceal(mobilePortrait?.matches ? "static-by-preference" : "desktop-static");
+    preservePoster(
+      mobilePortrait?.matches ? "static-true-hd-poster" : "desktop-static",
+    );
     return;
   }
 
@@ -213,7 +208,7 @@ async function start() {
     await video.play();
     if (!video.paused && video.readyState >= 2) reveal();
   } catch {
-    setState("autoplay-retry-pending");
+    preservePoster("autoplay-retry-pending");
     bindGestureRecovery();
   }
 }
@@ -224,9 +219,11 @@ if (video instanceof HTMLVideoElement) {
       if (!video.paused && video.readyState >= 2) reveal();
     });
   }
-  video.addEventListener("error", () => conceal("video-failed-poster-fallback"));
+  video.addEventListener("error", () =>
+    preservePoster("video-failed-true-hd-poster"),
+  );
   video.addEventListener("stalled", () => {
-    if (video.readyState < 2) conceal("video-stalled-poster-fallback");
+    if (video.readyState < 2) preservePoster("video-stalled-true-hd-poster");
   });
 }
 
@@ -261,17 +258,17 @@ const styleBlock = `${styleStart}
     height: 100%;
     object-fit: cover;
     object-position: 50% 50%;
-    opacity: 0;
+    opacity: 1;
     pointer-events: none;
     user-select: none;
     transform: translate3d(0, 0, 0);
     -webkit-transform: translate3d(0, 0, 0);
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
-    transition: opacity 120ms linear;
   }
 
-  .mobile-hd-background.is-ready {
+  .mobile-hd-background.is-ready,
+  .mobile-hd-background.is-poster-fallback {
     opacity: 1;
   }
 }
@@ -304,32 +301,10 @@ await update("public/_headers", (source) =>
   replaceMarked(source, headersStart, headersEnd, headersBlock, true),
 );
 
-const guideBlock = `@media (max-width: 980px) and (orientation: portrait) {
-  body::before {
-    background-image: url("${POSTER_ASSET}");
-    background-position: 50% 50%;
-    filter: none;
-  }
-}`;
-await update("public/guides.css", (source) =>
-  source.replace(
-    /@media \(max-width: 980px\) and \(orientation: portrait\) \{\n  body::before \{[\s\S]*?\n  \}\n\}/,
-    guideBlock,
-  ),
-);
-for (const path of STATIC_PAGES) {
-  await update(path, (source) =>
-    source.replace(
-      /href="\/guides\.css(?:\?v=[^"]*)?"/g,
-      `href="/guides.css?v=${VERSION}"`,
-    ),
-  );
-}
-
 const qualityStart = "// mobile-hd-background-v20-quality-test-start";
 const qualityEnd = "// mobile-hd-background-v20-quality-test-end";
 const qualityTest = `${qualityStart}
-test("portrait mobile layers a true-HD MP4 over the canvas fallback", async () => {
+test("portrait mobile layers a true-HD MP4 over the matched canvas fallback", async () => {
   const [pageSource, styleSource, clientSource, video, poster] =
     await Promise.all([
       readFile(new URL("../src/page.js", import.meta.url), "utf8"),
@@ -349,14 +324,20 @@ test("portrait mobile layers a true-HD MP4 over the canvas fallback", async () =
     { width: posterInfo.width, height: posterInfo.height },
     { width: 1440, height: 2560 },
   );
+  assert.equal(
+    [...pageSource.matchAll(/mobile-forest-stream-v14-retina-2160\\.webp 2160w/g)]
+      .length,
+    2,
+  );
   assert.match(pageSource, /id="mobile-hd-background"/);
   assert.match(pageSource, /autoplay[\\s\\S]*muted[\\s\\S]*loop[\\s\\S]*playsinline/);
   assert.match(pageSource, /mobile-forest-stream-v20-true-hd-1440\\.mp4/);
   assert.match(pageSource, /mobile-hd-background-v20\\.js\\?v=${VERSION}/);
   assert.match(styleSource, /mobile-hd-background-v20-start/);
-  assert.match(styleSource, /\\.mobile-hd-background\\.is-ready/);
+  assert.match(styleSource, /\\.mobile-hd-background[\\s\\S]*opacity: 1/);
   assert.match(clientSource, /await video\\.play\\(\\)/);
   assert.match(clientSource, /playing-true-hd/);
+  assert.match(clientSource, /static-true-hd-poster/);
   assert.match(clientSource, /navigator\\?\\.connection\\?\\.saveData/);
 });
 ${qualityEnd}`;
