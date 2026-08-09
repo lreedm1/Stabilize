@@ -1,0 +1,54 @@
+name: Diagnose iOS mobile video 2
+
+on:
+  push:
+    branches:
+      - agent/diagnose-ios-video-2
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Materialize video and inspect codec
+        shell: bash
+        run: |
+          set -euxo pipefail
+          node scripts/materialize-mobile-forest-stream.mjs
+          video='public/scenes/mobile-forest-stream-video-v4-1080.mp4'
+          command -v ffprobe || { sudo apt-get update -qq; sudo apt-get install -y ffmpeg; }
+          ffprobe -hide_banner -v error \
+            -show_entries stream=index,codec_name,codec_long_name,profile,codec_type,codec_tag_string,width,height,coded_width,coded_height,pix_fmt,level,color_range,color_space,color_transfer,color_primaries,field_order,refs,is_avc,nal_length_size,r_frame_rate,avg_frame_rate,time_base,start_time,duration,bit_rate,nb_frames:format=filename,format_name,format_long_name,start_time,duration,size,bit_rate,probe_score \
+            -of json "$video" | tee /tmp/ffprobe.json
+          ffmpeg -hide_banner -v error -i "$video" -map 0:v:0 -f null -
+          mkdir -p /tmp/mobile-video-diagnostic
+          cp "$video" /tmp/mobile-video-diagnostic/mobile-video.mp4
+          cp /tmp/ffprobe.json /tmp/mobile-video-diagnostic/ffprobe.json
+          ffmpeg -hide_banner -v error -i "$video" -vf 'select=eq(n\,0)' -frames:v 1 /tmp/mobile-video-diagnostic/frame-first.png
+          duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$video")"
+          middle="$(python -c "print(max(float('$duration')/2, 0))")"
+          ffmpeg -hide_banner -v error -ss "$middle" -i "$video" -frames:v 1 /tmp/mobile-video-diagnostic/frame-middle.png
+          sha256sum "$video" /tmp/mobile-video-diagnostic/frame-*.png | tee /tmp/mobile-video-diagnostic/sha256.txt
+          ls -lh /tmp/mobile-video-diagnostic
+
+      - name: Upload diagnostic artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-mobile-video-diagnostic-2
+          path: /tmp/mobile-video-diagnostic
+          if-no-files-found: error
+          retention-days: 3
