@@ -21,31 +21,61 @@ jobs:
           persist-credentials: false
 
       - name: Download and validate the replacement MP4
+        id: download
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           url='https://drive.usercontent.google.com/download?id=1pH2YWsVydiR2IscMzZbD-Wmf4tZdDUMk&export=download&confirm=t'
-          curl --fail-with-body --location --retry 3 --max-time 120 \
-            --output /tmp/mobile-video.mp4 "$url"
-          bytes="$(wc -c < /tmp/mobile-video.mp4 | tr -d '[:space:]')"
-          sha="$(sha256sum /tmp/mobile-video.mp4 | awk '{print $1}')"
-          file /tmp/mobile-video.mp4
-          echo "bytes=$bytes sha=$sha"
-          test "$bytes" = 409215
-          test "$sha" = '0c5a9399ef524b2f2d04458b3604078371c040ca1d5fbae2506bdba0dcda5953'
-          test "$(dd if=/tmp/mobile-video.mp4 bs=1 skip=4 count=4 status=none)" = 'ftyp'
-          command -v ffmpeg >/dev/null || { sudo apt-get update -qq; sudo apt-get install -y ffmpeg; }
-          ffmpeg -hide_banner -v error -xerror -err_detect explode \
-            -i /tmp/mobile-video.mp4 -map 0:v:0 -f null -
+          http_status="$(curl --location --retry 2 --max-time 120 \
+            --silent --show-error \
+            --output /tmp/mobile-video.mp4 \
+            --write-out '%{http_code}' "$url" || true)"
+          bytes="$(wc -c < /tmp/mobile-video.mp4 2>/dev/null | tr -d '[:space:]')"
+          bytes="${bytes:-0}"
+          sha="$(sha256sum /tmp/mobile-video.mp4 2>/dev/null | awk '{print $1}')"
+          type="$(file -b --mime-type /tmp/mobile-video.mp4 2>/dev/null || true)"
+          echo "http=$http_status bytes=$bytes type=$type sha=$sha"
+
+          result=failure
+          detail="HTTP ${http_status:-000}, ${bytes} bytes, ${type:-unknown}"
+          if [[ "$http_status" == 200 \
+            && "$bytes" == 409215 \
+            && "$sha" == '0c5a9399ef524b2f2d04458b3604078371c040ca1d5fbae2506bdba0dcda5953' \
+            && "$(dd if=/tmp/mobile-video.mp4 bs=1 skip=4 count=4 status=none 2>/dev/null)" == 'ftyp' ]]; then
+            command -v ffmpeg >/dev/null || { sudo apt-get update -qq; sudo apt-get install -y ffmpeg; }
+            if ffmpeg -hide_banner -v error -xerror -err_detect explode \
+              -i /tmp/mobile-video.mp4 -map 0:v:0 -f null -; then
+              result=success
+              detail='Validated 1080x1920 MP4 download succeeded'
+            else
+              detail='Downloaded MP4 failed strict frame decoding'
+            fi
+          fi
+          echo "result=$result" >> "$GITHUB_OUTPUT"
+          echo "detail=$detail" >> "$GITHUB_OUTPUT"
 
       - name: Publish import result
-        if: success()
+        if: always()
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ steps.download.outputs.result }}
+          DETAIL: ${{ steps.download.outputs.detail }}
         run: |
           set -euo pipefail
-          payload='{"state":"success","context":"diagnostic/mobile-video-import","description":"Validated 1080x1920 MP4 download succeeded","target_url":"'"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"'"}'
+          state="${RESULT:-failure}"
+          description="${DETAIL:-Video import step did not produce a result}"
+          description="${description:0:140}"
+          payload="$(python - "$state" "$description" <<'PY'
+          import json, os, sys
+          print(json.dumps({
+              'state': sys.argv[1],
+              'context': 'diagnostic/mobile-video-import',
+              'description': sys.argv[2],
+              'target_url': f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+          }))
+          PY
+          )"
           curl --fail-with-body --silent --show-error \
             --request POST \
             --header 'Accept: application/vnd.github+json' \
