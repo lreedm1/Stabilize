@@ -154,20 +154,10 @@ const FRAME_HEIGHT = 1200;`,
   return next;
 });
 
-await update(".github/workflows/verify-mobile-background.yml", (source) =>
-  replaceRequired(
-    source,
-    `              && grep -Fq 'const FRAME_RATE = 6;' "$tmpdir/client.js" \\`,
-    `              && grep -Fq 'const COMPOSITION_WIDTH = 1080;' "$tmpdir/client.js" \\
-              && grep -Fq 'const COMPOSITION_HEIGHT = 1920;' "$tmpdir/client.js" \\
-              && grep -Fq 'const FRAME_LEFT = 680;' "$tmpdir/client.js" \\
-              && grep -Fq 'const FRAME_TOP = 720;' "$tmpdir/client.js" \\
-              && grep -Fq 'const FRAME_WIDTH = 400;' "$tmpdir/client.js" \\
-              && grep -Fq 'const FRAME_HEIGHT = 1200;' "$tmpdir/client.js" \\
-              && grep -Fq 'const FRAME_RATE = 6;' "$tmpdir/client.js" \\`,
-    "the production canvas frame-rate check",
-  ),
-);
+// The existing production workflow already derives and checksum-verifies the
+// exact sprite selected by the page, then confirms changing visible pixels in
+// mobile WebKit. Keep generated visual output out of .github/workflows so the
+// branch can be published by the intentionally workflow-scoped Actions token.
 
 console.log(
   "Upgraded portrait-mobile water motion from a scaled 540p full-frame atlas to a 1080p-source cropped HD atlas.",
