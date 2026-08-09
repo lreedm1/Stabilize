@@ -27,12 +27,21 @@ function replaceRequired(source, before, after, label) {
 
 await update("scripts/apply-mobile-motion-canvas-v18.mjs", (source) => {
   let next = source;
-  next = replaceRequired(next, OLD_ASSET, NEW_ASSET, "the old water sprite asset");
+  // Replace the exact filename declaration before replacing the asset URL. The
+  // filename is a substring of the URL, so doing the broad URL replacement
+  // first can make an idempotence check incorrectly conclude that the filename
+  // declaration was already upgraded.
   next = replaceRequired(
     next,
-    OLD_FILENAME,
-    NEW_FILENAME,
-    "the old water sprite filename",
+    `const SPRITE_FILENAME = "${OLD_FILENAME}";`,
+    `const SPRITE_FILENAME = "${NEW_FILENAME}";`,
+    "the old water sprite filename declaration",
+  );
+  next = replaceRequired(
+    next,
+    `  "${OLD_ASSET}";`,
+    `  "${NEW_ASSET}";`,
+    "the old water sprite asset declaration",
   );
   next = replaceRequired(
     next,
