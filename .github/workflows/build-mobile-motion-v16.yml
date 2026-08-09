@@ -9,6 +9,13 @@ on:
       - scripts/generate-mobile-motion-fallback.sh
       - scripts/prepare-mobile-motion-fallback.py
       - .github/workflows/build-mobile-motion-v16.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - scripts/generate-mobile-motion-fallback.sh
+      - scripts/prepare-mobile-motion-fallback.py
+      - .github/workflows/build-mobile-motion-v16.yml
   workflow_dispatch:
 
 permissions:
@@ -75,6 +82,7 @@ jobs:
           git diff --exit-code
 
       - name: Publish the verified release branch
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         shell: bash
         run: |
           set -euo pipefail
