@@ -89,21 +89,3 @@
   X-Content-Type-Options: nosniff
 # mobile-motion-canvas-v18-end
 
-# mobile-hd-background-v20-start
-/scenes/mobile-forest-stream-v20-true-hd-1440.mp4
-  Content-Type: video/mp4
-  Cache-Control: public, max-age=31536000, immutable
-  Accept-Ranges: bytes
-  Cross-Origin-Resource-Policy: same-origin
-  X-Content-Type-Options: nosniff
-
-/scenes/mobile-forest-stream-v20-true-hd-1440.webp
-  Content-Type: image/webp
-  Cache-Control: public, max-age=31536000, immutable
-  Cross-Origin-Resource-Policy: same-origin
-  X-Content-Type-Options: nosniff
-
-/mobile-hd-background-v20.js
-  Content-Type: text/javascript; charset=utf-8
-  Cache-Control: no-store, max-age=0
-# mobile-hd-background-v20-end
