@@ -314,22 +314,22 @@ console.log(
 );
 // retina-mobile-video-v14-validation-end
 
-// no-tap-mobile-motion-v16-validation-start
-const noTapMotionPath = "public/scenes/mobile-forest-stream-motion-v16-1440.webp";
-const noTapMotionExpectedBytes = 10_592_086;
-const noTapMotionExpectedSha256 = "1d80ffedaa66e995f0a5c940d95538a2b3eec9889ec0c8b1e8d94c5cc21062fa";
+// no-tap-mobile-motion-v17-hq-validation-start
+const noTapMotionPath = "public/scenes/mobile-forest-stream-motion-v17-hq-1440.webp";
+const noTapMotionExpectedBytes = 15_000_242;
+const noTapMotionExpectedSha256 = "0c982b6027330c6d2bd71a1d0a9f72c4ef3f5c2065e724acf1509494c10db9bd";
 
 const noTapMotion = await readFile(noTapMotionPath);
 if (noTapMotion.byteLength !== noTapMotionExpectedBytes) {
   throw new Error(
-    `Unexpected no-tap mobile motion size: ${noTapMotion.byteLength}; expected ${noTapMotionExpectedBytes}`,
+    `Unexpected high-bitrate mobile motion size: ${noTapMotion.byteLength}; expected ${noTapMotionExpectedBytes}`,
   );
 }
 const noTapMotionSha256 = createHash("sha256")
   .update(noTapMotion)
   .digest("hex");
 if (noTapMotionSha256 !== noTapMotionExpectedSha256) {
-  throw new Error(`No-tap mobile motion checksum mismatch: ${noTapMotionSha256}`);
+  throw new Error(`High-bitrate mobile motion checksum mismatch: ${noTapMotionSha256}`);
 }
 const noTapMotionInfo = webpInfo(noTapMotion);
 if (
@@ -338,13 +338,16 @@ if (
   !noTapMotionInfo.animated
 ) {
   throw new Error(
-    `Unexpected no-tap mobile motion: ${noTapMotionInfo.width}x${noTapMotionInfo.height}, animated=${noTapMotionInfo.animated}`,
+    `Unexpected high-bitrate mobile motion: ${noTapMotionInfo.width}x${noTapMotionInfo.height}, animated=${noTapMotionInfo.animated}`,
   );
 }
 if (!noTapMotion.includes(Buffer.from("ANMF", "ascii"))) {
-  throw new Error("No-tap mobile motion does not contain animation frames");
+  throw new Error("High-bitrate mobile motion does not contain animation frames");
+}
+if (noTapMotion.byteLength <= 10592086) {
+  throw new Error("High-bitrate mobile motion is not larger than the v16 release");
 }
 console.log(
   `Validated ${noTapMotionPath}: 1440x2560, ${noTapMotion.byteLength} bytes, sha256=${noTapMotionSha256}`,
 );
-// no-tap-mobile-motion-v16-validation-end
+// no-tap-mobile-motion-v17-hq-validation-end

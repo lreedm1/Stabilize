@@ -336,29 +336,30 @@ test("portrait mobile prefers a hardware-friendly direct MP4", async () => {
 // smooth-mobile-video-v12-test-end
 
 
-// no-tap-mobile-motion-v16-test-start
-test("portrait mobile motion does not depend on video autoplay", async () => {
+// no-tap-mobile-motion-v17-hq-test-start
+test("portrait mobile uses the higher-bitrate no-tap motion release", async () => {
   const [pageSource, styleSource, materializerSource, motion] = await Promise.all([
     read("src/page.js"),
     read("public/mobile-woodland-loop.css"),
     read("scripts/materialize-mobile-forest-stream.mjs"),
-    readFile(new URL("../public/scenes/mobile-forest-stream-motion-v16-1440.webp", import.meta.url)),
+    readFile(new URL("../public/scenes/mobile-forest-stream-motion-v17-hq-1440.webp", import.meta.url)),
   ]);
 
-  assert.equal(motion.byteLength, 10592086);
+  assert.equal(motion.byteLength, 15000242);
+  assert.ok(motion.byteLength > 10592086);
   assert.equal(motion.subarray(0, 4).toString("ascii"), "RIFF");
   assert.equal(motion.subarray(8, 12).toString("ascii"), "WEBP");
   assert.ok(motion.includes(Buffer.from("ANIM", "ascii")));
   assert.ok(motion.includes(Buffer.from("ANMF", "ascii")));
   assert.equal(
-    [...pageSource.matchAll(/mobile\-forest\-stream\-motion\-v16\-1440\.webp 1440w/g)].length,
+    [...pageSource.matchAll(/mobile\-forest\-stream\-motion\-v17\-hq\-1440\.webp 1440w/g)].length,
     2,
   );
   assert.doesNotMatch(pageSource, /id="mobile-background-video"/);
   assert.doesNotMatch(pageSource, /mobile-quality\.js/);
   assert.match(styleSource, /no-tap-mobile-motion-v16-start/);
   assert.match(styleSource, /mobile-background-video[\s\S]*display:\s*none/);
-  assert.match(materializerSource, /no-tap-mobile-motion-v16-validation-start/);
-  assert.match(materializerSource, /mobile\-forest\-stream\-motion\-v16\-1440\.webp/);
+  assert.match(materializerSource, /no-tap-mobile-motion-v17-hq-validation-start/);
+  assert.match(materializerSource, /mobile\-forest\-stream\-motion\-v17\-hq\-1440\.webp/);
 });
-// no-tap-mobile-motion-v16-test-end
+// no-tap-mobile-motion-v17-hq-test-end

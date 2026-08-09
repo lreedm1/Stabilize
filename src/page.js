@@ -139,9 +139,9 @@ export function renderPage(options = {}) {
     <link
       rel="preload"
       as="image"
-      href="/scenes/mobile-forest-stream-motion-v16-1440.webp"
+      href="/scenes/mobile-forest-stream-motion-v17-hq-1440.webp"
       imagesrcset="
-        /scenes/mobile-forest-stream-motion-v16-1440.webp 1440w
+        /scenes/mobile-forest-stream-motion-v17-hq-1440.webp 1440w
       "
       imagesizes="100vw"
       media="(max-width: 980px) and (orientation: portrait)"
@@ -153,7 +153,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
     <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
-    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260809-mobile-motion-v16-no-tap-1" />
+    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260809-mobile-motion-v17-hq-no-tap-1" />
   </head>
   <body>
     <canvas
@@ -171,7 +171,7 @@ export function renderPage(options = {}) {
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="\n          /scenes/mobile-forest-stream-motion-v16-1440.webp 1440w\n        "
+        srcset="\n          /scenes/mobile-forest-stream-motion-v17-hq-1440.webp 1440w\n        "
       />
       <img
         id="photo-backdrop-image"

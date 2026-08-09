@@ -1,8 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const MOBILE_ASSET = "/scenes/mobile-forest-stream-motion-v16-1440.webp";
-const GUIDE_VERSION = "20260809-mobile-motion-v16-no-tap-1";
-const MOBILE_STYLE_VERSION = "20260809-mobile-motion-v16-no-tap-1";
+const MOBILE_ASSET = "/scenes/mobile-forest-stream-motion-v17-hq-1440.webp";
+const GUIDE_VERSION = "20260809-mobile-motion-v17-hq-no-tap-1";
+const MOBILE_STYLE_VERSION = "20260809-mobile-motion-v17-hq-no-tap-1";
 const STATIC_PAGES = [
   "public/about.html",
   "public/floor-first.html",
@@ -139,7 +139,7 @@ for (const path of STATIC_PAGES) {
 
 const mobileQualityTest = String.raw`test("portrait mobile moves without a media gesture", async () => {
   const tier = {
-    filename: "mobile-forest-stream-motion-v16-1440.webp",
+    filename: "mobile-forest-stream-motion-v17-hq-1440.webp",
     width: 1440,
     height: 2560,
   };
@@ -153,7 +153,7 @@ const mobileQualityTest = String.raw`test("portrait mobile moves without a media
     { width: imageInfo.width, height: imageInfo.height },
     { width: tier.width, height: tier.height },
   );
-  assert.equal(image.byteLength, 10592086);
+  assert.equal(image.byteLength, 15000242);
   assert.equal(imageInfo.chunks.includes("ANIM"), true);
   assert.equal(imageInfo.chunks.includes("ANMF"), true);
   assert.equal(
@@ -163,12 +163,12 @@ const mobileQualityTest = String.raw`test("portrait mobile moves without a media
   assert.match(pageSource, /<source[\s\S]*sizes="100vw"[\s\S]*srcset=/);
   assert.match(pageSource, /<link[\s\S]*rel="preload"[\s\S]*imagesrcset=/);
   assert.match(pageSource, /imagesizes="100vw"/);
-  assert.ok(pageSource.includes('href="/scenes/mobile-forest-stream-motion-v16-1440.webp"'));
+  assert.ok(pageSource.includes('href="/scenes/mobile-forest-stream-motion-v17-hq-1440.webp"'));
   assert.doesNotMatch(pageSource, /id="mobile-background-video"/);
   assert.doesNotMatch(pageSource, /mobile-quality\.js/);
   assert.match(
     pageSource,
-    /mobile-woodland-loop\.css\?v=20260809-mobile-motion-v16-no-tap-1/,
+    /mobile-woodland-loop\.css\?v=20260809-mobile-motion-v17-hq-no-tap-1/,
   );
   assert.match(mobileStyles, /no-tap-mobile-motion-v16-start/);
   assert.match(mobileStyles, /object-fit:\s*cover/);
@@ -191,7 +191,7 @@ await update("test/shared-site-theme.test.mjs", (source) => {
     "/scenes/mobile-golden-alpine-v3-1440.webp",
     "/scenes/mobile-forest-stream-v1-720.webp",
     "/scenes/mobile-forest-stream-v1-540.webp",
-    "/scenes/mobile-forest-stream-motion-v16-1440.webp",
+    "/scenes/mobile-forest-stream-motion-v17-hq-1440.webp",
   ]) {
     next = next.replaceAll(oldAsset, MOBILE_ASSET);
   }
@@ -205,7 +205,7 @@ await update("test/shared-site-theme.test.mjs", (source) => {
   );
   next = next.replaceAll(
     "mobile-forest-stream-v1-540",
-    "mobile-forest-stream-motion-v16-1440",
+    "mobile-forest-stream-motion-v17-hq-1440",
   );
   return next;
 });

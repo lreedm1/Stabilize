@@ -1,22 +1,14 @@
-# The generated moving image avoids iOS media-autoplay gating entirely.
-name: Build no-tap mobile motion v16
+# The generated moving image avoids iOS media-autoplay gating entirely while
+# using a substantially higher WebP quality setting and average bitrate.
+name: Build higher-bitrate no-tap mobile motion v17
 
 on:
-  push:
-    branches:
-      - agent/mobile-motion-without-tap
-    paths:
-      - scripts/generate-mobile-motion-fallback.sh
-      - scripts/prepare-mobile-motion-fallback.py
-      - scripts/finalize-mobile-motion-v16.py
-      - .github/workflows/build-mobile-motion-v16.yml
   pull_request:
     branches:
       - main
     paths:
       - scripts/generate-mobile-motion-fallback.sh
-      - scripts/prepare-mobile-motion-fallback.py
-      - scripts/finalize-mobile-motion-v16.py
+      - scripts/prepare-mobile-motion-hq-release.py
       - .github/workflows/build-mobile-motion-v16.yml
   workflow_dispatch:
 
@@ -29,9 +21,10 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Check out release branch
+      - name: Check out the actual release branch
         uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
           fetch-depth: 1
           persist-credentials: true
 
@@ -50,21 +43,43 @@ jobs:
             sudo apt-get install -y ffmpeg webp
           fi
 
-      - name: Generate and validate the no-tap animated WebP
+      - name: Generate and validate the higher-bitrate animated WebP
         shell: bash
         run: |
           set -euo pipefail
-          bash scripts/generate-mobile-motion-fallback.sh /tmp/stabilize-mobile-motion-v16
+          bash scripts/generate-mobile-motion-fallback.sh /tmp/stabilize-mobile-motion-v17-hq
 
-      - name: Install the animated background release
+      - name: Install the higher-bitrate background release
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/prepare-mobile-motion-fallback.py \
-            /tmp/stabilize-mobile-motion-v16/mobile-forest-stream-motion-v16-1440.webp
+          python scripts/prepare-mobile-motion-hq-release.py \
+            /tmp/stabilize-mobile-motion-v17-hq/mobile-forest-stream-motion-v17-hq-1440.webp
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("test/shared-site-theme.test.mjs")
+          source = path.read_text()
+          replacements = (
+              (
+                  "/scenes/mobile-forest-stream-motion-v16-1440.webp",
+                  "/scenes/mobile-forest-stream-motion-v17-hq-1440.webp",
+              ),
+              (
+                  "mobile-forest-stream-motion-v16-1440",
+                  "mobile-forest-stream-motion-v17-hq-1440",
+              ),
+              (
+                  "20260809-mobile-motion-v16-no-tap-1",
+                  "20260809-mobile-motion-v17-hq-no-tap-1",
+              ),
+          )
+          for old, new in replacements:
+              source = source.replace(old, new)
+          path.write_text(source)
+          PY
           npm ci --ignore-scripts
           npm run apply:prompt-policy
-          python scripts/finalize-mobile-motion-v16.py
 
       - name: Commit the generated binary and canonical output
         shell: bash
@@ -73,7 +88,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'Replace tap-gated mobile video with automatic 1440p motion'
+          git commit -m 'Raise no-tap mobile background bitrate and detail'
 
       - name: Run full regression and Worker build checks
         shell: bash
@@ -85,20 +100,20 @@ jobs:
           git diff --exit-code
 
       - name: Publish the verified release branch
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         shell: bash
         run: |
           set -euo pipefail
-          git push origin HEAD:agent/mobile-motion-without-tap
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
 
       - name: Upload decoded-motion evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-motion-v16-evidence
+          name: mobile-motion-v17-hq-evidence
           path: |
-            /tmp/stabilize-mobile-motion-v16/mobile-forest-stream-motion-v16-1440.webp
-            /tmp/stabilize-mobile-motion-v16/webpmux-info.txt
-            /tmp/stabilize-mobile-motion-v16/frame-*.png
+            /tmp/stabilize-mobile-motion-v17-hq/mobile-forest-stream-motion-v17-hq-1440.webp
+            /tmp/stabilize-mobile-motion-v17-hq/webpmux-info.txt
+            /tmp/stabilize-mobile-motion-v17-hq/frame-*.png
           if-no-files-found: warn
           retention-days: 7
