@@ -1,0 +1,120 @@
+name: Debug mobile HD WebKit v20
+
+on:
+  push:
+    branches:
+      - agent/debug-mobile-hd-webkit-v20
+    paths:
+      - .github/workflows/debug-mobile-hd-webkit-v20.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/debug-mobile-hd-webkit-v20.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: agent/debug-mobile-hd-webkit-v20
+          persist-credentials: false
+      - name: Install WebKit
+        shell: bash
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps webkit
+      - name: Capture diagnostics without failing early
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/mobile-hd-debug
+          node --input-type=module <<'NODE'
+          import { webkit } from "playwright";
+          import { writeFile } from "node:fs/promises";
+
+          const events = [];
+          const browser = await webkit.launch({ headless: true });
+          try {
+            const context = await browser.newContext({
+              viewport: { width: 390, height: 844 },
+              screen: { width: 390, height: 844 },
+              deviceScaleFactor: 3,
+              isMobile: true,
+              hasTouch: true,
+              userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1",
+            });
+            const page = await context.newPage();
+            page.on("console", m => events.push({kind:"console",type:m.type(),text:m.text()}));
+            page.on("pageerror", e => events.push({kind:"pageerror",text:e.message,stack:e.stack}));
+            page.on("requestfailed", r => events.push({kind:"requestfailed",url:r.url(),failure:r.failure()}));
+            page.on("response", r => {
+              if (/mobile-(?:hd-background|forest-stream-v20)/.test(r.url())) {
+                events.push({kind:"response",url:r.url(),status:r.status(),headers:r.headers()});
+              }
+            });
+
+            let navigationError = null;
+            try {
+              await page.goto(`https://stabilize.info/?hd-debug=${Date.now()}`, {waitUntil:"domcontentloaded",timeout:60000});
+            } catch (error) {
+              navigationError = String(error?.stack || error);
+            }
+
+            const samples = [];
+            for (let i = 0; i < 12; i += 1) {
+              if (i === 2) {
+                await page.tap("body", {position:{x:20,y:20}}).catch(error => events.push({kind:"taperror",text:String(error)}));
+              }
+              const sample = await page.evaluate(() => {
+                const v = document.querySelector("#mobile-hd-background");
+                const s = v instanceof HTMLVideoElement ? getComputedStyle(v) : null;
+                return {
+                  now: performance.now(),
+                  state: document.documentElement.dataset.mobileHdBackground || "",
+                  canvasState: document.documentElement.dataset.mobileMotion || "",
+                  videoExists: v instanceof HTMLVideoElement,
+                  currentTime: v instanceof HTMLVideoElement ? v.currentTime : null,
+                  duration: v instanceof HTMLVideoElement ? v.duration : null,
+                  paused: v instanceof HTMLVideoElement ? v.paused : null,
+                  readyState: v instanceof HTMLVideoElement ? v.readyState : null,
+                  networkState: v instanceof HTMLVideoElement ? v.networkState : null,
+                  videoWidth: v instanceof HTMLVideoElement ? v.videoWidth : null,
+                  videoHeight: v instanceof HTMLVideoElement ? v.videoHeight : null,
+                  error: v instanceof HTMLVideoElement && v.error ? {code:v.error.code,message:v.error.message} : null,
+                  currentSrc: v instanceof HTMLVideoElement ? v.currentSrc : null,
+                  canMp4: document.createElement("video").canPlayType('video/mp4; codecs="avc1.640033"'),
+                  canH264Generic: document.createElement("video").canPlayType('video/mp4; codecs="avc1.42E01E"'),
+                  display: s?.display || null,
+                  visibility: s?.visibility || null,
+                  opacity: s?.opacity || null,
+                  className: v instanceof HTMLVideoElement ? v.className : null,
+                  moduleTag: Boolean(document.querySelector('script[type="module"][src^="/mobile-hd-background-v20.js"]')),
+                  classicTag: Boolean(document.querySelector('script:not([type="module"])[src^="/mobile-hd-background-v20.js"]')),
+                };
+              }).catch(error => ({evaluationError:String(error)}));
+              samples.push(sample);
+              await page.waitForTimeout(1000);
+            }
+
+            await page.screenshot({path:"/tmp/mobile-hd-debug/screenshot.png",fullPage:false}).catch(() => {});
+            await writeFile("/tmp/mobile-hd-debug/debug.json", JSON.stringify({navigationError,events,samples},null,2));
+          } finally {
+            await browser.close();
+          }
+          NODE
+          cat /tmp/mobile-hd-debug/debug.json
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-hd-webkit-debug-v20
+          path: /tmp/mobile-hd-debug
+          if-no-files-found: error
+          retention-days: 7
