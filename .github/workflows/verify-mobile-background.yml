@@ -52,10 +52,17 @@ jobs:
               || true
           )"
           expected_mobile_file="public${expected_mobile_asset}"
+          expected_mobile_width="$(
+            printf '%s\n' "$expected_mobile_asset" \
+              | sed -n 's/.*-\([0-9][0-9]*\)\.webp$/\1/p' \
+              | head -n 1 \
+              || true
+          )"
 
           if [[ -z "$expected_app_path" \
             || -z "$expected_loader_path" \
             || -z "$expected_mobile_asset" \
+            || -z "$expected_mobile_width" \
             || ! -f "$expected_mobile_file" ]]; then
             echo "::error::Could not derive the expected application, loader, and mobile image from the checked-out release."
             exit 1
@@ -157,7 +164,7 @@ jobs:
                 || true
             )"
 
-            echo "Mobile release attempt ${attempt}: html=${html_status:-000} app=${app_status:-000} loader=${loader_status:-000} image=${mobile_status:-000}; live-app=${live_app_path:-missing}; live-mobile=${live_mobile_assets:-missing}; image-bytes=${live_mobile_bytes:-0}; image-sha=${live_mobile_sha:0:12}."
+            echo "Mobile release attempt ${attempt}: html=${html_status:-000} app=${app_status:-000} loader=${loader_status:-000} image=${mobile_status:-000}; live-app=${live_app_path:-missing}; live-mobile=${live_mobile_assets:-missing}; expected-width=${expected_mobile_width}w; image-bytes=${live_mobile_bytes:-0}; image-sha=${live_mobile_sha:0:12}."
 
             if [[ "$html_status" == "200" \
               && "$app_status" == "200" \
@@ -170,7 +177,7 @@ jobs:
               && grep -Fq 'imagesrcset="' "$tmpdir/live.html" \
               && grep -Fq 'imagesizes="100vw"' "$tmpdir/live.html" \
               && grep -Fq "href=\"${expected_mobile_asset}\"" "$tmpdir/live.html" \
-              && grep -Fq "${expected_mobile_asset} 540w" "$tmpdir/live.html" \
+              && grep -Fq "${expected_mobile_asset} ${expected_mobile_width}w" "$tmpdir/live.html" \
               && grep -Fq "from \"${expected_loader_import}\"" "$tmpdir/app.js" \
               && ! grep -Fq 'from "./terrain.js"' "$tmpdir/app.js" \
               && grep -Fq 'import("./terrain.js")' "$tmpdir/background-loader.js" \
