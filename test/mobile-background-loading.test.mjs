@@ -82,7 +82,7 @@ test("mobile clients keep the static image without loading the graphics module c
   const config = JSON.parse(packageSource);
   assert.equal(
     config.scripts["apply:prompt-policy"],
-    "node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs",
+    "node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs",
   );
 
   const loader = await import(
@@ -336,30 +336,31 @@ test("portrait mobile prefers a hardware-friendly direct MP4", async () => {
 // smooth-mobile-video-v12-test-end
 
 
-// no-tap-mobile-motion-v17-hq-test-start
-test("portrait mobile uses the higher-bitrate no-tap motion release", async () => {
-  const [pageSource, styleSource, materializerSource, motion] = await Promise.all([
-    read("src/page.js"),
-    read("public/mobile-woodland-loop.css"),
-    read("scripts/materialize-mobile-forest-stream.mjs"),
-    readFile(new URL("../public/scenes/mobile-forest-stream-motion-v17-hq-1440.webp", import.meta.url)),
-  ]);
+// mobile-motion-canvas-v18-test-start
+test("portrait mobile motion is independent of video and animated-image autoplay", async () => {
+  const [pageSource, styleSource, clientSource, materializerSource, sprite] =
+    await Promise.all([
+      read("src/page.js"),
+      read("public/mobile-woodland-loop.css"),
+      read("public/mobile-motion-canvas.js"),
+      read("scripts/materialize-mobile-forest-stream.mjs"),
+      readFile(new URL("../public/scenes/mobile-forest-stream-water-sprite-v18-540.webp", import.meta.url)),
+    ]);
 
-  assert.equal(motion.byteLength, 15000242);
-  assert.ok(motion.byteLength > 10592086);
-  assert.equal(motion.subarray(0, 4).toString("ascii"), "RIFF");
-  assert.equal(motion.subarray(8, 12).toString("ascii"), "WEBP");
-  assert.ok(motion.includes(Buffer.from("ANIM", "ascii")));
-  assert.ok(motion.includes(Buffer.from("ANMF", "ascii")));
-  assert.equal(
-    [...pageSource.matchAll(/mobile\-forest\-stream\-motion\-v17\-hq\-1440\.webp 1440w/g)].length,
-    2,
-  );
+  assert.equal(sprite.subarray(0, 4).toString("ascii"), "RIFF");
+  assert.equal(sprite.subarray(8, 12).toString("ascii"), "WEBP");
+  assert.ok(sprite.includes(Buffer.from("ALPH", "ascii")));
+  assert.equal(sprite.includes(Buffer.from("ANIM", "ascii")), false);
+  assert.equal(sprite.includes(Buffer.from("ANMF", "ascii")), false);
+  assert.match(pageSource, /id="mobile-motion-canvas"/);
+  assert.match(pageSource, /mobile-forest-stream-water-sprite-v18-540\.webp/);
   assert.doesNotMatch(pageSource, /id="mobile-background-video"/);
   assert.doesNotMatch(pageSource, /mobile-quality\.js/);
-  assert.match(styleSource, /no-tap-mobile-motion-v16-start/);
-  assert.match(styleSource, /mobile-background-video[\s\S]*display:\s*none/);
-  assert.match(materializerSource, /no-tap-mobile-motion-v17-hq-validation-start/);
-  assert.match(materializerSource, /mobile\-forest\-stream\-motion\-v17\-hq\-1440\.webp/);
+  assert.match(styleSource, /mobile-motion-canvas-v18-start/);
+  assert.match(clientSource, /ctx\.drawImage\(/);
+  assert.match(clientSource, /setTimeout\(step/);
+  assert.doesNotMatch(clientSource, /\.play\(/);
+  assert.match(materializerSource, /mobile-water-sprite-v18-validation-start/);
+  assert.match(materializerSource, /mobile-forest-stream-water-sprite-v18-540\.webp/);
 });
-// no-tap-mobile-motion-v17-hq-test-end
+// mobile-motion-canvas-v18-test-end

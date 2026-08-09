@@ -35,6 +35,7 @@ function replaceMobileQualityTest(source, replacement) {
     'test("mobile uses responsive high-DPI static generated WebPs", async () => {',
     'test("mobile uses the project-owner forest stream as its static portrait background", async () => {',
     'test("portrait mobile moves without a media gesture", async () => {',
+    'test("portrait mobile draws water through a canvas without media autoplay", async () => {',
   ];
   const starts = candidates
     .map((marker) => source.indexOf(marker))

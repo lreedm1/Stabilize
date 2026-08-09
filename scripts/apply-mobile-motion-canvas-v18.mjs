@@ -28,21 +28,23 @@ async function update(path, transform) {
 }
 
 function replaceRequired(source, pattern, replacement, label) {
+  if (source.includes(replacement)) return source;
   const next = source.replace(pattern, replacement);
   if (next === source) throw new Error(`Could not replace ${label}`);
   return next;
 }
 
 function replaceMarked(source, variants, replacement) {
+  const normalized = `${replacement.trimEnd()}\n`;
   for (const [start, end] of variants) {
     if (!source.includes(start)) continue;
     const pattern = new RegExp(
-      `${escapeRegExp(start)}[\\s\\S]*?${escapeRegExp(end)}\\n?`,
+      `[ \t]*${escapeRegExp(start)}[\\s\\S]*?${escapeRegExp(end)}[ \t]*(?:\\n|$)`,
     );
-    return source.replace(pattern, replacement);
+    return source.replace(pattern, normalized);
   }
   const suffix = source.endsWith("\n") ? "" : "\n";
-  return `${source}${suffix}\n${replacement}`;
+  return `${source}${suffix}\n${normalized}`;
 }
 
 function escapeRegExp(value) {

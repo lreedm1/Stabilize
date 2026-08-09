@@ -136,24 +136,34 @@ export function renderPage(options = {}) {
       type="font/woff2"
       crossorigin
     />
+    <!-- mobile-motion-canvas-v18-preloads-start -->
     <link
       rel="preload"
       as="image"
-      href="/scenes/mobile-forest-stream-motion-v17-hq-1440.webp"
+      href="/scenes/mobile-forest-stream-v14-retina-2160.webp"
       imagesrcset="
-        /scenes/mobile-forest-stream-motion-v17-hq-1440.webp 1440w
+        /scenes/mobile-forest-stream-v14-retina-2160.webp 2160w
       "
       imagesizes="100vw"
       media="(max-width: 980px) and (orientation: portrait)"
       type="image/webp"
       fetchpriority="high"
     />
+    <link
+      rel="preload"
+      as="image"
+      href="/scenes/mobile-forest-stream-water-sprite-v18-540.webp"
+      media="(max-width: 980px) and (orientation: portrait)"
+      type="image/webp"
+      fetchpriority="high"
+    />
+    <!-- mobile-motion-canvas-v18-preloads-end -->
     <link rel="stylesheet" href="/styles.css?v=20260807-priority-latency-1" />
     <link rel="stylesheet" href="/seo.css?v=20260808-memory-controls-1" />
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
     <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
-    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260809-mobile-motion-v17-hq-no-tap-1" />
+    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260809-mobile-motion-canvas-v18-1" />
   </head>
   <body>
     <canvas
@@ -171,7 +181,7 @@ export function renderPage(options = {}) {
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="\n          /scenes/mobile-forest-stream-motion-v17-hq-1440.webp 1440w\n        "
+        srcset="\n          /scenes/mobile-forest-stream-v14-retina-2160.webp 2160w\n        "
       />
       <img
         id="photo-backdrop-image"
@@ -188,6 +198,13 @@ export function renderPage(options = {}) {
         fetchpriority="high"
       />
     </picture>
+    <!-- mobile-motion-canvas-v18-start -->
+    <canvas
+      id="mobile-motion-canvas"
+      class="mobile-motion-canvas"
+      aria-hidden="true"
+    ></canvas>
+    <!-- mobile-motion-canvas-v18-end -->
     <canvas
       id="photo-background"
       class="terrain-background photo-background"
@@ -296,6 +313,9 @@ export function renderPage(options = {}) {
     <!-- Legacy generator marker: 20260808-guest-summary-1 -->
     <script type="module" src="/app.js?v=20260808-full-guest-thread-1"></script>
     <script type="module" src="/reasoning-choice.js?v=20260807-instant-thinking-2-fastest-1"></script>
+    <!-- mobile-motion-canvas-v18-script-start -->
+    <script src="/mobile-motion-canvas.js?v=20260809-mobile-motion-canvas-v18-1" defer></script>
+    <!-- mobile-motion-canvas-v18-script-end -->
   </body>
 </html>`;
 }
