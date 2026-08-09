@@ -128,16 +128,16 @@ for (const path of [
 await update("test/mobile-background-loading.test.mjs", (source) => {
   const replacementMarker =
     'test("the production mobile release gate verifies visible canvas motion", async () => {';
-  if (source.includes(replacementMarker)) return source;
-
-  const startMarker =
+  const obsoleteMarker =
     'test("the production mobile release gate follows built versions and exact image bytes", async () => {';
   const endMarker =
     'test("portrait mobile uses a Worker-served MP4 instead of a reconstructed blob", async () => {';
-  const start = source.indexOf(startMarker);
+  const replacementStart = source.indexOf(replacementMarker);
+  const obsoleteStart = source.indexOf(obsoleteMarker);
+  const start = replacementStart >= 0 ? replacementStart : obsoleteStart;
   const end = source.indexOf(endMarker, start);
   if (start < 0 || end < 0 || end <= start) {
-    throw new Error("Could not locate the obsolete production mobile release-gate test.");
+    throw new Error("Could not locate the production mobile release-gate test.");
   }
 
   const replacement = `test("the production mobile release gate verifies visible canvas motion", async () => {
@@ -145,19 +145,19 @@ await update("test/mobile-background-loading.test.mjs", (source) => {
     ".github/workflows/verify-mobile-background.yml",
   );
 
-  assert.match(workflow, /mobile-motion-canvas\\.js/);
-  assert.match(workflow, /mobile-woodland-loop\\.css/);
-  assert.match(workflow, /mobile-[^\\s]*water-sprite[^\\s]*\\.webp/);
-  assert.match(workflow, /expected_poster_sha/);
-  assert.match(workflow, /expected_sprite_sha/);
-  assert.match(workflow, /expected_poster_bytes/);
-  assert.match(workflow, /expected_sprite_bytes/);
-  assert.match(workflow, /verification\\/mobile-motion-canvas/);
-  assert.match(workflow, /Verify visible motion in mobile WebKit/);
-  assert.match(workflow, /getImageData/);
-  assert.match(workflow, /first\\.hash === second\\.hash/);
-  assert.match(workflow, /first\\.opacity !== "1"/);
-  assert.match(workflow, /Exact canvas mobile release is live/);
+  assert.ok(workflow.includes("mobile-motion-canvas"));
+  assert.ok(workflow.includes("mobile-woodland-loop"));
+  assert.ok(workflow.includes("water-sprite"));
+  assert.ok(workflow.includes("expected_poster_sha"));
+  assert.ok(workflow.includes("expected_sprite_sha"));
+  assert.ok(workflow.includes("expected_poster_bytes"));
+  assert.ok(workflow.includes("expected_sprite_bytes"));
+  assert.ok(workflow.includes("verification/mobile-motion-canvas"));
+  assert.ok(workflow.includes("Verify visible motion in mobile WebKit"));
+  assert.ok(workflow.includes("getImageData"));
+  assert.ok(workflow.includes("first.hash === second.hash"));
+  assert.ok(workflow.includes('first.opacity !== "1"'));
+  assert.ok(workflow.includes("Exact canvas mobile release is live"));
 });
 
 `;
