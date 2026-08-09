@@ -1,0 +1,47 @@
+name: Debug mobile video v9 generator
+
+on:
+  pull_request:
+    paths:
+      - scripts/generate-mobile-video-v9.sh
+      - .github/workflows/debug-mobile-video-v9.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install video tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y ffmpeg
+          fi
+
+      - name: Generate and validate video
+        shell: bash
+        run: bash scripts/generate-mobile-video-v9.sh /tmp/stabilize-mobile-video-v9
+
+      - name: Upload generated evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-mobile-video-v9
+          path: |
+            /tmp/stabilize-mobile-video-v9/mobile-forest-stream-video-v9-1080.mp4
+            /tmp/stabilize-mobile-video-v9/frame-early.png
+            /tmp/stabilize-mobile-video-v9/frame-late.png
+            /tmp/stabilize-mobile-video-v9/probe.json
+          if-no-files-found: error
+          retention-days: 3
