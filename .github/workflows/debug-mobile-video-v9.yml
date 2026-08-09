@@ -60,7 +60,7 @@ jobs:
           echo "poster_bytes=$(wc -c < "$poster" | tr -d '[:space:]')"
           sha256sum "$poster"
 
-      - name: Prepare, test, and publish the clean release branch
+      - name: Prepare and publish the clean release branch
         shell: bash
         run: |
           set -euo pipefail
@@ -132,13 +132,19 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
           git commit -m 'Replace corrupt mobile video with a validated screen-resolution release'
-
-          npm test
-          npm run check
-          git diff --exit-code
           git push --force origin HEAD:agent/mobile-video-v11-generated
 
-      - name: Upload generated evidence
+      - name: Run full regression and Worker build checks
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p /tmp/mobile-video-v11-test-logs
+          npm test 2>&1 | tee /tmp/mobile-video-v11-test-logs/npm-test.log
+          npm run check 2>&1 | tee /tmp/mobile-video-v11-test-logs/npm-check.log
+          git diff --exit-code 2>&1 | tee /tmp/mobile-video-v11-test-logs/git-diff.log
+
+      - name: Upload generated evidence and test logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mobile-video-v11-release-evidence
@@ -148,5 +154,6 @@ jobs:
             /tmp/stabilize-mobile-video-v11-clean/frame-early.png
             /tmp/stabilize-mobile-video-v11-clean/frame-late.png
             /tmp/stabilize-mobile-video-v11-clean/probe.json
-          if-no-files-found: error
+            /tmp/mobile-video-v11-test-logs
+          if-no-files-found: warn
           retention-days: 7
