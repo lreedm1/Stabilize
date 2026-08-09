@@ -1,0 +1,170 @@
+name: Build true-HD mobile background v20
+
+on:
+  push:
+    branches:
+      - agent/mobile-resolution-diagnostic-v20
+    paths:
+      - scripts/apply-mobile-hd-background-v20.mjs
+      - .github/workflows/build-mobile-hd-background-v20.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - scripts/apply-mobile-hd-background-v20.mjs
+      - .github/workflows/build-mobile-hd-background-v20.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out working branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/mobile-resolution-diagnostic-v20
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg webp
+          npm ci --ignore-scripts
+
+      - name: Download the actual 4K source and make an iPhone-native portrait encode
+        shell: bash
+        run: |
+          set -euo pipefail
+          work=/tmp/mobile-hd-background-v20
+          mkdir -p "$work"
+          source_url='https://videos.pexels.com/video-files/4333149/4333149-uhd_3840_2160_30fps.mp4'
+          source="$work/pexels-4333149-uhd.mp4"
+          video='public/scenes/mobile-forest-stream-v20-true-hd-1440.mp4'
+          poster='public/scenes/mobile-forest-stream-v20-true-hd-1440.webp'
+
+          curl --fail-with-body --location --retry 4 --retry-delay 2 \
+            --output "$source" "$source_url"
+
+          source_size="$(
+            ffprobe -v error -select_streams v:0 \
+              -show_entries stream=width,height \
+              -of csv=s=x:p=0 "$source"
+          )"
+          test "$source_size" = 3840x2160
+
+          # Crop the native 4K landscape source to a centered 9:16 portrait,
+          # then encode at 1440x2560. This retains real source detail rather
+          # than enlarging the former 512x908 generated preview.
+          ffmpeg -hide_banner -loglevel error -y \
+            -ss 0.35 -t 10 \
+            -i "$source" \
+            -an \
+            -vf "crop=1215:2160:1312:0,scale=1440:2560:flags=lanczos,format=yuv420p" \
+            -r 30 \
+            -c:v libx264 -preset slow -crf 18 \
+            -profile:v high -level:v 5.1 \
+            -maxrate 14M -bufsize 28M \
+            -movflags +faststart \
+            "$video"
+
+          ffmpeg -hide_banner -loglevel error -y \
+            -ss 1.5 -i "$video" -frames:v 1 \
+            -vf format=rgb24 "$work/poster.png"
+          cwebp -quiet -q 92 -m 6 -mt \
+            "$work/poster.png" -o "$poster"
+
+          video_size="$(
+            ffprobe -v error -select_streams v:0 \
+              -show_entries stream=width,height \
+              -of csv=s=x:p=0 "$video"
+          )"
+          poster_size="$(
+            ffprobe -v error -select_streams v:0 \
+              -show_entries stream=width,height \
+              -of csv=s=x:p=0 "$poster"
+          )"
+          test "$video_size" = 1440x2560
+          test "$poster_size" = 1440x2560
+
+          bytes="$(wc -c < "$video" | tr -d '[:space:]')"
+          test "$bytes" -gt 4000000
+          test "$bytes" -lt 30000000
+          ffprobe -v error -show_streams -show_format "$video" \
+            > "$work/output-ffprobe.txt"
+          sha256sum "$video" "$poster" > "$work/sha256.txt"
+          cp "$poster" "$work/poster.webp"
+
+      - name: Wire the final canonical pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/finalize-decision-grade-impact.mjs")
+          source = path.read_text()
+          import_line = 'await import("./apply-mobile-hd-background-v20.mjs");\n'
+          if import_line not in source:
+              marker = 'console.log(\n  "Finalized decision-grade impact compatibility'
+              if marker not in source:
+                  raise SystemExit("Could not locate the finalizer log boundary")
+              source = source.replace(marker, import_line + "\n" + marker, 1)
+          path.write_text(source)
+          PY
+
+          node scripts/apply-mobile-hd-background-v20.mjs
+          npm run apply:prompt-policy
+
+      - name: Commit generated release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'True-HD release output was already canonical.'
+          else
+            git commit -m 'Replace the upscaled mobile scene with true-HD video'
+          fi
+
+      - name: Run regression and Worker build gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+      - name: Publish verified branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:agent/mobile-resolution-diagnostic-v20
+
+      - name: Upload true-HD release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-hd-background-v20-evidence
+          path: |
+            /tmp/mobile-hd-background-v20/output-ffprobe.txt
+            /tmp/mobile-hd-background-v20/sha256.txt
+            /tmp/mobile-hd-background-v20/poster.webp
+          if-no-files-found: warn
+          retention-days: 7
