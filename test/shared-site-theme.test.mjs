@@ -11,7 +11,7 @@ const STATIC_PAGES = [
   "public/support.html",
   "public/sustainability.html",
 ];
-const VERSION = "20260809-mobile-forest-retina-2160-1";
+const VERSION = "20260809-mobile-motion-v16-no-tap-1";
 
 function capture(value, pattern, label) {
   const match = value.match(pattern);
@@ -92,8 +92,8 @@ test("all public Stabilize pages share the chat background and reading colors", 
   for (const asset of [
     "/scenes/lake-valley-landscape-1280.webp",
     "/scenes/lake-valley-landscape-2560.webp",
-    "/scenes/mobile-forest-stream-v14-retina-2160.webp",
-    "/scenes/mobile-forest-stream-v14-retina-2160.webp",
+    "/scenes/mobile-forest-stream-motion-v16-1440.webp",
+    "/scenes/mobile-forest-stream-motion-v16-1440.webp",
   ]) {
     assert.ok(pageSource.includes(asset), `Main page is missing ${asset}`);
     assert.ok(guides.includes(asset), `Guide theme is missing ${asset}`);
@@ -109,7 +109,7 @@ test("all public Stabilize pages share the chat background and reading colors", 
   );
   assert.match(
     guides,
-    /@media \(max-width: 980px\) and \(orientation: portrait\)[\s\S]*mobile-forest-stream-v14-retina-2160/,
+    /@media \(max-width: 980px\) and \(orientation: portrait\)[\s\S]*mobile-forest-stream-motion-v16-1440/,
   );
   assert.match(
     guides,

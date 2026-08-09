@@ -285,7 +285,7 @@ footer {
 
 @media (max-width: 980px) and (orientation: portrait) {
   body::before {
-    background-image: url("/scenes/mobile-forest-stream-v14-retina-2160.webp");
+    background-image: url("/scenes/mobile-forest-stream-motion-v16-1440.webp");
     background-position: 50% 50%;
     filter: none;
   }

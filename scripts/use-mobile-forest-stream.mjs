@@ -1,8 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const MOBILE_ASSET = "/scenes/mobile-forest-stream-v14-retina-2160.webp";
-const GUIDE_VERSION = "20260809-mobile-forest-retina-2160-1";
-const MOBILE_STYLE_VERSION = "20260809-mobile-video-v15-visible-autoplay-1";
+const MOBILE_ASSET = "/scenes/mobile-forest-stream-motion-v16-1440.webp";
+const GUIDE_VERSION = "20260809-mobile-motion-v16-no-tap-1";
+const MOBILE_STYLE_VERSION = "20260809-mobile-motion-v16-no-tap-1";
 const STATIC_PAGES = [
   "public/about.html",
   "public/floor-first.html",
@@ -34,6 +34,7 @@ function replaceMobileQualityTest(source, replacement) {
   const candidates = [
     'test("mobile uses responsive high-DPI static generated WebPs", async () => {',
     'test("mobile uses the project-owner forest stream as its static portrait background", async () => {',
+    'test("portrait mobile moves without a media gesture", async () => {',
   ];
   const starts = candidates
     .map((marker) => source.indexOf(marker))
@@ -52,7 +53,7 @@ const mobilePreload = `    <link
       as="image"
       href="${MOBILE_ASSET}"
       imagesrcset="
-        ${MOBILE_ASSET} 2160w
+        ${MOBILE_ASSET} 1440w
       "
       imagesizes="100vw"
       media="(max-width: 980px) and (orientation: portrait)"
@@ -64,7 +65,7 @@ const mobileSource = `      <source
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="\\n          ${MOBILE_ASSET} 2160w\\n        "
+        srcset="\\n          ${MOBILE_ASSET} 1440w\\n        "
       />`;
 
 await update("src/page.js", (source) => {
@@ -84,7 +85,7 @@ await update("src/page.js", (source) => {
     /mobile-woodland-loop\.css\?v=[^"]+/,
     `mobile-woodland-loop.css?v=${MOBILE_STYLE_VERSION}`,
   );
-  const references = next.split(`${MOBILE_ASSET} 2160w`).length - 1;
+  const references = next.split(`${MOBILE_ASSET} 1440w`).length - 1;
   if (references !== 2) {
     throw new Error(`Expected two mobile forest references, found ${references}`);
   }
@@ -136,27 +137,25 @@ for (const path of STATIC_PAGES) {
   );
 }
 
-const mobileQualityTest = String.raw`test("mobile uses the project-owner forest stream as its static portrait background", async () => {
+const mobileQualityTest = String.raw`test("portrait mobile moves without a media gesture", async () => {
   const tier = {
-    filename: "mobile-forest-stream-v14-retina-2160.webp",
-    width: 2160,
-    height: 3840,
+    filename: "mobile-forest-stream-motion-v16-1440.webp",
+    width: 1440,
+    height: 2560,
   };
   const [pageSource, mobileStyles, image] = await Promise.all([
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
     readFile(new URL("../public/mobile-woodland-loop.css", import.meta.url), "utf8"),
-    readFile(new URL(
-      "../public/scenes/" + tier.filename,
-      import.meta.url,
-    )),
+    readFile(new URL("../public/scenes/" + tier.filename, import.meta.url)),
   ]);
   const imageInfo = webpInfo(image);
   assert.deepEqual(
     { width: imageInfo.width, height: imageInfo.height },
     { width: tier.width, height: tier.height },
   );
-  assert.equal(image.byteLength, 645_202);
-  assert.equal(imageInfo.chunks.includes("ANIM"), false);
+  assert.equal(image.byteLength, 10592086);
+  assert.equal(imageInfo.chunks.includes("ANIM"), true);
+  assert.equal(imageInfo.chunks.includes("ANMF"), true);
   assert.equal(
     [...pageSource.matchAll(new RegExp(tier.filename + " " + tier.width + "w", "g"))].length,
     2,
@@ -164,20 +163,16 @@ const mobileQualityTest = String.raw`test("mobile uses the project-owner forest 
   assert.match(pageSource, /<source[\s\S]*sizes="100vw"[\s\S]*srcset=/);
   assert.match(pageSource, /<link[\s\S]*rel="preload"[\s\S]*imagesrcset=/);
   assert.match(pageSource, /imagesizes="100vw"/);
+  assert.ok(pageSource.includes('href="/scenes/mobile-forest-stream-motion-v16-1440.webp"'));
+  assert.doesNotMatch(pageSource, /id="mobile-background-video"/);
+  assert.doesNotMatch(pageSource, /mobile-quality\.js/);
   assert.match(
     pageSource,
-    /href="\/scenes\/mobile-forest-stream-v14-retina-2160\.webp"/,
+    /mobile-woodland-loop\.css\?v=20260809-mobile-motion-v16-no-tap-1/,
   );
-  assert.match(
-    pageSource,
-    /mobile-woodland-loop\.css\?v=20260809-mobile-video-v15-visible-autoplay-1/,
-  );
-  assert.doesNotMatch(pageSource, /mobile-golden-alpine/);
-  assert.match(mobileStyles, /opacity:\s*1/);
+  assert.match(mobileStyles, /no-tap-mobile-motion-v16-start/);
   assert.match(mobileStyles, /object-fit:\s*cover/);
-  assert.match(mobileStyles, /animation:\s*none/);
-  assert.match(mobileStyles, /mobile-video-poster-drift/);
-  assert.match(mobileStyles, /is-autoplay-blocked/);
+  assert.match(mobileStyles, /mobile-background-video[\s\S]*display:\s*none/);
 });
 
 `;
@@ -196,6 +191,7 @@ await update("test/shared-site-theme.test.mjs", (source) => {
     "/scenes/mobile-golden-alpine-v3-1440.webp",
     "/scenes/mobile-forest-stream-v1-720.webp",
     "/scenes/mobile-forest-stream-v1-540.webp",
+    "/scenes/mobile-forest-stream-motion-v16-1440.webp",
   ]) {
     next = next.replaceAll(oldAsset, MOBILE_ASSET);
   }
@@ -209,7 +205,7 @@ await update("test/shared-site-theme.test.mjs", (source) => {
   );
   next = next.replaceAll(
     "mobile-forest-stream-v1-540",
-    "mobile-forest-stream-v14-retina-2160",
+    "mobile-forest-stream-motion-v16-1440",
   );
   return next;
 });

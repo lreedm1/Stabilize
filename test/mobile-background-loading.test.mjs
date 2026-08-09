@@ -335,55 +335,30 @@ test("portrait mobile prefers a hardware-friendly direct MP4", async () => {
 });
 // smooth-mobile-video-v12-test-end
 
-// retina-mobile-video-v15-test-start
-test("portrait mobile always autoplays the Retina background", async () => {
-  const [clientSource, pageSource, styleSource, materializerSource, retinaVideo] =
-    await Promise.all([
-      read("public/mobile-quality.js"),
-      read("src/page.js"),
-      read("public/mobile-woodland-loop.css"),
-      read("scripts/materialize-mobile-forest-stream.mjs"),
-      readFile(new URL("../public/scenes/mobile-forest-stream-video-v14-retina-2160.mp4", import.meta.url)),
-    ]);
 
-  assert.match(
-    clientSource,
-    /const RETINA_VIDEO_ASSET =[\s\S]*"\/scenes\/mobile\-forest\-stream\-video\-v14\-retina\-2160\.mp4"/,
-  );
-  assert.match(clientSource, /video\.src = RETINA_VIDEO_ASSET/);
-  assert.match(clientSource, /video\.autoplay = true/);
-  assert.match(clientSource, /video\.muted = true/);
-  assert.match(clientSource, /video\.defaultMuted = true/);
-  assert.match(clientSource, /video\.loop = true/);
-  assert.match(clientSource, /video\.playsInline = true/);
-  assert.match(clientSource, /video\.addEventListener\("pause"/);
-  assert.match(clientSource, /scheduleAutoplayRetry\(video\)/);
-  assert.doesNotMatch(
-    clientSource,
-    /prefersStandardDefinition|prefers-reduced-data|saveData/,
-  );
+// no-tap-mobile-motion-v16-test-start
+test("portrait mobile motion does not depend on video autoplay", async () => {
+  const [pageSource, styleSource, materializerSource, motion] = await Promise.all([
+    read("src/page.js"),
+    read("public/mobile-woodland-loop.css"),
+    read("scripts/materialize-mobile-forest-stream.mjs"),
+    readFile(new URL("../public/scenes/mobile-forest-stream-motion-v16-1440.webp", import.meta.url)),
+  ]);
 
-  assert.match(
-    pageSource,
-    /<video[\s\S]*id="mobile-background-video"[\s\S]*autoplay[\s\S]*muted[\s\S]*loop[\s\S]*playsinline/,
+  assert.equal(motion.byteLength, 10592086);
+  assert.equal(motion.subarray(0, 4).toString("ascii"), "RIFF");
+  assert.equal(motion.subarray(8, 12).toString("ascii"), "WEBP");
+  assert.ok(motion.includes(Buffer.from("ANIM", "ascii")));
+  assert.ok(motion.includes(Buffer.from("ANMF", "ascii")));
+  assert.equal(
+    [...pageSource.matchAll(/mobile\-forest\-stream\-motion\-v16\-1440\.webp 1440w/g)].length,
+    2,
   );
-  assert.match(pageSource, /src="\/scenes\/mobile\-forest\-stream\-video\-v14\-retina\-2160\.mp4"/);
-  assert.match(pageSource, /poster="\/scenes\/mobile\-forest\-stream\-v14\-retina\-2160\.webp"/);
-  assert.match(pageSource, /mobile-quality\.js\?v=20260809\-mobile\-video\-v15\-visible\-autoplay\-1/);
-  assert.match(styleSource, /retina-mobile-video-v15-start/);
-  assert.match(styleSource, /object-fit:\s*cover/);
-  assert.match(styleSource, /\.mobile-background-video\s*\{[\s\S]*display:\s*block/);
-  assert.doesNotMatch(styleSource, /\.mobile-background-video\s*\{[^}]*display:\s*none/s);
-  assert.match(styleSource, /mobile-video-poster-drift/);
-  assert.match(clientSource, /video\.getAttribute\("src"\)/);
-  assert.match(pageSource, /<\/video>[\s\S]*mobile-quality\.js[\s\S]*<div class="page-shell">/);
-  assert.match(materializerSource, /retina-mobile-video-v14-validation-start/);
-  assert.match(materializerSource, /mobile\-forest\-stream\-video\-v14\-retina\-2160\.mp4/);
-
-  assert.equal(retinaVideo.byteLength, 5006520);
-  assert.equal(retinaVideo.subarray(4, 8).toString("ascii"), "ftyp");
-  for (const marker of ["moov", "mdat", "avc1"]) {
-    assert.ok(retinaVideo.includes(Buffer.from(marker, "ascii")));
-  }
+  assert.doesNotMatch(pageSource, /id="mobile-background-video"/);
+  assert.doesNotMatch(pageSource, /mobile-quality\.js/);
+  assert.match(styleSource, /no-tap-mobile-motion-v16-start/);
+  assert.match(styleSource, /mobile-background-video[\s\S]*display:\s*none/);
+  assert.match(materializerSource, /no-tap-mobile-motion-v16-validation-start/);
+  assert.match(materializerSource, /mobile\-forest\-stream\-motion\-v16\-1440\.webp/);
 });
-// retina-mobile-video-v15-test-end
+// no-tap-mobile-motion-v16-test-end
