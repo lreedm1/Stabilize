@@ -141,13 +141,32 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          path = Path("test/mobile-quality.test.mjs")
-          source = path.read_text()
           old = "20260808-mobile-forest-stream-540-1"
           new = "20260809-mobile-video-v13-hd-autoplay-1"
-          if source.count(old) != 1:
+
+          # npm test begins by regenerating tests. Update the canonical test
+          # template as well as the materialized test so the new cache tag
+          # survives every apply:prompt-policy pass.
+          generator_path = Path("scripts/use-mobile-forest-stream.mjs")
+          lines = generator_path.read_text().splitlines(keepends=True)
+          matches = [
+              index
+              for index, line in enumerate(lines)
+              if "mobile-woodland-loop" in line and old in line
+          ]
+          if len(matches) != 1:
+              raise SystemExit(
+                  f"Expected one generated mobile style assertion, found {len(matches)}"
+              )
+          index = matches[0]
+          lines[index] = lines[index].replace(old, new, 1)
+          generator_path.write_text("".join(lines))
+
+          test_path = Path("test/mobile-quality.test.mjs")
+          test_source = test_path.read_text()
+          if test_source.count(old) != 1:
               raise SystemExit("Could not align the mobile style regression version")
-          path.write_text(source.replace(old, new, 1))
+          test_path.write_text(test_source.replace(old, new, 1))
           PY
 
           git config user.name 'github-actions[bot]'
