@@ -148,7 +148,7 @@ await import("./apply-mobile-motion-canvas-v18.mjs");
 await import("./fix-mobile-motion-canvas-v18.mjs");
 await import("./restore-original-mobile-image-v21.mjs");
 await import("./use-selected-mobile-4k-video-v22.mjs");
-await import("./fix-selected-mobile-4k-video-v22-tests.mjs");
+await import("./fix-selected-mobile-4k-video-v22-tests-v2.mjs");
 
 console.log(
   "Finalized decision-grade impact compatibility, canonical regression expectations, and the selected forest-stream 4K mobile video.",
