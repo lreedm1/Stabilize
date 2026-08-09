@@ -55,9 +55,9 @@ function webpInfo(buffer) {
 
 test("mobile uses the project-owner forest stream as its static portrait background", async () => {
   const tier = {
-    filename: "mobile-forest-stream-v1-540.webp",
-    width: 540,
-    height: 960,
+    filename: "mobile-forest-stream-v14-retina-2160.webp",
+    width: 2160,
+    height: 3840,
   };
   const [pageSource, mobileStyles, image] = await Promise.all([
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
@@ -72,7 +72,7 @@ test("mobile uses the project-owner forest stream as its static portrait backgro
     { width: imageInfo.width, height: imageInfo.height },
     { width: tier.width, height: tier.height },
   );
-  assert.equal(image.byteLength, 91_750);
+  assert.equal(image.byteLength, 645_202);
   assert.equal(imageInfo.chunks.includes("ANIM"), false);
   assert.equal(
     [...pageSource.matchAll(new RegExp(tier.filename + " " + tier.width + "w", "g"))].length,
@@ -83,17 +83,18 @@ test("mobile uses the project-owner forest stream as its static portrait backgro
   assert.match(pageSource, /imagesizes="100vw"/);
   assert.match(
     pageSource,
-    /href="\/scenes\/mobile-forest-stream-v1-540\.webp"/,
+    /href="\/scenes\/mobile-forest-stream-v14-retina-2160\.webp"/,
   );
   assert.match(
     pageSource,
-    /mobile-woodland-loop\.css\?v=20260809-mobile-video-v14-retina-autoplay-1/,
+    /mobile-woodland-loop\.css\?v=20260809-mobile-video-v15-visible-autoplay-1/,
   );
   assert.doesNotMatch(pageSource, /mobile-golden-alpine/);
   assert.match(mobileStyles, /opacity:\s*1/);
   assert.match(mobileStyles, /object-fit:\s*cover/);
   assert.match(mobileStyles, /animation:\s*none/);
-  assert.doesNotMatch(mobileStyles, /@keyframes/);
+  assert.match(mobileStyles, /mobile-video-poster-drift/);
+  assert.match(mobileStyles, /is-autoplay-blocked/);
 });
 
 test("restored tabs recover from interrupted blank thinking views", async () => {

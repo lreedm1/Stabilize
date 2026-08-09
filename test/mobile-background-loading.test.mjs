@@ -335,7 +335,7 @@ test("portrait mobile prefers a hardware-friendly direct MP4", async () => {
 });
 // smooth-mobile-video-v12-test-end
 
-// retina-mobile-video-v14-test-start
+// retina-mobile-video-v15-test-start
 test("portrait mobile always autoplays the Retina background", async () => {
   const [clientSource, pageSource, styleSource, materializerSource, retinaVideo] =
     await Promise.all([
@@ -369,9 +369,14 @@ test("portrait mobile always autoplays the Retina background", async () => {
   );
   assert.match(pageSource, /src="\/scenes\/mobile\-forest\-stream\-video\-v14\-retina\-2160\.mp4"/);
   assert.match(pageSource, /poster="\/scenes\/mobile\-forest\-stream\-v14\-retina\-2160\.webp"/);
-  assert.match(pageSource, /mobile-quality\.js\?v=20260809\-mobile\-video\-v14\-retina\-autoplay\-1/);
-  assert.match(styleSource, /retina-mobile-video-v14-start/);
+  assert.match(pageSource, /mobile-quality\.js\?v=20260809\-mobile\-video\-v15\-visible\-autoplay\-1/);
+  assert.match(styleSource, /retina-mobile-video-v15-start/);
   assert.match(styleSource, /object-fit:\s*cover/);
+  assert.match(styleSource, /\.mobile-background-video\s*\{[\s\S]*display:\s*block/);
+  assert.doesNotMatch(styleSource, /\.mobile-background-video\s*\{[^}]*display:\s*none/s);
+  assert.match(styleSource, /mobile-video-poster-drift/);
+  assert.match(clientSource, /video\.getAttribute\("src"\)/);
+  assert.match(pageSource, /<\/video>[\s\S]*mobile-quality\.js[\s\S]*<div class="page-shell">/);
   assert.match(materializerSource, /retina-mobile-video-v14-validation-start/);
   assert.match(materializerSource, /mobile\-forest\-stream\-video\-v14\-retina\-2160\.mp4/);
 
@@ -381,4 +386,4 @@ test("portrait mobile always autoplays the Retina background", async () => {
     assert.ok(retinaVideo.includes(Buffer.from(marker, "ascii")));
   }
 });
-// retina-mobile-video-v14-test-end
+// retina-mobile-video-v15-test-end
