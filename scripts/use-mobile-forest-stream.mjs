@@ -1,8 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const MOBILE_ASSET = "/scenes/mobile-forest-stream-v1-540.webp";
-const GUIDE_VERSION = "20260808-mobile-forest-stream-540-1";
-const MOBILE_STYLE_VERSION = "20260809-mobile-video-v14-retina-autoplay-1";
+const MOBILE_ASSET = "/scenes/mobile-forest-stream-v14-retina-2160.webp";
+const GUIDE_VERSION = "20260809-mobile-forest-retina-2160-1";
+const MOBILE_STYLE_VERSION = "20260809-mobile-video-v15-visible-autoplay-1";
 const STATIC_PAGES = [
   "public/about.html",
   "public/floor-first.html",
@@ -52,7 +52,7 @@ const mobilePreload = `    <link
       as="image"
       href="${MOBILE_ASSET}"
       imagesrcset="
-        ${MOBILE_ASSET} 540w
+        ${MOBILE_ASSET} 2160w
       "
       imagesizes="100vw"
       media="(max-width: 980px) and (orientation: portrait)"
@@ -64,7 +64,7 @@ const mobileSource = `      <source
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="\\n          ${MOBILE_ASSET} 540w\\n        "
+        srcset="\\n          ${MOBILE_ASSET} 2160w\\n        "
       />`;
 
 await update("src/page.js", (source) => {
@@ -84,7 +84,7 @@ await update("src/page.js", (source) => {
     /mobile-woodland-loop\.css\?v=[^"]+/,
     `mobile-woodland-loop.css?v=${MOBILE_STYLE_VERSION}`,
   );
-  const references = next.split(`${MOBILE_ASSET} 540w`).length - 1;
+  const references = next.split(`${MOBILE_ASSET} 2160w`).length - 1;
   if (references !== 2) {
     throw new Error(`Expected two mobile forest references, found ${references}`);
   }
@@ -138,9 +138,9 @@ for (const path of STATIC_PAGES) {
 
 const mobileQualityTest = String.raw`test("mobile uses the project-owner forest stream as its static portrait background", async () => {
   const tier = {
-    filename: "mobile-forest-stream-v1-540.webp",
-    width: 540,
-    height: 960,
+    filename: "mobile-forest-stream-v14-retina-2160.webp",
+    width: 2160,
+    height: 3840,
   };
   const [pageSource, mobileStyles, image] = await Promise.all([
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
@@ -155,7 +155,7 @@ const mobileQualityTest = String.raw`test("mobile uses the project-owner forest 
     { width: imageInfo.width, height: imageInfo.height },
     { width: tier.width, height: tier.height },
   );
-  assert.equal(image.byteLength, 91_750);
+  assert.equal(image.byteLength, 645_202);
   assert.equal(imageInfo.chunks.includes("ANIM"), false);
   assert.equal(
     [...pageSource.matchAll(new RegExp(tier.filename + " " + tier.width + "w", "g"))].length,
@@ -166,17 +166,18 @@ const mobileQualityTest = String.raw`test("mobile uses the project-owner forest 
   assert.match(pageSource, /imagesizes="100vw"/);
   assert.match(
     pageSource,
-    /href="\/scenes\/mobile-forest-stream-v1-540\.webp"/,
+    /href="\/scenes\/mobile-forest-stream-v14-retina-2160\.webp"/,
   );
   assert.match(
     pageSource,
-    /mobile-woodland-loop\.css\?v=20260809-mobile-video-v14-retina-autoplay-1/,
+    /mobile-woodland-loop\.css\?v=20260809-mobile-video-v15-visible-autoplay-1/,
   );
   assert.doesNotMatch(pageSource, /mobile-golden-alpine/);
   assert.match(mobileStyles, /opacity:\s*1/);
   assert.match(mobileStyles, /object-fit:\s*cover/);
   assert.match(mobileStyles, /animation:\s*none/);
-  assert.doesNotMatch(mobileStyles, /@keyframes/);
+  assert.match(mobileStyles, /mobile-video-poster-drift/);
+  assert.match(mobileStyles, /is-autoplay-blocked/);
 });
 
 `;
@@ -194,6 +195,7 @@ await update("test/shared-site-theme.test.mjs", (source) => {
     "/scenes/mobile-golden-alpine-v3-720.webp",
     "/scenes/mobile-golden-alpine-v3-1440.webp",
     "/scenes/mobile-forest-stream-v1-720.webp",
+    "/scenes/mobile-forest-stream-v1-540.webp",
   ]) {
     next = next.replaceAll(oldAsset, MOBILE_ASSET);
   }
@@ -204,6 +206,10 @@ await update("test/shared-site-theme.test.mjs", (source) => {
   next = next.replaceAll(
     "mobile-forest-stream-v1-720",
     "mobile-forest-stream-v1-540",
+  );
+  next = next.replaceAll(
+    "mobile-forest-stream-v1-540",
+    "mobile-forest-stream-v14-retina-2160",
   );
   return next;
 });

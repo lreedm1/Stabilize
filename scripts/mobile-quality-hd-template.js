@@ -7,11 +7,11 @@ const RETINA_VIDEO_ASSET =
 const RETINA_POSTER_ASSET =
   "/scenes/mobile-forest-stream-v14-retina-2160.webp";
 const SD_POSTER_ASSET = "/scenes/mobile-forest-stream-v12-720.webp";
+const MAX_AUTOPLAY_RETRIES = 8;
 
 const mobilePortrait = globalThis.matchMedia?.(MOBILE_BACKGROUND_QUERY);
 const backdropImage = document.querySelector("#photo-backdrop-image");
 const terrain = document.querySelector("#terrain-background");
-const pageShell = document.querySelector(".page-shell");
 
 let backgroundVideo = null;
 let activeVideoAsset = RETINA_VIDEO_ASSET;
@@ -20,6 +20,7 @@ let fallbackStep = 0;
 let gestureListenersInstalled = false;
 let autoplayRetryTimer = null;
 let autoplayAttempts = 0;
+let requestedPause = false;
 
 function markPosterReady() {
   terrain?.classList.add("is-photo-ready");
@@ -50,10 +51,19 @@ function clearAutoplayRetry() {
   }
 }
 
+function markAutoplayBlocked(video, error) {
+  video.classList.add("is-autoplay-blocked");
+  document.documentElement.dataset.mobileBackground = "video-autoplay-blocked";
+  if (error && typeof error.name === "string") {
+    document.documentElement.dataset.mobileVideoAutoplayError = error.name;
+  }
+}
+
 function scheduleAutoplayRetry(video) {
   if (!mobilePortrait?.matches || document.hidden) return;
   clearAutoplayRetry();
-  const delay = Math.min(2000, 250 * 2 ** Math.min(autoplayAttempts, 3));
+  if (autoplayAttempts >= MAX_AUTOPLAY_RETRIES) return;
+  const delay = Math.min(2000, 160 * 2 ** Math.min(autoplayAttempts, 4));
   autoplayAttempts += 1;
   autoplayRetryTimer = setTimeout(() => requestPlayback(video), delay);
 }
@@ -66,7 +76,8 @@ function setVideoSource(video, asset, poster, label, step) {
   video.poster = poster;
   document.documentElement.dataset.mobileVideoSource = label;
 
-  const current = video.currentSrc || video.src || "";
+  const declared = video.getAttribute("src") || "";
+  const current = video.currentSrc || video.src || declared;
   if (!current.endsWith(asset)) {
     video.src = asset;
     video.load();
@@ -110,6 +121,7 @@ function markVideoPlaying() {
   ) {
     return;
   }
+  backgroundVideo.classList.remove("is-autoplay-blocked");
   terrain?.classList.add("is-photo-ready");
   document.documentElement.dataset.mobileBackground = "video-playing";
   document.documentElement.dataset.mobileVideoSource =
@@ -156,12 +168,10 @@ function configureVideo(video) {
     position: "fixed",
     zIndex: "0",
     inset: "0",
-    display: "block",
     width: "100%",
     height: "100%",
     objectFit: "cover",
     objectPosition: "50% 50%",
-    opacity: "1",
     background: "#173f31",
     pointerEvents: "none",
     userSelect: "none",
@@ -176,18 +186,20 @@ function configureVideo(video) {
     video.dataset.stabilizeConfigured = "true";
     video.addEventListener("playing", markVideoPlaying);
     video.addEventListener("timeupdate", markVideoPlaying);
+    video.addEventListener("loadedmetadata", () => requestPlayback(video));
     video.addEventListener("loadeddata", () => requestPlayback(video));
     video.addEventListener("canplay", () => requestPlayback(video));
     video.addEventListener("error", handleVideoError);
     video.addEventListener("pause", () => {
-      if (mobilePortrait?.matches && !document.hidden) {
+      if (!requestedPause && mobilePortrait?.matches && !document.hidden) {
         scheduleAutoplayRetry(video);
       }
     });
     video.addEventListener("ended", () => requestPlayback(video));
   }
 
-  const current = video.currentSrc || video.src || "";
+  const declared = video.getAttribute("src") || "";
+  const current = video.currentSrc || video.src || declared;
   if (current.endsWith(RETINA_VIDEO_ASSET)) {
     activeVideoAsset = RETINA_VIDEO_ASSET;
     activeVideoLabel = "retina-2160-autoplay";
@@ -229,8 +241,11 @@ function ensureBackgroundVideo() {
   const video = document.createElement("video");
   video.id = "mobile-background-video";
   video.className = "mobile-background-video";
+  video.src = RETINA_VIDEO_ASSET;
+  video.poster = RETINA_POSTER_ASSET;
   backgroundVideo = configureVideo(video);
 
+  const pageShell = document.querySelector(".page-shell");
   if (pageShell instanceof HTMLElement) {
     pageShell.before(video);
   } else {
@@ -249,7 +264,8 @@ function requestPlayback(video, fromGesture = false) {
   let playback;
   try {
     playback = video.play();
-  } catch {
+  } catch (error) {
+    markAutoplayBlocked(video, error);
     scheduleAutoplayRetry(video);
     return;
   }
@@ -257,8 +273,9 @@ function requestPlayback(video, fromGesture = false) {
   if (playback && typeof playback.then === "function") {
     playback
       .then(markVideoPlaying)
-      .catch(() => {
+      .catch((error) => {
         if (fromGesture) autoplayAttempts = 0;
+        markAutoplayBlocked(video, error);
         scheduleAutoplayRetry(video);
       });
   } else {
@@ -268,13 +285,21 @@ function requestPlayback(video, fromGesture = false) {
 
 function startVideo() {
   if (!mobilePortrait?.matches || document.hidden) return;
-  requestPlayback(ensureBackgroundVideo());
+  const video = ensureBackgroundVideo();
+  requestedPause = false;
+  requestPlayback(video);
+  queueMicrotask(() => requestPlayback(video));
+  requestAnimationFrame(() => requestPlayback(video));
 }
 
 function stopVideo() {
   clearAutoplayRetry();
+  requestedPause = true;
   backgroundVideo?.pause();
   document.documentElement.dataset.mobileBackground = "poster-ready";
+  queueMicrotask(() => {
+    requestedPause = false;
+  });
 }
 
 function resumeAfterGesture() {
@@ -306,10 +331,13 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) stopVideo();
   else startVideo();
 });
+document.addEventListener("DOMContentLoaded", startVideo, { once: true });
+window.addEventListener("load", startVideo, { once: true });
 window.addEventListener("pageshow", startVideo);
 window.addEventListener("focus", startVideo);
 window.addEventListener("online", startVideo);
-window.addEventListener("pagehide", () => backgroundVideo?.pause());
+window.addEventListener("orientationchange", () => setTimeout(startVideo, 0));
+window.addEventListener("pagehide", stopVideo);
 
 if (mobilePortrait?.matches) {
   addGestureListeners();
