@@ -1,4 +1,4 @@
-name: Build HD autoplay mobile background
+name: Build Retina autoplay mobile background
 
 on:
   pull_request:
@@ -15,7 +15,7 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -37,28 +37,27 @@ jobs:
             sudo apt-get install -y ffmpeg
           fi
 
-      - name: Generate and strictly validate the HD release
+      - name: Generate and strictly validate the Retina release
         shell: bash
         run: |
           bash scripts/generate-mobile-video-hd.sh \
-            /tmp/stabilize-mobile-video-hd
+            /tmp/stabilize-mobile-video-retina
 
       - name: Prepare, test, and publish the release branch
         shell: bash
         run: |
           set -euo pipefail
-          work=/tmp/stabilize-mobile-video-hd
+          work=/tmp/stabilize-mobile-video-retina
           cp scripts/generate-mobile-video-hd.sh /tmp/generate-mobile-video-hd.sh
           cp scripts/prepare-mobile-video-hd-release.py /tmp/prepare-mobile-video-hd-release.py
           cp scripts/mobile-quality-hd-template.js /tmp/mobile-quality-hd-template.js
 
-          # Generation may touch tracked modes or files. Everything needed for
-          # the release is safely copied to /tmp, so restore a clean checkout
-          # before switching from the builder PR to the current main branch.
+          # Restore a clean checkout before building the product release from
+          # the current main branch rather than from the temporary builder PR.
           git reset --hard HEAD
           git clean -fd
           git fetch --no-tags origin main:refs/remotes/origin/main
-          git switch -C agent/mobile-video-hd-autoplay-release refs/remotes/origin/main
+          git switch -C agent/mobile-video-retina-autoplay-release refs/remotes/origin/main
 
           npm ci --ignore-scripts
           npm run apply:prompt-policy
@@ -69,153 +68,55 @@ jobs:
           chmod +x scripts/generate-mobile-video-hd.sh
           chmod +x scripts/prepare-mobile-video-hd-release.py
 
-          python - <<'PY'
-          from pathlib import Path
-
-          template_path = Path("scripts/mobile-quality-hd-template.js")
-          template = template_path.read_text()
-          replacements = [
-              (
-                  "let cadenceStartedAt = 0;\n",
-                  "let cadenceStartedAt = 0;\nlet cadenceVerifiedAsset = null;\n",
-              ),
-              (
-                  "  activeVideoAsset = asset;\n  activeVideoLabel = label;\n  video.poster = poster;\n",
-                  "  activeVideoAsset = asset;\n"
-                  "  activeVideoLabel = label;\n"
-                  "  cadenceVerifiedAsset = null;\n"
-                  "  delete document.documentElement.dataset.mobileVideoCadence;\n"
-                  "  video.poster = poster;\n",
-              ),
-              (
-                  '  document.documentElement.dataset.mobileVideoCadence = "healthy";\n  stopCadenceMonitor();\n',
-                  '  document.documentElement.dataset.mobileVideoCadence = "healthy";\n'
-                  "  cadenceVerifiedAsset = HD_VIDEO_ASSET;\n"
-                  "  stopCadenceMonitor();\n",
-              ),
-              (
-                  "  if (activeVideoAsset === HD_VIDEO_ASSET) startCadenceMonitor();\n",
-                  "  if (\n"
-                  "    activeVideoAsset === HD_VIDEO_ASSET &&\n"
-                  "    cadenceVerifiedAsset !== HD_VIDEO_ASSET &&\n"
-                  "    cadenceStartedAt === 0\n"
-                  "  ) {\n"
-                  "    startCadenceMonitor();\n"
-                  "  }\n",
-              ),
-              (
-                  "  video.src = SMOOTH_VIDEO_ASSET;\n  setVideoSource(\n",
-                  "  setVideoSource(\n",
-              ),
-              (
-                  '  video.src = VIDEO_ASSET;\n  setVideoSource(video, VIDEO_ASSET, SD_POSTER_ASSET, "legacy-worker-fallback");\n',
-                  '  setVideoSource(video, VIDEO_ASSET, SD_POSTER_ASSET, "legacy-worker-fallback");\n',
-              ),
-          ]
-          for before, after in replacements:
-              count = template.count(before)
-              if count != 1:
-                  raise SystemExit(
-                      f"Expected exactly one HD client template match, found {count}: {before!r}"
-                  )
-              template = template.replace(before, after, 1)
-          template_path.write_text(template)
-
-          prepare_path = Path("scripts/prepare-mobile-video-hd-release.py")
-          prepare = prepare_path.read_text()
-          anchor = 'HEIGHT = 1920\n\nvideo = video_source.read_bytes()\n'
-          replacement = (
-              'HEIGHT = 1920\n'
-              'JS_VIDEO_ASSET = VIDEO_ASSET.replace("/", r"\\/")\n'
-              'JS_POSTER_ASSET = POSTER_ASSET.replace("/", r"\\/")\n\n'
-              'video = video_source.read_bytes()\n'
-          )
-          if prepare.count(anchor) != 1:
-              raise SystemExit("Could not add JavaScript-safe HD asset patterns")
-          prepare = prepare.replace(anchor, replacement, 1)
-          prepare = prepare.replace(
-              "{re.escape(VIDEO_ASSET)}", "{JS_VIDEO_ASSET}"
-          )
-          prepare = prepare.replace(
-              "{re.escape(POSTER_ASSET)}", "{JS_POSTER_ASSET}"
-          )
-          prepare_path.write_text(prepare)
-          PY
-
           python scripts/prepare-mobile-video-hd-release.py \
-            "$work/mobile-forest-stream-video-v13-1080.mp4" \
-            "$work/mobile-forest-stream-v13-1080.webp"
+            "$work/mobile-forest-stream-video-v14-retina-2160.mp4" \
+            "$work/mobile-forest-stream-v14-retina-2160.webp"
 
-          # Keep temporary verification workflow code and an untracked local
-          # runbook with a credential-shaped example out of the product release.
-          rm -f .github/workflows/verify-mobile-hd-video.yml docs/runbook.md
+          # Materialize canonical generated expectations after the release
+          # script updates the persistent style version and exact asset checks.
+          npm run apply:prompt-policy
 
+          # Keep the no-audio guarantee. Muted inline autoplay is now the
+          # required background behavior and is covered by dedicated tests.
           python - <<'PY'
           from pathlib import Path
 
-          old = "20260808-mobile-forest-stream-540-1"
-          new = "20260809-mobile-video-v13-hd-autoplay-1"
-
-          # npm test begins by regenerating tests. Update the canonical test
-          # template as well as the materialized test so the new cache tag
-          # survives every apply:prompt-policy pass.
-          generator_path = Path("scripts/use-mobile-forest-stream.mjs")
-          lines = generator_path.read_text().splitlines(keepends=True)
-          matches = [
-              index
-              for index, line in enumerate(lines)
-              if "mobile-woodland-loop" in line and old in line
-          ]
-          if len(matches) != 1:
-              raise SystemExit(
-                  f"Expected one generated mobile style assertion, found {len(matches)}"
-              )
-          index = matches[0]
-          lines[index] = lines[index].replace(old, new, 1)
-          generator_path.write_text("".join(lines))
-
-          test_path = Path("test/mobile-quality.test.mjs")
-          test_source = test_path.read_text()
-          if test_source.count(old) != 1:
-              raise SystemExit("Could not align the mobile style regression version")
-          test_path.write_text(test_source.replace(old, new, 1))
-
-          # Keep the no-audio guarantee. Autoplay is now allowed only through
-          # the muted inline video contract covered by the HD release tests.
           worker_test_path = Path("test/worker.test.mjs")
           worker_test = worker_test_path.read_text()
           old_guard = "<audio|autoplay|nature-sounds"
           new_guard = "<audio|nature-sounds"
-          if worker_test.count(old_guard) != 1:
-              raise SystemExit("Could not update the root-page audio guard")
-          worker_test_path.write_text(
-              worker_test.replace(old_guard, new_guard, 1)
-          )
+          if old_guard in worker_test:
+              worker_test = worker_test.replace(old_guard, new_guard, 1)
+          elif new_guard not in worker_test:
+              raise SystemExit("Could not align the root-page audio guard")
+          worker_test_path.write_text(worker_test)
           PY
+
+          rm -f docs/runbook.md
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'Autoplay an adaptive 1080p mobile background'
+          git commit -m 'Always autoplay the Retina mobile background'
 
           npm test
           npm run check
           npm run verify:clean
           git diff --exit-code
 
-          git push --force origin HEAD:agent/mobile-video-hd-autoplay-release
+          git push --force origin HEAD:agent/mobile-video-retina-autoplay-release
 
       - name: Upload generated evidence and release logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: hd-autoplay-mobile-background-evidence
+          name: retina-autoplay-mobile-background-evidence
           path: |
-            /tmp/stabilize-mobile-video-hd/mobile-forest-stream-video-v13-1080.mp4
-            /tmp/stabilize-mobile-video-hd/mobile-forest-stream-v13-1080.webp
-            /tmp/stabilize-mobile-video-hd/frame-early.png
-            /tmp/stabilize-mobile-video-hd/frame-late.png
-            /tmp/stabilize-mobile-video-hd/probe.json
-            /tmp/stabilize-mobile-video-hd/framemd5.txt
+            /tmp/stabilize-mobile-video-retina/mobile-forest-stream-video-v14-retina-2160.mp4
+            /tmp/stabilize-mobile-video-retina/mobile-forest-stream-v14-retina-2160.webp
+            /tmp/stabilize-mobile-video-retina/frame-early.png
+            /tmp/stabilize-mobile-video-retina/frame-late.png
+            /tmp/stabilize-mobile-video-retina/probe.json
+            /tmp/stabilize-mobile-video-retina/framemd5.txt
           if-no-files-found: warn
           retention-days: 7
