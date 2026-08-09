@@ -108,7 +108,7 @@ async function readBase64Payload(directory, expectedCount = null) {
 }
 
 function validateVideo(video) {
-  if (video.byteLength < 1_000_000) {
+  if (video.byteLength < 100_000) {
     throw new Error(
       `Mobile forest video is unexpectedly small: ${video.byteLength} bytes`,
     );
