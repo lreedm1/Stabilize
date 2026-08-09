@@ -1,0 +1,69 @@
+name: Materialize selected 4K mobile video v22
+
+on:
+  push:
+    branches:
+      - agent/selected-mobile-4k-video-v22
+    paths:
+      - scripts/use-selected-mobile-4k-video-v22.mjs
+      - scripts/finalize-decision-grade-impact.mjs
+      - .github/workflows/verify-mobile-video.yml
+      - .github/workflows/materialize-selected-mobile-4k-video-v22.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize-test-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out the selected-video branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/selected-mobile-4k-video-v22
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies without historical install scripts
+        shell: bash
+        run: npm ci --ignore-scripts
+
+      - name: Materialize canonical selected-scene output
+        shell: bash
+        run: npm run apply:prompt-policy
+
+      - name: Commit generated product files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git restore --source=HEAD --staged --worktree .github/workflows
+          git add -A -- . ':(exclude).github/workflows/**'
+          if git diff --cached --quiet; then
+            echo 'Selected 4K mobile output was already canonical.'
+          else
+            git commit -m 'Use the selected forest stream as a 4K mobile video'
+          fi
+
+      - name: Run complete regression and Worker build gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+      - name: Publish verified branch
+        shell: bash
+        run: git push origin HEAD:agent/selected-mobile-4k-video-v22
