@@ -1,0 +1,117 @@
+name: Deploy reedlokken.com redirect
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - src/reedlokken-redirect.js
+      - wrangler.reedlokken.jsonc
+      - .github/workflows/deploy-reedlokken-redirect.yml
+  workflow_dispatch:
+
+concurrency:
+  group: reedlokken-redirect-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy and verify redirect
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Verify redirect behavior
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import worker from "./src/reedlokken-redirect.js";
+
+          const cases = [
+            ["https://reedlokken.com/", "https://stabilize.info/"],
+            [
+              "https://www.reedlokken.com/path/to/page?source=legacy&item=1",
+              "https://stabilize.info/path/to/page?source=legacy&item=1",
+            ],
+          ];
+
+          for (const [input, expected] of cases) {
+            const response = await worker.fetch(new Request(input));
+            if (response.status !== 308) {
+              throw new Error(`${input} returned ${response.status}, expected 308`);
+            }
+            if (response.headers.get("location") !== expected) {
+              throw new Error(
+                `${input} redirected to ${response.headers.get("location")}, expected ${expected}`,
+              );
+            }
+          }
+          NODE
+
+      - name: Validate the redirect Worker build
+        run: npx wrangler deploy --config wrangler.reedlokken.jsonc --dry-run
+
+      - name: Deploy redirect Worker to Cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config wrangler.reedlokken.jsonc
+          packageManager: npm
+
+      - name: Verify both public hostnames
+        shell: bash
+        run: |
+          set -euo pipefail
+          path='/cloudflare-redirect-check'
+          query="deployment=${GITHUB_SHA}"
+          expected="https://stabilize.info${path}?${query}"
+
+          for host in reedlokken.com www.reedlokken.com; do
+            verified=false
+            for attempt in {1..36}; do
+              headers="$(mktemp)"
+              status="$(
+                curl --max-time 20 --silent --show-error \
+                  --header 'Cache-Control: no-cache' \
+                  --dump-header "$headers" \
+                  --output /dev/null \
+                  --write-out '%{http_code}' \
+                  "https://${host}${path}?${query}" || true
+              )"
+              location="$(
+                awk -F': ' 'tolower($1) == "location" { gsub("\r", "", $2); print $2 }' \
+                  "$headers" | tail -n 1
+              )"
+              rm -f "$headers"
+
+              echo "${host} attempt ${attempt}: HTTP ${status:-000}; location=${location:-missing}"
+              if [[ "$status" == '308' && "$location" == "$expected" ]]; then
+                verified=true
+                break
+              fi
+              sleep 10
+            done
+
+            if [[ "$verified" != true ]]; then
+              echo "::error::${host} did not redirect to ${expected}."
+              exit 1
+            fi
+          done
