@@ -1,0 +1,560 @@
+name: Diagnose selected 4K mobile WebKit v23
+
+on:
+  push:
+    branches:
+      - agent/diagnose-selected-4k-webkit-v23
+    paths:
+      - .github/workflows/diagnose-selected-4k-webkit-v23.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/diagnose-selected-4k-webkit-v23.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: agent/diagnose-selected-4k-webkit-v23
+          persist-credentials: false
+
+      - name: Install media and browser dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps webkit
+
+      - name: Probe the checked-in and production media
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=/tmp/selected-4k-diagnostic
+          mkdir -p "$out"
+          local_video='public/scenes/mobile-forest-stream-video-v14-retina-2160.mp4'
+          route='https://stabilize.info/media/mobile-forest-stream-video-v14-retina-2160.mp4'
+
+          ffprobe -v error \
+            -show_streams -show_format \
+            -of json "$local_video" \
+            > "$out/local-ffprobe.json"
+
+          curl --fail-with-body --location --silent --show-error \
+            --header 'Cache-Control: no-cache' \
+            --dump-header "$out/full.headers" \
+            --output "$out/production.mp4" \
+            "${route}?diagnostic=${GITHUB_SHA}"
+
+          curl --fail-with-body --location --silent --show-error \
+            --header 'Cache-Control: no-cache' \
+            --header 'Range: bytes=0-1048575' \
+            --dump-header "$out/range-start.headers" \
+            --output "$out/range-start.bin" \
+            "${route}?diagnostic-range-start=${GITHUB_SHA}"
+
+          curl --fail-with-body --location --silent --show-error \
+            --header 'Cache-Control: no-cache' \
+            --header 'Range: bytes=-1048576' \
+            --dump-header "$out/range-tail.headers" \
+            --output "$out/range-tail.bin" \
+            "${route}?diagnostic-range-tail=${GITHUB_SHA}"
+
+          ffprobe -v error \
+            -show_streams -show_format \
+            -of json "$out/production.mp4" \
+            > "$out/production-ffprobe.json"
+          sha256sum "$local_video" "$out/production.mp4" \
+            > "$out/checksums.txt"
+          wc -c "$local_video" "$out/production.mp4" \
+            "$out/range-start.bin" "$out/range-tail.bin" \
+            > "$out/byte-counts.txt"
+
+      - name: Sample mobile WebKit before and after a gesture
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=/tmp/selected-4k-diagnostic
+
+          cat > "$out/diagnose.mjs" <<'NODE'
+          import { webkit } from "playwright";
+          import { writeFile } from "node:fs/promises";
+
+          const output = "/tmp/selected-4k-diagnostic";
+          const route =
+            "/media/mobile-forest-stream-video-v14-retina-2160.mp4";
+          const records = {
+            startedAt: new Date().toISOString(),
+            browserEvents: [],
+            mediaEvents: [],
+            samples: [],
+            explicitPlayResults: [],
+          };
+
+          const browser = await webkit.launch({ headless: true });
+          try {
+            const context = await browser.newContext({
+              viewport: { width: 390, height: 844 },
+              screen: { width: 390, height: 844 },
+              deviceScaleFactor: 3,
+              isMobile: true,
+              hasTouch: true,
+              userAgent:
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) " +
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 " +
+                "Mobile/15E148 Safari/604.1",
+            });
+            const page = await context.newPage();
+
+            page.on("console", (message) =>
+              records.browserEvents.push({
+                kind: "console",
+                at: Date.now(),
+                type: message.type(),
+                text: message.text(),
+              }),
+            );
+            page.on("pageerror", (error) =>
+              records.browserEvents.push({
+                kind: "pageerror",
+                at: Date.now(),
+                message: error.message,
+                stack: error.stack || null,
+              }),
+            );
+            page.on("requestfailed", (request) =>
+              records.browserEvents.push({
+                kind: "requestfailed",
+                at: Date.now(),
+                url: request.url(),
+                failure: request.failure(),
+              }),
+            );
+            page.on("response", async (response) => {
+              if (!response.url().includes(route)) return;
+              records.browserEvents.push({
+                kind: "video-response",
+                at: Date.now(),
+                url: response.url(),
+                status: response.status(),
+                headers: await response.allHeaders().catch(() => ({})),
+              });
+            });
+
+            await page.addInitScript(() => {
+              globalThis.__selected4kMediaEvents = [];
+              const seen = new WeakSet();
+              const attach = (video) => {
+                if (!(video instanceof HTMLVideoElement) || seen.has(video)) return;
+                seen.add(video);
+                const eventNames = [
+                  "loadstart",
+                  "durationchange",
+                  "loadedmetadata",
+                  "loadeddata",
+                  "progress",
+                  "canplay",
+                  "canplaythrough",
+                  "play",
+                  "playing",
+                  "pause",
+                  "waiting",
+                  "stalled",
+                  "suspend",
+                  "abort",
+                  "emptied",
+                  "error",
+                  "timeupdate",
+                  "ended",
+                ];
+                for (const name of eventNames) {
+                  video.addEventListener(name, () => {
+                    globalThis.__selected4kMediaEvents.push({
+                      name,
+                      at: performance.now(),
+                      currentTime: video.currentTime,
+                      duration: Number.isFinite(video.duration)
+                        ? video.duration
+                        : null,
+                      readyState: video.readyState,
+                      networkState: video.networkState,
+                      paused: video.paused,
+                      videoWidth: video.videoWidth,
+                      videoHeight: video.videoHeight,
+                      currentSrc: video.currentSrc,
+                      error: video.error
+                        ? {
+                            code: video.error.code,
+                            message: video.error.message || "",
+                          }
+                        : null,
+                    });
+                  });
+                }
+              };
+              const scan = () => {
+                for (const video of document.querySelectorAll("video")) attach(video);
+              };
+              new MutationObserver(scan).observe(document, {
+                childList: true,
+                subtree: true,
+              });
+              document.addEventListener("readystatechange", scan);
+              document.addEventListener("DOMContentLoaded", scan);
+              scan();
+            });
+
+            const url =
+              `https://stabilize.info/?selected-4k-diagnostic=${Date.now()}`;
+            let navigationError = null;
+            try {
+              await page.goto(url, {
+                waitUntil: "domcontentloaded",
+                timeout: 60_000,
+              });
+            } catch (error) {
+              navigationError = String(error?.stack || error);
+            }
+            records.navigationError = navigationError;
+
+            await page
+              .waitForSelector("#mobile-background-video", {
+                state: "attached",
+                timeout: 30_000,
+              })
+              .catch((error) => {
+                records.browserEvents.push({
+                  kind: "selector-timeout",
+                  at: Date.now(),
+                  message: String(error?.message || error),
+                });
+              });
+
+            async function sample(label) {
+              const value = await page
+                .evaluate((videoRoute) => {
+                  const video = document.querySelector(
+                    "#mobile-background-video",
+                  );
+                  const style =
+                    video instanceof HTMLVideoElement
+                      ? getComputedStyle(video)
+                      : null;
+                  const source =
+                    video instanceof HTMLVideoElement
+                      ? video.querySelector("source")
+                      : null;
+                  const probe = document.createElement("video");
+                  const resources = performance
+                    .getEntriesByType("resource")
+                    .filter((entry) => entry.name.includes(videoRoute))
+                    .map((entry) => ({
+                      name: entry.name,
+                      initiatorType: entry.initiatorType,
+                      duration: entry.duration,
+                      transferSize: entry.transferSize,
+                      encodedBodySize: entry.encodedBodySize,
+                      decodedBodySize: entry.decodedBodySize,
+                    }));
+                  return {
+                    performanceNow: performance.now(),
+                    location: location.href,
+                    documentHidden: document.hidden,
+                    visibilityState: document.visibilityState,
+                    mobilePortrait: matchMedia(
+                      "(max-width: 980px) and (orientation: portrait)",
+                    ).matches,
+                    reducedMotion: matchMedia(
+                      "(prefers-reduced-motion: reduce)",
+                    ).matches,
+                    saveData: navigator.connection?.saveData ?? null,
+                    videoExists: video instanceof HTMLVideoElement,
+                    sourceAttribute:
+                      video instanceof HTMLVideoElement
+                        ? video.getAttribute("src")
+                        : null,
+                    sourceChild: source?.getAttribute("src") || null,
+                    currentSrc:
+                      video instanceof HTMLVideoElement
+                        ? video.currentSrc
+                        : null,
+                    resolvedSrc:
+                      video instanceof HTMLVideoElement ? video.src : null,
+                    poster:
+                      video instanceof HTMLVideoElement ? video.poster : null,
+                    autoplay:
+                      video instanceof HTMLVideoElement ? video.autoplay : null,
+                    muted:
+                      video instanceof HTMLVideoElement ? video.muted : null,
+                    defaultMuted:
+                      video instanceof HTMLVideoElement
+                        ? video.defaultMuted
+                        : null,
+                    loop:
+                      video instanceof HTMLVideoElement ? video.loop : null,
+                    playsInline:
+                      video instanceof HTMLVideoElement
+                        ? video.playsInline
+                        : null,
+                    preload:
+                      video instanceof HTMLVideoElement ? video.preload : null,
+                    paused:
+                      video instanceof HTMLVideoElement ? video.paused : null,
+                    ended:
+                      video instanceof HTMLVideoElement ? video.ended : null,
+                    seeking:
+                      video instanceof HTMLVideoElement ? video.seeking : null,
+                    currentTime:
+                      video instanceof HTMLVideoElement
+                        ? video.currentTime
+                        : null,
+                    duration:
+                      video instanceof HTMLVideoElement &&
+                      Number.isFinite(video.duration)
+                        ? video.duration
+                        : null,
+                    readyState:
+                      video instanceof HTMLVideoElement
+                        ? video.readyState
+                        : null,
+                    networkState:
+                      video instanceof HTMLVideoElement
+                        ? video.networkState
+                        : null,
+                    videoWidth:
+                      video instanceof HTMLVideoElement
+                        ? video.videoWidth
+                        : null,
+                    videoHeight:
+                      video instanceof HTMLVideoElement
+                        ? video.videoHeight
+                        : null,
+                    error:
+                      video instanceof HTMLVideoElement && video.error
+                        ? {
+                            code: video.error.code,
+                            message: video.error.message || "",
+                          }
+                        : null,
+                    className:
+                      video instanceof HTMLVideoElement
+                        ? video.className
+                        : null,
+                    display: style?.display || null,
+                    visibility: style?.visibility || null,
+                    opacity: style?.opacity || null,
+                    zIndex: style?.zIndex || null,
+                    dataset: {
+                      mobileBackground:
+                        document.documentElement.dataset.mobileBackground || "",
+                      mobileVideoQuality:
+                        document.documentElement.dataset.mobileVideoQuality || "",
+                      mobileVideoSource:
+                        document.documentElement.dataset.mobileVideoSource || "",
+                      autoplayError:
+                        document.documentElement.dataset
+                          .mobileVideoAutoplayError || "",
+                      mobileMotion:
+                        document.documentElement.dataset.mobileMotion || "",
+                    },
+                    canPlay: {
+                      genericMp4: probe.canPlayType("video/mp4"),
+                      baseline: probe.canPlayType(
+                        'video/mp4; codecs="avc1.42E01E"',
+                      ),
+                      main: probe.canPlayType(
+                        'video/mp4; codecs="avc1.4D401F"',
+                      ),
+                      high: probe.canPlayType(
+                        'video/mp4; codecs="avc1.640033"',
+                      ),
+                    },
+                    resources,
+                    mediaEvents:
+                      globalThis.__selected4kMediaEvents?.slice(-60) || [],
+                  };
+                }, route)
+                .catch((error) => ({
+                  evaluationError: String(error?.stack || error),
+                }));
+              records.samples.push({ label, at: Date.now(), value });
+              records.mediaEvents = value.mediaEvents || records.mediaEvents;
+              return value;
+            }
+
+            async function explicitPlay(label) {
+              const result = await page
+                .evaluate(async () => {
+                  const video = document.querySelector(
+                    "#mobile-background-video",
+                  );
+                  if (!(video instanceof HTMLVideoElement)) {
+                    return { ok: false, reason: "missing-video" };
+                  }
+                  try {
+                    await video.play();
+                    return {
+                      ok: true,
+                      paused: video.paused,
+                      readyState: video.readyState,
+                      currentTime: video.currentTime,
+                    };
+                  } catch (error) {
+                    return {
+                      ok: false,
+                      name: error?.name || "",
+                      message: error?.message || String(error),
+                      paused: video.paused,
+                      readyState: video.readyState,
+                      networkState: video.networkState,
+                      mediaError: video.error
+                        ? {
+                            code: video.error.code,
+                            message: video.error.message || "",
+                          }
+                        : null,
+                    };
+                  }
+                })
+                .catch((error) => ({
+                  ok: false,
+                  evaluationError: String(error?.stack || error),
+                }));
+              records.explicitPlayResults.push({ label, at: Date.now(), result });
+            }
+
+            for (let second = 0; second < 9; second += 1) {
+              await sample(`before-gesture-${second}`);
+              if (second === 3 || second === 7) {
+                await explicitPlay(`script-play-before-gesture-${second}`);
+              }
+              await page.waitForTimeout(1_000);
+            }
+
+            await page.screenshot({
+              path: `${output}/before-gesture.png`,
+              fullPage: false,
+            });
+
+            records.gestureAttempt = await page
+              .tap("body", { position: { x: 24, y: 24 } })
+              .then(() => ({ ok: true }))
+              .catch((error) => ({
+                ok: false,
+                error: String(error?.stack || error),
+              }));
+            await explicitPlay("immediately-after-gesture");
+
+            for (let second = 0; second < 9; second += 1) {
+              await sample(`after-gesture-${second}`);
+              if (second === 3 || second === 7) {
+                await explicitPlay(`script-play-after-gesture-${second}`);
+              }
+              await page.waitForTimeout(1_000);
+            }
+
+            await page.screenshot({
+              path: `${output}/after-gesture.png`,
+              fullPage: false,
+            });
+
+            const fetchDiagnostics = await page.evaluate(async (videoRoute) => {
+              const responses = [];
+              for (const [name, headers] of [
+                ["full", {}],
+                ["start-range", { Range: "bytes=0-1023" }],
+                ["tail-range", { Range: "bytes=-1024" }],
+              ]) {
+                try {
+                  const response = await fetch(
+                    `${videoRoute}?browser-fetch=${name}-${Date.now()}`,
+                    { headers, cache: "no-store" },
+                  );
+                  const bytes = await response.arrayBuffer();
+                  responses.push({
+                    name,
+                    ok: response.ok,
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries()),
+                    bytes: bytes.byteLength,
+                  });
+                } catch (error) {
+                  responses.push({
+                    name,
+                    error: String(error?.stack || error),
+                  });
+                }
+              }
+              return responses;
+            }, route);
+            records.browserFetchDiagnostics = fetchDiagnostics;
+          } finally {
+            records.finishedAt = new Date().toISOString();
+            await writeFile(
+              `${output}/webkit-diagnostic.json`,
+              JSON.stringify(records, null, 2),
+            );
+            await browser.close();
+          }
+          NODE
+
+          node "$out/diagnose.mjs"
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('/tmp/selected-4k-diagnostic/webkit-diagnostic.json')
+          data = json.loads(path.read_text())
+          summary = {
+              'navigationError': data.get('navigationError'),
+              'gestureAttempt': data.get('gestureAttempt'),
+              'explicitPlayResults': data.get('explicitPlayResults'),
+              'browserEvents': data.get('browserEvents'),
+              'sampleCount': len(data.get('samples', [])),
+              'samples': [
+                  {
+                      'label': sample.get('label'),
+                      'videoWidth': sample.get('value', {}).get('videoWidth'),
+                      'videoHeight': sample.get('value', {}).get('videoHeight'),
+                      'readyState': sample.get('value', {}).get('readyState'),
+                      'networkState': sample.get('value', {}).get('networkState'),
+                      'paused': sample.get('value', {}).get('paused'),
+                      'currentTime': sample.get('value', {}).get('currentTime'),
+                      'error': sample.get('value', {}).get('error'),
+                      'state': sample.get('value', {}).get('dataset', {}).get('mobileBackground'),
+                      'autoplayError': sample.get('value', {}).get('dataset', {}).get('autoplayError'),
+                      'display': sample.get('value', {}).get('display'),
+                      'visibility': sample.get('value', {}).get('visibility'),
+                      'opacity': sample.get('value', {}).get('opacity'),
+                  }
+                  for sample in data.get('samples', [])
+              ],
+              'browserFetchDiagnostics': data.get('browserFetchDiagnostics'),
+          }
+          Path('/tmp/selected-4k-diagnostic/summary.json').write_text(
+              json.dumps(summary, indent=2)
+          )
+          print(json.dumps(summary, indent=2))
+          PY
+
+      - name: Upload complete diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selected-4k-webkit-v23-diagnostic
+          path: /tmp/selected-4k-diagnostic
+          if-no-files-found: error
+          retention-days: 7
