@@ -1,11 +1,17 @@
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 
-const payloadDirectory = "materialize/mobile-forest-stream";
-const outputPath = "public/scenes/mobile-forest-stream-v1-540.webp";
-const expectedBytes = 91_750;
-const expectedSha256 =
+const posterPayloadDirectory = "materialize/mobile-forest-stream";
+const posterOutputPath = "public/scenes/mobile-forest-stream-v1-540.webp";
+const expectedPosterBytes = 91_750;
+const expectedPosterSha256 =
   "e2396c2f73018151c20f99130ebdde75a85db6248ed5459ea0039f03e84eb23c";
+
+const videoPayloadDirectory =
+  "materialize/mobile-forest-stream-video-1080-v4";
+const videoOutputPath =
+  "public/scenes/mobile-forest-stream-video-v4-1080.mp4";
+const expectedVideoParts = 9;
 
 function webpInfo(buffer) {
   if (
@@ -63,45 +69,115 @@ function webpInfo(buffer) {
   return { width, height, animated };
 }
 
-const payloadFiles = (await readdir(payloadDirectory))
-  .filter((name) => /^\d{3}\.b64$/.test(name))
-  .sort();
-if (!payloadFiles.length) {
-  throw new Error("Mobile forest payload chunks are missing");
+async function readBase64Payload(directory, expectedCount = null) {
+  const payloadFiles = (await readdir(directory))
+    .filter((name) => /^\d{3}\.b64$/.test(name))
+    .sort();
+
+  if (!payloadFiles.length) {
+    throw new Error(`Payload chunks are missing from ${directory}`);
+  }
+
+  if (expectedCount !== null) {
+    const expectedNames = Array.from(
+      { length: expectedCount },
+      (_, index) => `${String(index).padStart(3, "0")}.b64`,
+    );
+    if (
+      payloadFiles.length !== expectedNames.length ||
+      payloadFiles.some((name, index) => name !== expectedNames[index])
+    ) {
+      throw new Error(
+        `Expected ${expectedNames.join(", ")} in ${directory}; found ${payloadFiles.join(", ")}`,
+      );
+    }
+  }
+
+  const encodedParts = await Promise.all(
+    payloadFiles.map((name) => readFile(`${directory}/${name}`, "utf8")),
+  );
+  const encoded = encodedParts.join("").replace(/\s+/g, "");
+  if (!encoded || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+    throw new Error(`Payload in ${directory} is not valid base64 text`);
+  }
+
+  return {
+    payloadFiles,
+    bytes: Buffer.from(encoded, "base64"),
+  };
 }
 
-const encodedParts = await Promise.all(
-  payloadFiles.map((name) =>
-    readFile(`${payloadDirectory}/${name}`, "utf8"),
-  ),
-);
-const encoded = encodedParts.join("").replace(/\s+/g, "");
-if (!encoded || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
-  throw new Error("Mobile forest payload is not valid base64 text");
+function validateVideo(video) {
+  if (video.byteLength < 100_000) {
+    throw new Error(
+      `Mobile forest video is unexpectedly small: ${video.byteLength} bytes`,
+    );
+  }
+  if (video.byteLength > 25_000_000) {
+    throw new Error(
+      `Mobile forest video is unexpectedly large: ${video.byteLength} bytes`,
+    );
+  }
+  if (
+    video.byteLength < 12 ||
+    video.subarray(4, 8).toString("ascii") !== "ftyp"
+  ) {
+    throw new Error("Mobile forest video payload is not an MP4 file");
+  }
+
+  for (const marker of ["moov", "mdat", "vide", "avc1"]) {
+    if (!video.includes(Buffer.from(marker, "ascii"))) {
+      throw new Error(`Mobile forest video is missing the ${marker} marker`);
+    }
+  }
+
+  const moovOffset = video.indexOf(Buffer.from("moov", "ascii"));
+  const mdatOffset = video.indexOf(Buffer.from("mdat", "ascii"));
+  return {
+    fastStart: moovOffset >= 0 && mdatOffset >= 0 && moovOffset < mdatOffset,
+    sha256: createHash("sha256").update(video).digest("hex"),
+  };
 }
 
-const image = Buffer.from(encoded, "base64");
-if (image.byteLength !== expectedBytes) {
+const posterPayload = await readBase64Payload(posterPayloadDirectory);
+const poster = posterPayload.bytes;
+if (poster.byteLength !== expectedPosterBytes) {
   throw new Error(
-    `Unexpected mobile forest image size: ${image.byteLength}; expected ${expectedBytes}`,
+    `Unexpected mobile forest image size: ${poster.byteLength}; expected ${expectedPosterBytes}`,
   );
 }
-const actualSha256 = createHash("sha256").update(image).digest("hex");
-if (actualSha256 !== expectedSha256) {
+const actualPosterSha256 = createHash("sha256")
+  .update(poster)
+  .digest("hex");
+if (actualPosterSha256 !== expectedPosterSha256) {
   throw new Error(
-    `Mobile forest payload checksum mismatch: ${actualSha256}`,
+    `Mobile forest payload checksum mismatch: ${actualPosterSha256}`,
   );
 }
 
-const info = webpInfo(image);
-if (info.width !== 540 || info.height !== 960 || info.animated) {
+const posterInfo = webpInfo(poster);
+if (
+  posterInfo.width !== 540 ||
+  posterInfo.height !== 960 ||
+  posterInfo.animated
+) {
   throw new Error(
-    `Unexpected mobile forest image: ${info.width}x${info.height}, animated=${info.animated}`,
+    `Unexpected mobile forest image: ${posterInfo.width}x${posterInfo.height}, animated=${posterInfo.animated}`,
   );
 }
 
 await mkdir("public/scenes", { recursive: true });
-await writeFile(outputPath, image);
+await writeFile(posterOutputPath, poster);
 console.log(
-  `Materialized ${outputPath}: ${info.width}x${info.height}, ${image.byteLength} bytes from ${payloadFiles.length} chunks`,
+  `Materialized ${posterOutputPath}: ${posterInfo.width}x${posterInfo.height}, ${poster.byteLength} bytes from ${posterPayload.payloadFiles.length} chunks`,
+);
+
+const videoPayload = await readBase64Payload(
+  videoPayloadDirectory,
+  expectedVideoParts,
+);
+const videoInfo = validateVideo(videoPayload.bytes);
+await writeFile(videoOutputPath, videoPayload.bytes);
+console.log(
+  `Materialized ${videoOutputPath}: ${videoPayload.bytes.byteLength} bytes from ${videoPayload.payloadFiles.length} chunks, sha256=${videoInfo.sha256}, fastStart=${videoInfo.fastStart}`,
 );

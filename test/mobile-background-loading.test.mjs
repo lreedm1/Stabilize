@@ -99,3 +99,50 @@ test("the production mobile release gate follows built versions and exact image 
     workflow.includes("Exact forest-stream mobile release is live"),
   );
 });
+
+test("portrait mobile uses a direct same-origin MP4 instead of a reconstructed blob", async () => {
+  const [clientSource, materializerSource, headersSource, video] =
+    await Promise.all([
+      read("public/mobile-quality.js"),
+      read("scripts/materialize-mobile-forest-stream.mjs"),
+      read("public/_headers"),
+      readFile(
+        new URL(
+          "../public/scenes/mobile-forest-stream-video-v4-1080.mp4",
+          import.meta.url,
+        ),
+      ),
+    ]);
+
+  assert.match(
+    clientSource,
+    /const VIDEO_ASSET =[\s\S]*mobile-forest-stream-video-v4-1080\.mp4/,
+  );
+  assert.match(clientSource, /video\.src = VIDEO_ASSET/);
+  assert.match(clientSource, /video\.autoplay = true/);
+  assert.match(clientSource, /video\.muted = true/);
+  assert.match(clientSource, /video\.defaultMuted = true/);
+  assert.match(clientSource, /video\.loop = true/);
+  assert.match(clientSource, /video\.playsInline = true/);
+  assert.match(clientSource, /function resumeAfterGesture\(\)/);
+  assert.doesNotMatch(clientSource, /URL\.createObjectURL|new Blob|atob\(/);
+
+  assert.match(
+    materializerSource,
+    /materialize\/mobile-forest-stream-video-1080-v4/,
+  );
+  assert.match(
+    materializerSource,
+    /public\/scenes\/mobile-forest-stream-video-v4-1080\.mp4/,
+  );
+  assert.match(
+    headersSource,
+    /\/scenes\/mobile-forest-stream-video-v4-1080\.mp4[\s\S]*Content-Type: video\/mp4/,
+  );
+
+  assert.ok(video.byteLength > 100_000);
+  assert.equal(video.subarray(4, 8).toString("ascii"), "ftyp");
+  for (const marker of ["moov", "mdat", "avc1"]) {
+    assert.ok(video.includes(Buffer.from(marker, "ascii")));
+  }
+});
