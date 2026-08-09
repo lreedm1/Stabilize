@@ -5,3 +5,4 @@ node_modules/
 .nightly/
 .DS_Store
 npm-debug.log*
+public/scenes/mobile-forest-stream-video-v4-1080.mp4
