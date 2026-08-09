@@ -123,6 +123,8 @@ jobs:
             if [ -n "$previous_tree" ] && [ "$current_tree" != "$previous_tree" ]; then
               echo "Files changed between passes $((attempt - 1)) and $attempt:"
               git diff --name-status "$previous_tree" "$current_tree" || true
+              echo "Exact src/page.js drift:"
+              git diff --no-ext-diff --unified=30 "$previous_tree" "$current_tree" -- src/page.js || true
             fi
             if [ "$current_tree" = "$previous_tree" ]; then
               stable="true"
