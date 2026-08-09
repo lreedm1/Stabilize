@@ -43,6 +43,29 @@ jobs:
         shell: bash
         run: npm ci --ignore-scripts
 
+      - name: Repair the generated regression template
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/apply-mobile-hd-range-route-v20.mjs")
+          source = path.read_text()
+          replacements = {
+              '  const url = `https://stabilize.info${VIDEO_ROUTE}`;':
+                  '  const url = "https://stabilize.info" + MOBILE_HD_VIDEO_ROUTE;',
+              '    `bytes 0-1023/${VIDEO_BYTES}`,':
+                  '    "bytes 0-1023/" + MOBILE_HD_VIDEO_BYTES,',
+              '    `bytes ${VIDEO_BYTES - 2048}-${VIDEO_BYTES - 1}/${VIDEO_BYTES}`,':
+                  '    "bytes " + (MOBILE_HD_VIDEO_BYTES - 2048) + "-" + (MOBILE_HD_VIDEO_BYTES - 1) + "/" + MOBILE_HD_VIDEO_BYTES,',
+          }
+          for before, after in replacements.items():
+              source = source.replace(before, after)
+          path.write_text(source)
+          PY
+          node --check scripts/apply-mobile-hd-range-route-v20.mjs
+
       - name: Materialize canonical output
         shell: bash
         run: npm run apply:prompt-policy
