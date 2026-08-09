@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const OLD_VERSION = "20260809-mobile-motion-canvas-v18-1";
-const VERSION = "20260809-mobile-motion-canvas-v18-2";
+const OLD_VERSION = "20260809-mobile-motion-canvas-v19-hd-1";
+const VERSION = "20260809-mobile-motion-canvas-v19-hd-2";
 
 async function update(path, transform) {
   const before = await readFile(path, "utf8");

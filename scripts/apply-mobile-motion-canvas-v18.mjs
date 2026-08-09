@@ -6,11 +6,11 @@ const POSTER_FILENAME = "mobile-forest-stream-v14-retina-2160.webp";
 const POSTER_WIDTH = 2160;
 const POSTER_HEIGHT = 3840;
 const SPRITE_ASSET =
-  "/scenes/mobile-forest-stream-water-sprite-v18-540.webp";
-const SPRITE_FILENAME = "mobile-forest-stream-water-sprite-v18-540.webp";
-const SPRITE_WIDTH = 3240;
-const SPRITE_HEIGHT = 4800;
-const VERSION = "20260809-mobile-motion-canvas-v18-1";
+  "/scenes/mobile-forest-stream-water-sprite-v19-hd-1080.webp";
+const SPRITE_FILENAME = "mobile-forest-stream-water-sprite-v19-hd-1080.webp";
+const SPRITE_WIDTH = 2400;
+const SPRITE_HEIGHT = 6000;
+const VERSION = "20260809-mobile-motion-canvas-v19-hd-1";
 const STATIC_PAGES = [
   "public/about.html",
   "public/floor-first.html",
@@ -319,7 +319,7 @@ const mobileQualityTest = `test("portrait mobile draws water through a canvas wi
   assert.equal(spriteInfo.chunks.includes("ALPH"), true);
   assert.equal(spriteInfo.chunks.includes("ANIM"), false);
   assert.ok(sprite.byteLength > 1_000_000);
-  assert.ok(sprite.byteLength < 10_000_000);
+  assert.ok(sprite.byteLength < 12_000_000);
 
   assert.equal(
     [...pageSource.matchAll(/${escapeRegExp(POSTER_FILENAME)} ${POSTER_WIDTH}w/g)].length,
@@ -333,6 +333,12 @@ const mobileQualityTest = `test("portrait mobile draws water through a canvas wi
   assert.match(mobileStyles, /mobile-motion-canvas-v18-start/);
   assert.match(mobileStyles, /\\.mobile-motion-canvas\\.is-ready/);
 
+  assert.match(clientSource, /const COMPOSITION_WIDTH = 1080/);
+  assert.match(clientSource, /const COMPOSITION_HEIGHT = 1920/);
+  assert.match(clientSource, /const FRAME_LEFT = 680/);
+  assert.match(clientSource, /const FRAME_TOP = 720/);
+  assert.match(clientSource, /const FRAME_WIDTH = 400/);
+  assert.match(clientSource, /const FRAME_HEIGHT = 1200/);
   assert.match(clientSource, /const FRAME_RATE = 6/);
   assert.match(clientSource, /context = canvas\\.getContext\\("2d"/);
   assert.match(clientSource, /ctx\\.drawImage\\(/);
@@ -389,7 +395,7 @@ test("portrait mobile motion is independent of video and animated-image autoplay
   assert.match(clientSource, /ctx\\.drawImage\\(/);
   assert.match(clientSource, /setTimeout\\(step/);
   assert.doesNotMatch(clientSource, /\\.play\\(/);
-  assert.match(materializerSource, /mobile-water-sprite-v18-validation-start/);
+  assert.match(materializerSource, /mobile-water-sprite-v19-hd-validation-start/);
   assert.match(materializerSource, /${escapeRegExp(SPRITE_FILENAME)}/);
 });
 ${loadingEnd}
@@ -426,5 +432,5 @@ await update("test/shared-site-theme.test.mjs", (source) => {
 });
 
 console.log(
-  "Installed a Retina poster plus automatic canvas water motion for portrait mobile.",
+  "Installed a Retina poster plus high-resolution cropped canvas water motion for portrait mobile.",
 );

@@ -11,7 +11,7 @@ const STATIC_PAGES = [
   "public/support.html",
   "public/sustainability.html",
 ];
-const VERSION = "20260809-mobile-motion-canvas-v18-1";
+const VERSION = "20260809-mobile-motion-canvas-v19-hd-1";
 
 function capture(value, pattern, label) {
   const match = value.match(pattern);

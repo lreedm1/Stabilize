@@ -385,3 +385,37 @@ console.log(
   `Validated ${waterSpritePath}: 3240x4800, ${waterSprite.byteLength} bytes, sha256=${waterSpriteSha256}`,
 );
 // mobile-water-sprite-v18-validation-end
+
+// mobile-water-sprite-v19-hd-validation-start
+const hdWaterSpritePath = "public/scenes/mobile-forest-stream-water-sprite-v19-hd-1080.webp";
+const hdWaterSpriteExpectedBytes = 1_598_848;
+const hdWaterSpriteExpectedSha256 = "8ab3683f07300055b59474db732de4dbc47ec7c3decc9c722863d3635d63eba8";
+const hdWaterSprite = await readFile(hdWaterSpritePath);
+if (hdWaterSprite.byteLength !== hdWaterSpriteExpectedBytes) {
+  throw new Error(
+    `Unexpected HD mobile water sprite size: ${hdWaterSprite.byteLength}; expected ${hdWaterSpriteExpectedBytes}`,
+  );
+}
+const hdWaterSpriteSha256 = createHash("sha256")
+  .update(hdWaterSprite)
+  .digest("hex");
+if (hdWaterSpriteSha256 !== hdWaterSpriteExpectedSha256) {
+  throw new Error(`HD mobile water sprite checksum mismatch: ${hdWaterSpriteSha256}`);
+}
+const hdWaterSpriteInfo = webpInfo(hdWaterSprite);
+if (
+  hdWaterSpriteInfo.width !== 2400 ||
+  hdWaterSpriteInfo.height !== 6000 ||
+  hdWaterSpriteInfo.animated
+) {
+  throw new Error(
+    `Unexpected HD mobile water sprite: ${hdWaterSpriteInfo.width}x${hdWaterSpriteInfo.height}, animated=${hdWaterSpriteInfo.animated}`,
+  );
+}
+if (!hdWaterSprite.includes(Buffer.from("ALPH", "ascii"))) {
+  throw new Error("HD mobile water sprite is missing its alpha channel");
+}
+console.log(
+  `Validated ${hdWaterSpritePath}: 2400x6000, ${hdWaterSprite.byteLength} bytes, sha256=${hdWaterSpriteSha256}`,
+);
+// mobile-water-sprite-v19-hd-validation-end
