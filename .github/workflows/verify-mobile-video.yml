@@ -1,4 +1,4 @@
-name: Verify mobile video background
+name: Verify selected 4K mobile video
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: verify-mobile-video-${{ github.ref }}
+  group: verify-selected-mobile-4k-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -18,7 +18,7 @@ permissions:
 jobs:
   verify-payload:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
@@ -30,49 +30,55 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
-      - name: Materialize and validate the direct mobile MP4
+      - name: Install dependencies and media tools
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/materialize-mobile-forest-stream.mjs
-          video='public/scenes/mobile-forest-stream-video-v4-1080.mp4'
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          npm ci --ignore-scripts
+
+      - name: Verify canonical selected-scene output
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run apply:prompt-policy
+          git diff --exit-code
+
+          video='public/scenes/mobile-forest-stream-video-v14-retina-2160.mp4'
           test -s "$video"
-          test "$(wc -c < "$video")" -eq 113613
+          test "$(wc -c < "$video" | tr -d '[:space:]')" -eq 5006520
           test "$(dd if="$video" bs=1 skip=4 count=4 status=none)" = 'ftyp'
           grep -aFq 'moov' "$video"
           grep -aFq 'mdat' "$video"
           grep -aFq 'avc1' "$video"
-          file "$video" | grep -Fq 'ISO Media, MP4'
+          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video")" = '2160x3840'
 
-      - name: Validate the Safari playback and range path
-        shell: bash
-        run: |
-          set -euo pipefail
-          grep -Fq '/media/mobile-forest-stream-video-v4-1080.mp4' public/mobile-quality.js
-          grep -Fq 'video.src = VIDEO_ASSET' public/mobile-quality.js
+          route='/media/mobile-forest-stream-video-v14-retina-2160.mp4'
+          grep -Fq 'id="mobile-background-video"' src/page.js
+          grep -Fq "$route" src/page.js
+          grep -Fq 'mobile-quality.js?v=20260809-selected-mobile-4k-video-v22-1' src/page.js
+          grep -Fq 'mobile-woodland-loop.css?v=20260809-selected-mobile-4k-video-v22-1' src/page.js
+          grep -Fq "$route" public/mobile-quality.js
+          grep -Fq '4k-2160x3840' public/mobile-quality.js
           grep -Fq 'video.autoplay = true' public/mobile-quality.js
           grep -Fq 'video.muted = true' public/mobile-quality.js
           grep -Fq 'video.defaultMuted = true' public/mobile-quality.js
-          grep -Fq 'video.loop = true' public/mobile-quality.js
           grep -Fq 'video.playsInline = true' public/mobile-quality.js
           grep -Fq 'video.play()' public/mobile-quality.js
-          grep -Fq 'resumeAfterGesture' public/mobile-quality.js
-          ! grep -Fq 'URL.createObjectURL' public/mobile-quality.js
-          ! grep -Fq 'new Blob' public/mobile-quality.js
-          ! grep -Fq 'atob(' public/mobile-quality.js
-          grep -Fq 'url.pathname === MOBILE_VIDEO_ROUTE' src/domain-router.js
-          grep -Fq 'await serveMobileVideo(request, canonicalEnv)' src/domain-router.js
-          grep -Fq 'Cloudflare-CDN-Cache-Control' src/mobile-video-response.js
+          grep -Fq 'MOBILE_VIDEO_BYTES = 5_006_520' src/mobile-video-response.js
+          grep -Fq "$route" src/mobile-video-response.js
           grep -Fq 'Accept-Ranges' src/mobile-video-response.js
           grep -Fq 'Content-Range' src/mobile-video-response.js
-          grep -Fq 'MOBILE_VIDEO_ETAG' src/mobile-video-response.js
+          ! grep -Fq 'mobile-forest-stream-v20-true-hd-1440' src/page.js
 
   verify-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: verify-payload
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
@@ -80,19 +86,21 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+      - name: Install media tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
 
-      - name: Wait for the exact Safari-safe video release to reach production
+      - name: Wait for the exact 2160x3840 release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          node scripts/materialize-mobile-forest-stream.mjs
-          expected_file='public/scenes/mobile-forest-stream-video-v4-1080.mp4'
+          route='/media/mobile-forest-stream-video-v14-retina-2160.mp4'
+          expected_file='public/scenes/mobile-forest-stream-video-v14-retina-2160.mp4'
           expected_bytes="$(wc -c < "$expected_file" | tr -d '[:space:]')"
           expected_sha="$(sha256sum "$expected_file" | awk '{print $1}')"
           expected_etag="\"${expected_sha}\""
@@ -104,11 +112,7 @@ jobs:
             local description="$2"
             local payload
             payload="$(printf '{"state":"%s","context":"verification/mobile-video-background","description":"%s","target_url":"%s/%s/actions/runs/%s"}' \
-              "$state" \
-              "$description" \
-              "$GITHUB_SERVER_URL" \
-              "$GITHUB_REPOSITORY" \
-              "$GITHUB_RUN_ID")"
+              "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
             curl --fail-with-body --silent --show-error \
               --request POST \
               --header 'Accept: application/vnd.github+json' \
@@ -129,26 +133,24 @@ jobs:
             ' "$file" | tail -n 1
           }
 
-          publish_status pending 'Waiting for Safari-safe mobile video delivery'
+          publish_status pending 'Waiting for the selected 4K forest video'
 
           for attempt in {1..36}; do
             key="${GITHUB_SHA}-${attempt}"
+            page_status="$(
+              curl --max-time 25 --silent --show-error --compressed \
+                --header 'Cache-Control: no-cache' \
+                --dump-header "$tmpdir/page.headers" \
+                --output "$tmpdir/page.html" \
+                --write-out '%{http_code}' \
+                "https://stabilize.info/?selected-4k=${key}" || true
+            )"
             script_status="$(
-              curl --max-time 20 --silent --show-error \
+              curl --max-time 25 --silent --show-error --compressed \
                 --header 'Cache-Control: no-cache' \
                 --output "$tmpdir/mobile-quality.js" \
                 --write-out '%{http_code}' \
-                "https://stabilize.info/mobile-quality.js?release=${key}" \
-                || true
-            )"
-            home_status="$(
-              curl --max-time 20 --silent --show-error \
-                --header 'Cache-Control: no-cache' \
-                --dump-header "$tmpdir/home.headers" \
-                --output /dev/null \
-                --write-out '%{http_code}' \
-                "https://stabilize.info/?mobile-video-release=${key}" \
-                || true
+                "https://stabilize.info/mobile-quality.js?selected-4k=${key}" || true
             )"
             video_status="$(
               curl --max-time 90 --silent --show-error \
@@ -156,18 +158,16 @@ jobs:
                 --dump-header "$tmpdir/video.headers" \
                 --output "$tmpdir/video.mp4" \
                 --write-out '%{http_code}' \
-                "https://stabilize.info/media/mobile-forest-stream-video-v4-1080.mp4?release=${key}" \
-                || true
+                "https://stabilize.info${route}?selected-4k=${key}" || true
             )"
             range_status="$(
-              curl --max-time 30 --silent --show-error \
+              curl --max-time 40 --silent --show-error \
                 --header 'Cache-Control: no-cache' \
                 --header 'Range: bytes=0-1023' \
                 --dump-header "$tmpdir/range.headers" \
                 --output "$tmpdir/range.bin" \
                 --write-out '%{http_code}' \
-                "https://stabilize.info/media/mobile-forest-stream-video-v4-1080.mp4?range=${key}" \
-                || true
+                "https://stabilize.info${route}?range=${key}" || true
             )"
 
             live_bytes="$(wc -c < "$tmpdir/video.mp4" | tr -d '[:space:]')"
@@ -175,46 +175,189 @@ jobs:
             live_type="$(header_value "$tmpdir/video.headers" content-type | tr '[:upper:]' '[:lower:]')"
             live_etag="$(header_value "$tmpdir/video.headers" etag)"
             live_cache="$(header_value "$tmpdir/video.headers" cache-control | tr '[:upper:]' '[:lower:]')"
-            live_cdn_cache="$(header_value "$tmpdir/video.headers" cdn-cache-control | tr '[:upper:]' '[:lower:]')"
-            live_cf_cdn_cache="$(header_value "$tmpdir/video.headers" cloudflare-cdn-cache-control | tr '[:upper:]' '[:lower:]')"
             live_accept_ranges="$(header_value "$tmpdir/video.headers" accept-ranges | tr '[:upper:]' '[:lower:]')"
             range_bytes="$(wc -c < "$tmpdir/range.bin" | tr -d '[:space:]')"
             range_content="$(header_value "$tmpdir/range.headers" content-range | tr '[:upper:]' '[:lower:]')"
             range_etag="$(header_value "$tmpdir/range.headers" etag)"
-            range_cache="$(header_value "$tmpdir/range.headers" cache-control | tr '[:upper:]' '[:lower:]')"
 
-            echo "Mobile video attempt ${attempt}: script=${script_status:-000} home=${home_status:-000} video=${video_status:-000} range=${range_status:-000}; bytes=${live_bytes}/${expected_bytes}; type=${live_type:-missing}; etag=${live_etag:-missing}; cache=${live_cache:-missing}; sha=${live_sha:0:12}."
+            echo "Selected 4K attempt ${attempt}: page=${page_status:-000} script=${script_status:-000} video=${video_status:-000} range=${range_status:-000}; bytes=${live_bytes}/${expected_bytes}; sha=${live_sha:0:12}."
 
-            if [[ "$script_status" == 200 \
-              && "$home_status" == 200 \
+            dimensions='missing'
+            if [[ "$video_status" == 200 && "$live_bytes" -gt 0 ]]; then
+              dimensions="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$tmpdir/video.mp4" 2>/dev/null || true)"
+            fi
+
+            if [[ "$page_status" == 200 \
+              && "$script_status" == 200 \
               && "$video_status" == 200 \
               && "$range_status" == 206 \
               && "$range_bytes" == 1024 \
               && "$range_content" == "bytes 0-1023/${expected_bytes}" \
               && "$live_bytes" == "$expected_bytes" \
               && "$live_sha" == "$expected_sha" \
+              && "$dimensions" == '2160x3840' \
               && "$live_type" == video/mp4* \
               && "$live_etag" == "$expected_etag" \
               && "$range_etag" == "$expected_etag" \
-              && "$live_etag" != W/* \
               && "$live_cache" == *no-store* \
-              && "$range_cache" == *no-store* \
-              && "$live_cdn_cache" == "no-store" \
-              && "$live_cf_cdn_cache" == "no-store" \
-              && "$live_accept_ranges" == "bytes" ]] \
-              && grep -Fq '/media/mobile-forest-stream-video-v4-1080.mp4' "$tmpdir/mobile-quality.js" \
-              && grep -Fq 'video.src = VIDEO_ASSET' "$tmpdir/mobile-quality.js" \
-              && grep -Fq 'video.play()' "$tmpdir/mobile-quality.js" \
-              && ! grep -Fq 'URL.createObjectURL' "$tmpdir/mobile-quality.js" \
-              && grep -Fqi "media-src 'self'" "$tmpdir/home.headers"; then
-              publish_status success 'Safari-safe mobile forest video is live'
-              echo 'The exact MP4 is live through the uncached strong-ETag range route.'
+              && "$live_accept_ranges" == 'bytes' ]] \
+              && grep -Fq 'id="mobile-background-video"' "$tmpdir/page.html" \
+              && grep -Fq "$route" "$tmpdir/page.html" \
+              && grep -Fq 'mobile-quality.js?v=20260809-selected-mobile-4k-video-v22-1' "$tmpdir/page.html" \
+              && grep -Fq "$route" "$tmpdir/mobile-quality.js" \
+              && grep -Fq '4k-2160x3840' "$tmpdir/mobile-quality.js" \
+              && ! grep -Fq 'mobile-forest-stream-v20-true-hd-1440' "$tmpdir/page.html" \
+              && grep -Fqi "media-src 'self'" "$tmpdir/page.headers"; then
+              publish_status success 'Exact 2160x3840 selected forest video is live'
+              echo 'Production serves the correct scene through the exact 4K range route.'
               exit 0
             fi
 
             sleep 10
           done
 
-          publish_status failure 'Safari-safe mobile forest video is not live'
-          echo '::error::Production never served the exact MP4 through the strong-ETag no-store range route.'
+          publish_status failure 'Selected 4K forest video is not live'
+          echo '::error::Production never served the exact selected 2160x3840 release.'
           exit 1
+
+  verify-mobile-webkit:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify-production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Install mobile WebKit
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps webkit
+
+      - name: Verify visible 4K playback without a tap
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/selected-mobile-4k
+          node --input-type=module <<'NODE'
+          import { webkit } from "playwright";
+          import { writeFile } from "node:fs/promises";
+
+          const browser = await webkit.launch({ headless: true });
+          const evidence = {};
+          try {
+            const context = await browser.newContext({
+              viewport: { width: 390, height: 844 },
+              screen: { width: 390, height: 844 },
+              deviceScaleFactor: 3,
+              isMobile: true,
+              hasTouch: true,
+              userAgent:
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) " +
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 " +
+                "Mobile/15E148 Safari/604.1",
+            });
+            const page = await context.newPage();
+            const errors = [];
+            page.on("pageerror", (error) => errors.push(error.message));
+            page.on("requestfailed", (request) =>
+              errors.push(`${request.url()}: ${request.failure()?.errorText || "failed"}`),
+            );
+
+            await page.goto(
+              `https://stabilize.info/?selected-4k-webkit=${Date.now()}`,
+              { waitUntil: "domcontentloaded", timeout: 60_000 },
+            );
+            await page.waitForSelector("#mobile-background-video", {
+              state: "attached",
+              timeout: 60_000,
+            });
+            await page.waitForFunction(
+              () => {
+                const video = document.querySelector("#mobile-background-video");
+                return (
+                  video instanceof HTMLVideoElement &&
+                  video.videoWidth === 2160 &&
+                  video.videoHeight === 3840 &&
+                  video.readyState >= 2 &&
+                  !video.paused &&
+                  document.documentElement.dataset.mobileBackground ===
+                    "video-playing"
+                );
+              },
+              undefined,
+              { timeout: 60_000 },
+            );
+
+            const sample = () =>
+              page.evaluate(() => {
+                const video = document.querySelector("#mobile-background-video");
+                if (!(video instanceof HTMLVideoElement)) {
+                  throw new Error("The selected 4K video is missing.");
+                }
+                const style = getComputedStyle(video);
+                return {
+                  width: video.videoWidth,
+                  height: video.videoHeight,
+                  currentTime: video.currentTime,
+                  duration: video.duration,
+                  readyState: video.readyState,
+                  paused: video.paused,
+                  opacity: style.opacity,
+                  display: style.display,
+                  visibility: style.visibility,
+                  state:
+                    document.documentElement.dataset.mobileBackground || "",
+                  quality:
+                    document.documentElement.dataset.mobileVideoQuality || "",
+                  source: video.currentSrc,
+                };
+              });
+
+            const first = await sample();
+            await page.waitForTimeout(1_400);
+            const second = await sample();
+            evidence.first = first;
+            evidence.second = second;
+            evidence.errors = errors;
+
+            if (first.width !== 2160 || first.height !== 3840) {
+              throw new Error("The browser did not decode the 2160x3840 source.");
+            }
+            if (first.opacity !== "1" || second.opacity !== "1") {
+              throw new Error("The 4K video is not visibly opaque.");
+            }
+            if (first.display === "none" || first.visibility === "hidden") {
+              throw new Error("The 4K video is hidden.");
+            }
+            if (first.paused || second.paused) {
+              throw new Error("The 4K video is paused.");
+            }
+            if (second.currentTime - first.currentTime < 0.4) {
+              throw new Error("The 4K video timeline did not advance.");
+            }
+            if (second.quality !== "4k-2160x3840") {
+              throw new Error("The page did not report the selected 4K quality.");
+            }
+
+            await page.screenshot({
+              path: "/tmp/selected-mobile-4k/production.png",
+              fullPage: false,
+            });
+          } finally {
+            await writeFile(
+              "/tmp/selected-mobile-4k/evidence.json",
+              JSON.stringify(evidence, null, 2),
+            );
+            await browser.close();
+          }
+          NODE
+
+      - name: Upload WebKit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selected-mobile-4k-webkit-evidence
+          path: /tmp/selected-mobile-4k
+          if-no-files-found: warn
+          retention-days: 7
