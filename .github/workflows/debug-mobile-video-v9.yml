@@ -1,25 +1,31 @@
-name: Debug clean mobile video v11 generator
+name: Build validated mobile video v11 release
 
 on:
   pull_request:
     paths:
       - scripts/generate-mobile-video-v9-clean.sh
+      - scripts/prepare-mobile-video-v11-release.py
       - .github/workflows/debug-mobile-video-v9.yml
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
-          persist-credentials: false
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Install video tools
         shell: bash
@@ -30,18 +36,66 @@ jobs:
             sudo apt-get install -y ffmpeg
           fi
 
-      - name: Generate and validate video
+      - name: Generate and validate the screen-resolution video
         shell: bash
         run: bash scripts/generate-mobile-video-v9-clean.sh /tmp/stabilize-mobile-video-v11-clean
+
+      - name: Generate and validate the screen-resolution poster
+        shell: bash
+        run: |
+          set -euo pipefail
+          work=/tmp/stabilize-mobile-video-v11-clean
+          video="$work/mobile-forest-stream-video-v11-1536.mp4"
+          poster="$work/mobile-forest-stream-v11-1536.webp"
+          ffmpeg -hide_banner -v error -y -i "$video" \
+            -frames:v 1 -c:v libwebp -quality 86 -compression_level 6 "$poster"
+          dimensions="$(
+            ffprobe -v error -select_streams v:0 \
+              -show_entries stream=width,height \
+              -of csv=s=x:p=0 "$poster"
+          )"
+          test "$dimensions" = 1536x2732
+          test "$(dd if="$poster" bs=1 count=4 status=none)" = RIFF
+          test "$(dd if="$poster" bs=1 skip=8 count=4 status=none)" = WEBP
+          echo "poster_bytes=$(wc -c < "$poster" | tr -d '[:space:]')"
+          sha256sum "$poster"
+
+      - name: Prepare, test, and publish the clean release branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          work=/tmp/stabilize-mobile-video-v11-clean
+          cp scripts/prepare-mobile-video-v11-release.py /tmp/prepare-mobile-video-v11-release.py
+
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git switch -C agent/mobile-video-v11-generated refs/remotes/origin/main
+
+          python /tmp/prepare-mobile-video-v11-release.py \
+            "$work/mobile-forest-stream-video-v11-1536.mp4" \
+            "$work/mobile-forest-stream-v11-1536.webp"
+
+          npm ci --ignore-scripts
+          npm run apply:prompt-policy
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Replace corrupt mobile video with a validated screen-resolution release'
+
+          npm test
+          npm run check
+          git diff --exit-code
+          git push --force origin HEAD:agent/mobile-video-v11-generated
 
       - name: Upload generated evidence
         uses: actions/upload-artifact@v4
         with:
-          name: debug-mobile-video-v11-clean
+          name: mobile-video-v11-release-evidence
           path: |
             /tmp/stabilize-mobile-video-v11-clean/mobile-forest-stream-video-v11-1536.mp4
+            /tmp/stabilize-mobile-video-v11-clean/mobile-forest-stream-v11-1536.webp
             /tmp/stabilize-mobile-video-v11-clean/frame-early.png
             /tmp/stabilize-mobile-video-v11-clean/frame-late.png
             /tmp/stabilize-mobile-video-v11-clean/probe.json
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 7
