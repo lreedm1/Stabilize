@@ -1,9 +1,13 @@
 const MOBILE_MOTION_QUERY =
   "(max-width: 980px) and (orientation: portrait)";
 const SPRITE_ASSET =
-  "/scenes/mobile-forest-stream-water-sprite-v18-540.webp";
-const FRAME_WIDTH = 540;
-const FRAME_HEIGHT = 960;
+  "/scenes/mobile-forest-stream-water-sprite-v19-hd-1080.webp";
+const COMPOSITION_WIDTH = 1080;
+const COMPOSITION_HEIGHT = 1920;
+const FRAME_LEFT = 680;
+const FRAME_TOP = 720;
+const FRAME_WIDTH = 400;
+const FRAME_HEIGHT = 1200;
 const FRAME_COLUMNS = 6;
 const FRAME_COUNT = 30;
 const FRAME_RATE = 6;
@@ -105,11 +109,20 @@ function drawFrame(index) {
   const sourceX = column * FRAME_WIDTH;
   const sourceY = row * FRAME_HEIGHT;
 
-  const scale = Math.max(cssWidth / FRAME_WIDTH, cssHeight / FRAME_HEIGHT);
+  // Match the centered object-fit: cover geometry used by the Retina poster,
+  // then place the cropped moving-water frame back into that composition.
+  const scale = Math.max(
+    cssWidth / COMPOSITION_WIDTH,
+    cssHeight / COMPOSITION_HEIGHT,
+  );
+  const compositionWidth = COMPOSITION_WIDTH * scale;
+  const compositionHeight = COMPOSITION_HEIGHT * scale;
+  const compositionX = (cssWidth - compositionWidth) / 2;
+  const compositionY = (cssHeight - compositionHeight) / 2;
   const destinationWidth = FRAME_WIDTH * scale;
   const destinationHeight = FRAME_HEIGHT * scale;
-  const destinationX = (cssWidth - destinationWidth) / 2;
-  const destinationY = (cssHeight - destinationHeight) / 2;
+  const destinationX = compositionX + FRAME_LEFT * scale;
+  const destinationY = compositionY + FRAME_TOP * scale;
 
   ctx.clearRect(0, 0, cssWidth, cssHeight);
   ctx.drawImage(

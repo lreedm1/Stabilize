@@ -336,7 +336,7 @@ test("portrait mobile motion is independent of video and animated-image autoplay
       read("public/mobile-woodland-loop.css"),
       read("public/mobile-motion-canvas.js"),
       read("scripts/materialize-mobile-forest-stream.mjs"),
-      readFile(new URL("../public/scenes/mobile-forest-stream-water-sprite-v18-540.webp", import.meta.url)),
+      readFile(new URL("../public/scenes/mobile-forest-stream-water-sprite-v19-hd-1080.webp", import.meta.url)),
     ]);
 
   assert.equal(sprite.subarray(0, 4).toString("ascii"), "RIFF");
@@ -345,14 +345,14 @@ test("portrait mobile motion is independent of video and animated-image autoplay
   assert.equal(sprite.includes(Buffer.from("ANIM", "ascii")), false);
   assert.equal(sprite.includes(Buffer.from("ANMF", "ascii")), false);
   assert.match(pageSource, /id="mobile-motion-canvas"/);
-  assert.match(pageSource, /mobile-forest-stream-water-sprite-v18-540\.webp/);
+  assert.match(pageSource, /mobile-forest-stream-water-sprite-v19-hd-1080\.webp/);
   assert.doesNotMatch(pageSource, /id="mobile-background-video"/);
   assert.doesNotMatch(pageSource, /mobile-quality\.js/);
   assert.match(styleSource, /mobile-motion-canvas-v18-start/);
   assert.match(clientSource, /ctx\.drawImage\(/);
   assert.match(clientSource, /setTimeout\(step/);
   assert.doesNotMatch(clientSource, /\.play\(/);
-  assert.match(materializerSource, /mobile-water-sprite-v18-validation-start/);
-  assert.match(materializerSource, /mobile-forest-stream-water-sprite-v18-540\.webp/);
+  assert.match(materializerSource, /mobile-water-sprite-v19-hd-validation-start/);
+  assert.match(materializerSource, /mobile-forest-stream-water-sprite-v19-hd-1080\.webp/);
 });
 // mobile-motion-canvas-v18-test-end

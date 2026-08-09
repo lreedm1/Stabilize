@@ -60,7 +60,7 @@ test("portrait mobile draws water through a canvas without media autoplay", asyn
       readFile(new URL("../public/mobile-woodland-loop.css", import.meta.url), "utf8"),
       readFile(new URL("../public/mobile-motion-canvas.js", import.meta.url), "utf8"),
       readFile(new URL("../public/scenes/mobile-forest-stream-v14-retina-2160.webp", import.meta.url)),
-      readFile(new URL("../public/scenes/mobile-forest-stream-water-sprite-v18-540.webp", import.meta.url)),
+      readFile(new URL("../public/scenes/mobile-forest-stream-water-sprite-v19-hd-1080.webp", import.meta.url)),
     ]);
 
   const posterInfo = webpInfo(poster);
@@ -72,25 +72,31 @@ test("portrait mobile draws water through a canvas without media autoplay", asyn
   assert.equal(posterInfo.chunks.includes("ANIM"), false);
   assert.deepEqual(
     { width: spriteInfo.width, height: spriteInfo.height },
-    { width: 3240, height: 4800 },
+    { width: 2400, height: 6000 },
   );
   assert.equal(spriteInfo.chunks.includes("ALPH"), true);
   assert.equal(spriteInfo.chunks.includes("ANIM"), false);
   assert.ok(sprite.byteLength > 1_000_000);
-  assert.ok(sprite.byteLength < 10_000_000);
+  assert.ok(sprite.byteLength < 12_000_000);
 
   assert.equal(
     [...pageSource.matchAll(/mobile-forest-stream-v14-retina-2160\.webp 2160w/g)].length,
     2,
   );
-  assert.ok(pageSource.includes('href="/scenes/mobile-forest-stream-water-sprite-v18-540.webp"'));
+  assert.ok(pageSource.includes('href="/scenes/mobile-forest-stream-water-sprite-v19-hd-1080.webp"'));
   assert.match(pageSource, /id="mobile-motion-canvas"/);
-  assert.match(pageSource, /mobile-motion-canvas\.js\?v=20260809-mobile-motion-canvas-v18-2/);
+  assert.match(pageSource, /mobile-motion-canvas\.js\?v=20260809-mobile-motion-canvas-v19-hd-2/);
   assert.doesNotMatch(pageSource, /id="mobile-background-video"/);
   assert.doesNotMatch(pageSource, /mobile-quality\.js/);
   assert.match(mobileStyles, /mobile-motion-canvas-v18-start/);
   assert.match(mobileStyles, /\.mobile-motion-canvas\.is-ready/);
 
+  assert.match(clientSource, /const COMPOSITION_WIDTH = 1080/);
+  assert.match(clientSource, /const COMPOSITION_HEIGHT = 1920/);
+  assert.match(clientSource, /const FRAME_LEFT = 680/);
+  assert.match(clientSource, /const FRAME_TOP = 720/);
+  assert.match(clientSource, /const FRAME_WIDTH = 400/);
+  assert.match(clientSource, /const FRAME_HEIGHT = 1200/);
   assert.match(clientSource, /const FRAME_RATE = 6/);
   assert.match(clientSource, /context = canvas\.getContext\("2d"/);
   assert.match(clientSource, /ctx\.drawImage\(/);
