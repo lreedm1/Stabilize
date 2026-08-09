@@ -26,36 +26,31 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Reconstruct and validate the exact mobile MP4
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t parts < <(
-            find public/scenes -maxdepth 1 -type f \
-              -name 'mobile-forest-stream-loop-v1.part*.b64' \
-              | sort
-          )
-          test "${#parts[@]}" -eq 5
-          cat "${parts[@]}" \
-            | tr -d '[:space:]' \
-            | base64 --decode \
-            > /tmp/mobile-forest-stream-loop-v1.mp4
-          test "$(wc -c < /tmp/mobile-forest-stream-loop-v1.mp4)" -eq 43100
-          printf '%s  %s\n' \
-            'a3493523af9dd22728fb81ab30b36b9633debf49b8486f168efc0503b039ae57' \
-            '/tmp/mobile-forest-stream-loop-v1.mp4' \
-            | sha256sum --check --strict
-          file /tmp/mobile-forest-stream-loop-v1.mp4 \
-            | grep -Fq 'ISO Media, MP4'
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
-      - name: Validate mobile playback implementation
+      - name: Materialize and validate the direct mobile MP4
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'const EXPECTED_VIDEO_BYTES = 43_100;' public/mobile-quality.js
-          grep -Fq 'mobile-forest-stream-loop-v1.part' public/mobile-quality.js
-          grep -Fq 'new Blob([bytes], { type: "video/mp4" })' public/mobile-quality.js
-          grep -Fq 'URL.createObjectURL(blob)' public/mobile-quality.js
+          node scripts/materialize-mobile-forest-stream.mjs
+          video='public/scenes/mobile-forest-stream-video-v4-1080.mp4'
+          test -s "$video"
+          test "$(wc -c < "$video")" -gt 1000000
+          test "$(dd if="$video" bs=1 skip=4 count=4 status=none)" = 'ftyp'
+          grep -aFq 'moov' "$video"
+          grep -aFq 'mdat' "$video"
+          grep -aFq 'avc1' "$video"
+          file "$video" | grep -Fq 'ISO Media, MP4'
+
+      - name: Validate the Safari playback path
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq '/scenes/mobile-forest-stream-video-v4-1080.mp4' public/mobile-quality.js
+          grep -Fq 'video.src = VIDEO_ASSET' public/mobile-quality.js
           grep -Fq 'video.autoplay = true' public/mobile-quality.js
           grep -Fq 'video.muted = true' public/mobile-quality.js
           grep -Fq 'video.defaultMuted = true' public/mobile-quality.js
@@ -63,8 +58,11 @@ jobs:
           grep -Fq 'video.playsInline = true' public/mobile-quality.js
           grep -Fq 'video.play()' public/mobile-quality.js
           grep -Fq 'resumeAfterGesture' public/mobile-quality.js
-          grep -Fq "media-src 'self' blob:" public/_headers
-          test ! -e .github/workflows/install-mobile-video-bridge.yml
+          ! grep -Fq 'URL.createObjectURL' public/mobile-quality.js
+          ! grep -Fq 'new Blob' public/mobile-quality.js
+          ! grep -Fq 'atob(' public/mobile-quality.js
+          grep -Fq '/scenes/mobile-forest-stream-video-v4-1080.mp4' public/_headers
+          grep -Fq 'Content-Type: video/mp4' public/_headers
 
   verify-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -78,13 +76,21 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Wait for the exact video loader and payload to reach production
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Wait for the exact direct video release to reach production
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          expected_sha='a3493523af9dd22728fb81ab30b36b9633debf49b8486f168efc0503b039ae57'
+          node scripts/materialize-mobile-forest-stream.mjs
+          expected_file='public/scenes/mobile-forest-stream-video-v4-1080.mp4'
+          expected_bytes="$(wc -c < "$expected_file" | tr -d '[:space:]')"
+          expected_sha="$(sha256sum "$expected_file" | awk '{print $1}')"
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
 
@@ -107,7 +113,7 @@ jobs:
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
           }
 
-          publish_status pending 'Waiting for the exact mobile video release'
+          publish_status pending 'Waiting for the direct mobile video release'
 
           for attempt in {1..36}; do
             key="${GITHUB_SHA}-${attempt}"
@@ -119,7 +125,7 @@ jobs:
                 "https://stabilize.info/mobile-quality.js?release=${key}" \
                 || true
             )"
-            header_status="$(
+            home_status="$(
               curl --max-time 20 --silent --show-error \
                 --header 'Cache-Control: no-cache' \
                 --dump-header "$tmpdir/home.headers" \
@@ -128,54 +134,54 @@ jobs:
                 "https://stabilize.info/?mobile-video-release=${key}" \
                 || true
             )"
+            video_status="$(
+              curl --max-time 90 --silent --show-error \
+                --header 'Cache-Control: no-cache' \
+                --dump-header "$tmpdir/video.headers" \
+                --output "$tmpdir/video.mp4" \
+                --write-out '%{http_code}' \
+                "https://stabilize.info/scenes/mobile-forest-stream-video-v4-1080.mp4?release=${key}" \
+                || true
+            )"
+            range_status="$(
+              curl --max-time 30 --silent --show-error \
+                --header 'Cache-Control: no-cache' \
+                --header 'Range: bytes=0-1023' \
+                --dump-header "$tmpdir/range.headers" \
+                --output "$tmpdir/range.bin" \
+                --write-out '%{http_code}' \
+                "https://stabilize.info/scenes/mobile-forest-stream-video-v4-1080.mp4?range=${key}" \
+                || true
+            )"
 
-            : > "$tmpdir/video.b64"
-            parts_ok=true
-            for index in 00 01 02 03 04; do
-              part_status="$(
-                curl --max-time 20 --silent --show-error \
-                  --header 'Cache-Control: no-cache' \
-                  --output "$tmpdir/part-${index}.b64" \
-                  --write-out '%{http_code}' \
-                  "https://stabilize.info/scenes/mobile-forest-stream-loop-v1.part${index}.b64?release=${key}" \
-                  || true
-              )"
-              if [[ "$part_status" != 200 ]]; then
-                parts_ok=false
-              fi
-              cat "$tmpdir/part-${index}.b64" >> "$tmpdir/video.b64"
-            done
+            live_bytes="$(wc -c < "$tmpdir/video.mp4" | tr -d '[:space:]')"
+            live_sha="$(sha256sum "$tmpdir/video.mp4" | awk '{print $1}')"
+            live_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$tmpdir/video.headers" | tail -n 1)"
+            range_bytes="$(wc -c < "$tmpdir/range.bin" | tr -d '[:space:]')"
 
-            live_bytes=0
-            live_sha='missing'
-            if $parts_ok; then
-              tr -d '[:space:]' < "$tmpdir/video.b64" \
-                | base64 --decode \
-                > "$tmpdir/video.mp4" \
-                2>/dev/null || true
-              live_bytes="$(wc -c < "$tmpdir/video.mp4" | tr -d '[:space:]')"
-              live_sha="$(sha256sum "$tmpdir/video.mp4" | awk '{print $1}')"
-            fi
-
-            echo "Mobile video attempt ${attempt}: script=${script_status:-000} headers=${header_status:-000} parts=${parts_ok}; bytes=${live_bytes}; sha=${live_sha:0:12}."
+            echo "Mobile video attempt ${attempt}: script=${script_status:-000} home=${home_status:-000} video=${video_status:-000} range=${range_status:-000}; bytes=${live_bytes}/${expected_bytes}; type=${live_type:-missing}; sha=${live_sha:0:12}."
 
             if [[ "$script_status" == 200 \
-              && "$header_status" == 200 \
-              && "$parts_ok" == true \
-              && "$live_bytes" == 43100 \
-              && "$live_sha" == "$expected_sha" ]] \
-              && grep -Fq 'URL.createObjectURL(blob)' "$tmpdir/mobile-quality.js" \
-              && grep -Fq 'video.defaultMuted = true' "$tmpdir/mobile-quality.js" \
+              && "$home_status" == 200 \
+              && "$video_status" == 200 \
+              && "$range_status" == 206 \
+              && "$range_bytes" == 1024 \
+              && "$live_bytes" == "$expected_bytes" \
+              && "$live_sha" == "$expected_sha" \
+              && "$live_type" == video/mp4* ]] \
+              && grep -Fq '/scenes/mobile-forest-stream-video-v4-1080.mp4' "$tmpdir/mobile-quality.js" \
+              && grep -Fq 'video.src = VIDEO_ASSET' "$tmpdir/mobile-quality.js" \
               && grep -Fq 'video.play()' "$tmpdir/mobile-quality.js" \
-              && grep -Fqi "media-src 'self' blob:" "$tmpdir/home.headers"; then
-              publish_status success 'Exact mobile forest video is live'
-              echo 'The exact mobile forest video loader and payload are live.'
+              && ! grep -Fq 'URL.createObjectURL' "$tmpdir/mobile-quality.js" \
+              && grep -Fqi "media-src 'self'" "$tmpdir/home.headers"; then
+              publish_status success 'Direct mobile forest video is live'
+              echo 'The direct mobile forest video, Safari loader, MIME type, and byte-range response are live.'
               exit 0
             fi
 
             sleep 10
           done
 
-          publish_status failure 'Exact mobile forest video is not live'
-          echo '::error::Production never served the exact mobile video loader, CSP, and reconstructed MP4 together.'
+          publish_status failure 'Direct mobile forest video is not live'
+          echo '::error::Production never served the exact direct MP4 and Safari playback path together.'
           exit 1
