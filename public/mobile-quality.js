@@ -1,7 +1,7 @@
 const MOBILE_BACKGROUND_QUERY =
   "(max-width: 980px) and (orientation: portrait)";
 const VIDEO_ASSET =
-  "/scenes/mobile-forest-stream-video-v4-1080.mp4";
+  "/media/mobile-forest-stream-video-v4-1080.mp4";
 const POSTER_ASSET = "/scenes/mobile-forest-stream-v1-540.webp";
 
 const mobilePortrait = globalThis.matchMedia?.(MOBILE_BACKGROUND_QUERY);

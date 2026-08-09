@@ -6,6 +6,10 @@ import worker, {
   SessionMemory,
 } from "./impact-worker.js";
 import { signOut } from "./auth.js";
+import {
+  MOBILE_VIDEO_ROUTE,
+  serveMobileVideo,
+} from "./mobile-video-response.js";
 
 export {
   BillingAccount,
@@ -81,6 +85,15 @@ export default {
     }
 
     const canonicalEnv = canonicalEnvironment(env);
+    // Keep MP4 delivery inside the Worker so Safari receives a strong ETag,
+    // an uncached response, and exact single-range handling rather than a
+    // potentially transformed CDN cache response.
+    if (url.pathname === MOBILE_VIDEO_ROUTE) {
+      return withStrictTransportSecurity(
+        await serveMobileVideo(request, canonicalEnv),
+      );
+    }
+
     // Logout only expires cookies in the current browser. Handle it before the
     // inner same-origin check because iOS and embedded browsers can submit an
     // opaque Origin header (`Origin: null`).
