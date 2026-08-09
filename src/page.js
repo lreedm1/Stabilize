@@ -139,9 +139,9 @@ export function renderPage(options = {}) {
     <link
       rel="preload"
       as="image"
-      href="/scenes/mobile-forest-stream-v1-540.webp"
+      href="/scenes/mobile-forest-stream-v11-1536.webp"
       imagesrcset="
-        /scenes/mobile-forest-stream-v1-540.webp 540w
+        /scenes/mobile-forest-stream-v11-1536.webp 1536w
       "
       imagesizes="100vw"
       media="(max-width: 980px) and (orientation: portrait)"
@@ -153,7 +153,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
     <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
-    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260808-mobile-forest-stream-540-1" />
+    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260809-mobile-video-v11-1" />
   </head>
   <body>
     <canvas
@@ -171,7 +171,7 @@ export function renderPage(options = {}) {
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="\n          /scenes/mobile-forest-stream-v1-540.webp 540w\n        "
+        srcset="\n          /scenes/mobile-forest-stream-v11-1536.webp 1536w\n        "
       />
       <img
         id="photo-backdrop-image"
@@ -188,6 +188,22 @@ export function renderPage(options = {}) {
         fetchpriority="high"
       />
     </picture>
+    <video
+      id="mobile-background-video"
+      class="mobile-background-video"
+      src="/media/mobile-forest-stream-video-v11-1536.mp4"
+      poster="/scenes/mobile-forest-stream-v11-1536.webp"
+      autoplay
+      muted
+      loop
+      playsinline
+      webkit-playsinline
+      preload="auto"
+      aria-hidden="true"
+      tabindex="-1"
+      disablepictureinpicture
+      disableremoteplayback
+    ></video>
     <canvas
       id="photo-background"
       class="terrain-background photo-background"
@@ -293,7 +309,7 @@ export function renderPage(options = {}) {
 
     <template id="client-copy">${copyData}</template>
     <template id="product-copy">${productCopyData}</template>
-    <script src="/mobile-quality.js?v=20260802-8"></script>
+    <script src="/mobile-quality.js?v=20260809-mobile-video-v11-1"></script>
     <!-- Legacy generator marker: 20260808-guest-summary-1 -->
     <script type="module" src="/app.js?v=20260808-full-guest-thread-1"></script>
     <script type="module" src="/reasoning-choice.js?v=20260807-instant-thinking-2-fastest-1"></script>

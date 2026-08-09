@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const VERSION = "20260808-mobile-forest-stream-540-1";
+const VERSION = "20260809-mobile-video-v11-1";
 const STATIC_PAGES = [
   "public/about.html",
   "public/floor-first.html",
@@ -85,8 +85,8 @@ const photoOverlay = compactCssValue(
 
 const DESKTOP_1X = "/scenes/lake-valley-landscape-1280.webp";
 const DESKTOP_2X = "/scenes/lake-valley-landscape-2560.webp";
-const MOBILE_1X = "/scenes/mobile-forest-stream-v1-540.webp";
-const MOBILE_2X = "/scenes/mobile-forest-stream-v1-540.webp";
+const MOBILE_1X = "/scenes/mobile-forest-stream-v11-1536.webp";
+const MOBILE_2X = "/scenes/mobile-forest-stream-v11-1536.webp";
 
 for (const [asset, label] of [
   [DESKTOP_1X, "the main desktop background"],

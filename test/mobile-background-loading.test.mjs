@@ -16,7 +16,7 @@ const read = (path) =>
 const readVideo = () =>
   readFile(
     new URL(
-      "../public/scenes/mobile-forest-stream-video-v4-1080.mp4",
+      "../public/scenes/mobile-forest-stream-video-v11-1536.mp4",
       import.meta.url,
     ),
   );
@@ -153,7 +153,7 @@ test("portrait mobile uses a Worker-served MP4 instead of a reconstructed blob",
 
   assert.match(
     clientSource,
-    /const VIDEO_ASSET =[\s\S]*\/media\/mobile-forest-stream-video-v4-1080\.mp4/,
+    /const VIDEO_ASSET =[\s\S]*\/media\/mobile-forest-stream-video-v11-1536\.mp4/,
   );
   assert.match(clientSource, /video\.src = VIDEO_ASSET/);
   assert.match(clientSource, /video\.autoplay = true/);
@@ -166,15 +166,15 @@ test("portrait mobile uses a Worker-served MP4 instead of a reconstructed blob",
 
   assert.match(
     materializerSource,
-    /materialize\/mobile-forest-stream-video-1080-v4/,
+    /expectedVideoSha256/,
   );
   assert.match(
     materializerSource,
-    /public\/scenes\/mobile-forest-stream-video-v4-1080\.mp4/,
+    /public\/scenes\/mobile-forest-stream-video-v11-1536\.mp4/,
   );
   assert.match(
     headersSource,
-    /\/scenes\/mobile-forest-stream-video-v4-1080\.mp4[\s\S]*Content-Type: video\/mp4/,
+    /\/scenes\/mobile-forest-stream-video-v11-1536\.mp4[\s\S]*Content-Type: video\/mp4/,
   );
   assert.match(routerSource, /url\.pathname === MOBILE_VIDEO_ROUTE/);
   assert.match(routerSource, /await serveMobileVideo\(request, canonicalEnv\)/);

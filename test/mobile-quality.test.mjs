@@ -53,26 +53,23 @@ function webpInfo(buffer) {
   return { width, height, chunks };
 }
 
-test("mobile uses the project-owner forest stream as its static portrait background", async () => {
+test("mobile starts with a screen-resolution forest poster", async () => {
   const tier = {
-    filename: "mobile-forest-stream-v1-540.webp",
-    width: 540,
-    height: 960,
+    filename: "mobile-forest-stream-v11-1536.webp",
+    width: 1536,
+    height: 2732,
   };
   const [pageSource, mobileStyles, image] = await Promise.all([
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
     readFile(new URL("../public/mobile-woodland-loop.css", import.meta.url), "utf8"),
-    readFile(new URL(
-      "../public/scenes/" + tier.filename,
-      import.meta.url,
-    )),
+    readFile(new URL("../public/scenes/" + tier.filename, import.meta.url)),
   ]);
   const imageInfo = webpInfo(image);
   assert.deepEqual(
     { width: imageInfo.width, height: imageInfo.height },
     { width: tier.width, height: tier.height },
   );
-  assert.equal(image.byteLength, 91_750);
+  assert.equal(image.byteLength, 356158);
   assert.equal(imageInfo.chunks.includes("ANIM"), false);
   assert.equal(
     [...pageSource.matchAll(new RegExp(tier.filename + " " + tier.width + "w", "g"))].length,
@@ -81,19 +78,15 @@ test("mobile uses the project-owner forest stream as its static portrait backgro
   assert.match(pageSource, /<source[\s\S]*sizes="100vw"[\s\S]*srcset=/);
   assert.match(pageSource, /<link[\s\S]*rel="preload"[\s\S]*imagesrcset=/);
   assert.match(pageSource, /imagesizes="100vw"/);
+  assert.ok(pageSource.includes('href="/scenes/mobile-forest-stream-v11-1536.webp"'));
+  assert.match(pageSource, /id="mobile-background-video"/);
+  assert.match(pageSource, /autoplay[\s\S]*muted[\s\S]*loop[\s\S]*playsinline/);
   assert.match(
     pageSource,
-    /href="\/scenes\/mobile-forest-stream-v1-540\.webp"/,
+    /mobile-woodland-loop\.css\?v=20260809-mobile-video-v11-1/,
   );
-  assert.match(
-    pageSource,
-    /mobile-woodland-loop\.css\?v=20260808-mobile-forest-stream-540-1/,
-  );
-  assert.doesNotMatch(pageSource, /mobile-golden-alpine/);
-  assert.match(mobileStyles, /opacity:\s*1/);
+  assert.match(mobileStyles, /\.mobile-background-video\.is-playing/);
   assert.match(mobileStyles, /object-fit:\s*cover/);
-  assert.match(mobileStyles, /animation:\s*none/);
-  assert.doesNotMatch(mobileStyles, /@keyframes/);
 });
 
 test("restored tabs recover from interrupted blank thinking views", async () => {

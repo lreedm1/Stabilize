@@ -1,8 +1,12 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const MOBILE_ASSET = "/scenes/mobile-forest-stream-v1-540.webp";
-const GUIDE_VERSION = "20260808-mobile-forest-stream-540-1";
-const MOBILE_STYLE_VERSION = "20260808-mobile-forest-stream-540-1";
+const MOBILE_ASSET = "/scenes/mobile-forest-stream-v11-1536.webp";
+const POSTER_FILENAME = "mobile-forest-stream-v11-1536.webp";
+const MOBILE_WIDTH = 1536;
+const MOBILE_HEIGHT = 2732;
+const MOBILE_BYTES = 356158;
+const GUIDE_VERSION = "20260809-mobile-video-v11-1";
+const MOBILE_STYLE_VERSION = "20260809-mobile-video-v11-1";
 const STATIC_PAGES = [
   "public/about.html",
   "public/floor-first.html",
@@ -34,6 +38,7 @@ function replaceMobileQualityTest(source, replacement) {
   const candidates = [
     'test("mobile uses responsive high-DPI static generated WebPs", async () => {',
     'test("mobile uses the project-owner forest stream as its static portrait background", async () => {',
+    'test("mobile starts with a screen-resolution forest poster", async () => {',
   ];
   const starts = candidates
     .map((marker) => source.indexOf(marker))
@@ -52,7 +57,7 @@ const mobilePreload = `    <link
       as="image"
       href="${MOBILE_ASSET}"
       imagesrcset="
-        ${MOBILE_ASSET} 540w
+        ${MOBILE_ASSET} ${MOBILE_WIDTH}w
       "
       imagesizes="100vw"
       media="(max-width: 980px) and (orientation: portrait)"
@@ -64,7 +69,7 @@ const mobileSource = `      <source
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="\\n          ${MOBILE_ASSET} 540w\\n        "
+        srcset="\\n          ${MOBILE_ASSET} ${MOBILE_WIDTH}w\\n        "
       />`;
 
 await update("src/page.js", (source) => {
@@ -84,9 +89,9 @@ await update("src/page.js", (source) => {
     /mobile-woodland-loop\.css\?v=[^"]+/,
     `mobile-woodland-loop.css?v=${MOBILE_STYLE_VERSION}`,
   );
-  const references = next.split(`${MOBILE_ASSET} 540w`).length - 1;
+  const references = next.split(`${MOBILE_ASSET} ${MOBILE_WIDTH}w`).length - 1;
   if (references !== 2) {
-    throw new Error(`Expected two mobile forest references, found ${references}`);
+    throw new Error(`Expected two screen-resolution mobile references, found ${references}`);
   }
   return next;
 });
@@ -122,7 +127,7 @@ await update("scripts/unify-public-page-theme.mjs", (source) => {
     `const MOBILE_2X = "${MOBILE_ASSET}";`,
   );
   if (!next.includes(`const MOBILE_1X = "${MOBILE_ASSET}";`)) {
-    throw new Error("Unified theme generator did not receive the forest background");
+    throw new Error("Unified theme generator did not receive the screen-resolution forest poster");
   }
   return next;
 });
@@ -136,26 +141,23 @@ for (const path of STATIC_PAGES) {
   );
 }
 
-const mobileQualityTest = String.raw`test("mobile uses the project-owner forest stream as its static portrait background", async () => {
+const mobileQualityTest = String.raw`test("mobile starts with a screen-resolution forest poster", async () => {
   const tier = {
-    filename: "mobile-forest-stream-v1-540.webp",
-    width: 540,
-    height: 960,
+    filename: "${POSTER_FILENAME}",
+    width: ${MOBILE_WIDTH},
+    height: ${MOBILE_HEIGHT},
   };
   const [pageSource, mobileStyles, image] = await Promise.all([
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
     readFile(new URL("../public/mobile-woodland-loop.css", import.meta.url), "utf8"),
-    readFile(new URL(
-      "../public/scenes/" + tier.filename,
-      import.meta.url,
-    )),
+    readFile(new URL("../public/scenes/" + tier.filename, import.meta.url)),
   ]);
   const imageInfo = webpInfo(image);
   assert.deepEqual(
     { width: imageInfo.width, height: imageInfo.height },
     { width: tier.width, height: tier.height },
   );
-  assert.equal(image.byteLength, 91_750);
+  assert.equal(image.byteLength, ${MOBILE_BYTES});
   assert.equal(imageInfo.chunks.includes("ANIM"), false);
   assert.equal(
     [...pageSource.matchAll(new RegExp(tier.filename + " " + tier.width + "w", "g"))].length,
@@ -164,19 +166,15 @@ const mobileQualityTest = String.raw`test("mobile uses the project-owner forest 
   assert.match(pageSource, /<source[\s\S]*sizes="100vw"[\s\S]*srcset=/);
   assert.match(pageSource, /<link[\s\S]*rel="preload"[\s\S]*imagesrcset=/);
   assert.match(pageSource, /imagesizes="100vw"/);
+  assert.ok(pageSource.includes('href="${MOBILE_ASSET}"'));
+  assert.match(pageSource, /id="mobile-background-video"/);
+  assert.match(pageSource, /autoplay[\s\S]*muted[\s\S]*loop[\s\S]*playsinline/);
   assert.match(
     pageSource,
-    /href="\/scenes\/mobile-forest-stream-v1-540\.webp"/,
+    /mobile-woodland-loop\.css\?v=20260809-mobile-video-v11-1/,
   );
-  assert.match(
-    pageSource,
-    /mobile-woodland-loop\.css\?v=20260808-mobile-forest-stream-540-1/,
-  );
-  assert.doesNotMatch(pageSource, /mobile-golden-alpine/);
-  assert.match(mobileStyles, /opacity:\s*1/);
+  assert.match(mobileStyles, /\.mobile-background-video\.is-playing/);
   assert.match(mobileStyles, /object-fit:\s*cover/);
-  assert.match(mobileStyles, /animation:\s*none/);
-  assert.doesNotMatch(mobileStyles, /@keyframes/);
 });
 
 `;
@@ -194,17 +192,13 @@ await update("test/shared-site-theme.test.mjs", (source) => {
     "/scenes/mobile-golden-alpine-v3-720.webp",
     "/scenes/mobile-golden-alpine-v3-1440.webp",
     "/scenes/mobile-forest-stream-v1-720.webp",
+    "/scenes/mobile-forest-stream-v1-540.webp",
   ]) {
     next = next.replaceAll(oldAsset, MOBILE_ASSET);
   }
-  next = next.replaceAll(
-    "mobile-golden-alpine-v3",
-    "mobile-forest-stream-v1-540",
-  );
-  next = next.replaceAll(
-    "mobile-forest-stream-v1-720",
-    "mobile-forest-stream-v1-540",
-  );
+  next = next.replaceAll("mobile-golden-alpine-v3", POSTER_FILENAME.replace(/\.webp$/, ""));
+  next = next.replaceAll("mobile-forest-stream-v1-720", POSTER_FILENAME.replace(/\.webp$/, ""));
+  next = next.replaceAll("mobile-forest-stream-v1-540", POSTER_FILENAME.replace(/\.webp$/, ""));
   return next;
 });
 
@@ -215,4 +209,4 @@ await update(".github/workflows/verify-mobile-background.yml", (source) =>
   ),
 );
 
-console.log("Installed the project-owner forest stream as the portrait mobile background.");
+console.log("Installed the screen-resolution forest poster for portrait mobile.");
