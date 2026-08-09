@@ -163,7 +163,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
     <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
-    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260809-mobile-motion-canvas-v18-1" />
+    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260809-mobile-motion-canvas-v18-2" />
   </head>
   <body>
     <canvas
@@ -314,7 +314,7 @@ export function renderPage(options = {}) {
     <script type="module" src="/app.js?v=20260808-full-guest-thread-1"></script>
     <script type="module" src="/reasoning-choice.js?v=20260807-instant-thinking-2-fastest-1"></script>
     <!-- mobile-motion-canvas-v18-script-start -->
-    <script src="/mobile-motion-canvas.js?v=20260809-mobile-motion-canvas-v18-1" defer></script>
+    <script src="/mobile-motion-canvas.js?v=20260809-mobile-motion-canvas-v18-2" defer></script>
     <!-- mobile-motion-canvas-v18-script-end -->
   </body>
 </html>`;

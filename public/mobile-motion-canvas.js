@@ -27,6 +27,23 @@ function setMotionState(state) {
   document.documentElement.dataset.mobileMotion = state;
 }
 
+function showCanvas() {
+  if (!(canvas instanceof HTMLCanvasElement)) return;
+  // A historical stylesheet can remain in Safari's cache while the new client
+  // is already live. Inline important properties guarantee that a successfully
+  // painted frame is actually visible instead of remaining at opacity zero.
+  canvas.style.setProperty("display", "block", "important");
+  canvas.style.setProperty("visibility", "visible", "important");
+  canvas.style.setProperty("opacity", "1", "important");
+}
+
+function hideCanvas() {
+  if (!(canvas instanceof HTMLCanvasElement)) return;
+  canvas.style.removeProperty("display");
+  canvas.style.removeProperty("visibility");
+  canvas.style.removeProperty("opacity");
+}
+
 function canAnimate() {
   return (
     canvas instanceof HTMLCanvasElement &&
@@ -107,6 +124,7 @@ function drawFrame(index) {
     destinationHeight,
   );
   canvas.classList.add("is-ready");
+  showCanvas();
   setMotionState("canvas-playing");
   return true;
 }
@@ -163,6 +181,7 @@ function stopMotion() {
   clearTimer();
   if (!mobilePortrait?.matches) {
     canvas?.classList.remove("is-ready");
+    hideCanvas();
     setMotionState("desktop-static");
   } else if (document.hidden) {
     setMotionState("paused-hidden");
@@ -184,6 +203,7 @@ function loadSprite() {
   image.onerror = () => {
     setMotionState("sprite-failed");
     canvas?.classList.remove("is-ready");
+    hideCanvas();
   };
   image.src = SPRITE_ASSET;
   sprite = image;
