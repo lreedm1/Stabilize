@@ -79,14 +79,29 @@ jobs:
           path.write_text(source)
           PY
 
-      - name: Install generated asset and apply the canvas release
+      - name: Install generated asset and converge canonical output
         shell: bash
         run: |
           set -euo pipefail
           python scripts/install-mobile-water-sprite-v18.py \
             /tmp/stabilize-mobile-water-sprite-v18/mobile-forest-stream-water-sprite-v18-540.webp
           npm ci --ignore-scripts
-          npm run apply:prompt-policy
+
+          previous_tree=""
+          stable="false"
+          for attempt in 1 2 3; do
+            npm run apply:prompt-policy
+            git add -A
+            current_tree="$(git write-tree)"
+            git reset --quiet
+            if [ "$current_tree" = "$previous_tree" ]; then
+              stable="true"
+              echo "Canonical output stabilized on pass $attempt."
+              break
+            fi
+            previous_tree="$current_tree"
+          done
+          test "$stable" = true
 
       - name: Commit generated asset and canonical output
         shell: bash
