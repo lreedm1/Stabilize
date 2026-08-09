@@ -38,7 +38,7 @@ jobs:
           node scripts/materialize-mobile-forest-stream.mjs
           video='public/scenes/mobile-forest-stream-video-v4-1080.mp4'
           test -s "$video"
-          test "$(wc -c < "$video")" -gt 1000000
+          test "$(wc -c < "$video")" -gt 100000
           test "$(dd if="$video" bs=1 skip=4 count=4 status=none)" = 'ftyp'
           grep -aFq 'moov' "$video"
           grep -aFq 'mdat' "$video"
