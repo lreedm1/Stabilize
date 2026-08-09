@@ -123,6 +123,22 @@ jobs:
               "mobile-forest-stream-video-v11-1536.mp4",
           )
           test_path.write_text(source)
+
+          worker_test_path = Path("test/worker.test.mjs")
+          worker_test = worker_test_path.read_text()
+          old_assertion = (
+              '  assert.doesNotMatch(html, /<audio|autoplay|nature-sounds\\.js/);'
+          )
+          new_assertions = '''  assert.doesNotMatch(html, /<audio|nature-sounds\\.js/);
+          assert.match(
+            html,
+            /<video[\\s\\S]*autoplay[\\s\\S]*muted[\\s\\S]*loop[\\s\\S]*playsinline/,
+          );'''
+          if old_assertion not in worker_test:
+              raise SystemExit("Could not find the root-page audio/autoplay assertion")
+          worker_test_path.write_text(
+              worker_test.replace(old_assertion, new_assertions, 1)
+          )
           PY
 
           npm ci --ignore-scripts
