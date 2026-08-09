@@ -1,3 +1,4 @@
+# The generated moving image avoids iOS media-autoplay gating entirely.
 name: Build no-tap mobile motion v16
 
 on:
