@@ -66,7 +66,9 @@ jobs:
           if "function escapeRegExp(value)" not in source:
               helper = r'''
           function escapeRegExp(value) {
-            return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            return value
+              .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+              .replaceAll("/", "\\/");
           }
 
           '''
