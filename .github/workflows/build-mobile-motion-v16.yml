@@ -3,9 +3,9 @@
 name: Build higher-bitrate no-tap mobile motion v17
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/mobile-motion-higher-bitrate
+      - main
     paths:
       - scripts/generate-mobile-motion-fallback.sh
       - scripts/prepare-mobile-motion-hq-release.py
@@ -21,9 +21,10 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Check out release branch
+      - name: Check out the actual release branch
         uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
           fetch-depth: 1
           persist-credentials: true
 
@@ -76,10 +77,11 @@ jobs:
           git diff --exit-code
 
       - name: Publish the verified release branch
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         shell: bash
         run: |
           set -euo pipefail
-          git push origin HEAD:agent/mobile-motion-higher-bitrate
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
 
       - name: Upload decoded-motion evidence
         if: always()
