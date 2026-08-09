@@ -1,0 +1,71 @@
+name: Build visible mobile canvas v18.2
+
+on:
+  push:
+    branches:
+      - agent/fix-visible-mobile-canvas-v18-2
+    paths:
+      - scripts/fix-mobile-motion-canvas-v18.mjs
+      - scripts/finalize-decision-grade-impact.mjs
+      - .github/workflows/build-visible-mobile-canvas-v18-2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out fix branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/fix-visible-mobile-canvas-v18-2
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        shell: bash
+        run: npm ci --ignore-scripts
+
+      - name: Generate canonical visible-canvas output
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run apply:prompt-policy
+
+      - name: Commit generated output
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Canonical output was already committed."
+          else
+            git commit -m 'Make painted mobile canvas frames visibly opaque'
+          fi
+
+      - name: Run full regression and Worker build checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+      - name: Publish verified branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:agent/fix-visible-mobile-canvas-v18-2
