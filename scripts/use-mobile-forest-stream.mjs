@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 
 const MOBILE_ASSET = "/scenes/mobile-forest-stream-v1-540.webp";
 const GUIDE_VERSION = "20260808-mobile-forest-stream-540-1";
-const MOBILE_STYLE_VERSION = "20260808-mobile-forest-stream-540-1";
+const MOBILE_STYLE_VERSION = "20260809-mobile-video-v14-retina-autoplay-1";
 const STATIC_PAGES = [
   "public/about.html",
   "public/floor-first.html",
@@ -170,7 +170,7 @@ const mobileQualityTest = String.raw`test("mobile uses the project-owner forest 
   );
   assert.match(
     pageSource,
-    /mobile-woodland-loop\.css\?v=20260808-mobile-forest-stream-540-1/,
+    /mobile-woodland-loop\.css\?v=20260809-mobile-video-v14-retina-autoplay-1/,
   );
   assert.doesNotMatch(pageSource, /mobile-golden-alpine/);
   assert.match(mobileStyles, /opacity:\s*1/);

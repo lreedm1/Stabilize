@@ -87,7 +87,7 @@ test("mobile uses the project-owner forest stream as its static portrait backgro
   );
   assert.match(
     pageSource,
-    /mobile-woodland-loop\.css\?v=20260808-mobile-forest-stream-540-1/,
+    /mobile-woodland-loop\.css\?v=20260809-mobile-video-v14-retina-autoplay-1/,
   );
   assert.doesNotMatch(pageSource, /mobile-golden-alpine/);
   assert.match(mobileStyles, /opacity:\s*1/);

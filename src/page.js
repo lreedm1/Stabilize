@@ -153,7 +153,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
     <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
-    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260808-mobile-forest-stream-540-1" />
+    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260809-mobile-video-v14-retina-autoplay-1" />
   </head>
   <body>
     <canvas
@@ -193,6 +193,30 @@ export function renderPage(options = {}) {
       class="terrain-background photo-background"
       aria-hidden="true"
     ></canvas>
+    <!-- retina-mobile-video-v14-start -->
+    <video
+      id="mobile-background-video"
+      class="mobile-background-video"
+      autoplay
+      muted
+      loop
+      playsinline
+      webkit-playsinline
+      preload="auto"
+      poster="/scenes/mobile-forest-stream-v14-retina-2160.webp"
+      aria-hidden="true"
+      tabindex="-1"
+      disablepictureinpicture
+      disableremoteplayback
+      x-webkit-airplay="deny"
+    >
+      <source
+        src="/scenes/mobile-forest-stream-video-v14-retina-2160.mp4"
+        type="video/mp4"
+        media="(max-width: 980px) and (orientation: portrait)"
+      />
+    </video>
+    <!-- retina-mobile-video-v14-end -->
     <div class="page-shell">
       <header class="site-header">
         <nav class="header-navigation" aria-label="Primary navigation">
@@ -293,7 +317,7 @@ export function renderPage(options = {}) {
 
     <template id="client-copy">${copyData}</template>
     <template id="product-copy">${productCopyData}</template>
-    <script src="/mobile-quality.js?v=20260809-mobile-video-v12-smooth-1"></script>
+    <script src="/mobile-quality.js?v=20260809-mobile-video-v14-retina-autoplay-1"></script>
     <!-- Legacy generator marker: 20260808-guest-summary-1 -->
     <script type="module" src="/app.js?v=20260808-full-guest-thread-1"></script>
     <script type="module" src="/reasoning-choice.js?v=20260807-instant-thinking-2-fastest-1"></script>
