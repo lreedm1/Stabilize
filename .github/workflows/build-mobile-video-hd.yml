@@ -131,37 +131,24 @@ jobs:
           prepare = prepare.replace(
               "{re.escape(POSTER_ASSET)}", "{JS_POSTER_ASSET}"
           )
-
-          test_anchor = (
-              'use_mobile_path.write_text(use_mobile)\n\n'
-              'headers_start = "# hd-mobile-video-v13-start"\n'
-          )
-          test_replacement = '''use_mobile_path.write_text(use_mobile)
-
-# Keep the static-background regression aligned with this cache-busted release.
-mobile_quality_test_path = root / "test/mobile-quality.test.mjs"
-mobile_quality_test = mobile_quality_test_path.read_text()
-mobile_quality_test, count = re.subn(
-    r"/mobile-woodland-loop\\\.css\\\?v=[A-Za-z0-9._-]+/",
-    rf"/mobile-woodland-loop\.css\?v={STYLE_VERSION}/",
-    mobile_quality_test,
-    count=1,
-)
-if count != 1:
-    raise SystemExit("could not update the mobile style regression version")
-mobile_quality_test_path.write_text(mobile_quality_test)
-
-headers_start = "# hd-mobile-video-v13-start"
-'''
-          if prepare.count(test_anchor) != 1:
-              raise SystemExit("Could not add the mobile style regression update")
-          prepare = prepare.replace(test_anchor, test_replacement, 1)
           prepare_path.write_text(prepare)
           PY
 
           python scripts/prepare-mobile-video-hd-release.py \
             "$work/mobile-forest-stream-video-v13-1080.mp4" \
             "$work/mobile-forest-stream-v13-1080.webp"
+
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("test/mobile-quality.test.mjs")
+          source = path.read_text()
+          old = "20260808-mobile-forest-stream-540-1"
+          new = "20260809-mobile-video-v13-hd-autoplay-1"
+          if source.count(old) != 1:
+              raise SystemExit("Could not align the mobile style regression version")
+          path.write_text(source.replace(old, new, 1))
+          PY
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
