@@ -8,6 +8,7 @@ on:
     paths:
       - scripts/generate-mobile-motion-fallback.sh
       - scripts/prepare-mobile-motion-fallback.py
+      - scripts/finalize-mobile-motion-v16.py
       - .github/workflows/build-mobile-motion-v16.yml
   pull_request:
     branches:
@@ -15,6 +16,7 @@ on:
     paths:
       - scripts/generate-mobile-motion-fallback.sh
       - scripts/prepare-mobile-motion-fallback.py
+      - scripts/finalize-mobile-motion-v16.py
       - .github/workflows/build-mobile-motion-v16.yml
   workflow_dispatch:
 
@@ -62,6 +64,7 @@ jobs:
             /tmp/stabilize-mobile-motion-v16/mobile-forest-stream-motion-v16-1440.webp
           npm ci --ignore-scripts
           npm run apply:prompt-policy
+          python scripts/finalize-mobile-motion-v16.py
 
       - name: Commit the generated binary and canonical output
         shell: bash
