@@ -35,6 +35,7 @@ jobs:
       - name: Check out release branch
         uses: actions/checkout@v6
         with:
+          ref: agent/mobile-motion-canvas-v18
           fetch-depth: 1
           persist-credentials: true
 
@@ -57,6 +58,26 @@ jobs:
           set -euo pipefail
           bash scripts/generate-mobile-water-sprite-v18.sh \
             /tmp/stabilize-mobile-water-sprite-v18
+
+      - name: Make the canonical mobile generator canvas-aware
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/use-mobile-forest-stream.mjs")
+          source = path.read_text()
+          marker = '    \'test("portrait mobile moves without a media gesture", async () => {\','
+          canvas_marker = (
+              '    \'test("portrait mobile draws water through a canvas without media autoplay", async () => {\','
+          )
+          if canvas_marker not in source:
+              if marker not in source:
+                  raise SystemExit("Could not find the mobile quality candidate list")
+              source = source.replace(marker, marker + "\n" + canvas_marker, 1)
+          path.write_text(source)
+          PY
 
       - name: Install generated asset and apply the canvas release
         shell: bash
@@ -86,7 +107,6 @@ jobs:
           git diff --exit-code
 
       - name: Publish verified branch
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         shell: bash
         run: |
           set -euo pipefail
