@@ -39,7 +39,7 @@
 /* Keep the full 2160px poster sharp. Only transparent stream pixels are drawn
    over it, so motion does not depend on video.play() or animated-image policy. */
 .mobile-background-video {
-  display: none !important;
+  display: none;
 }
 
 .mobile-motion-canvas {
@@ -92,3 +92,45 @@
 }
 /* mobile-motion-canvas-v18-visibility-fix-end */
 
+/* selected-mobile-4k-video-v22-start */
+.mobile-background-video {
+  display: none;
+}
+
+@media (max-width: 980px) and (orientation: portrait) {
+  .mobile-background-video {
+    position: fixed;
+    z-index: 0;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 50%;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    user-select: none;
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    contain: strict;
+    will-change: opacity;
+  }
+
+  html[data-mobile-background="video-playing"]
+    .mobile-background-video.is-playing,
+  .mobile-background-video.is-playing {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  .mobile-background-video.is-autoplay-blocked,
+  .mobile-background-video.is-failed {
+    visibility: hidden !important;
+    opacity: 0 !important;
+  }
+}
+/* selected-mobile-4k-video-v22-end */

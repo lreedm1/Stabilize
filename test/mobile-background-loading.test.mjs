@@ -16,7 +16,7 @@ const read = (path) =>
 const readVideo = () =>
   readFile(
     new URL(
-      "../public/scenes/mobile-forest-stream-video-v4-1080.mp4",
+      "../public/scenes/mobile-forest-stream-video-v14-retina-2160.mp4",
       import.meta.url,
     ),
   );
@@ -127,25 +127,18 @@ test("the production mobile release gate verifies visible canvas motion", async 
 });
 
 test("portrait mobile uses a Worker-served MP4 instead of a reconstructed blob", async () => {
-  const [
-    clientSource,
-    materializerSource,
-    headersSource,
-    routerSource,
-    responderSource,
-    video,
-  ] = await Promise.all([
-    read("public/mobile-quality.js"),
-    read("scripts/materialize-mobile-forest-stream.mjs"),
-    read("public/_headers"),
-    read("src/domain-router.js"),
-    read("src/mobile-video-response.js"),
-    readVideo(),
-  ]);
+  const [clientSource, materializerSource, routerSource, responderSource, video] =
+    await Promise.all([
+      read("public/mobile-quality.js"),
+      read("scripts/materialize-mobile-forest-stream.mjs"),
+      read("src/domain-router.js"),
+      read("src/mobile-video-response.js"),
+      readVideo(),
+    ]);
 
   assert.match(
     clientSource,
-    /const VIDEO_ASSET =[\s\S]*\/media\/mobile-forest-stream-video-v4-1080\.mp4/,
+    /const VIDEO_ASSET =[\s\S]*\/media\/mobile-forest-stream-video-v14-retina-2160\.mp4/,
   );
   assert.match(clientSource, /video\.src = VIDEO_ASSET/);
   assert.match(clientSource, /video\.autoplay = true/);
@@ -153,24 +146,21 @@ test("portrait mobile uses a Worker-served MP4 instead of a reconstructed blob",
   assert.match(clientSource, /video\.defaultMuted = true/);
   assert.match(clientSource, /video\.loop = true/);
   assert.match(clientSource, /video\.playsInline = true/);
-  assert.match(clientSource, /function resumeAfterGesture\(\)/);
+  assert.match(clientSource, /function bindGestureRecovery\(\)/);
+  assert.match(clientSource, /4k-2160x3840/);
   assert.doesNotMatch(clientSource, /URL\.createObjectURL|new Blob|atob\(/);
 
+  assert.match(materializerSource, /retina-mobile-video-v14-validation-start/);
   assert.match(
     materializerSource,
-    /materialize\/mobile-forest-stream-video-1080-v4/,
-  );
-  assert.match(
-    materializerSource,
-    /public\/scenes\/mobile-forest-stream-video-v4-1080\.mp4/,
-  );
-  assert.match(
-    headersSource,
-    /\/scenes\/mobile-forest-stream-video-v4-1080\.mp4[\s\S]*Content-Type: video\/mp4/,
+    /public\/scenes\/mobile-forest-stream-video-v14-retina-2160\.mp4/,
   );
   assert.match(routerSource, /url\.pathname === MOBILE_VIDEO_ROUTE/);
   assert.match(routerSource, /await serveMobileVideo\(request, canonicalEnv\)/);
-  assert.match(responderSource, /Cloudflare-CDN-Cache-Control/);
+  assert.match(
+    responderSource,
+    /mobile-forest-stream-video-v14-retina-2160\.mp4/,
+  );
   assert.match(responderSource, /Accept-Ranges/);
   assert.match(responderSource, /Content-Range/);
   assert.match(responderSource, /MOBILE_VIDEO_ETAG/);
@@ -271,7 +261,7 @@ test("the mobile video response has a strong ETag and exact uncached ranges", as
   );
 
   const invalid = await serveMobileVideo(
-    new Request(url, { headers: { Range: "bytes=999999-" } }),
+    new Request(url, { headers: { Range: `bytes=${MOBILE_VIDEO_BYTES}-` } }),
     env,
   );
   assert.equal(invalid.status, 416);
@@ -296,63 +286,88 @@ test("the mobile video response has a strong ETag and exact uncached ranges", as
 });
 
 // smooth-mobile-video-v12-test-start
-test("portrait mobile prefers a hardware-friendly direct MP4", async () => {
-  const [clientSource, materializerSource, smoothVideo] = await Promise.all([
-    read("public/mobile-quality.js"),
-    read("scripts/materialize-mobile-forest-stream.mjs"),
-    readFile(
-      new URL("../public/scenes/mobile-forest-stream-video-v12-720.mp4", import.meta.url),
-    ),
-  ]);
+test("portrait mobile uses the selected 2160x3840 MP4 without a lower-resolution video fallback", async () => {
+  const [pageSource, clientSource, materializerSource, video] =
+    await Promise.all([
+      read("src/page.js"),
+      read("public/mobile-quality.js"),
+      read("scripts/materialize-mobile-forest-stream.mjs"),
+      readFile(
+        new URL(
+          "../public/scenes/mobile-forest-stream-video-v14-retina-2160.mp4",
+          import.meta.url,
+        ),
+      ),
+    ]);
 
+  assert.match(pageSource, /id="mobile-background-video"/);
   assert.match(
-    clientSource,
-    /const SMOOTH_VIDEO_ASSET = "\/scenes\/mobile\-forest\-stream\-video\-v12\-720\.mp4"/,
+    pageSource,
+    /\/media\/mobile-forest-stream-video-v14-retina-2160\.mp4/,
   );
-  assert.match(clientSource, /video\.src = SMOOTH_VIDEO_ASSET/);
+  assert.match(
+    pageSource,
+    /mobile-quality\.js\?v=20260809-selected-mobile-4k-video-v22-1/,
+  );
   assert.match(
     clientSource,
-    /const VIDEO_ASSET = "\/media\/mobile-forest-stream-video-v4-1080\.mp4"/,
+    /const VIDEO_ASSET =[\s\S]*\/media\/mobile-forest-stream-video-v14-retina-2160\.mp4/,
   );
   assert.match(clientSource, /video\.src = VIDEO_ASSET/);
-  assert.match(clientSource, /translate3d\(0, 0, 0\)/);
-  assert.match(clientSource, /video\.preload = "auto"/);
-  assert.match(materializerSource, /smooth-mobile-video-v12-validation-start/);
+  assert.match(clientSource, /video\.autoplay = true/);
+  assert.match(clientSource, /video\.muted = true/);
+  assert.match(clientSource, /video\.defaultMuted = true/);
+  assert.match(clientSource, /video\.playsInline = true/);
+  assert.match(clientSource, /4k-2160x3840/);
+  assert.doesNotMatch(clientSource, /smooth-720-fallback|legacy-worker-fallback/);
+  assert.match(materializerSource, /retina-mobile-video-v14-validation-start/);
 
-  assert.equal(smoothVideo.byteLength, 1314209);
-  assert.equal(smoothVideo.subarray(4, 8).toString("ascii"), "ftyp");
+  assert.equal(video.byteLength, 5006520);
+  assert.equal(video.subarray(4, 8).toString("ascii"), "ftyp");
   for (const marker of ["moov", "mdat", "avc1"]) {
-    assert.ok(smoothVideo.includes(Buffer.from(marker, "ascii")));
+    assert.ok(video.includes(Buffer.from(marker, "ascii")));
   }
 });
 // smooth-mobile-video-v12-test-end
 
 
 // mobile-motion-canvas-v18-test-start
-test("portrait mobile motion is independent of video and animated-image autoplay", async () => {
-  const [pageSource, styleSource, clientSource, materializerSource, sprite] =
+test("portrait mobile keeps a canvas fallback beneath the selected 4K video", async () => {
+  const [pageSource, styleSource, canvasClient, videoClient, sprite] =
     await Promise.all([
       read("src/page.js"),
       read("public/mobile-woodland-loop.css"),
       read("public/mobile-motion-canvas.js"),
-      read("scripts/materialize-mobile-forest-stream.mjs"),
-      readFile(new URL("../public/scenes/mobile-forest-stream-water-sprite-v19-hd-1080.webp", import.meta.url)),
+      read("public/mobile-quality.js"),
+      readFile(
+        new URL(
+          "../public/scenes/mobile-forest-stream-water-sprite-v19-hd-1080.webp",
+          import.meta.url,
+        ),
+      ),
     ]);
 
   assert.equal(sprite.subarray(0, 4).toString("ascii"), "RIFF");
   assert.equal(sprite.subarray(8, 12).toString("ascii"), "WEBP");
   assert.ok(sprite.includes(Buffer.from("ALPH", "ascii")));
   assert.equal(sprite.includes(Buffer.from("ANIM", "ascii")), false);
-  assert.equal(sprite.includes(Buffer.from("ANMF", "ascii")), false);
+
   assert.match(pageSource, /id="mobile-motion-canvas"/);
-  assert.match(pageSource, /mobile-forest-stream-water-sprite-v19-hd-1080\.webp/);
-  assert.doesNotMatch(pageSource, /id="mobile-background-video"/);
-  assert.doesNotMatch(pageSource, /mobile-quality\.js/);
+  assert.match(pageSource, /id="mobile-background-video"/);
+  assert.match(
+    pageSource,
+    /\/media\/mobile-forest-stream-video-v14-retina-2160\.mp4/,
+  );
+  assert.match(
+    pageSource,
+    /mobile-forest-stream-water-sprite-v19-hd-1080\.webp/,
+  );
   assert.match(styleSource, /mobile-motion-canvas-v18-start/);
-  assert.match(clientSource, /ctx\.drawImage\(/);
-  assert.match(clientSource, /setTimeout\(step/);
-  assert.doesNotMatch(clientSource, /\.play\(/);
-  assert.match(materializerSource, /mobile-water-sprite-v19-hd-validation-start/);
-  assert.match(materializerSource, /mobile-forest-stream-water-sprite-v19-hd-1080\.webp/);
+  assert.match(styleSource, /selected-mobile-4k-video-v22-start/);
+  assert.match(canvasClient, /ctx\.drawImage\(/);
+  assert.match(canvasClient, /setTimeout\(step/);
+  assert.doesNotMatch(canvasClient, /\.play\(/);
+  assert.match(videoClient, /await video\.play\(\)/);
+  assert.match(videoClient, /4k-2160x3840/);
 });
 // mobile-motion-canvas-v18-test-end

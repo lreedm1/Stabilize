@@ -142,12 +142,15 @@ await update("package.json", (source) => {
 });
 
 // Historical generators can still rewrite the mobile background before this
-// finalizer runs. Reapply the selected poster and canvas implementation here,
-// then remove any replacement-scene video layer.
+// finalizer runs. Reapply the selected poster and canvas implementation first,
+// then layer the matching 2160x3840 MP4 above that fallback.
 await import("./apply-mobile-motion-canvas-v18.mjs");
 await import("./fix-mobile-motion-canvas-v18.mjs");
 await import("./restore-original-mobile-image-v21.mjs");
+await import("./use-selected-mobile-4k-video-v22.mjs");
+await import("./fix-selected-mobile-4k-video-v22-tests-v2.mjs");
+await import("./compat-selected-mobile-4k-v22-history.mjs");
 
 console.log(
-  "Finalized decision-grade impact compatibility, canonical regression expectations, and the selected forest-stream mobile scene.",
+  "Finalized decision-grade impact compatibility, canonical regression expectations, and the selected forest-stream 4K mobile video.",
 );
