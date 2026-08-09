@@ -1,4 +1,4 @@
-name: Verify mobile static background release
+name: Verify mobile canvas background release
 
 on:
   push:
@@ -15,10 +15,10 @@ permissions:
   statuses: write
 
 jobs:
-  verify-mobile-background:
-    name: Verify exact mobile background release
+  verify-production-assets:
+    name: Verify exact canvas background release
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
@@ -26,56 +26,70 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Verify the exact mobile background release is live
+      - name: Verify the exact page, client, poster, and sprite are live
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
-          expected_app_path="$(
-            grep -oE '/app\.js\?v=[A-Za-z0-9._-]+' src/page.js \
+          expected_client_path="$(
+            grep -oE '/mobile-motion-canvas\.js\?v=[A-Za-z0-9._-]+' src/page.js \
               | tail -n 1 \
               || true
           )"
-          expected_loader_name="$(
-            grep -oE 'background-loader\.js\?v=[A-Za-z0-9._-]+' public/app.js \
+          expected_style_path="$(
+            grep -oE '/mobile-woodland-loop\.css\?v=[A-Za-z0-9._-]+' src/page.js \
+              | tail -n 1 \
+              || true
+          )"
+          expected_poster_asset="$(
+            grep -oE '/scenes/mobile-[^" ]+\.webp' src/page.js \
+              | grep -v 'water-sprite' \
               | head -n 1 \
               || true
           )"
-          expected_loader_path="${expected_loader_name:+/${expected_loader_name}}"
-          expected_loader_import=".${expected_loader_path}"
-          expected_mobile_asset="$(
-            sed -n 's/^const MOBILE_ASSET = "\([^"]*\)";$/\1/p' \
-              scripts/use-mobile-forest-stream.mjs \
+          expected_sprite_asset="$(
+            grep -oE '/scenes/mobile-[^" ]*water-sprite[^" ]*\.webp' src/page.js \
               | head -n 1 \
               || true
           )"
-          expected_mobile_file="public${expected_mobile_asset}"
-          expected_mobile_width="$(
-            printf '%s\n' "$expected_mobile_asset" \
-              | sed -n 's/.*-\([0-9][0-9]*\)\.webp$/\1/p' \
+          expected_poster_width="$(
+            grep -F "${expected_poster_asset} " src/page.js \
+              | grep -oE '[0-9]+w' \
               | head -n 1 \
+              | tr -d 'w' \
               || true
           )"
 
-          if [[ -z "$expected_app_path" \
-            || -z "$expected_loader_path" \
-            || -z "$expected_mobile_asset" \
-            || -z "$expected_mobile_width" \
-            || ! -f "$expected_mobile_file" ]]; then
-            echo "::error::Could not derive the expected application, loader, and mobile image from the checked-out release."
+          expected_client_file="public${expected_client_path%%\?*}"
+          expected_style_file="public${expected_style_path%%\?*}"
+          expected_poster_file="public${expected_poster_asset}"
+          expected_sprite_file="public${expected_sprite_asset}"
+
+          if [[ -z "$expected_client_path" \
+            || -z "$expected_style_path" \
+            || -z "$expected_poster_asset" \
+            || -z "$expected_sprite_asset" \
+            || -z "$expected_poster_width" \
+            || ! -f "$expected_client_file" \
+            || ! -f "$expected_style_file" \
+            || ! -f "$expected_poster_file" \
+            || ! -f "$expected_sprite_file" ]]; then
+            echo "::error::Could not derive the canvas client, Retina poster, and water sprite from the checked-out release."
             exit 1
           fi
 
-          expected_mobile_sha="$(sha256sum "$expected_mobile_file" | awk '{print $1}')"
-          expected_mobile_bytes="$(wc -c < "$expected_mobile_file" | tr -d '[:space:]')"
+          expected_poster_sha="$(sha256sum "$expected_poster_file" | awk '{print $1}')"
+          expected_poster_bytes="$(wc -c < "$expected_poster_file" | tr -d '[:space:]')"
+          expected_sprite_sha="$(sha256sum "$expected_sprite_file" | awk '{print $1}')"
+          expected_sprite_bytes="$(wc -c < "$expected_sprite_file" | tr -d '[:space:]')"
 
           publish_status() {
             local state="$1"
             local description="$2"
             local payload
-            payload="$(printf '{"state":"%s","context":"verification/mobile-static-background","description":"%s","target_url":"%s/%s/actions/runs/%s"}' \
+            payload="$(printf '{"state":"%s","context":"verification/mobile-motion-canvas","description":"%s","target_url":"%s/%s/actions/runs/%s"}' \
               "$state" \
               "$description" \
               "$GITHUB_SERVER_URL" \
@@ -93,113 +107,263 @@ jobs:
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
 
-          publish_status \
-            pending \
-            "Waiting for the exact forest-stream mobile release"
+          publish_status pending "Waiting for the exact canvas mobile release"
 
           for attempt in {1..36}; do
             cache_key="${GITHUB_SHA}-${attempt}"
             : > "$tmpdir/live.html"
-            : > "$tmpdir/app.js"
-            : > "$tmpdir/background-loader.js"
-            : > "$tmpdir/mobile.headers"
-            : > "$tmpdir/mobile.webp"
+            : > "$tmpdir/client.js"
+            : > "$tmpdir/mobile.css"
+            : > "$tmpdir/poster.headers"
+            : > "$tmpdir/poster.webp"
+            : > "$tmpdir/sprite.headers"
+            : > "$tmpdir/sprite.webp"
 
             html_status="$(
-              curl --max-time 20 --silent --show-error \
+              curl --max-time 25 --silent --show-error --compressed \
                 --header "Cache-Control: no-cache" \
                 --output "$tmpdir/live.html" \
                 --write-out "%{http_code}" \
-                "https://stabilize.info/?mobile-background-release=${cache_key}" \
+                "https://stabilize.info/?mobile-canvas-release=${cache_key}" \
                 || true
             )"
-            app_status="$(
-              curl --max-time 20 --silent --show-error \
+            client_status="$(
+              curl --max-time 25 --silent --show-error --compressed \
                 --header "Cache-Control: no-cache" \
-                --output "$tmpdir/app.js" \
+                --output "$tmpdir/client.js" \
                 --write-out "%{http_code}" \
-                "https://stabilize.info${expected_app_path}&release=${cache_key}" \
+                "https://stabilize.info${expected_client_path}&release=${cache_key}" \
                 || true
             )"
-            loader_status="$(
-              curl --max-time 20 --silent --show-error \
+            style_status="$(
+              curl --max-time 25 --silent --show-error --compressed \
                 --header "Cache-Control: no-cache" \
-                --output "$tmpdir/background-loader.js" \
+                --output "$tmpdir/mobile.css" \
                 --write-out "%{http_code}" \
-                "https://stabilize.info${expected_loader_path}&release=${cache_key}" \
+                "https://stabilize.info${expected_style_path}&release=${cache_key}" \
                 || true
             )"
-            mobile_status="$(
-              curl --max-time 20 --silent --show-error \
+            poster_status="$(
+              curl --max-time 30 --silent --show-error \
                 --header "Cache-Control: no-cache" \
-                --dump-header "$tmpdir/mobile.headers" \
-                --output "$tmpdir/mobile.webp" \
+                --dump-header "$tmpdir/poster.headers" \
+                --output "$tmpdir/poster.webp" \
                 --write-out "%{http_code}" \
-                "https://stabilize.info${expected_mobile_asset}?release=${cache_key}" \
+                "https://stabilize.info${expected_poster_asset}?release=${cache_key}" \
+                || true
+            )"
+            sprite_status="$(
+              curl --max-time 30 --silent --show-error \
+                --header "Cache-Control: no-cache" \
+                --dump-header "$tmpdir/sprite.headers" \
+                --output "$tmpdir/sprite.webp" \
+                --write-out "%{http_code}" \
+                "https://stabilize.info${expected_sprite_asset}?release=${cache_key}" \
                 || true
             )"
 
-            live_app_path="$(
-              grep -oE '/app\.js\?v=[A-Za-z0-9._-]+' "$tmpdir/live.html" \
-                | tail -n 1 \
-                || true
-            )"
-            live_mobile_assets="$(
-              grep -oE '/scenes/mobile-[^" ]+\.webp' "$tmpdir/live.html" \
-                | sort -u \
-                | paste -sd, - \
-                || true
-            )"
-            mobile_ref_count="$(
-              (grep -oF "$expected_mobile_asset" "$tmpdir/live.html" || true) \
-                | wc -l \
-                | tr -d '[:space:]'
-            )"
-            live_mobile_bytes="$(wc -c < "$tmpdir/mobile.webp" | tr -d '[:space:]')"
-            live_mobile_sha="$(sha256sum "$tmpdir/mobile.webp" | awk '{print $1}')"
-            live_mobile_type="$(
+            live_poster_bytes="$(wc -c < "$tmpdir/poster.webp" | tr -d '[:space:]')"
+            live_poster_sha="$(sha256sum "$tmpdir/poster.webp" | awk '{print $1}')"
+            live_sprite_bytes="$(wc -c < "$tmpdir/sprite.webp" | tr -d '[:space:]')"
+            live_sprite_sha="$(sha256sum "$tmpdir/sprite.webp" | awk '{print $1}')"
+            live_poster_type="$(
               awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' \
-                "$tmpdir/mobile.headers" \
-                | tail -n 1 \
-                || true
+                "$tmpdir/poster.headers" | tail -n 1 || true
+            )"
+            live_sprite_type="$(
+              awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' \
+                "$tmpdir/sprite.headers" | tail -n 1 || true
+            )"
+            poster_ref_count="$(
+              (grep -oF "$expected_poster_asset" "$tmpdir/live.html" || true) \
+                | wc -l | tr -d '[:space:]'
+            )"
+            sprite_ref_count="$(
+              (grep -oF "$expected_sprite_asset" "$tmpdir/live.html" || true) \
+                | wc -l | tr -d '[:space:]'
             )"
 
-            echo "Mobile release attempt ${attempt}: html=${html_status:-000} app=${app_status:-000} loader=${loader_status:-000} image=${mobile_status:-000}; live-app=${live_app_path:-missing}; live-mobile=${live_mobile_assets:-missing}; expected-width=${expected_mobile_width}w; image-bytes=${live_mobile_bytes:-0}; image-sha=${live_mobile_sha:0:12}."
+            echo "Canvas release attempt ${attempt}: html=${html_status:-000} client=${client_status:-000} css=${style_status:-000} poster=${poster_status:-000} sprite=${sprite_status:-000}; poster=${live_poster_bytes:-0}/${expected_poster_bytes}; sprite=${live_sprite_bytes:-0}/${expected_sprite_bytes}; refs=${poster_ref_count}/${sprite_ref_count}."
 
             if [[ "$html_status" == "200" \
-              && "$app_status" == "200" \
-              && "$loader_status" == "200" \
-              && "$mobile_status" == "200" \
-              && "$live_app_path" == "$expected_app_path" \
-              && "$mobile_ref_count" -ge 2 \
-              && "$live_mobile_bytes" == "$expected_mobile_bytes" \
-              && "$live_mobile_sha" == "$expected_mobile_sha" ]] \
-              && grep -Fq 'imagesrcset="' "$tmpdir/live.html" \
-              && grep -Fq 'imagesizes="100vw"' "$tmpdir/live.html" \
-              && grep -Fq "href=\"${expected_mobile_asset}\"" "$tmpdir/live.html" \
-              && grep -Fq "${expected_mobile_asset} ${expected_mobile_width}w" "$tmpdir/live.html" \
-              && grep -Fq "from \"${expected_loader_import}\"" "$tmpdir/app.js" \
-              && ! grep -Fq 'from "./terrain.js"' "$tmpdir/app.js" \
-              && grep -Fq 'import("./terrain.js")' "$tmpdir/background-loader.js" \
-              && grep -Fq '(max-width: 980px) and (orientation: portrait)' "$tmpdir/background-loader.js" \
-              && grep -Fq '(hover: none) and (pointer: coarse)' "$tmpdir/background-loader.js" \
-              && grep -Fq 'navigator?.connection?.saveData' "$tmpdir/background-loader.js" \
-              && grep -Fq 'requestIdleCallback' "$tmpdir/background-loader.js" \
-              && [[ "$live_mobile_type" == image/webp* ]] \
-              && grep -Fqi 'strict-transport-security: max-age=31536000; includeSubDomains' "$tmpdir/mobile.headers" \
-              && grep -Fqi 'etag:' "$tmpdir/mobile.headers"; then
-              echo "Production serves the exact forest-stream image and the expected static mobile rendering path."
-              publish_status \
-                success \
-                "Exact forest-stream mobile release is live"
+              && "$client_status" == "200" \
+              && "$style_status" == "200" \
+              && "$poster_status" == "200" \
+              && "$sprite_status" == "200" \
+              && "$live_poster_bytes" == "$expected_poster_bytes" \
+              && "$live_poster_sha" == "$expected_poster_sha" \
+              && "$live_sprite_bytes" == "$expected_sprite_bytes" \
+              && "$live_sprite_sha" == "$expected_sprite_sha" \
+              && "$poster_ref_count" -ge 2 \
+              && "$sprite_ref_count" -eq 1 \
+              && "$live_poster_type" == image/webp* \
+              && "$live_sprite_type" == image/webp* ]] \
+              && grep -Fq 'id="mobile-motion-canvas"' "$tmpdir/live.html" \
+              && grep -Fq "$expected_client_path" "$tmpdir/live.html" \
+              && grep -Fq "$expected_style_path" "$tmpdir/live.html" \
+              && grep -Fq "${expected_poster_asset} ${expected_poster_width}w" "$tmpdir/live.html" \
+              && ! grep -Fq 'id="mobile-background-video"' "$tmpdir/live.html" \
+              && ! grep -Fq 'mobile-quality.js' "$tmpdir/live.html" \
+              && grep -Fq "const SPRITE_ASSET" "$tmpdir/client.js" \
+              && grep -Fq "$expected_sprite_asset" "$tmpdir/client.js" \
+              && grep -Fq 'const FRAME_RATE = 6;' "$tmpdir/client.js" \
+              && grep -Fq 'ctx.drawImage(' "$tmpdir/client.js" \
+              && grep -Fq 'setTimeout(step' "$tmpdir/client.js" \
+              && ! grep -Fq '.play(' "$tmpdir/client.js" \
+              && ! grep -Fq 'HTMLVideoElement' "$tmpdir/client.js" \
+              && grep -Fq 'mobile-motion-canvas-v18-start' "$tmpdir/mobile.css" \
+              && grep -Fq '.mobile-motion-canvas.is-ready' "$tmpdir/mobile.css" \
+              && grep -Fq 'opacity: 1;' "$tmpdir/mobile.css"; then
+              echo "Production serves the exact Retina-poster plus canvas-motion release."
+              publish_status success "Exact canvas mobile release is live"
               exit 0
             fi
 
             sleep 10
           done
 
-          publish_status \
-            failure \
-            "Exact forest-stream mobile release is not live"
-          echo "::error::Production never served the checked-out page, loader path, and exact forest-stream image bytes together."
+          publish_status failure "Exact canvas mobile release is not live"
+          echo "::error::Production never served the checked-out canvas page, client, Retina poster, and water sprite together."
           exit 1
+
+  verify-webkit-motion:
+    name: Verify visible motion in mobile WebKit
+    needs: verify-production-assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Playwright WebKit
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps webkit
+
+      - name: Confirm the production canvas paints changing visible frames
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { webkit } from "playwright";
+
+          const browser = await webkit.launch({ headless: true });
+          try {
+            const context = await browser.newContext({
+              viewport: { width: 390, height: 844 },
+              screen: { width: 390, height: 844 },
+              deviceScaleFactor: 3,
+              isMobile: true,
+              hasTouch: true,
+              userAgent:
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) " +
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 " +
+                "Mobile/15E148 Safari/604.1",
+            });
+            const page = await context.newPage();
+            page.on("console", (message) =>
+              console.log(`browser:${message.type()}: ${message.text()}`),
+            );
+            page.on("pageerror", (error) =>
+              console.error(`browser-pageerror: ${error.message}`),
+            );
+
+            await page.goto(
+              `https://stabilize.info/?webkit-canvas-release=${process.env.RELEASE_SHA}`,
+              { waitUntil: "domcontentloaded", timeout: 60_000 },
+            );
+            await page.waitForSelector("#mobile-motion-canvas", {
+              state: "attached",
+              timeout: 60_000,
+            });
+            await page.waitForFunction(
+              () =>
+                document.documentElement.dataset.mobileMotion ===
+                "canvas-playing",
+              undefined,
+              { timeout: 60_000 },
+            );
+
+            const sample = () =>
+              page.evaluate(() => {
+                const canvas = document.querySelector("#mobile-motion-canvas");
+                if (!(canvas instanceof HTMLCanvasElement)) {
+                  throw new Error("The mobile motion canvas is missing.");
+                }
+                const context = canvas.getContext("2d");
+                if (!context) throw new Error("The canvas has no 2D context.");
+
+                const startX = Math.floor(canvas.width * 0.18);
+                const startY = Math.floor(canvas.height * 0.3);
+                const width = Math.max(1, Math.floor(canvas.width * 0.64));
+                const height = Math.max(1, Math.floor(canvas.height * 0.68));
+                const pixels = context.getImageData(
+                  startX,
+                  startY,
+                  width,
+                  height,
+                ).data;
+                let hash = 2166136261;
+                let nontransparent = 0;
+                for (let index = 0; index < pixels.length; index += 64) {
+                  hash ^= pixels[index];
+                  hash = Math.imul(hash, 16777619);
+                  hash ^= pixels[index + 1];
+                  hash = Math.imul(hash, 16777619);
+                  hash ^= pixels[index + 2];
+                  hash = Math.imul(hash, 16777619);
+                  hash ^= pixels[index + 3];
+                  hash = Math.imul(hash, 16777619);
+                  if (pixels[index + 3] > 0) nontransparent += 1;
+                }
+                const style = getComputedStyle(canvas);
+                return {
+                  hash: hash >>> 0,
+                  nontransparent,
+                  width: canvas.width,
+                  height: canvas.height,
+                  opacity: style.opacity,
+                  display: style.display,
+                  ready: canvas.classList.contains("is-ready"),
+                  state: document.documentElement.dataset.mobileMotion,
+                  videoCount: document.querySelectorAll(
+                    "#mobile-background-video",
+                  ).length,
+                };
+              });
+
+            await page.waitForTimeout(250);
+            const first = await sample();
+            await page.waitForTimeout(850);
+            const second = await sample();
+            console.log(JSON.stringify({ first, second }, null, 2));
+
+            if (!first.ready || !second.ready) {
+              throw new Error("The production canvas never became ready.");
+            }
+            if (first.opacity !== "1" || second.opacity !== "1") {
+              throw new Error("The production canvas is not visibly opaque.");
+            }
+            if (first.display === "none" || second.display === "none") {
+              throw new Error("The production canvas is hidden.");
+            }
+            if (first.nontransparent === 0 || second.nontransparent === 0) {
+              throw new Error("The production canvas did not paint water pixels.");
+            }
+            if (first.hash === second.hash) {
+              throw new Error("The production canvas did not advance visible frames.");
+            }
+            if (first.videoCount !== 0 || second.videoCount !== 0) {
+              throw new Error("A tap-gated background video is still present.");
+            }
+          } finally {
+            await browser.close();
+          }
+          NODE
