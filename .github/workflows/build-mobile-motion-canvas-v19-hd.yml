@@ -9,6 +9,14 @@ on:
       - scripts/install-mobile-water-sprite-v19-hd.py
       - scripts/upgrade-mobile-motion-resolution-v19-hd.mjs
       - .github/workflows/build-mobile-motion-canvas-v19-hd.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - scripts/generate-mobile-water-sprite-v19-hd.sh
+      - scripts/install-mobile-water-sprite-v19-hd.py
+      - scripts/upgrade-mobile-motion-resolution-v19-hd.mjs
+      - .github/workflows/build-mobile-motion-canvas-v19-hd.yml
   workflow_dispatch:
 
 permissions:
