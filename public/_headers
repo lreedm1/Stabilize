@@ -69,10 +69,10 @@
   X-Content-Type-Options: nosniff
 # retina-mobile-video-v14-end
 
-# no-tap-mobile-motion-v16-start
-/scenes/mobile-forest-stream-motion-v16-1440.webp
+# no-tap-mobile-motion-v17-hq-start
+/scenes/mobile-forest-stream-motion-v17-hq-1440.webp
   Content-Type: image/webp
   Cache-Control: public, max-age=31536000, immutable
   Cross-Origin-Resource-Policy: same-origin
   X-Content-Type-Options: nosniff
-# no-tap-mobile-motion-v16-end
+# no-tap-mobile-motion-v17-hq-end

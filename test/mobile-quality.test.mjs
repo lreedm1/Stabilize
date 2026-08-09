@@ -55,7 +55,7 @@ function webpInfo(buffer) {
 
 test("portrait mobile moves without a media gesture", async () => {
   const tier = {
-    filename: "mobile-forest-stream-motion-v16-1440.webp",
+    filename: "mobile-forest-stream-motion-v17-hq-1440.webp",
     width: 1440,
     height: 2560,
   };
@@ -69,7 +69,7 @@ test("portrait mobile moves without a media gesture", async () => {
     { width: imageInfo.width, height: imageInfo.height },
     { width: tier.width, height: tier.height },
   );
-  assert.equal(image.byteLength, 10592086);
+  assert.equal(image.byteLength, 15000242);
   assert.equal(imageInfo.chunks.includes("ANIM"), true);
   assert.equal(imageInfo.chunks.includes("ANMF"), true);
   assert.equal(
@@ -79,12 +79,12 @@ test("portrait mobile moves without a media gesture", async () => {
   assert.match(pageSource, /<source[\s\S]*sizes="100vw"[\s\S]*srcset=/);
   assert.match(pageSource, /<link[\s\S]*rel="preload"[\s\S]*imagesrcset=/);
   assert.match(pageSource, /imagesizes="100vw"/);
-  assert.ok(pageSource.includes('href="/scenes/mobile-forest-stream-motion-v16-1440.webp"'));
+  assert.ok(pageSource.includes('href="/scenes/mobile-forest-stream-motion-v17-hq-1440.webp"'));
   assert.doesNotMatch(pageSource, /id="mobile-background-video"/);
   assert.doesNotMatch(pageSource, /mobile-quality\.js/);
   assert.match(
     pageSource,
-    /mobile-woodland-loop\.css\?v=20260809-mobile-motion-v16-no-tap-1/,
+    /mobile-woodland-loop\.css\?v=20260809-mobile-motion-v17-hq-no-tap-1/,
   );
   assert.match(mobileStyles, /no-tap-mobile-motion-v16-start/);
   assert.match(mobileStyles, /object-fit:\s*cover/);
