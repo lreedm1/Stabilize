@@ -1,8 +1,8 @@
 const MOBILE_BACKGROUND_QUERY =
   "(max-width: 980px) and (orientation: portrait)";
-const VIDEO_ASSET =
-  "/media/mobile-forest-stream-video-v4-1080.mp4";
-const POSTER_ASSET = "/scenes/mobile-forest-stream-v1-540.webp";
+const VIDEO_ASSET = "/media/mobile-forest-stream-video-v4-1080.mp4";
+const SMOOTH_VIDEO_ASSET = "/scenes/mobile-forest-stream-video-v12-720.mp4";
+const POSTER_ASSET = "/scenes/mobile-forest-stream-v12-720.webp";
 
 const mobilePortrait = globalThis.matchMedia?.(MOBILE_BACKGROUND_QUERY);
 const backdropImage = document.querySelector("#photo-backdrop-image");
@@ -10,7 +10,9 @@ const terrain = document.querySelector("#terrain-background");
 const pageShell = document.querySelector(".page-shell");
 
 let backgroundVideo = null;
+let fallbackAttempted = false;
 let gestureListenersInstalled = false;
+let playControl = null;
 
 function markPosterReady() {
   terrain?.classList.add("is-photo-ready");
@@ -34,6 +36,50 @@ if (backdropImage instanceof HTMLImageElement) {
   }
 }
 
+function ensurePlayControl() {
+  if (playControl instanceof HTMLButtonElement) return playControl;
+  const existing = document.querySelector("#mobile-video-play-control");
+  if (existing instanceof HTMLButtonElement) {
+    playControl = existing;
+    return playControl;
+  }
+
+  const button = document.createElement("button");
+  button.id = "mobile-video-play-control";
+  button.type = "button";
+  button.textContent = "Play background";
+  button.setAttribute("aria-label", "Play the moving forest background");
+  button.hidden = true;
+  Object.assign(button.style, {
+    position: "fixed",
+    zIndex: "4",
+    left: "50%",
+    bottom: "calc(max(18px, env(safe-area-inset-bottom)) + 78px)",
+    transform: "translateX(-50%)",
+    minHeight: "40px",
+    border: "1px solid rgba(255, 255, 255, 0.78)",
+    borderRadius: "999px",
+    background: "rgba(20, 54, 42, 0.88)",
+    boxShadow: "0 6px 20px rgba(4, 24, 17, 0.32)",
+    color: "#fffdf6",
+    padding: "9px 14px",
+    font: "600 0.84rem Lexend, system-ui, sans-serif",
+    cursor: "pointer",
+    WebkitTapHighlightColor: "transparent",
+  });
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    resumeAfterGesture();
+  });
+  document.body.append(button);
+  playControl = button;
+  return button;
+}
+
+function setPlayControlVisible(visible) {
+  ensurePlayControl().hidden = !visible;
+}
+
 function removeGestureListeners() {
   if (!gestureListenersInstalled) return;
   gestureListenersInstalled = false;
@@ -53,36 +99,46 @@ function addGestureListeners() {
     capture: true,
     passive: true,
   });
-  window.addEventListener("keydown", resumeAfterGesture, {
-    capture: true,
-  });
-}
-
-function showPoster(state = "poster-ready") {
-  if (backgroundVideo instanceof HTMLVideoElement) {
-    backgroundVideo.style.opacity = "0";
-  }
-  document.documentElement.dataset.mobileBackground = state;
+  window.addEventListener("keydown", resumeAfterGesture, { capture: true });
 }
 
 function markVideoPlaying() {
   if (
     !(backgroundVideo instanceof HTMLVideoElement) ||
-    !mobilePortrait?.matches
+    !mobilePortrait?.matches ||
+    backgroundVideo.paused
   ) {
     return;
   }
-
-  backgroundVideo.style.opacity = "1";
   terrain?.classList.add("is-photo-ready");
   document.documentElement.dataset.mobileBackground = "video-playing";
+  document.documentElement.dataset.mobileVideoSource = fallbackAttempted
+    ? "legacy-fallback"
+    : "smooth-static";
+  setPlayControlVisible(false);
   removeGestureListeners();
 }
 
-function ensureBackgroundVideo() {
-  if (backgroundVideo instanceof HTMLVideoElement) {
-    return backgroundVideo;
+function useLegacyFallback(video) {
+  if (fallbackAttempted) return false;
+  fallbackAttempted = true;
+  video.src = VIDEO_ASSET;
+  video.load();
+  return true;
+}
+
+function handleVideoError() {
+  if (!(backgroundVideo instanceof HTMLVideoElement)) return;
+  if (useLegacyFallback(backgroundVideo)) {
+    requestPlayback(backgroundVideo);
+    return;
   }
+  document.documentElement.dataset.mobileBackground = "video-failed";
+  setPlayControlVisible(false);
+}
+
+function ensureBackgroundVideo() {
+  if (backgroundVideo instanceof HTMLVideoElement) return backgroundVideo;
 
   const existing = document.querySelector("#mobile-background-video");
   if (existing instanceof HTMLVideoElement) {
@@ -105,7 +161,7 @@ function ensureBackgroundVideo() {
   video.setAttribute("muted", "");
   video.setAttribute("loop", "");
   video.setAttribute("playsinline", "");
-  video.setAttribute("webkit-playsinline", "");
+  video.setAttribute("webkit-playsinline", "true");
   video.setAttribute("preload", "auto");
   video.setAttribute("aria-hidden", "true");
   video.setAttribute("tabindex", "-1");
@@ -120,24 +176,21 @@ function ensureBackgroundVideo() {
     height: "100%",
     objectFit: "cover",
     objectPosition: "50% 50%",
-    opacity: "0",
+    opacity: "1",
     background: "#173f31",
     pointerEvents: "none",
     userSelect: "none",
-    transition: "opacity 220ms ease",
-    willChange: "opacity",
+    transform: "translate3d(0, 0, 0)",
+    WebkitTransform: "translate3d(0, 0, 0)",
+    backfaceVisibility: "hidden",
+    WebkitBackfaceVisibility: "hidden",
+    contain: "strict",
   });
 
   video.addEventListener("playing", markVideoPlaying);
-  video.addEventListener("timeupdate", () => {
-    if (video.currentTime > 0 && !video.paused) markVideoPlaying();
-  });
-  video.addEventListener("error", () => {
-    showPoster("video-failed");
-    addGestureListeners();
-  });
-
-  video.src = VIDEO_ASSET;
+  video.addEventListener("timeupdate", markVideoPlaying);
+  video.addEventListener("error", handleVideoError);
+  video.src = SMOOTH_VIDEO_ASSET;
   backgroundVideo = video;
 
   if (pageShell instanceof HTMLElement) {
@@ -145,15 +198,11 @@ function ensureBackgroundVideo() {
   } else {
     document.body.append(video);
   }
-
   video.load();
   return video;
 }
 
-function startVideo() {
-  if (!mobilePortrait?.matches || document.hidden) return;
-
-  const video = ensureBackgroundVideo();
+function requestPlayback(video) {
   video.muted = true;
   video.defaultMuted = true;
   video.playsInline = true;
@@ -163,57 +212,41 @@ function startVideo() {
   try {
     playback = video.play();
   } catch {
-    showPoster("video-awaiting-gesture");
+    document.documentElement.dataset.mobileBackground =
+      "video-awaiting-gesture";
+    setPlayControlVisible(true);
     addGestureListeners();
     return;
   }
 
   if (playback && typeof playback.then === "function") {
     playback
-      .then(() => {
-        if (!video.paused) markVideoPlaying();
-      })
+      .then(markVideoPlaying)
       .catch(() => {
-        showPoster("video-awaiting-gesture");
+        document.documentElement.dataset.mobileBackground =
+          "video-awaiting-gesture";
+        setPlayControlVisible(true);
         addGestureListeners();
       });
-  } else if (!video.paused) {
+  } else {
     markVideoPlaying();
   }
 }
 
+function startVideo() {
+  if (!mobilePortrait?.matches || document.hidden) return;
+  requestPlayback(ensureBackgroundVideo());
+}
+
 function stopVideo() {
-  if (backgroundVideo instanceof HTMLVideoElement) {
-    backgroundVideo.pause();
-  }
-  showPoster("poster-ready");
+  backgroundVideo?.pause();
+  setPlayControlVisible(false);
+  document.documentElement.dataset.mobileBackground = "poster-ready";
 }
 
 function resumeAfterGesture() {
   if (!mobilePortrait?.matches || document.hidden) return;
-
-  const video = ensureBackgroundVideo();
-  video.muted = true;
-  video.defaultMuted = true;
-  video.playsInline = true;
-
-  let playback;
-  try {
-    playback = video.play();
-  } catch {
-    showPoster("video-awaiting-gesture");
-    return;
-  }
-
-  if (playback && typeof playback.then === "function") {
-    playback
-      .then(() => {
-        if (!video.paused) markVideoPlaying();
-      })
-      .catch(() => showPoster("video-awaiting-gesture"));
-  } else if (!video.paused) {
-    markVideoPlaying();
-  }
+  requestPlayback(ensureBackgroundVideo());
 }
 
 mobilePortrait?.addEventListener?.("change", (event) => {
@@ -227,17 +260,14 @@ mobilePortrait?.addEventListener?.("change", (event) => {
 });
 
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) {
-    backgroundVideo?.pause();
-  } else {
-    startVideo();
-  }
+  if (document.hidden) stopVideo();
+  else startVideo();
 });
-
 window.addEventListener("pageshow", startVideo);
 window.addEventListener("pagehide", () => backgroundVideo?.pause());
 
 if (mobilePortrait?.matches) {
+  ensurePlayControl();
   addGestureListeners();
   startVideo();
 }

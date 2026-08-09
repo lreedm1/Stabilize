@@ -181,3 +181,68 @@ await writeFile(videoOutputPath, videoPayload.bytes);
 console.log(
   `Materialized ${videoOutputPath}: ${videoPayload.bytes.byteLength} bytes from ${videoPayload.payloadFiles.length} chunks, sha256=${videoInfo.sha256}, fastStart=${videoInfo.fastStart}`,
 );
+
+// smooth-mobile-video-v12-validation-start
+const smoothVideoPath = "public/scenes/mobile-forest-stream-video-v12-720.mp4";
+const smoothVideoExpectedBytes = 1_314_209;
+const smoothVideoExpectedSha256 = "78b6c1f1928d369e2d2a5b15d3b0de44b0458e1f5a940034080c0d8861e14bc3";
+const smoothPosterPath = "public/scenes/mobile-forest-stream-v12-720.webp";
+const smoothPosterExpectedBytes = 167_224;
+const smoothPosterExpectedSha256 = "819e6210c77ae3de7752be689a33fb979a44fc31a8f5d52ef222a77245e33618";
+
+const smoothVideo = await readFile(smoothVideoPath);
+if (smoothVideo.byteLength !== smoothVideoExpectedBytes) {
+  throw new Error(
+    `Unexpected smooth mobile video size: ${smoothVideo.byteLength}; expected ${smoothVideoExpectedBytes}`,
+  );
+}
+const smoothVideoSha256 = createHash("sha256")
+  .update(smoothVideo)
+  .digest("hex");
+if (smoothVideoSha256 !== smoothVideoExpectedSha256) {
+  throw new Error(`Smooth mobile video checksum mismatch: ${smoothVideoSha256}`);
+}
+if (
+  smoothVideo.byteLength < 12 ||
+  smoothVideo.subarray(4, 8).toString("ascii") !== "ftyp"
+) {
+  throw new Error("Smooth mobile video is not an MP4 file");
+}
+for (const marker of ["moov", "mdat", "vide", "avc1"]) {
+  if (!smoothVideo.includes(Buffer.from(marker, "ascii"))) {
+    throw new Error(`Smooth mobile video is missing the ${marker} marker`);
+  }
+}
+if (
+  smoothVideo.includes(Buffer.from("mp4a", "ascii")) ||
+  smoothVideo.includes(Buffer.from("soun", "ascii"))
+) {
+  throw new Error("Smooth mobile video must not contain audio");
+}
+
+const smoothPoster = await readFile(smoothPosterPath);
+if (smoothPoster.byteLength !== smoothPosterExpectedBytes) {
+  throw new Error(
+    `Unexpected smooth mobile poster size: ${smoothPoster.byteLength}; expected ${smoothPosterExpectedBytes}`,
+  );
+}
+const smoothPosterSha256 = createHash("sha256")
+  .update(smoothPoster)
+  .digest("hex");
+if (smoothPosterSha256 !== smoothPosterExpectedSha256) {
+  throw new Error(`Smooth mobile poster checksum mismatch: ${smoothPosterSha256}`);
+}
+const smoothPosterInfo = webpInfo(smoothPoster);
+if (
+  smoothPosterInfo.width !== 720 ||
+  smoothPosterInfo.height !== 1280 ||
+  smoothPosterInfo.animated
+) {
+  throw new Error(
+    `Unexpected smooth mobile poster: ${smoothPosterInfo.width}x${smoothPosterInfo.height}, animated=${smoothPosterInfo.animated}`,
+  );
+}
+console.log(
+  `Validated ${smoothVideoPath}: 720x1280, ${smoothVideo.byteLength} bytes, sha256=${smoothVideoSha256}`,
+);
+// smooth-mobile-video-v12-validation-end
