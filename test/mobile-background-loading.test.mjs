@@ -106,32 +106,24 @@ test("mobile clients keep the static image without loading the graphics module c
   assert.equal(loader.shouldLoadInteractiveBackground(dataSaver), false);
 });
 
-test("the production mobile release gate follows built versions and exact image bytes", async () => {
+test("the production mobile release gate verifies visible canvas motion", async () => {
   const workflow = await read(
     ".github/workflows/verify-mobile-background.yml",
   );
 
-  assert.doesNotMatch(workflow, /defer-mobile-background\.mjs/);
-  assert.doesNotMatch(workflow, /asset_version=/);
-  assert.ok(
-    workflow.includes(
-      "grep -oE '/app\\.js\\?v=[A-Za-z0-9._-]+' src/page.js",
-    ),
-  );
-  assert.ok(
-    workflow.includes(
-      "grep -oE 'background-loader\\.js\\?v=[A-Za-z0-9._-]+' public/app.js",
-    ),
-  );
-  assert.ok(workflow.includes("scripts/use-mobile-forest-stream.mjs"));
-  assert.ok(workflow.includes('sha256sum "$expected_mobile_file"'));
-  assert.ok(workflow.includes('wc -c < "$expected_mobile_file"'));
-  assert.ok(workflow.includes('live_mobile_sha'));
-  assert.ok(workflow.includes('live_mobile_bytes'));
-  assert.ok(workflow.includes('live_mobile_type'));
-  assert.ok(
-    workflow.includes("Exact forest-stream mobile release is live"),
-  );
+  assert.ok(workflow.includes("mobile-motion-canvas"));
+  assert.ok(workflow.includes("mobile-woodland-loop"));
+  assert.ok(workflow.includes("water-sprite"));
+  assert.ok(workflow.includes("expected_poster_sha"));
+  assert.ok(workflow.includes("expected_sprite_sha"));
+  assert.ok(workflow.includes("expected_poster_bytes"));
+  assert.ok(workflow.includes("expected_sprite_bytes"));
+  assert.ok(workflow.includes("verification/mobile-motion-canvas"));
+  assert.ok(workflow.includes("Verify visible motion in mobile WebKit"));
+  assert.ok(workflow.includes("getImageData"));
+  assert.ok(workflow.includes("first.hash === second.hash"));
+  assert.ok(workflow.includes('first.opacity !== "1"'));
+  assert.ok(workflow.includes("Exact canvas mobile release is live"));
 });
 
 test("portrait mobile uses a Worker-served MP4 instead of a reconstructed blob", async () => {

@@ -7,14 +7,7 @@ on:
     paths:
       - scripts/fix-mobile-motion-canvas-v18.mjs
       - scripts/finalize-decision-grade-impact.mjs
-      - .github/workflows/build-mobile-motion-canvas-v18.yml
-  pull_request:
-    branches:
-      - main
-    paths:
-      - scripts/fix-mobile-motion-canvas-v18.mjs
-      - scripts/finalize-decision-grade-impact.mjs
-      - .github/workflows/build-mobile-motion-canvas-v18.yml
+      - .github/workflows/build-visible-mobile-canvas-v18-2.yml
   workflow_dispatch:
 
 permissions:
@@ -26,7 +19,7 @@ jobs:
     timeout-minutes: 35
 
     steps:
-      - name: Check out the visible-canvas fix branch
+      - name: Check out fix branch
         uses: actions/checkout@v6
         with:
           ref: agent/fix-visible-mobile-canvas-v18-2
@@ -39,17 +32,17 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies without running generators
+      - name: Install dependencies
         shell: bash
         run: npm ci --ignore-scripts
 
-      - name: Generate the canonical visible-canvas release
+      - name: Generate canonical visible-canvas output
         shell: bash
         run: |
           set -euo pipefail
           npm run apply:prompt-policy
 
-      - name: Commit canonical generated output
+      - name: Commit generated output
         shell: bash
         run: |
           set -euo pipefail
@@ -57,12 +50,12 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
           if git diff --cached --quiet; then
-            echo 'Canonical output is already committed.'
+            echo "Canonical output was already committed."
           else
             git commit -m 'Make painted mobile canvas frames visibly opaque'
           fi
 
-      - name: Run the complete test and Worker build gates
+      - name: Run full regression and Worker build checks
         shell: bash
         run: |
           set -euo pipefail
@@ -71,7 +64,7 @@ jobs:
           npm run verify:clean
           git diff --exit-code
 
-      - name: Publish the verified canonical branch
+      - name: Publish verified branch
         shell: bash
         run: |
           set -euo pipefail

@@ -76,3 +76,18 @@
   }
 }
 /* mobile-motion-canvas-v18-end */
+
+/* mobile-motion-canvas-v18-visibility-fix-start */
+@media (max-width: 980px) and (orientation: portrait) {
+  /* The canvas is transparent until its first water frame is painted, so it is
+     safe to keep the layer visible from first layout. Important declarations
+     also defeat stale or higher-specificity opacity rules on restored tabs. */
+  html[data-mobile-motion="canvas-playing"] .mobile-motion-canvas.is-ready,
+  .mobile-motion-canvas.is-ready {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    transition: none !important;
+  }
+}
+/* mobile-motion-canvas-v18-visibility-fix-end */

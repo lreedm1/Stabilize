@@ -85,7 +85,7 @@ test("portrait mobile draws water through a canvas without media autoplay", asyn
   );
   assert.ok(pageSource.includes('href="/scenes/mobile-forest-stream-water-sprite-v18-540.webp"'));
   assert.match(pageSource, /id="mobile-motion-canvas"/);
-  assert.match(pageSource, /mobile-motion-canvas\.js\?v=20260809-mobile-motion-canvas-v18-1/);
+  assert.match(pageSource, /mobile-motion-canvas\.js\?v=20260809-mobile-motion-canvas-v18-2/);
   assert.doesNotMatch(pageSource, /id="mobile-background-video"/);
   assert.doesNotMatch(pageSource, /mobile-quality\.js/);
   assert.match(mobileStyles, /mobile-motion-canvas-v18-start/);
@@ -97,6 +97,8 @@ test("portrait mobile draws water through a canvas without media autoplay", asyn
   assert.match(clientSource, /setTimeout\(step/);
   assert.doesNotMatch(clientSource, /\.play\(/);
   assert.doesNotMatch(clientSource, /HTMLVideoElement/);
+  assert.match(clientSource, /style\.setProperty\("opacity", "1", "important"\)/);
+  assert.match(clientSource, /function showCanvas\(\)/);
 });
 
 test("restored tabs recover from interrupted blank thinking views", async () => {
