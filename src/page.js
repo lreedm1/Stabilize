@@ -352,7 +352,7 @@ export function renderPage(options = {}) {
     <script src="/mobile-motion-canvas.js?v=20260809-mobile-motion-canvas-v19-hd-2" defer></script>
     <!-- mobile-motion-canvas-v18-script-end -->
     <!-- mobile-hd-background-v20-script-start -->
-    <script src="/mobile-hd-background-v20.js?v=20260809-mobile-hd-background-v20-2" defer></script>
+    <script type="module" src="/mobile-hd-background-v20.js?v=20260809-mobile-hd-background-v20-2"></script>
     <!-- mobile-hd-background-v20-script-end -->
   </body>
 </html>`;
