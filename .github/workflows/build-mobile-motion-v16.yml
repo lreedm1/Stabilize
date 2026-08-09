@@ -43,9 +43,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+          if ! command -v ffmpeg >/dev/null || ! command -v webpmux >/dev/null; then
             sudo apt-get update -qq
-            sudo apt-get install -y ffmpeg
+            sudo apt-get install -y ffmpeg webp
           fi
 
       - name: Generate and validate the no-tap animated WebP
@@ -95,6 +95,7 @@ jobs:
           name: mobile-motion-v16-evidence
           path: |
             /tmp/stabilize-mobile-motion-v16/mobile-forest-stream-motion-v16-1440.webp
-            /tmp/stabilize-mobile-motion-v16/framemd5.txt
+            /tmp/stabilize-mobile-motion-v16/webpmux-info.txt
+            /tmp/stabilize-mobile-motion-v16/frame-*.png
           if-no-files-found: warn
           retention-days: 7
