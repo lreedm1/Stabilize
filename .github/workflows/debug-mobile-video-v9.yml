@@ -1,4 +1,4 @@
-name: Debug clean mobile video v9 generator
+name: Debug clean mobile video v11 generator
 
 on:
   pull_request:
@@ -32,16 +32,16 @@ jobs:
 
       - name: Generate and validate video
         shell: bash
-        run: bash scripts/generate-mobile-video-v9-clean.sh /tmp/stabilize-mobile-video-v9-clean
+        run: bash scripts/generate-mobile-video-v9-clean.sh /tmp/stabilize-mobile-video-v11-clean
 
       - name: Upload generated evidence
         uses: actions/upload-artifact@v4
         with:
-          name: debug-mobile-video-v9-clean
+          name: debug-mobile-video-v11-clean
           path: |
-            /tmp/stabilize-mobile-video-v9-clean/mobile-forest-stream-video-v9-1080.mp4
-            /tmp/stabilize-mobile-video-v9-clean/frame-early.png
-            /tmp/stabilize-mobile-video-v9-clean/frame-late.png
-            /tmp/stabilize-mobile-video-v9-clean/probe.json
+            /tmp/stabilize-mobile-video-v11-clean/mobile-forest-stream-video-v11-1536.mp4
+            /tmp/stabilize-mobile-video-v11-clean/frame-early.png
+            /tmp/stabilize-mobile-video-v11-clean/frame-late.png
+            /tmp/stabilize-mobile-video-v11-clean/probe.json
           if-no-files-found: error
           retention-days: 3
