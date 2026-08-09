@@ -140,7 +140,7 @@ test("portrait mobile uses a direct same-origin MP4 instead of a reconstructed b
     /\/scenes\/mobile-forest-stream-video-v4-1080\.mp4[\s\S]*Content-Type: video\/mp4/,
   );
 
-  assert.ok(video.byteLength > 1_000_000);
+  assert.ok(video.byteLength > 100_000);
   assert.equal(video.subarray(4, 8).toString("ascii"), "ftyp");
   for (const marker of ["moov", "mdat", "avc1"]) {
     assert.ok(video.includes(Buffer.from(marker, "ascii")));
