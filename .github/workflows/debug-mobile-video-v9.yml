@@ -74,6 +74,22 @@ jobs:
             "$work/mobile-forest-stream-video-v11-1536.mp4" \
             "$work/mobile-forest-stream-v11-1536.webp"
 
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("test/mobile-background-loading.test.mjs")
+          source = path.read_text()
+          source = source.replace(
+              r"mobile-forest-stream-video-v4-1080\.mp4",
+              r"mobile-forest-stream-video-v11-1536\.mp4",
+          )
+          source = source.replace(
+              "mobile-forest-stream-video-v4-1080.mp4",
+              "mobile-forest-stream-video-v11-1536.mp4",
+          )
+          path.write_text(source)
+          PY
+
           npm ci --ignore-scripts
           npm run apply:prompt-policy
 
