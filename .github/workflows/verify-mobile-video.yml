@@ -38,18 +38,18 @@ jobs:
           node scripts/materialize-mobile-forest-stream.mjs
           video='public/scenes/mobile-forest-stream-video-v4-1080.mp4'
           test -s "$video"
-          test "$(wc -c < "$video")" -gt 100000
+          test "$(wc -c < "$video")" -eq 113613
           test "$(dd if="$video" bs=1 skip=4 count=4 status=none)" = 'ftyp'
           grep -aFq 'moov' "$video"
           grep -aFq 'mdat' "$video"
           grep -aFq 'avc1' "$video"
           file "$video" | grep -Fq 'ISO Media, MP4'
 
-      - name: Validate the Safari playback path
+      - name: Validate the Safari playback and range path
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq '/scenes/mobile-forest-stream-video-v4-1080.mp4' public/mobile-quality.js
+          grep -Fq '/media/mobile-forest-stream-video-v4-1080.mp4' public/mobile-quality.js
           grep -Fq 'video.src = VIDEO_ASSET' public/mobile-quality.js
           grep -Fq 'video.autoplay = true' public/mobile-quality.js
           grep -Fq 'video.muted = true' public/mobile-quality.js
@@ -61,8 +61,12 @@ jobs:
           ! grep -Fq 'URL.createObjectURL' public/mobile-quality.js
           ! grep -Fq 'new Blob' public/mobile-quality.js
           ! grep -Fq 'atob(' public/mobile-quality.js
-          grep -Fq '/scenes/mobile-forest-stream-video-v4-1080.mp4' public/_headers
-          grep -Fq 'Content-Type: video/mp4' public/_headers
+          grep -Fq 'url.pathname === MOBILE_VIDEO_ROUTE' src/domain-router.js
+          grep -Fq 'await serveMobileVideo(request, canonicalEnv)' src/domain-router.js
+          grep -Fq 'Cloudflare-CDN-Cache-Control' src/mobile-video-response.js
+          grep -Fq 'Accept-Ranges' src/mobile-video-response.js
+          grep -Fq 'Content-Range' src/mobile-video-response.js
+          grep -Fq 'MOBILE_VIDEO_ETAG' src/mobile-video-response.js
 
   verify-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -81,7 +85,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Wait for the exact direct video release to reach production
+      - name: Wait for the exact Safari-safe video release to reach production
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -91,6 +95,7 @@ jobs:
           expected_file='public/scenes/mobile-forest-stream-video-v4-1080.mp4'
           expected_bytes="$(wc -c < "$expected_file" | tr -d '[:space:]')"
           expected_sha="$(sha256sum "$expected_file" | awk '{print $1}')"
+          expected_etag="\"${expected_sha}\""
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
 
@@ -113,7 +118,18 @@ jobs:
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
           }
 
-          publish_status pending 'Waiting for the direct mobile video release'
+          header_value() {
+            local file="$1"
+            local name="$2"
+            awk -F': ' -v target="$name" '
+              tolower($1) == tolower(target) {
+                gsub("\r", "", $2)
+                print $2
+              }
+            ' "$file" | tail -n 1
+          }
+
+          publish_status pending 'Waiting for Safari-safe mobile video delivery'
 
           for attempt in {1..36}; do
             key="${GITHUB_SHA}-${attempt}"
@@ -140,7 +156,7 @@ jobs:
                 --dump-header "$tmpdir/video.headers" \
                 --output "$tmpdir/video.mp4" \
                 --write-out '%{http_code}' \
-                "https://stabilize.info/scenes/mobile-forest-stream-video-v4-1080.mp4?release=${key}" \
+                "https://stabilize.info/media/mobile-forest-stream-video-v4-1080.mp4?release=${key}" \
                 || true
             )"
             range_status="$(
@@ -150,38 +166,55 @@ jobs:
                 --dump-header "$tmpdir/range.headers" \
                 --output "$tmpdir/range.bin" \
                 --write-out '%{http_code}' \
-                "https://stabilize.info/scenes/mobile-forest-stream-video-v4-1080.mp4?range=${key}" \
+                "https://stabilize.info/media/mobile-forest-stream-video-v4-1080.mp4?range=${key}" \
                 || true
             )"
 
             live_bytes="$(wc -c < "$tmpdir/video.mp4" | tr -d '[:space:]')"
             live_sha="$(sha256sum "$tmpdir/video.mp4" | awk '{print $1}')"
-            live_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$tmpdir/video.headers" | tail -n 1)"
+            live_type="$(header_value "$tmpdir/video.headers" content-type | tr '[:upper:]' '[:lower:]')"
+            live_etag="$(header_value "$tmpdir/video.headers" etag)"
+            live_cache="$(header_value "$tmpdir/video.headers" cache-control | tr '[:upper:]' '[:lower:]')"
+            live_cdn_cache="$(header_value "$tmpdir/video.headers" cdn-cache-control | tr '[:upper:]' '[:lower:]')"
+            live_cf_cdn_cache="$(header_value "$tmpdir/video.headers" cloudflare-cdn-cache-control | tr '[:upper:]' '[:lower:]')"
+            live_accept_ranges="$(header_value "$tmpdir/video.headers" accept-ranges | tr '[:upper:]' '[:lower:]')"
             range_bytes="$(wc -c < "$tmpdir/range.bin" | tr -d '[:space:]')"
+            range_content="$(header_value "$tmpdir/range.headers" content-range | tr '[:upper:]' '[:lower:]')"
+            range_etag="$(header_value "$tmpdir/range.headers" etag)"
+            range_cache="$(header_value "$tmpdir/range.headers" cache-control | tr '[:upper:]' '[:lower:]')"
 
-            echo "Mobile video attempt ${attempt}: script=${script_status:-000} home=${home_status:-000} video=${video_status:-000} range=${range_status:-000}; bytes=${live_bytes}/${expected_bytes}; type=${live_type:-missing}; sha=${live_sha:0:12}."
+            echo "Mobile video attempt ${attempt}: script=${script_status:-000} home=${home_status:-000} video=${video_status:-000} range=${range_status:-000}; bytes=${live_bytes}/${expected_bytes}; type=${live_type:-missing}; etag=${live_etag:-missing}; cache=${live_cache:-missing}; sha=${live_sha:0:12}."
 
             if [[ "$script_status" == 200 \
               && "$home_status" == 200 \
               && "$video_status" == 200 \
               && "$range_status" == 206 \
               && "$range_bytes" == 1024 \
+              && "$range_content" == "bytes 0-1023/${expected_bytes}" \
               && "$live_bytes" == "$expected_bytes" \
               && "$live_sha" == "$expected_sha" \
-              && "$live_type" == video/mp4* ]] \
-              && grep -Fq '/scenes/mobile-forest-stream-video-v4-1080.mp4' "$tmpdir/mobile-quality.js" \
+              && "$live_type" == video/mp4* \
+              && "$live_etag" == "$expected_etag" \
+              && "$range_etag" == "$expected_etag" \
+              && "$live_etag" != W/* \
+              && "$live_cache" == *no-store* \
+              && "$range_cache" == *no-store* \
+              && "$live_cdn_cache" == "no-store" \
+              && "$live_cf_cdn_cache" == "no-store" \
+              && "$live_accept_ranges" == "bytes" ]] \
+              && grep -Fq '/media/mobile-forest-stream-video-v4-1080.mp4' "$tmpdir/mobile-quality.js" \
               && grep -Fq 'video.src = VIDEO_ASSET' "$tmpdir/mobile-quality.js" \
               && grep -Fq 'video.play()' "$tmpdir/mobile-quality.js" \
               && ! grep -Fq 'URL.createObjectURL' "$tmpdir/mobile-quality.js" \
               && grep -Fqi "media-src 'self'" "$tmpdir/home.headers"; then
-              publish_status success 'Direct mobile forest video is live'
-              echo 'The direct mobile forest video, Safari loader, MIME type, and byte-range response are live.'
+              publish_status success 'Safari-safe mobile forest video is live'
+              echo 'The exact MP4 is live through the uncached strong-ETag range route.'
               exit 0
             fi
 
             sleep 10
           done
 
-          publish_status failure 'Direct mobile forest video is not live'
-          echo '::error::Production never served the exact direct MP4 and Safari playback path together.'
+          publish_status failure 'Safari-safe mobile forest video is not live'
+          echo '::error::Production never served the exact MP4 through the strong-ETag no-store range route.'
           exit 1
