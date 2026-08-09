@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   diagnose:
@@ -44,6 +45,43 @@ jobs:
           ffmpeg -hide_banner -v error -ss "$middle" -i "$video" -frames:v 1 /tmp/mobile-video-diagnostic/frame-middle.png
           sha256sum "$video" /tmp/mobile-video-diagnostic/frame-*.png | tee /tmp/mobile-video-diagnostic/sha256.txt
           ls -lh /tmp/mobile-video-diagnostic
+
+      - name: Publish codec summary
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          description="$(python - <<'PY'
+          import json
+          data = json.load(open('/tmp/ffprobe.json'))
+          s = data['streams'][0]
+          f = data['format']
+          text = (
+              f"{s.get('codec_name')} {s.get('profile')} {s.get('pix_fmt')} "
+              f"{s.get('width')}x{s.get('height')} L{s.get('level')} "
+              f"{float(f.get('duration', 0)):.2f}s {s.get('nb_frames')}f decode-ok"
+          )
+          print(text[:140])
+          PY
+          )"
+          payload="$(python - "$description" <<'PY'
+          import json, os, sys
+          print(json.dumps({
+              'state': 'success',
+              'context': 'diagnostic/mobile-video-codec',
+              'description': sys.argv[1],
+              'target_url': f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+          }))
+          PY
+          )"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
 
       - name: Upload diagnostic artifact
         uses: actions/upload-artifact@v4
