@@ -1,31 +1,24 @@
-name: Build smooth mobile video release
+name: Verify smooth mobile video on production
 
 on:
   pull_request:
     paths:
-      - scripts/generate-mobile-video-smooth.sh
-      - scripts/prepare-mobile-video-smooth-release.py
       - .github/workflows/debug-mobile-video-v9.yml
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  generate:
+  verify-production:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
-          persist-credentials: true
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+          persist-credentials: false
 
       - name: Install video tools
         shell: bash
@@ -36,78 +29,126 @@ jobs:
             sudo apt-get install -y ffmpeg
           fi
 
-      - name: Generate and strictly validate the smooth video
-        shell: bash
-        run: |
-          bash scripts/generate-mobile-video-smooth.sh \
-            /tmp/stabilize-mobile-video-smooth
-
-      - name: Generate and validate the matching poster
+      - name: Wait for the exact smooth release on stabilize.info
         shell: bash
         run: |
           set -euo pipefail
-          work=/tmp/stabilize-mobile-video-smooth
-          video="$work/mobile-forest-stream-video-v12-720.mp4"
-          poster="$work/mobile-forest-stream-v12-720.webp"
-          ffmpeg -hide_banner -v error -y -i "$video" \
-            -frames:v 1 -c:v libwebp -quality 86 -compression_level 6 "$poster"
-          dimensions="$(
+          work=/tmp/stabilize-production-video-v12
+          mkdir -p "$work"
+
+          expected_bytes=1314209
+          expected_sha=78b6c1f1928d369e2d2a5b15d3b0de44b0458e1f5a940034080c0d8861e14bc3
+          client_version=20260809-mobile-video-v12-smooth-1
+          video_name=mobile-forest-stream-video-v12-720.mp4
+
+          header_value() {
+            local file="$1"
+            local name="$2"
+            awk -F': ' -v target="$name" '
+              tolower($1) == tolower(target) {
+                gsub("\r", "", $2)
+                print $2
+              }
+            ' "$file" | tail -n 1
+          }
+
+          for attempt in {1..36}; do
+            key="${GITHUB_SHA}-${attempt}"
+            home_status="$(
+              curl --max-time 20 --silent --show-error \
+                --header 'Cache-Control: no-cache' \
+                --output "$work/home.html" \
+                --write-out '%{http_code}' \
+                "https://stabilize.info/?smooth-video-release=${key}" \
+                || true
+            )"
+            script_status="$(
+              curl --max-time 20 --silent --show-error \
+                --header 'Cache-Control: no-cache' \
+                --output "$work/mobile-quality.js" \
+                --write-out '%{http_code}' \
+                "https://stabilize.info/mobile-quality.js?v=${client_version}&release=${key}" \
+                || true
+            )"
+            video_status="$(
+              curl --max-time 90 --silent --show-error \
+                --header 'Cache-Control: no-cache' \
+                --dump-header "$work/video.headers" \
+                --output "$work/video.mp4" \
+                --write-out '%{http_code}' \
+                "https://stabilize.info/scenes/${video_name}?release=${key}" \
+                || true
+            )"
+
+            live_bytes="$(wc -c < "$work/video.mp4" 2>/dev/null | tr -d '[:space:]' || true)"
+            live_bytes="${live_bytes:-0}"
+            live_sha="$(sha256sum "$work/video.mp4" 2>/dev/null | awk '{print $1}' || true)"
+            live_type="$(header_value "$work/video.headers" content-type | tr '[:upper:]' '[:lower:]')"
+            live_cache="$(header_value "$work/video.headers" cache-control | tr '[:upper:]' '[:lower:]')"
+
+            echo "Attempt ${attempt}: home=${home_status:-000} script=${script_status:-000} video=${video_status:-000}; bytes=${live_bytes}/${expected_bytes}; type=${live_type:-missing}; cache=${live_cache:-missing}; sha=${live_sha:0:12}."
+
+            if [[ "$home_status" == 200 \
+              && "$script_status" == 200 \
+              && "$video_status" == 200 \
+              && "$live_bytes" == "$expected_bytes" \
+              && "$live_sha" == "$expected_sha" \
+              && "$live_type" == video/mp4* \
+              && "$live_cache" == *immutable* ]] \
+              && grep -Fq "/mobile-quality.js?v=${client_version}" "$work/home.html" \
+              && grep -Fq 'const SMOOTH_VIDEO_ASSET = "/scenes/mobile-forest-stream-video-v12-720.mp4"' "$work/mobile-quality.js" \
+              && grep -Fq 'video.src = SMOOTH_VIDEO_ASSET' "$work/mobile-quality.js"; then
+              break
+            fi
+
+            if [[ "$attempt" == 36 ]]; then
+              echo '::error::Production never served the exact smooth mobile video release.'
+              exit 1
+            fi
+            sleep 10
+          done
+
+          probe="$(
             ffprobe -v error -select_streams v:0 \
-              -show_entries stream=width,height \
-              -of csv=s=x:p=0 "$poster"
+              -show_entries stream=codec_name,profile,pix_fmt,width,height,level,r_frame_rate,avg_frame_rate \
+              -of default=nw=1 "$work/video.mp4"
           )"
-          test "$dimensions" = 720x1280
-          test "$(dd if="$poster" bs=1 count=4 status=none)" = RIFF
-          test "$(dd if="$poster" bs=1 skip=8 count=4 status=none)" = WEBP
-          echo "poster_bytes=$(wc -c < "$poster" | tr -d '[:space:]')"
-          sha256sum "$poster"
+          printf '%s\n' "$probe"
+          grep -Fq 'codec_name=h264' <<<"$probe"
+          grep -Fq 'profile=Constrained Baseline' <<<"$probe"
+          grep -Fq 'pix_fmt=yuv420p' <<<"$probe"
+          grep -Fq 'width=720' <<<"$probe"
+          grep -Fq 'height=1280' <<<"$probe"
+          grep -Fq 'level=31' <<<"$probe"
+          grep -Fq 'r_frame_rate=24/1' <<<"$probe"
+          grep -Fq 'avg_frame_rate=24/1' <<<"$probe"
 
-      - name: Prepare, test, and publish the release branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          work=/tmp/stabilize-mobile-video-smooth
-          cp scripts/generate-mobile-video-smooth.sh /tmp/generate-mobile-video-smooth.sh
-          cp scripts/prepare-mobile-video-smooth-release.py /tmp/prepare-mobile-video-smooth-release.py
+          audio_streams="$(
+            ffprobe -v error -select_streams a \
+              -show_entries stream=index -of csv=p=0 "$work/video.mp4"
+          )"
+          test -z "$audio_streams"
 
-          git fetch --no-tags origin main:refs/remotes/origin/main
-          git switch -C agent/mobile-video-smooth-release refs/remotes/origin/main
+          ffmpeg -hide_banner -v error -xerror -err_detect explode \
+            -i "$work/video.mp4" -map 0:v:0 -f null -
+          ffmpeg -hide_banner -v error -i "$work/video.mp4" \
+            -vf "select='between(n,12,35)'" -vsync 0 \
+            -f framemd5 "$work/framemd5.txt"
+          unique_frames="$(
+            awk '!/^#/ && NF >= 6 {print $6}' "$work/framemd5.txt" \
+              | sort -u | wc -l | tr -d '[:space:]'
+          )"
+          test "$unique_frames" -ge 20
+          echo "Production smooth video verified: ${live_bytes} bytes, sha256=${live_sha}, unique decoded frames in one second=${unique_frames}."
 
-          npm ci --ignore-scripts
-          npm run apply:prompt-policy
-
-          cp /tmp/generate-mobile-video-smooth.sh scripts/generate-mobile-video-smooth.sh
-          cp /tmp/prepare-mobile-video-smooth-release.py scripts/prepare-mobile-video-smooth-release.py
-          chmod +x scripts/generate-mobile-video-smooth.sh
-          chmod +x scripts/prepare-mobile-video-smooth-release.py
-
-          python /tmp/prepare-mobile-video-smooth-release.py \
-            "$work/mobile-forest-stream-video-v12-720.mp4" \
-            "$work/mobile-forest-stream-v12-720.webp"
-
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'Replace the stuttering mobile background with a smooth baseline video'
-
-          npm test
-          npm run check
-          npm run verify:clean
-          git diff --exit-code
-
-          git push --force origin HEAD:agent/mobile-video-smooth-release
-
-      - name: Upload generated evidence and release logs
-        if: always()
+      - name: Upload production evidence
         uses: actions/upload-artifact@v4
         with:
-          name: smooth-mobile-video-release-evidence
+          name: smooth-mobile-video-production-evidence
           path: |
-            /tmp/stabilize-mobile-video-smooth/mobile-forest-stream-video-v12-720.mp4
-            /tmp/stabilize-mobile-video-smooth/mobile-forest-stream-v12-720.webp
-            /tmp/stabilize-mobile-video-smooth/frame-early.png
-            /tmp/stabilize-mobile-video-smooth/frame-late.png
-            /tmp/stabilize-mobile-video-smooth/probe.json
-            /tmp/stabilize-mobile-video-smooth/framemd5.txt
-          if-no-files-found: warn
-          retention-days: 7
+            /tmp/stabilize-production-video-v12/home.html
+            /tmp/stabilize-production-video-v12/mobile-quality.js
+            /tmp/stabilize-production-video-v12/video.headers
+            /tmp/stabilize-production-video-v12/framemd5.txt
+          if-no-files-found: error
+          retention-days: 3
