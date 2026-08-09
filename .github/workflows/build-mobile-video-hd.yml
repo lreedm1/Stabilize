@@ -103,6 +103,14 @@ jobs:
                   "    startCadenceMonitor();\n"
                   "  }\n",
               ),
+              (
+                  "  video.src = SMOOTH_VIDEO_ASSET;\n  setVideoSource(\n",
+                  "  setVideoSource(\n",
+              ),
+              (
+                  '  video.src = VIDEO_ASSET;\n  setVideoSource(video, VIDEO_ASSET, SD_POSTER_ASSET, "legacy-worker-fallback");\n',
+                  '  setVideoSource(video, VIDEO_ASSET, SD_POSTER_ASSET, "legacy-worker-fallback");\n',
+              ),
           ]
           for before, after in replacements:
               count = template.count(before)
@@ -137,6 +145,11 @@ jobs:
           python scripts/prepare-mobile-video-hd-release.py \
             "$work/mobile-forest-stream-video-v13-1080.mp4" \
             "$work/mobile-forest-stream-v13-1080.webp"
+
+          # The builder token can publish product code and assets but cannot
+          # create workflow files. Production verification is run separately
+          # after merge, so keep that temporary workflow out of the release.
+          rm -f .github/workflows/verify-mobile-hd-video.yml
 
           python - <<'PY'
           from pathlib import Path
