@@ -40,7 +40,6 @@ jobs:
       - name: Generate and strictly validate the HD release
         shell: bash
         run: |
-          chmod +x scripts/generate-mobile-video-hd.sh
           bash scripts/generate-mobile-video-hd.sh \
             /tmp/stabilize-mobile-video-hd
 
@@ -53,6 +52,11 @@ jobs:
           cp scripts/prepare-mobile-video-hd-release.py /tmp/prepare-mobile-video-hd-release.py
           cp scripts/mobile-quality-hd-template.js /tmp/mobile-quality-hd-template.js
 
+          # Generation may touch tracked modes or files. Everything needed for
+          # the release is safely copied to /tmp, so restore a clean checkout
+          # before switching from the builder PR to the current main branch.
+          git reset --hard HEAD
+          git clean -fd
           git fetch --no-tags origin main:refs/remotes/origin/main
           git switch -C agent/mobile-video-hd-autoplay-release refs/remotes/origin/main
 
