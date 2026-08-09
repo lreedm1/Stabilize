@@ -145,7 +145,8 @@ await update("package.json", (source) => {
 // finalizer runs. Reapply the canvas implementation here so every build ends
 // with the no-media-autoplay motion path, regardless of pipeline ordering.
 await import("./apply-mobile-motion-canvas-v18.mjs");
+await import("./fix-mobile-motion-canvas-v18.mjs");
 
 console.log(
-  "Finalized decision-grade impact compatibility, mobile-video CSP, canonical regression expectations, and canvas mobile motion.",
+  "Finalized decision-grade impact compatibility, mobile-video CSP, canonical regression expectations, and visibly opaque canvas mobile motion.",
 );
