@@ -55,6 +55,29 @@ jobs:
           set -euo pipefail
           python scripts/prepare-mobile-motion-hq-release.py \
             /tmp/stabilize-mobile-motion-v17-hq/mobile-forest-stream-motion-v17-hq-1440.webp
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("test/shared-site-theme.test.mjs")
+          source = path.read_text()
+          replacements = (
+              (
+                  "/scenes/mobile-forest-stream-motion-v16-1440.webp",
+                  "/scenes/mobile-forest-stream-motion-v17-hq-1440.webp",
+              ),
+              (
+                  "mobile-forest-stream-motion-v16-1440",
+                  "mobile-forest-stream-motion-v17-hq-1440",
+              ),
+              (
+                  "20260809-mobile-motion-v16-no-tap-1",
+                  "20260809-mobile-motion-v17-hq-no-tap-1",
+              ),
+          )
+          for old, new in replacements:
+              source = source.replace(old, new)
+          path.write_text(source)
+          PY
           npm ci --ignore-scripts
           npm run apply:prompt-policy
 
