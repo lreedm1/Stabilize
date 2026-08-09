@@ -114,11 +114,16 @@ jobs:
 
           previous_tree=""
           stable="false"
-          for attempt in 1 2 3; do
+          for attempt in 1 2 3 4; do
             npm run apply:prompt-policy
             git add -A
             current_tree="$(git write-tree)"
             git reset --quiet
+            echo "Canonical tree after pass $attempt: $current_tree"
+            if [ -n "$previous_tree" ] && [ "$current_tree" != "$previous_tree" ]; then
+              echo "Files changed between passes $((attempt - 1)) and $attempt:"
+              git diff --name-status "$previous_tree" "$current_tree" || true
+            fi
             if [ "$current_tree" = "$previous_tree" ]; then
               stable="true"
               echo "Canonical output stabilized on pass $attempt."
