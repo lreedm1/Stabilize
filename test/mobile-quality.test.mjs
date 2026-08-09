@@ -148,6 +148,7 @@ test("portrait mobile layers a true-HD MP4 over the matched canvas fallback", as
     2,
   );
   assert.match(pageSource, /id="mobile-hd-background"/);
+  assert.ok(pageSource.includes('<script type="module" src="/mobile-hd-background-v20.js?v=20260809-mobile-hd-background-v20-2"></script>'));
   assert.match(pageSource, /autoplay[\s\S]*muted[\s\S]*loop[\s\S]*playsinline/);
   assert.match(pageSource, /mobile-forest-stream-v20-true-hd-1440\.mp4/);
   assert.match(pageSource, /mobile-hd-background-v20\.js\?v=20260809-mobile-hd-background-v20-2/);
