@@ -5,7 +5,7 @@ const CLIENT_PATH =
 const CLASSIC_TAG = `    <script src="${CLIENT_PATH}" defer></script>`;
 const MODULE_TAG = `    <script type="module" src="${CLIENT_PATH}"></script>`;
 const MODULE_ASSERTION =
-  "  assert.match(pageSource, /<script type=\\\"module\\\" src=\\\"\\/mobile-hd-background-v20\\\\.js\\\\?v=20260809-mobile-hd-background-v20-2\\\"><\\/script>/);";
+  `  assert.ok(pageSource.includes('<script type="module" src="${CLIENT_PATH}"></script>'));`;
 
 async function update(path, transform) {
   const before = await readFile(path, "utf8");
