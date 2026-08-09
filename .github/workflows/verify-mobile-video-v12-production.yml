@@ -1,0 +1,154 @@
+name: Verify smooth mobile video v12 in production
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/verify-mobile-video-v12-production.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install video tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y ffmpeg
+          fi
+
+      - name: Download and verify the exact production release
+        shell: bash
+        run: |
+          set -euo pipefail
+          work=/tmp/stabilize-production-video-v12
+          mkdir -p "$work"
+
+          expected_bytes=1314209
+          expected_sha=78b6c1f1928d369e2d2a5b15d3b0de44b0458e1f5a940034080c0d8861e14bc3
+          client_version=20260809-mobile-video-v12-smooth-1
+          video_name=mobile-forest-stream-video-v12-720.mp4
+
+          header_value() {
+            local file="$1"
+            local name="$2"
+            awk -F': ' -v target="$name" '
+              tolower($1) == tolower(target) {
+                gsub("\r", "", $2)
+                print $2
+              }
+            ' "$file" | tail -n 1
+          }
+
+          for attempt in {1..36}; do
+            key="${GITHUB_SHA}-${attempt}"
+            home_status="$(
+              curl --max-time 20 --silent --show-error \
+                --header 'Cache-Control: no-cache' \
+                --output "$work/home.html" \
+                --write-out '%{http_code}' \
+                "https://stabilize.info/?smooth-video-release=${key}" \
+                || true
+            )"
+            script_status="$(
+              curl --max-time 20 --silent --show-error \
+                --header 'Cache-Control: no-cache' \
+                --output "$work/mobile-quality.js" \
+                --write-out '%{http_code}' \
+                "https://stabilize.info/mobile-quality.js?v=${client_version}&release=${key}" \
+                || true
+            )"
+            video_status="$(
+              curl --max-time 90 --silent --show-error \
+                --header 'Cache-Control: no-cache' \
+                --dump-header "$work/video.headers" \
+                --output "$work/video.mp4" \
+                --write-out '%{http_code}' \
+                "https://stabilize.info/scenes/${video_name}?release=${key}" \
+                || true
+            )"
+
+            live_bytes="$(wc -c < "$work/video.mp4" 2>/dev/null | tr -d '[:space:]' || true)"
+            live_bytes="${live_bytes:-0}"
+            live_sha="$(sha256sum "$work/video.mp4" 2>/dev/null | awk '{print $1}' || true)"
+            live_type="$(header_value "$work/video.headers" content-type | tr '[:upper:]' '[:lower:]')"
+            live_cache="$(header_value "$work/video.headers" cache-control | tr '[:upper:]' '[:lower:]')"
+
+            echo "Attempt ${attempt}: home=${home_status:-000} script=${script_status:-000} video=${video_status:-000}; bytes=${live_bytes}/${expected_bytes}; type=${live_type:-missing}; cache=${live_cache:-missing}; sha=${live_sha:0:12}."
+
+            if [[ "$home_status" == 200 \
+              && "$script_status" == 200 \
+              && "$video_status" == 200 \
+              && "$live_bytes" == "$expected_bytes" \
+              && "$live_sha" == "$expected_sha" \
+              && "$live_type" == video/mp4* \
+              && "$live_cache" == *immutable* ]] \
+              && grep -Fq "/mobile-quality.js?v=${client_version}" "$work/home.html" \
+              && grep -Fq 'const SMOOTH_VIDEO_ASSET = "/scenes/mobile-forest-stream-video-v12-720.mp4"' "$work/mobile-quality.js" \
+              && grep -Fq 'video.src = SMOOTH_VIDEO_ASSET' "$work/mobile-quality.js"; then
+              break
+            fi
+
+            if [[ "$attempt" == 36 ]]; then
+              echo '::error::Production never served the exact smooth mobile video release.'
+              exit 1
+            fi
+            sleep 10
+          done
+
+          probe="$(
+            ffprobe -v error -select_streams v:0 \
+              -show_entries stream=codec_name,profile,pix_fmt,width,height,level,r_frame_rate,avg_frame_rate \
+              -of default=nw=1 "$work/video.mp4"
+          )"
+          printf '%s\n' "$probe"
+          grep -Fq 'codec_name=h264' <<<"$probe"
+          grep -Fq 'profile=Constrained Baseline' <<<"$probe"
+          grep -Fq 'pix_fmt=yuv420p' <<<"$probe"
+          grep -Fq 'width=720' <<<"$probe"
+          grep -Fq 'height=1280' <<<"$probe"
+          grep -Fq 'level=31' <<<"$probe"
+          grep -Fq 'r_frame_rate=24/1' <<<"$probe"
+          grep -Fq 'avg_frame_rate=24/1' <<<"$probe"
+
+          audio_streams="$(
+            ffprobe -v error -select_streams a \
+              -show_entries stream=index -of csv=p=0 "$work/video.mp4"
+          )"
+          test -z "$audio_streams"
+
+          ffmpeg -hide_banner -v error -xerror -err_detect explode \
+            -i "$work/video.mp4" -map 0:v:0 -f null -
+          ffmpeg -hide_banner -v error -i "$work/video.mp4" \
+            -vf "select='between(n,12,35)'" -vsync 0 \
+            -f framemd5 "$work/framemd5.txt"
+          unique_frames="$(
+            awk '!/^#/ && NF >= 6 {print $6}' "$work/framemd5.txt" \
+              | sort -u | wc -l | tr -d '[:space:]'
+          )"
+          test "$unique_frames" -ge 20
+          echo "Production smooth video verified: ${live_bytes} bytes, sha256=${live_sha}, unique decoded frames in one second=${unique_frames}."
+
+      - name: Upload production evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: smooth-mobile-video-v12-production-evidence
+          path: |
+            /tmp/stabilize-production-video-v12/home.html
+            /tmp/stabilize-production-video-v12/mobile-quality.js
+            /tmp/stabilize-production-video-v12/video.headers
+            /tmp/stabilize-production-video-v12/framemd5.txt
+          if-no-files-found: error
+          retention-days: 3
