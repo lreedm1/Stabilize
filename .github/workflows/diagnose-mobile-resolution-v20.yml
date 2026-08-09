@@ -6,6 +6,11 @@ on:
       - agent/mobile-resolution-diagnostic-v20
     paths:
       - .github/workflows/diagnose-mobile-resolution-v20.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/diagnose-mobile-resolution-v20.yml
   workflow_dispatch:
 
 permissions:
