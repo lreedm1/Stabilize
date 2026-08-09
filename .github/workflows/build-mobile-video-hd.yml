@@ -65,6 +65,71 @@ jobs:
           chmod +x scripts/generate-mobile-video-hd.sh
           chmod +x scripts/prepare-mobile-video-hd-release.py
 
+          python - <<'PY'
+          from pathlib import Path
+
+          template_path = Path("scripts/mobile-quality-hd-template.js")
+          template = template_path.read_text()
+          replacements = [
+              (
+                  "let cadenceStartedAt = 0;\n",
+                  "let cadenceStartedAt = 0;\nlet cadenceVerifiedAsset = null;\n",
+              ),
+              (
+                  "  activeVideoAsset = asset;\n  activeVideoLabel = label;\n  video.poster = poster;\n",
+                  "  activeVideoAsset = asset;\n"
+                  "  activeVideoLabel = label;\n"
+                  "  cadenceVerifiedAsset = null;\n"
+                  "  delete document.documentElement.dataset.mobileVideoCadence;\n"
+                  "  video.poster = poster;\n",
+              ),
+              (
+                  '  document.documentElement.dataset.mobileVideoCadence = "healthy";\n  stopCadenceMonitor();\n',
+                  '  document.documentElement.dataset.mobileVideoCadence = "healthy";\n'
+                  "  cadenceVerifiedAsset = HD_VIDEO_ASSET;\n"
+                  "  stopCadenceMonitor();\n",
+              ),
+              (
+                  "  if (activeVideoAsset === HD_VIDEO_ASSET) startCadenceMonitor();\n",
+                  "  if (\n"
+                  "    activeVideoAsset === HD_VIDEO_ASSET &&\n"
+                  "    cadenceVerifiedAsset !== HD_VIDEO_ASSET &&\n"
+                  "    cadenceStartedAt === 0\n"
+                  "  ) {\n"
+                  "    startCadenceMonitor();\n"
+                  "  }\n",
+              ),
+          ]
+          for before, after in replacements:
+              count = template.count(before)
+              if count != 1:
+                  raise SystemExit(
+                      f"Expected exactly one HD client template match, found {count}: {before!r}"
+                  )
+              template = template.replace(before, after, 1)
+          template_path.write_text(template)
+
+          prepare_path = Path("scripts/prepare-mobile-video-hd-release.py")
+          prepare = prepare_path.read_text()
+          anchor = 'HEIGHT = 1920\n\nvideo = video_source.read_bytes()\n'
+          replacement = (
+              'HEIGHT = 1920\n'
+              'JS_VIDEO_ASSET = VIDEO_ASSET.replace("/", r"\\/")\n'
+              'JS_POSTER_ASSET = POSTER_ASSET.replace("/", r"\\/")\n\n'
+              'video = video_source.read_bytes()\n'
+          )
+          if prepare.count(anchor) != 1:
+              raise SystemExit("Could not add JavaScript-safe HD asset patterns")
+          prepare = prepare.replace(anchor, replacement, 1)
+          prepare = prepare.replace(
+              "{re.escape(VIDEO_ASSET)}", "{JS_VIDEO_ASSET}"
+          )
+          prepare = prepare.replace(
+              "{re.escape(POSTER_ASSET)}", "{JS_POSTER_ASSET}"
+          )
+          prepare_path.write_text(prepare)
+          PY
+
           python scripts/prepare-mobile-video-hd-release.py \
             "$work/mobile-forest-stream-video-v13-1080.mp4" \
             "$work/mobile-forest-stream-v13-1080.webp"
