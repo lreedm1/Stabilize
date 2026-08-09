@@ -1,0 +1,105 @@
+name: Build canvas mobile motion v18
+
+on:
+  push:
+    branches:
+      - agent/mobile-motion-canvas-v18
+    paths:
+      - scripts/generate-mobile-water-sprite-v18.sh
+      - scripts/install-mobile-water-sprite-v18.py
+      - scripts/apply-mobile-motion-canvas-v18.mjs
+      - public/mobile-motion-canvas.js
+      - package.json
+      - .github/workflows/build-mobile-motion-canvas-v18.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - scripts/generate-mobile-water-sprite-v18.sh
+      - scripts/install-mobile-water-sprite-v18.py
+      - scripts/apply-mobile-motion-canvas-v18.mjs
+      - public/mobile-motion-canvas.js
+      - package.json
+      - .github/workflows/build-mobile-motion-canvas-v18.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install media tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg webp
+
+      - name: Generate and validate the transparent water atlas
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/generate-mobile-water-sprite-v18.sh \
+            /tmp/stabilize-mobile-water-sprite-v18
+
+      - name: Install generated asset and apply the canvas release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/install-mobile-water-sprite-v18.py \
+            /tmp/stabilize-mobile-water-sprite-v18/mobile-forest-stream-water-sprite-v18-540.webp
+          npm ci --ignore-scripts
+          npm run apply:prompt-policy
+
+      - name: Commit generated asset and canonical output
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Use a Retina poster with automatic canvas water motion'
+
+      - name: Run full regression and Worker build checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+      - name: Publish verified branch
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:agent/mobile-motion-canvas-v18
+
+      - name: Upload sprite and decoded-frame evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-motion-canvas-v18-evidence
+          path: |
+            /tmp/stabilize-mobile-water-sprite-v18/mobile-forest-stream-water-sprite-v18-540.webp
+            /tmp/stabilize-mobile-water-sprite-v18/webpmux-info.txt
+            /tmp/stabilize-mobile-water-sprite-v18/frame-*.png
+          if-no-files-found: warn
+          retention-days: 7
