@@ -302,3 +302,35 @@ test("the mobile video response has a strong ETag and exact uncached ranges", as
   assert.equal(head.headers.get("content-length"), String(MOBILE_VIDEO_BYTES));
   assert.equal((await head.arrayBuffer()).byteLength, 0);
 });
+
+// smooth-mobile-video-v12-test-start
+test("portrait mobile prefers a hardware-friendly direct MP4", async () => {
+  const [clientSource, materializerSource, smoothVideo] = await Promise.all([
+    read("public/mobile-quality.js"),
+    read("scripts/materialize-mobile-forest-stream.mjs"),
+    readFile(
+      new URL("../public/scenes/mobile-forest-stream-video-v12-720.mp4", import.meta.url),
+    ),
+  ]);
+
+  assert.match(
+    clientSource,
+    /const SMOOTH_VIDEO_ASSET = "\/scenes\/mobile\-forest\-stream\-video\-v12\-720\.mp4"/,
+  );
+  assert.match(clientSource, /video\.src = SMOOTH_VIDEO_ASSET/);
+  assert.match(
+    clientSource,
+    /const VIDEO_ASSET = "\/media\/mobile-forest-stream-video-v4-1080\.mp4"/,
+  );
+  assert.match(clientSource, /video\.src = VIDEO_ASSET/);
+  assert.match(clientSource, /translate3d\(0, 0, 0\)/);
+  assert.match(clientSource, /video\.preload = "auto"/);
+  assert.match(materializerSource, /smooth-mobile-video-v12-validation-start/);
+
+  assert.equal(smoothVideo.byteLength, 1314209);
+  assert.equal(smoothVideo.subarray(4, 8).toString("ascii"), "ftyp");
+  for (const marker of ["moov", "mdat", "avc1"]) {
+    assert.ok(smoothVideo.includes(Buffer.from(marker, "ascii")));
+  }
+});
+// smooth-mobile-video-v12-test-end
