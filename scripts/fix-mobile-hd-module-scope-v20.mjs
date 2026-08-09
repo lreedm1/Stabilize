@@ -35,7 +35,7 @@ await update("test/mobile-quality.test.mjs", (source) => {
   if (source.includes(MODULE_ASSERTION)) return source;
 
   const anchor =
-    "  assert.match(pageSource, /id=\\\"mobile-hd-background\\\"/);";
+    '  assert.match(pageSource, /id="mobile-hd-background"/);';
   if (!source.includes(anchor)) {
     throw new Error("Could not locate the true-HD page assertion.");
   }
