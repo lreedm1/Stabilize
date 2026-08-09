@@ -1,0 +1,104 @@
+name: Build HD mobile canvas motion v19
+
+on:
+  push:
+    branches:
+      - agent/mobile-motion-canvas-v19-hd
+    paths:
+      - scripts/generate-mobile-water-sprite-v19-hd.sh
+      - scripts/install-mobile-water-sprite-v19-hd.py
+      - scripts/upgrade-mobile-motion-resolution-v19-hd.mjs
+      - .github/workflows/build-mobile-motion-canvas-v19-hd.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out the HD mobile-motion branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/mobile-motion-canvas-v19-hd
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install media tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg webp
+
+      - name: Install dependencies without historical generators
+        shell: bash
+        run: npm ci --ignore-scripts
+
+      - name: Upgrade the canonical canvas implementation
+        shell: bash
+        run: node scripts/upgrade-mobile-motion-resolution-v19-hd.mjs
+
+      - name: Generate the HD cropped water atlas
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/generate-mobile-water-sprite-v19-hd.sh \
+            /tmp/stabilize-mobile-water-sprite-v19-hd
+
+      - name: Install the generated atlas and converge canonical output
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/install-mobile-water-sprite-v19-hd.py \
+            /tmp/stabilize-mobile-water-sprite-v19-hd/mobile-forest-stream-water-sprite-v19-hd-1080.webp
+          npm run apply:prompt-policy
+
+      - name: Commit canonical HD output
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Canonical HD output was already committed."
+          else
+            git commit -m 'Raise mobile water motion to a cropped HD source'
+          fi
+
+      - name: Run complete regression and Worker build gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+      - name: Publish the verified HD branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:agent/mobile-motion-canvas-v19-hd
+
+      - name: Upload HD sprite evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-motion-canvas-v19-hd-evidence
+          path: |
+            /tmp/stabilize-mobile-water-sprite-v19-hd/mobile-forest-stream-water-sprite-v19-hd-1080.webp
+            /tmp/stabilize-mobile-water-sprite-v19-hd/webpmux-info.txt
+            /tmp/stabilize-mobile-water-sprite-v19-hd/frame-*.png
+          if-no-files-found: warn
+          retention-days: 7
