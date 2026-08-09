@@ -313,3 +313,38 @@ console.log(
   `Validated ${retinaVideoPath}: 2160x3840, ${retinaVideo.byteLength} bytes, sha256=${retinaVideoSha256}`,
 );
 // retina-mobile-video-v14-validation-end
+
+// no-tap-mobile-motion-v16-validation-start
+const noTapMotionPath = "public/scenes/mobile-forest-stream-motion-v16-1440.webp";
+const noTapMotionExpectedBytes = 10_592_086;
+const noTapMotionExpectedSha256 = "1d80ffedaa66e995f0a5c940d95538a2b3eec9889ec0c8b1e8d94c5cc21062fa";
+
+const noTapMotion = await readFile(noTapMotionPath);
+if (noTapMotion.byteLength !== noTapMotionExpectedBytes) {
+  throw new Error(
+    `Unexpected no-tap mobile motion size: ${noTapMotion.byteLength}; expected ${noTapMotionExpectedBytes}`,
+  );
+}
+const noTapMotionSha256 = createHash("sha256")
+  .update(noTapMotion)
+  .digest("hex");
+if (noTapMotionSha256 !== noTapMotionExpectedSha256) {
+  throw new Error(`No-tap mobile motion checksum mismatch: ${noTapMotionSha256}`);
+}
+const noTapMotionInfo = webpInfo(noTapMotion);
+if (
+  noTapMotionInfo.width !== 1440 ||
+  noTapMotionInfo.height !== 2560 ||
+  !noTapMotionInfo.animated
+) {
+  throw new Error(
+    `Unexpected no-tap mobile motion: ${noTapMotionInfo.width}x${noTapMotionInfo.height}, animated=${noTapMotionInfo.animated}`,
+  );
+}
+if (!noTapMotion.includes(Buffer.from("ANMF", "ascii"))) {
+  throw new Error("No-tap mobile motion does not contain animation frames");
+}
+console.log(
+  `Validated ${noTapMotionPath}: 1440x2560, ${noTapMotion.byteLength} bytes, sha256=${noTapMotionSha256}`,
+);
+// no-tap-mobile-motion-v16-validation-end

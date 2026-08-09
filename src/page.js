@@ -139,9 +139,9 @@ export function renderPage(options = {}) {
     <link
       rel="preload"
       as="image"
-      href="/scenes/mobile-forest-stream-v14-retina-2160.webp"
+      href="/scenes/mobile-forest-stream-motion-v16-1440.webp"
       imagesrcset="
-        /scenes/mobile-forest-stream-v14-retina-2160.webp 2160w
+        /scenes/mobile-forest-stream-motion-v16-1440.webp 1440w
       "
       imagesizes="100vw"
       media="(max-width: 980px) and (orientation: portrait)"
@@ -153,7 +153,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
     <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
-    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260809-mobile-video-v15-visible-autoplay-1" />
+    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260809-mobile-motion-v16-no-tap-1" />
   </head>
   <body>
     <canvas
@@ -171,7 +171,7 @@ export function renderPage(options = {}) {
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="\n          /scenes/mobile-forest-stream-v14-retina-2160.webp 2160w\n        "
+        srcset="\n          /scenes/mobile-forest-stream-motion-v16-1440.webp 1440w\n        "
       />
       <img
         id="photo-backdrop-image"
@@ -193,26 +193,6 @@ export function renderPage(options = {}) {
       class="terrain-background photo-background"
       aria-hidden="true"
     ></canvas>
-    <!-- retina-mobile-video-v15-start -->
-    <video
-      id="mobile-background-video"
-      class="mobile-background-video"
-      src="/scenes/mobile-forest-stream-video-v14-retina-2160.mp4"
-      autoplay
-      muted
-      loop
-      playsinline
-      webkit-playsinline
-      preload="auto"
-      poster="/scenes/mobile-forest-stream-v14-retina-2160.webp"
-      aria-hidden="true"
-      tabindex="-1"
-      disablepictureinpicture
-      disableremoteplayback
-      x-webkit-airplay="deny"
-    ></video>
-    <script src="/mobile-quality.js?v=20260809-mobile-video-v15-visible-autoplay-1"></script>
-    <!-- retina-mobile-video-v15-end -->
     <div class="page-shell">
       <header class="site-header">
         <nav class="header-navigation" aria-label="Primary navigation">
