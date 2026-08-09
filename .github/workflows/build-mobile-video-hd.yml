@@ -146,10 +146,9 @@ jobs:
             "$work/mobile-forest-stream-video-v13-1080.mp4" \
             "$work/mobile-forest-stream-v13-1080.webp"
 
-          # The builder token can publish product code and assets but cannot
-          # create workflow files. Production verification is run separately
-          # after merge, so keep that temporary workflow out of the release.
-          rm -f .github/workflows/verify-mobile-hd-video.yml
+          # Keep temporary verification workflow code and an untracked local
+          # runbook with a credential-shaped example out of the product release.
+          rm -f .github/workflows/verify-mobile-hd-video.yml docs/runbook.md
 
           python - <<'PY'
           from pathlib import Path
