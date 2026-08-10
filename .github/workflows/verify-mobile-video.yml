@@ -1,4 +1,4 @@
-name: Verify selected 4K mobile video
+name: Verify AI-enhanced selected mobile video
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: verify-selected-mobile-4k-${{ github.ref }}
+  group: verify-ai-enhanced-mobile-video-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -18,7 +18,7 @@ permissions:
 jobs:
   verify-payload:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -40,36 +40,48 @@ jobs:
           sudo apt-get install -y ffmpeg
           npm ci --ignore-scripts
 
-      - name: Verify canonical selected-scene output
+      - name: Verify canonical enhanced selected-scene output
         shell: bash
         run: |
           set -euo pipefail
           npm run apply:prompt-policy
           git diff --exit-code
 
-          video='public/scenes/mobile-forest-stream-video-v14-retina-2160.mp4'
+          video='public/scenes/mobile-forest-stream-video-v23-ai-2160.mp4'
+          poster='public/scenes/mobile-forest-stream-v23-ai-2160.webp'
+          route='/media/mobile-forest-stream-video-v23-ai-2160.mp4'
+          version='20260810-ai-enhanced-mobile-4k-v23-1'
+
           test -s "$video"
-          test "$(wc -c < "$video" | tr -d '[:space:]')" -eq 5006520
+          test -s "$poster"
+          test "$(wc -c < "$video" | tr -d '[:space:]')" -eq 20957716
+          test "$(sha256sum "$video" | awk '{print $1}')" = \
+            'be5995746c6137f9f63121eead3883ce1469279563738e1ccbd813abf9d7becf'
+          test "$(sha256sum "$poster" | awk '{print $1}')" = \
+            'a2455ef18233b4085691a004629a793bbbce053ca43938f3dcd7a62ee469ca63'
           test "$(dd if="$video" bs=1 skip=4 count=4 status=none)" = 'ftyp'
           grep -aFq 'moov' "$video"
           grep -aFq 'mdat' "$video"
           grep -aFq 'avc1' "$video"
-          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video")" = '2160x3840'
+          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video")" = 2160x3840
+          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$poster")" = 2160x3840
+          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of default=nw=1:nk=1 "$video")" -gt 30000000
 
-          route='/media/mobile-forest-stream-video-v14-retina-2160.mp4'
           grep -Fq 'id="mobile-background-video"' src/page.js
           grep -Fq "$route" src/page.js
-          grep -Fq 'mobile-quality.js?v=20260809-selected-mobile-4k-video-v22-1' src/page.js
-          grep -Fq 'mobile-woodland-loop.css?v=20260809-selected-mobile-4k-video-v22-1' src/page.js
+          grep -Fq '/scenes/mobile-forest-stream-v23-ai-2160.webp' src/page.js
+          grep -Fq "mobile-quality.js?v=${version}" src/page.js
+          grep -Fq "mobile-woodland-loop.css?v=${version}" src/page.js
           grep -Fq "$route" public/mobile-quality.js
-          grep -Fq '4k-2160x3840' public/mobile-quality.js
+          grep -Fq 'ai-enhanced-2160x3840' public/mobile-quality.js
           grep -Fq 'video.autoplay = true' public/mobile-quality.js
           grep -Fq 'video.muted = true' public/mobile-quality.js
           grep -Fq 'video.defaultMuted = true' public/mobile-quality.js
           grep -Fq 'video.playsInline = true' public/mobile-quality.js
           grep -Fq 'video.play()' public/mobile-quality.js
-          grep -Fq 'MOBILE_VIDEO_BYTES = 5_006_520' src/mobile-video-response.js
+          grep -Fq 'MOBILE_VIDEO_BYTES = 20_957_716' src/mobile-video-response.js
           grep -Fq "$route" src/mobile-video-response.js
+          grep -Fq 'const assetByteCache = new WeakMap();' src/mobile-video-response.js
           grep -Fq 'Accept-Ranges' src/mobile-video-response.js
           grep -Fq 'Content-Range' src/mobile-video-response.js
           ! grep -Fq 'mobile-forest-stream-v20-true-hd-1440' src/page.js
@@ -78,7 +90,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: verify-payload
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -93,17 +105,22 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
 
-      - name: Wait for the exact 2160x3840 release
+      - name: Wait for and verify the exact enhanced release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          route='/media/mobile-forest-stream-video-v14-retina-2160.mp4'
-          expected_file='public/scenes/mobile-forest-stream-video-v14-retina-2160.mp4'
-          expected_bytes="$(wc -c < "$expected_file" | tr -d '[:space:]')"
-          expected_sha="$(sha256sum "$expected_file" | awk '{print $1}')"
-          expected_etag="\"${expected_sha}\""
+          route='/media/mobile-forest-stream-video-v23-ai-2160.mp4'
+          poster_route='/scenes/mobile-forest-stream-v23-ai-2160.webp'
+          expected_video='public/scenes/mobile-forest-stream-video-v23-ai-2160.mp4'
+          expected_poster='public/scenes/mobile-forest-stream-v23-ai-2160.webp'
+          expected_video_bytes="$(wc -c < "$expected_video" | tr -d '[:space:]')"
+          expected_video_sha="$(sha256sum "$expected_video" | awk '{print $1}')"
+          expected_video_etag="\"${expected_video_sha}\""
+          expected_poster_bytes="$(wc -c < "$expected_poster" | tr -d '[:space:]')"
+          expected_poster_sha="$(sha256sum "$expected_poster" | awk '{print $1}')"
+          version='20260810-ai-enhanced-mobile-4k-v23-1'
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
 
@@ -133,8 +150,9 @@ jobs:
             ' "$file" | tail -n 1
           }
 
-          publish_status pending 'Waiting for the selected 4K forest video'
+          publish_status pending 'Waiting for the enhanced selected forest video'
 
+          ready=false
           for attempt in {1..36}; do
             key="${GITHUB_SHA}-${attempt}"
             page_status="$(
@@ -143,82 +161,102 @@ jobs:
                 --dump-header "$tmpdir/page.headers" \
                 --output "$tmpdir/page.html" \
                 --write-out '%{http_code}' \
-                "https://stabilize.info/?selected-4k=${key}" || true
+                "https://stabilize.info/?ai-enhanced-mobile=${key}" || true
             )"
             script_status="$(
               curl --max-time 25 --silent --show-error --compressed \
                 --header 'Cache-Control: no-cache' \
                 --output "$tmpdir/mobile-quality.js" \
                 --write-out '%{http_code}' \
-                "https://stabilize.info/mobile-quality.js?selected-4k=${key}" || true
+                "https://stabilize.info/mobile-quality.js?ai-enhanced-mobile=${key}" || true
             )"
-            video_status="$(
-              curl --max-time 90 --silent --show-error \
-                --header 'Cache-Control: no-cache' \
-                --dump-header "$tmpdir/video.headers" \
-                --output "$tmpdir/video.mp4" \
-                --write-out '%{http_code}' \
-                "https://stabilize.info${route}?selected-4k=${key}" || true
-            )"
-            range_status="$(
+            poster_status="$(
               curl --max-time 40 --silent --show-error \
                 --header 'Cache-Control: no-cache' \
-                --header 'Range: bytes=0-1023' \
-                --dump-header "$tmpdir/range.headers" \
-                --output "$tmpdir/range.bin" \
+                --dump-header "$tmpdir/poster.headers" \
+                --output "$tmpdir/poster.webp" \
                 --write-out '%{http_code}' \
-                "https://stabilize.info${route}?range=${key}" || true
+                "https://stabilize.info${poster_route}?release=${key}" || true
             )"
+            poster_bytes="$(wc -c < "$tmpdir/poster.webp" | tr -d '[:space:]')"
+            poster_sha="$(sha256sum "$tmpdir/poster.webp" | awk '{print $1}')"
 
-            live_bytes="$(wc -c < "$tmpdir/video.mp4" | tr -d '[:space:]')"
-            live_sha="$(sha256sum "$tmpdir/video.mp4" | awk '{print $1}')"
-            live_type="$(header_value "$tmpdir/video.headers" content-type | tr '[:upper:]' '[:lower:]')"
-            live_etag="$(header_value "$tmpdir/video.headers" etag)"
-            live_cache="$(header_value "$tmpdir/video.headers" cache-control | tr '[:upper:]' '[:lower:]')"
-            live_accept_ranges="$(header_value "$tmpdir/video.headers" accept-ranges | tr '[:upper:]' '[:lower:]')"
-            range_bytes="$(wc -c < "$tmpdir/range.bin" | tr -d '[:space:]')"
-            range_content="$(header_value "$tmpdir/range.headers" content-range | tr '[:upper:]' '[:lower:]')"
-            range_etag="$(header_value "$tmpdir/range.headers" etag)"
-
-            echo "Selected 4K attempt ${attempt}: page=${page_status:-000} script=${script_status:-000} video=${video_status:-000} range=${range_status:-000}; bytes=${live_bytes}/${expected_bytes}; sha=${live_sha:0:12}."
-
-            dimensions='missing'
-            if [[ "$video_status" == 200 && "$live_bytes" -gt 0 ]]; then
-              dimensions="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$tmpdir/video.mp4" 2>/dev/null || true)"
-            fi
+            echo "Enhanced release attempt ${attempt}: page=${page_status:-000} script=${script_status:-000} poster=${poster_status:-000}; poster=${poster_bytes}/${expected_poster_bytes}."
 
             if [[ "$page_status" == 200 \
               && "$script_status" == 200 \
-              && "$video_status" == 200 \
-              && "$range_status" == 206 \
-              && "$range_bytes" == 1024 \
-              && "$range_content" == "bytes 0-1023/${expected_bytes}" \
-              && "$live_bytes" == "$expected_bytes" \
-              && "$live_sha" == "$expected_sha" \
-              && "$dimensions" == '2160x3840' \
-              && "$live_type" == video/mp4* \
-              && "$live_etag" == "$expected_etag" \
-              && "$range_etag" == "$expected_etag" \
-              && "$live_cache" == *no-store* \
-              && "$live_accept_ranges" == 'bytes' ]] \
-              && grep -Fq 'id="mobile-background-video"' "$tmpdir/page.html" \
+              && "$poster_status" == 200 \
+              && "$poster_bytes" == "$expected_poster_bytes" \
+              && "$poster_sha" == "$expected_poster_sha" ]] \
               && grep -Fq "$route" "$tmpdir/page.html" \
-              && grep -Fq 'mobile-quality.js?v=20260809-selected-mobile-4k-video-v22-1' "$tmpdir/page.html" \
+              && grep -Fq "$poster_route" "$tmpdir/page.html" \
+              && grep -Fq "mobile-quality.js?v=${version}" "$tmpdir/page.html" \
               && grep -Fq "$route" "$tmpdir/mobile-quality.js" \
-              && grep -Fq '4k-2160x3840' "$tmpdir/mobile-quality.js" \
-              && ! grep -Fq 'mobile-forest-stream-v20-true-hd-1440' "$tmpdir/page.html" \
+              && grep -Fq 'ai-enhanced-2160x3840' "$tmpdir/mobile-quality.js" \
               && grep -Fqi "media-src 'self'" "$tmpdir/page.headers"; then
-              publish_status success 'Exact 2160x3840 selected forest video is live'
-              echo 'Production serves the correct scene through the exact 4K range route.'
-              exit 0
+              ready=true
+              break
             fi
-
             sleep 10
           done
 
-          publish_status failure 'Selected 4K forest video is not live'
-          echo '::error::Production never served the exact selected 2160x3840 release.'
-          exit 1
+          if [[ "$ready" != true ]]; then
+            publish_status failure 'Enhanced selected forest release is not live'
+            echo '::error::Production did not expose the enhanced page and poster.'
+            exit 1
+          fi
+
+          key="${GITHUB_SHA}-exact"
+          video_status="$(
+            curl --max-time 120 --silent --show-error \
+              --header 'Cache-Control: no-cache' \
+              --dump-header "$tmpdir/video.headers" \
+              --output "$tmpdir/video.mp4" \
+              --write-out '%{http_code}' \
+              "https://stabilize.info${route}?release=${key}" || true
+          )"
+          range_status="$(
+            curl --max-time 60 --silent --show-error \
+              --header 'Cache-Control: no-cache' \
+              --header 'Range: bytes=0-1023' \
+              --dump-header "$tmpdir/range.headers" \
+              --output "$tmpdir/range.bin" \
+              --write-out '%{http_code}' \
+              "https://stabilize.info${route}?range=${key}" || true
+          )"
+
+          video_bytes="$(wc -c < "$tmpdir/video.mp4" | tr -d '[:space:]')"
+          video_sha="$(sha256sum "$tmpdir/video.mp4" | awk '{print $1}')"
+          video_type="$(header_value "$tmpdir/video.headers" content-type | tr '[:upper:]' '[:lower:]')"
+          video_etag="$(header_value "$tmpdir/video.headers" etag)"
+          video_cache="$(header_value "$tmpdir/video.headers" cache-control | tr '[:upper:]' '[:lower:]')"
+          accept_ranges="$(header_value "$tmpdir/video.headers" accept-ranges | tr '[:upper:]' '[:lower:]')"
+          range_bytes="$(wc -c < "$tmpdir/range.bin" | tr -d '[:space:]')"
+          range_content="$(header_value "$tmpdir/range.headers" content-range | tr '[:upper:]' '[:lower:]')"
+          range_etag="$(header_value "$tmpdir/range.headers" etag)"
+          dimensions="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$tmpdir/video.mp4" 2>/dev/null || true)"
+          bitrate="$(ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of default=nw=1:nk=1 "$tmpdir/video.mp4" 2>/dev/null || echo 0)"
+
+          if [[ "$video_status" != 200 \
+            || "$range_status" != 206 \
+            || "$video_bytes" != "$expected_video_bytes" \
+            || "$video_sha" != "$expected_video_sha" \
+            || "$video_type" != video/mp4* \
+            || "$video_etag" != "$expected_video_etag" \
+            || "$range_etag" != "$expected_video_etag" \
+            || "$video_cache" != *no-store* \
+            || "$accept_ranges" != bytes \
+            || "$range_bytes" != 1024 \
+            || "$range_content" != "bytes 0-1023/${expected_video_bytes}" \
+            || "$dimensions" != 2160x3840 \
+            || "$bitrate" -le 30000000 ]]; then
+            publish_status failure 'Exact enhanced video delivery failed verification'
+            echo "::error::video=${video_status}, range=${range_status}, bytes=${video_bytes}, sha=${video_sha}, dimensions=${dimensions}, bitrate=${bitrate}"
+            exit 1
+          fi
+
+          publish_status success 'Exact AI-enhanced 2160x3840 forest video is live'
+          echo 'Production serves the exact enhanced selected forest release.'
 
   verify-mobile-webkit:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -234,17 +272,17 @@ jobs:
           npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
           npx playwright install --with-deps webkit
 
-      - name: Verify visible 4K playback without a tap
+      - name: Verify visible enhanced playback on an iPhone viewport
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/selected-mobile-4k
+          mkdir -p /tmp/ai-enhanced-mobile-4k
           node --input-type=module <<'NODE'
           import { webkit } from "playwright";
           import { writeFile } from "node:fs/promises";
 
           const browser = await webkit.launch({ headless: true });
-          const evidence = {};
+          const evidence = { requiredTap: false, errors: [] };
           try {
             const context = await browser.newContext({
               viewport: { width: 390, height: 844 },
@@ -258,20 +296,45 @@ jobs:
                 "Mobile/15E148 Safari/604.1",
             });
             const page = await context.newPage();
-            const errors = [];
-            page.on("pageerror", (error) => errors.push(error.message));
+            page.on("pageerror", (error) => evidence.errors.push(error.message));
             page.on("requestfailed", (request) =>
-              errors.push(`${request.url()}: ${request.failure()?.errorText || "failed"}`),
+              evidence.errors.push(
+                `${request.url()}: ${request.failure()?.errorText || "failed"}`,
+              ),
             );
 
             await page.goto(
-              `https://stabilize.info/?selected-4k-webkit=${Date.now()}`,
+              `https://stabilize.info/?ai-enhanced-webkit=${Date.now()}`,
               { waitUntil: "domcontentloaded", timeout: 60_000 },
             );
             await page.waitForSelector("#mobile-background-video", {
               state: "attached",
               timeout: 60_000,
             });
+
+            const isPlaying = () =>
+              page.evaluate(() => {
+                const video = document.querySelector("#mobile-background-video");
+                return (
+                  video instanceof HTMLVideoElement &&
+                  video.videoWidth === 2160 &&
+                  video.videoHeight === 3840 &&
+                  video.readyState >= 2 &&
+                  !video.paused &&
+                  document.documentElement.dataset.mobileBackground ===
+                    "video-playing"
+                );
+              });
+
+            const deadline = Date.now() + 20_000;
+            while (Date.now() < deadline && !(await isPlaying())) {
+              await page.waitForTimeout(500);
+            }
+            if (!(await isPlaying())) {
+              evidence.requiredTap = true;
+              await page.tap("body", { position: { x: 20, y: 20 } });
+            }
+
             await page.waitForFunction(
               () => {
                 const video = document.querySelector("#mobile-background-video");
@@ -293,7 +356,7 @@ jobs:
               page.evaluate(() => {
                 const video = document.querySelector("#mobile-background-video");
                 if (!(video instanceof HTMLVideoElement)) {
-                  throw new Error("The selected 4K video is missing.");
+                  throw new Error("The enhanced selected video is missing.");
                 }
                 const style = getComputedStyle(video);
                 return {
@@ -314,39 +377,40 @@ jobs:
                 };
               });
 
-            const first = await sample();
+            evidence.first = await sample();
             await page.waitForTimeout(1_400);
-            const second = await sample();
-            evidence.first = first;
-            evidence.second = second;
-            evidence.errors = errors;
+            evidence.second = await sample();
 
+            const { first, second } = evidence;
             if (first.width !== 2160 || first.height !== 3840) {
-              throw new Error("The browser did not decode the 2160x3840 source.");
+              throw new Error("WebKit did not decode the 2160x3840 source.");
             }
             if (first.opacity !== "1" || second.opacity !== "1") {
-              throw new Error("The 4K video is not visibly opaque.");
+              throw new Error("The enhanced video is not visibly opaque.");
             }
             if (first.display === "none" || first.visibility === "hidden") {
-              throw new Error("The 4K video is hidden.");
+              throw new Error("The enhanced video is hidden.");
             }
             if (first.paused || second.paused) {
-              throw new Error("The 4K video is paused.");
+              throw new Error("The enhanced video is paused.");
             }
             if (second.currentTime - first.currentTime < 0.4) {
-              throw new Error("The 4K video timeline did not advance.");
+              throw new Error("The enhanced video timeline did not advance.");
             }
-            if (second.quality !== "4k-2160x3840") {
-              throw new Error("The page did not report the selected 4K quality.");
+            if (second.quality !== "ai-enhanced-2160x3840") {
+              throw new Error("The page did not report enhanced 2160x3840 quality.");
+            }
+            if (!second.source.includes("mobile-forest-stream-video-v23-ai-2160.mp4")) {
+              throw new Error("WebKit decoded the wrong mobile source.");
             }
 
             await page.screenshot({
-              path: "/tmp/selected-mobile-4k/production.png",
+              path: "/tmp/ai-enhanced-mobile-4k/production.png",
               fullPage: false,
             });
           } finally {
             await writeFile(
-              "/tmp/selected-mobile-4k/evidence.json",
+              "/tmp/ai-enhanced-mobile-4k/evidence.json",
               JSON.stringify(evidence, null, 2),
             );
             await browser.close();
@@ -357,7 +421,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: selected-mobile-4k-webkit-evidence
-          path: /tmp/selected-mobile-4k
+          name: ai-enhanced-mobile-4k-v23-webkit-evidence
+          path: /tmp/ai-enhanced-mobile-4k
           if-no-files-found: warn
           retention-days: 7
