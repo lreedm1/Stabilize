@@ -134,6 +134,38 @@ test("restored tabs recover from interrupted blank thinking views", async () => 
   assert.match(clientScript, /lastSubmittedText/);
 });
 
+
+// ai-enhanced-mobile-4k-v23-test-start
+test("portrait mobile serves the AI-enhanced selected forest scene", async () => {
+  const [pageSource, clientSource, responderSource, video, poster] =
+    await Promise.all([
+      readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+      readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
+      readFile(new URL("../src/mobile-video-response.js", import.meta.url), "utf8"),
+      readFile(new URL("../public/scenes/mobile-forest-stream-video-v23-ai-2160.mp4", import.meta.url)),
+      readFile(new URL("../public/scenes/mobile-forest-stream-v23-ai-2160.webp", import.meta.url)),
+    ]);
+
+  assert.equal(video.byteLength, 20957716);
+  assert.equal(video.subarray(4, 8).toString("ascii"), "ftyp");
+  for (const marker of ["moov", "mdat", "avc1"]) {
+    assert.ok(video.includes(Buffer.from(marker, "ascii")));
+  }
+  const posterInfo = webpInfo(poster);
+  assert.deepEqual(
+    { width: posterInfo.width, height: posterInfo.height },
+    { width: 2160, height: 3840 },
+  );
+  assert.match(pageSource, /mobile-forest-stream-video-v23-ai-2160\.mp4/);
+  assert.match(pageSource, /mobile-forest-stream-v23-ai-2160\.webp/);
+  assert.match(pageSource, /mobile-quality\.js\?v=20260810-ai-enhanced-mobile-4k-v23-1/);
+  assert.match(clientSource, /ai-enhanced-2160x3840/);
+  assert.match(responderSource, /const assetByteCache = new WeakMap\(\)/);
+  assert.match(responderSource, /MOBILE_VIDEO_BYTES = 20_957_716/);
+  assert.match(responderSource, /be5995746c6137f9f63121eead3883ce1469279563738e1ccbd813abf9d7becf/);
+});
+// ai-enhanced-mobile-4k-v23-test-end
+
 // original-mobile-image-v21-quality-test-start
 test("portrait mobile plays the selected forest-stream scene through the 4K route", async () => {
   const [pageSource, styleSource, videoClient, canvasClient] =
@@ -178,34 +210,3 @@ test("portrait mobile plays the selected forest-stream scene through the 4K rout
   );
 });
 // original-mobile-image-v21-quality-test-end
-
-// ai-enhanced-mobile-4k-v23-test-start
-test("portrait mobile serves the AI-enhanced selected forest scene", async () => {
-  const [pageSource, clientSource, responderSource, video, poster] =
-    await Promise.all([
-      readFile(new URL("../src/page.js", import.meta.url), "utf8"),
-      readFile(new URL("../public/mobile-quality.js", import.meta.url), "utf8"),
-      readFile(new URL("../src/mobile-video-response.js", import.meta.url), "utf8"),
-      readFile(new URL("../public/scenes/mobile-forest-stream-video-v23-ai-2160.mp4", import.meta.url)),
-      readFile(new URL("../public/scenes/mobile-forest-stream-v23-ai-2160.webp", import.meta.url)),
-    ]);
-
-  assert.equal(video.byteLength, 20957716);
-  assert.equal(video.subarray(4, 8).toString("ascii"), "ftyp");
-  for (const marker of ["moov", "mdat", "avc1"]) {
-    assert.ok(video.includes(Buffer.from(marker, "ascii")));
-  }
-  const posterInfo = webpInfo(poster);
-  assert.deepEqual(
-    { width: posterInfo.width, height: posterInfo.height },
-    { width: 2160, height: 3840 },
-  );
-  assert.match(pageSource, /mobile-forest-stream-video-v23-ai-2160\.mp4/);
-  assert.match(pageSource, /mobile-forest-stream-v23-ai-2160\.webp/);
-  assert.match(pageSource, /mobile-quality\.js\?v=20260810-ai-enhanced-mobile-4k-v23-1/);
-  assert.match(clientSource, /ai-enhanced-2160x3840/);
-  assert.match(responderSource, /const assetByteCache = new WeakMap\(\)/);
-  assert.match(responderSource, /MOBILE_VIDEO_BYTES = 20_957_716/);
-  assert.match(responderSource, /be5995746c6137f9f63121eead3883ce1469279563738e1ccbd813abf9d7becf/);
-});
-// ai-enhanced-mobile-4k-v23-test-end
