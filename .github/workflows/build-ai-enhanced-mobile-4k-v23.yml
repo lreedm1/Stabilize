@@ -68,7 +68,7 @@ jobs:
           mkdir -p weights
           curl --fail-with-body --location --retry 4 --retry-delay 2 \
             --output weights/RealESRGAN_x2plus.pth \
-            https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/RealESRGAN_x2plus.pth
+            https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth
 
       - name: Reconstruct the exact selected scene sources
         shell: bash
