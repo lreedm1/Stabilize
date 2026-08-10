@@ -22,7 +22,11 @@ export {
 const CANONICAL_ORIGIN = "https://stabilize.info";
 const CANONICAL_HOST = "stabilize.info";
 const HSTS_VALUE = "max-age=31536000; includeSubDomains";
-const REDIRECT_HOSTS = new Set(["www.stabilize.info"]);
+const REDIRECT_HOSTS = new Set([
+  "www.stabilize.info",
+  "reedlokken.com",
+  "www.reedlokken.com",
+]);
 
 function redirectToCanonical(request) {
   const incoming = new URL(request.url);

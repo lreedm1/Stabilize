@@ -5,15 +5,24 @@ import { readFile } from "node:fs/promises";
 const repositoryFile = (path) =>
   readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("stabilize.info is the only production domain", async () => {
-  const [configText, router, page, sitemap, robots, workflow, staticHeaders] =
-    await Promise.all([
+test("stabilize.info is canonical and reedlokken.com redirects", async () => {
+  const [
+    configText,
+    router,
+    page,
+    sitemap,
+    robots,
+    workflow,
+    redirectWorkflow,
+    staticHeaders,
+  ] = await Promise.all([
     repositoryFile("wrangler.jsonc"),
     repositoryFile("src/domain-router.js"),
     repositoryFile("src/page.js"),
     repositoryFile("public/sitemap.xml"),
     repositoryFile("public/robots.txt"),
     repositoryFile(".github/workflows/deploy-cloudflare.yml"),
+    repositoryFile(".github/workflows/verify-reedlokken-redirect.yml"),
     repositoryFile("public/_headers"),
   ]);
   const config = JSON.parse(configText);
@@ -46,15 +55,25 @@ test("stabilize.info is the only production domain", async () => {
   );
   assert.deepEqual(config.routes, [
     { pattern: "stabilize.info/*", zone_name: "stabilize.info" },
+    { pattern: "reedlokken.com", custom_domain: true },
+    { pattern: "www.reedlokken.com", custom_domain: true },
   ]);
   assert.equal(
-    config.routes.some((route) => route.custom_domain === true),
-    false,
-    "the production domain must be a Worker route so requests are answered at the edge before an origin TLS handshake",
+    config.routes[0].custom_domain,
+    undefined,
+    "the canonical production domain must remain a Worker route",
+  );
+  assert.deepEqual(
+    config.routes
+      .filter((route) => route.custom_domain === true)
+      .map((route) => route.pattern),
+    ["reedlokken.com", "www.reedlokken.com"],
   );
 
   assert.match(router, /const CANONICAL_ORIGIN = "https:\/\/stabilize\.info"/);
   assert.match(router, /const CANONICAL_HOST = "stabilize\.info"/);
+  assert.match(router, /"reedlokken\.com"/);
+  assert.match(router, /"www\.reedlokken\.com"/);
   assert.match(router, /function unknownHostResponse\(\)/);
   assert.match(router, /status: 404/);
   assert.match(router, /status: 308/);
@@ -75,7 +94,9 @@ test("stabilize.info is the only production domain", async () => {
   assert.match(robots, /Sitemap: https:\/\/stabilize\.info\/sitemap\.xml/);
   assert.doesNotMatch(robots, /Disallow: \/\s*$/m);
   assert.match(workflow, /https:\/\/stabilize\.info\/api\/auth/);
-  assert.doesNotMatch(workflow, /Legacy-domain redirect/);
+  assert.match(redirectWorkflow, /Verify reedlokken\.com redirects/);
+  assert.match(redirectWorkflow, /www\.reedlokken\.com/);
+  assert.match(redirectWorkflow, /verification\/reedlokken-redirect/);
 });
 
 test("repository and public descriptions match the current model policy", async () => {
