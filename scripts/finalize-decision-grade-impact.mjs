@@ -152,6 +152,7 @@ await import("./use-selected-mobile-4k-video-v22.mjs");
 await import("./fix-selected-mobile-4k-video-v22-tests-v2.mjs");
 await import("./compat-selected-mobile-4k-v22-history.mjs");
 await import("./use-ai-enhanced-mobile-4k-v23.mjs");
+await import("./fix-ai-enhanced-mobile-theme-v23.mjs");
 
 console.log(
   "Finalized decision-grade impact compatibility, canonical regression expectations, and the AI-enhanced selected forest-stream mobile release.",
