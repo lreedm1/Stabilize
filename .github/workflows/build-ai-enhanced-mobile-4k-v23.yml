@@ -29,19 +29,25 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
       - name: Install media and image dependencies
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg python3-pip git libgl1
-          python -m pip install --upgrade pip
+          sudo apt-get install -y ffmpeg git libgl1
+          python -m pip install --upgrade pip setuptools wheel
           python -m pip install \
-            torch==2.2.2+cpu torchvision==0.17.2+cpu \
+            torch==2.1.2+cpu torchvision==0.16.2+cpu \
             --index-url https://download.pytorch.org/whl/cpu
           python -m pip install \
             numpy==1.26.4 \
-            opencv-python-headless==4.10.0.84 \
+            opencv-python==4.10.0.84 \
             pillow==10.4.0 \
             scikit-image==0.24.0
 
@@ -54,7 +60,11 @@ jobs:
             /tmp/Real-ESRGAN
           cd /tmp/Real-ESRGAN
           python -m pip install -r requirements.txt
-          python setup.py develop
+          python -m pip install -e .
+          python -m pip install --force-reinstall \
+            numpy==1.26.4 \
+            opencv-python==4.10.0.84 \
+            pillow==10.4.0
           mkdir -p weights
           curl --fail-with-body --location --retry 4 --retry-delay 2 \
             --output weights/RealESRGAN_x2plus.pth \
@@ -88,7 +98,7 @@ jobs:
           ffmpeg -hide_banner -v error -xerror -err_detect explode \
             -i "$work/source/selected-motion-512.mp4" -map 0:v:0 -f null -
 
-      - name: AI-upscale the selected still to a real full-frame master
+      - name: AI-upscale the selected still to a full-frame master
         shell: bash
         run: |
           set -euo pipefail
@@ -184,7 +194,7 @@ jobs:
             -map '[out]' \
             -t 5.0 -r 24 -an \
             -c:v libx264 -profile:v high -level:v 5.1 \
-            -preset slower -crf 16 -maxrate 30000k -bufsize 60000k \
+            -preset slow -crf 16 -maxrate 30000k -bufsize 60000k \
             -g 24 -keyint_min 24 -sc_threshold 0 -bf 3 -refs 4 \
             -pix_fmt yuv420p -tag:v avc1 \
             -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
