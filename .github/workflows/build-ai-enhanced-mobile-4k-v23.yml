@@ -6,6 +6,11 @@ on:
       - agent/ai-enhanced-mobile-4k-v23
     paths:
       - .github/workflows/build-ai-enhanced-mobile-4k-v23.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/build-ai-enhanced-mobile-4k-v23.yml
   workflow_dispatch:
 
 permissions:
@@ -232,9 +237,6 @@ jobs:
           display_size = (1170, 2532)
           old_display = cv2.resize(old, display_size, interpolation=cv2.INTER_LANCZOS4)
           new_display = cv2.resize(new, display_size, interpolation=cv2.INTER_LANCZOS4)
-
-          # Measure the forest/path region, excluding the moving creek where
-          # natural water softness would distort the sharpness comparison.
           roi_old = old_display[0:2150, 0:780]
           roi_new = new_display[0:2150, 0:780]
           gray_old = cv2.cvtColor(roi_old, cv2.COLOR_BGR2GRAY)
