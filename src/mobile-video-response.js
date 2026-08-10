@@ -1,10 +1,12 @@
 export const MOBILE_VIDEO_ROUTE =
-  "/media/mobile-forest-stream-video-v14-retina-2160.mp4";
+  "/media/mobile-forest-stream-video-v23-ai-2160.mp4";
 export const MOBILE_VIDEO_ASSET_PATH =
-  "/scenes/mobile-forest-stream-video-v14-retina-2160.mp4";
-export const MOBILE_VIDEO_BYTES = 5_006_520;
+  "/scenes/mobile-forest-stream-video-v23-ai-2160.mp4";
+export const MOBILE_VIDEO_BYTES = 20_957_716;
 export const MOBILE_VIDEO_ETAG =
-  '"16f5b59a82b6ba8a2820a548c4fd0395d59304dec8bf4c6fcfb68b1d423377ff"';
+  '"be5995746c6137f9f63121eead3883ce1469279563738e1ccbd813abf9d7becf"';
+
+const assetByteCache = new WeakMap();
 
 function videoHeaders() {
   return new Headers({
@@ -77,29 +79,39 @@ async function loadVideoBytes(request, env) {
     throw new Error("Static asset binding is unavailable");
   }
 
-  const assetUrl = new URL(request.url);
-  assetUrl.pathname = MOBILE_VIDEO_ASSET_PATH;
-  assetUrl.search = "";
-  assetUrl.hash = "";
+  let promise = assetByteCache.get(env.ASSETS);
+  if (!promise) {
+    const assetUrl = new URL(request.url);
+    assetUrl.pathname = MOBILE_VIDEO_ASSET_PATH;
+    assetUrl.search = "";
+    assetUrl.hash = "";
 
-  const asset = await env.ASSETS.fetch(
-    new Request(assetUrl.toString(), {
-      method: "GET",
-      headers: { Accept: "video/mp4" },
-    }),
-  );
-
-  if (!asset.ok) {
-    throw new Error(`Static mobile video returned ${asset.status}`);
+    promise = env.ASSETS
+      .fetch(
+        new Request(assetUrl.toString(), {
+          method: "GET",
+          headers: { Accept: "video/mp4" },
+        }),
+      )
+      .then(async (asset) => {
+        if (!asset.ok) {
+          throw new Error(`Static mobile video returned ${asset.status}`);
+        }
+        const bytes = new Uint8Array(await asset.arrayBuffer());
+        if (bytes.byteLength !== MOBILE_VIDEO_BYTES) {
+          throw new Error(
+            `Static mobile video has ${bytes.byteLength} bytes; expected ${MOBILE_VIDEO_BYTES}`,
+          );
+        }
+        return bytes;
+      })
+      .catch((error) => {
+        assetByteCache.delete(env.ASSETS);
+        throw error;
+      });
+    assetByteCache.set(env.ASSETS, promise);
   }
-
-  const bytes = new Uint8Array(await asset.arrayBuffer());
-  if (bytes.byteLength !== MOBILE_VIDEO_BYTES) {
-    throw new Error(
-      `Static mobile video has ${bytes.byteLength} bytes; expected ${MOBILE_VIDEO_BYTES}`,
-    );
-  }
-  return bytes;
+  return promise;
 }
 
 export async function serveMobileVideo(request, env) {
@@ -153,7 +165,7 @@ export async function serveMobileVideo(request, env) {
 
     const headers = videoHeaders();
     headers.set("Content-Length", String(size));
-    return new Response(request.method === "HEAD" ? null : bytes, {
+    return new Response(request.method === "HEAD" ? null : bytes.slice(), {
       status: 200,
       headers,
     });

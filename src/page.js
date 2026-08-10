@@ -140,7 +140,7 @@ export function renderPage(options = {}) {
     <link
       rel="preload"
       as="video"
-      href="/media/mobile-forest-stream-video-v14-retina-2160.mp4"
+      href="/media/mobile-forest-stream-video-v23-ai-2160.mp4"
       media="(max-width: 980px) and (orientation: portrait)"
       type="video/mp4"
     />
@@ -149,9 +149,9 @@ export function renderPage(options = {}) {
     <link
       rel="preload"
       as="image"
-      href="/scenes/mobile-forest-stream-v14-retina-2160.webp"
+      href="/scenes/mobile-forest-stream-v23-ai-2160.webp"
       imagesrcset="
-        /scenes/mobile-forest-stream-v14-retina-2160.webp 2160w
+        /scenes/mobile-forest-stream-v23-ai-2160.webp 2160w
       "
       imagesizes="100vw"
       media="(max-width: 980px) and (orientation: portrait)"
@@ -172,7 +172,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
     <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
-    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260809-selected-mobile-4k-video-v22-1" />
+    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260810-ai-enhanced-mobile-4k-v23-1" />
   </head>
   <body>
     <canvas
@@ -190,7 +190,7 @@ export function renderPage(options = {}) {
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="\n          /scenes/mobile-forest-stream-v14-retina-2160.webp 2160w\n        "
+        srcset="\n          /scenes/mobile-forest-stream-v23-ai-2160.webp 2160w\n        "
       />
       <img
         id="photo-backdrop-image"
@@ -223,11 +223,11 @@ export function renderPage(options = {}) {
       loop
       playsinline
       preload="auto"
-      poster="/scenes/mobile-forest-stream-v14-retina-2160.webp"
+      poster="/scenes/mobile-forest-stream-v23-ai-2160.webp"
       aria-hidden="true"
       tabindex="-1"
     >
-      <source src="/media/mobile-forest-stream-video-v14-retina-2160.mp4" type="video/mp4" />
+      <source src="/media/mobile-forest-stream-video-v23-ai-2160.mp4" type="video/mp4" />
     </video>
     <!-- selected-mobile-4k-video-v22-end -->
     <canvas
@@ -342,7 +342,7 @@ export function renderPage(options = {}) {
     <script src="/mobile-motion-canvas.js?v=20260809-mobile-motion-canvas-v19-hd-2" defer></script>
     <!-- mobile-motion-canvas-v18-script-end -->
     <!-- selected-mobile-4k-video-v22-script-start -->
-    <script type="module" src="/mobile-quality.js?v=20260809-selected-mobile-4k-video-v22-1"></script>
+    <script type="module" src="/mobile-quality.js?v=20260810-ai-enhanced-mobile-4k-v23-1"></script>
     <!-- selected-mobile-4k-video-v22-script-end -->
   </body>
 </html>`;

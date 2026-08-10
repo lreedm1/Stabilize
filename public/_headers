@@ -89,3 +89,16 @@
   X-Content-Type-Options: nosniff
 # mobile-motion-canvas-v18-end
 
+# ai-enhanced-mobile-4k-v23-start
+/scenes/mobile-forest-stream-video-v23-ai-2160.mp4
+  Content-Type: video/mp4
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+
+/scenes/mobile-forest-stream-v23-ai-2160.webp
+  Content-Type: image/webp
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+# ai-enhanced-mobile-4k-v23-end
