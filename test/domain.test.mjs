@@ -6,14 +6,23 @@ const repositoryFile = (path) =>
   readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("stabilize.info is canonical and reedlokken.com redirects", async () => {
-  const [configText, router, page, sitemap, robots, workflow, staticHeaders] =
-    await Promise.all([
+  const [
+    configText,
+    router,
+    page,
+    sitemap,
+    robots,
+    workflow,
+    redirectWorkflow,
+    staticHeaders,
+  ] = await Promise.all([
     repositoryFile("wrangler.jsonc"),
     repositoryFile("src/domain-router.js"),
     repositoryFile("src/page.js"),
     repositoryFile("public/sitemap.xml"),
     repositoryFile("public/robots.txt"),
     repositoryFile(".github/workflows/deploy-cloudflare.yml"),
+    repositoryFile(".github/workflows/verify-reedlokken-redirect.yml"),
     repositoryFile("public/_headers"),
   ]);
   const config = JSON.parse(configText);
@@ -85,8 +94,9 @@ test("stabilize.info is canonical and reedlokken.com redirects", async () => {
   assert.match(robots, /Sitemap: https:\/\/stabilize\.info\/sitemap\.xml/);
   assert.doesNotMatch(robots, /Disallow: \/\s*$/m);
   assert.match(workflow, /https:\/\/stabilize\.info\/api\/auth/);
-  assert.match(workflow, /Verify reedlokken\.com redirects/);
-  assert.match(workflow, /www\.reedlokken\.com/);
+  assert.match(redirectWorkflow, /Verify reedlokken\.com redirects/);
+  assert.match(redirectWorkflow, /www\.reedlokken\.com/);
+  assert.match(redirectWorkflow, /verification\/reedlokken-redirect/);
 });
 
 test("repository and public descriptions match the current model policy", async () => {
