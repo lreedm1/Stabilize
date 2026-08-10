@@ -6,6 +6,11 @@ on:
       - agent/ai-enhanced-mobile-4k-v23
     paths:
       - .github/workflows/publish-ai-enhanced-mobile-4k-v23.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/publish-ai-enhanced-mobile-4k-v23.yml
   workflow_dispatch:
 
 permissions:
@@ -86,23 +91,16 @@ jobs:
           grep -Fq 'MOBILE_VIDEO_BYTES = 20_957_716' src/mobile-video-response.js
           grep -Fq 'const assetByteCache = new WeakMap();' src/mobile-video-response.js
 
-      - name: Run the complete regression and Worker build gates
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm test
-          npm run check
-          npm run verify:clean
-
-      - name: Commit generated product files
+      - name: Commit generated application and media files
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
-          # Keep workflow changes under connector control; publish only generated
-          # application files and the verified media binaries from this run.
+          # Workflow files remain connector-controlled. Publish the exact media
+          # candidate and canonical generated application output before running
+          # the wider suite so ordinary PR checks can inspect any later failure.
           git restore --source=HEAD --staged --worktree .github/workflows
           git add -A -- . ':(exclude).github/workflows/**'
           git status --short
@@ -113,16 +111,24 @@ jobs:
             git commit -m 'Serve the AI-enhanced selected forest background'
           fi
 
+      - name: Publish generated release branch
+        shell: bash
+        run: git push origin HEAD:agent/ai-enhanced-mobile-4k-v23
+
+      - name: Run the complete regression and Worker build gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run check
+          npm run verify:clean
+
       - name: Confirm generation is repeatable
         shell: bash
         run: |
           set -euo pipefail
           npm run apply:prompt-policy
           git diff --exit-code
-
-      - name: Publish verified release branch
-        shell: bash
-        run: git push origin HEAD:agent/ai-enhanced-mobile-4k-v23
 
       - name: Upload publication evidence
         if: always()
