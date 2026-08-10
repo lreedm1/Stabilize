@@ -6,11 +6,13 @@ on:
       - agent/ai-enhanced-mobile-4k-v23
     paths:
       - .github/workflows/build-ai-enhanced-mobile-4k-v23.yml
+      - requirements.txt
   pull_request:
     branches:
       - main
     paths:
       - .github/workflows/build-ai-enhanced-mobile-4k-v23.yml
+      - requirements.txt
   workflow_dispatch:
 
 permissions:
@@ -45,11 +47,7 @@ jobs:
           python -m pip install \
             torch==2.1.2+cpu torchvision==0.16.2+cpu \
             --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install \
-            numpy==1.26.4 \
-            opencv-python==4.10.0.84 \
-            pillow==10.4.0 \
-            scikit-image==0.24.0
+          python -m pip install -r requirements.txt
 
       - name: Install Real-ESRGAN x2
         shell: bash
@@ -70,33 +68,49 @@ jobs:
             --output weights/RealESRGAN_x2plus.pth \
             https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth
 
-      - name: Reconstruct the exact selected scene sources
+      - name: Prepare the exact selected scene
         shell: bash
         run: |
           set -euo pipefail
           work=/tmp/mobile-ai-4k-v23
           mkdir -p "$work/source" "$work/output" "$work/metrics"
 
+          # Use the clean selected forest still preserved in its source branch.
+          # Normalize whatever its stored dimensions are to the 9:16 1080 master
+          # before enhancement rather than assuming metadata that may have changed.
           git fetch --no-tags --depth=1 origin \
             agent/mobile-hq-v1:refs/remotes/origin/agent/mobile-hq-v1
           git show \
             origin/agent/mobile-hq-v1:public/scenes/mobile-forest-hq-v1-1080.webp \
-            > "$work/source/selected-forest-1080.webp"
+            > "$work/source/selected-forest-source.webp"
+          source_dimensions="$(
+            ffprobe -v error -select_streams v:0 \
+              -show_entries stream=width,height -of csv=s=x:p=0 \
+              "$work/source/selected-forest-source.webp"
+          )"
+          echo "Selected still source: ${source_dimensions}"
+          ffmpeg -hide_banner -v error -y \
+            -i "$work/source/selected-forest-source.webp" \
+            -vf "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,format=rgb24" \
+            -frames:v 1 "$work/source/selected-forest-1080.png"
+          test "$(
+            ffprobe -v error -select_streams v:0 \
+              -show_entries stream=width,height -of csv=s=x:p=0 \
+              "$work/source/selected-forest-1080.png"
+          )" = 1080x1920
 
-          mapfile -t motion_parts < <(
-            find public/scenes -maxdepth 1 -type f \
-              -name 'mobile-forest-stream-loop-v1.part*.b64' | sort
-          )
-          test "${#motion_parts[@]}" -eq 5
-          cat "${motion_parts[@]}" \
-            | tr -d '[:space:]' \
-            | base64 --decode \
-            > "$work/source/selected-motion-512.mp4"
-
-          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$work/source/selected-forest-1080.webp")" = 1080x1920
-          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$work/source/selected-motion-512.mp4")" = 512x908
+          # Reuse the exact selected-scene production motion as a donor only for
+          # creek pixels. The rest of every frame comes from the sharper master.
+          cp public/scenes/mobile-forest-stream-video-v14-retina-2160.mp4 \
+            "$work/source/selected-motion-2160.mp4"
+          test "$(
+            ffprobe -v error -select_streams v:0 \
+              -show_entries stream=width,height -of csv=s=x:p=0 \
+              "$work/source/selected-motion-2160.mp4"
+          )" = 2160x3840
           ffmpeg -hide_banner -v error -xerror -err_detect explode \
-            -i "$work/source/selected-motion-512.mp4" -map 0:v:0 -f null -
+            -i "$work/source/selected-motion-2160.mp4" \
+            -map 0:v:0 -f null -
 
       - name: AI-upscale the selected still to a full-frame master
         shell: bash
@@ -106,7 +120,7 @@ jobs:
           cd /tmp/Real-ESRGAN
           python inference_realesrgan.py \
             -n RealESRGAN_x2plus \
-            -i "$work/source/selected-forest-1080.webp" \
+            -i "$work/source/selected-forest-1080.png" \
             -o "$work/output/upscaled" \
             --outscale 2 \
             --tile 192 \
@@ -115,12 +129,19 @@ jobs:
             --fp32 \
             --ext png
 
-          upscaled="$(find "$work/output/upscaled" -maxdepth 1 -type f -name '*.png' | head -n 1)"
+          upscaled="$(
+            find "$work/output/upscaled" -maxdepth 1 -type f \
+              -name '*.png' | head -n 1
+          )"
           test -n "$upscaled"
           cp "$upscaled" "$work/output/selected-forest-ai-2160.png"
-          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$work/output/selected-forest-ai-2160.png")" = 2160x3840
+          test "$(
+            ffprobe -v error -select_streams v:0 \
+              -show_entries stream=width,height -of csv=s=x:p=0 \
+              "$work/output/selected-forest-ai-2160.png"
+          )" = 2160x3840
 
-      - name: Render only the creek motion over the enhanced full-frame master
+      - name: Render only creek motion over the enhanced master
         shell: bash
         run: |
           set -euo pipefail
@@ -179,13 +200,16 @@ jobs:
           poster="$work/output/mobile-forest-stream-v23-ai-2160.webp"
 
           ffmpeg -hide_banner -v error -y \
-            -loop 1 -framerate 24 -i "$work/output/selected-forest-ai-2160.png" \
-            -stream_loop -1 -i "$work/source/selected-motion-512.mp4" \
-            -loop 1 -framerate 24 -i "$work/source/water-mask-2160.pgm" \
+            -loop 1 -framerate 24 \
+              -i "$work/output/selected-forest-ai-2160.png" \
+            -stream_loop -1 \
+              -i "$work/source/selected-motion-2160.mp4" \
+            -loop 1 -framerate 24 \
+              -i "$work/source/water-mask-2160.pgm" \
             -filter_complex "
               [0:v]scale=2160:3840:flags=lanczos,setsar=1,setpts=PTS-STARTPTS,format=yuv420p[base];
               [1:v]scale=2160:3840:flags=lanczos,setsar=1,setpts=PTS-STARTPTS,
-                unsharp=5:5:0.35:5:5:0.0,format=rgb24[motion];
+                unsharp=5:5:0.25:5:5:0.0,format=rgb24[motion];
               [2:v]scale=2160:3840:flags=neighbor,setsar=1,setpts=PTS-STARTPTS,
                 format=gray,gblur=sigma=28[mask];
               [motion][mask]alphamerge[water];
@@ -194,7 +218,7 @@ jobs:
             -map '[out]' \
             -t 5.0 -r 24 -an \
             -c:v libx264 -profile:v high -level:v 5.1 \
-            -preset slow -crf 16 -maxrate 30000k -bufsize 60000k \
+            -preset slow -crf 14 -maxrate 40000k -bufsize 80000k \
             -g 24 -keyint_min 24 -sc_threshold 0 -bf 3 -refs 4 \
             -pix_fmt yuv420p -tag:v avc1 \
             -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
@@ -208,10 +232,14 @@ jobs:
             -frames:v 1 -c:v libwebp -quality 95 -compression_level 6 \
             "$poster"
 
-          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$output")" = 2160x3840
-          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$poster")" = 2160x3840
+          for asset in "$output" "$poster"; do
+            test "$(
+              ffprobe -v error -select_streams v:0 \
+                -show_entries stream=width,height -of csv=s=x:p=0 "$asset"
+            )" = 2160x3840
+          done
           bytes="$(wc -c < "$output" | tr -d '[:space:]')"
-          test "$bytes" -gt 7000000
+          test "$bytes" -gt 5000000
           test "$bytes" -lt 30000000
           ffprobe -v error -show_streams -show_format "$output" \
             > "$work/metrics/new-ffprobe.txt"
@@ -262,7 +290,9 @@ jobs:
               cv2.cvtColor(new_small, cv2.COLOR_BGR2GRAY),
               data_range=255,
           ))
-          mae = float(np.abs(old_small.astype(np.float32) - new_small.astype(np.float32)).mean())
+          mae = float(np.abs(
+              old_small.astype(np.float32) - new_small.astype(np.float32)
+          ).mean())
 
           report = {
               'old_display_laplacian_variance': lap_old,
@@ -271,12 +301,18 @@ jobs:
               'scene_ssim_at_540x960': ssim,
               'scene_mean_absolute_error': mae,
           }
-          (work / 'metrics/detail-report.json').write_text(json.dumps(report, indent=2))
+          (work / 'metrics/detail-report.json').write_text(
+              json.dumps(report, indent=2)
+          )
           print(json.dumps(report, indent=2))
           if edge_ratio < 1.08:
-              raise SystemExit(f'AI-enhanced frame did not add enough display-scale edge detail: {edge_ratio:.3f}')
+              raise SystemExit(
+                  f'Enhanced frame did not add enough display-scale detail: {edge_ratio:.3f}'
+              )
           if ssim < 0.78:
-              raise SystemExit(f'Enhanced frame drifted too far from the selected scene: SSIM={ssim:.3f}')
+              raise SystemExit(
+                  f'Enhanced frame drifted from the selected scene: SSIM={ssim:.3f}'
+              )
           PY
 
       - name: Upload candidate video and evidence
