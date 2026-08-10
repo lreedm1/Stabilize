@@ -6,11 +6,17 @@ on:
       - agent/ai-enhanced-mobile-4k-v23
     paths:
       - .github/workflows/publish-ai-enhanced-mobile-4k-v23.yml
+      - scripts/use-ai-enhanced-mobile-4k-v23.mjs
+      - scripts/fix-ai-enhanced-mobile-theme-v23.mjs
+      - scripts/finalize-decision-grade-impact.mjs
   pull_request:
     branches:
       - main
     paths:
       - .github/workflows/publish-ai-enhanced-mobile-4k-v23.yml
+      - scripts/use-ai-enhanced-mobile-4k-v23.mjs
+      - scripts/fix-ai-enhanced-mobile-theme-v23.mjs
+      - scripts/finalize-decision-grade-impact.mjs
   workflow_dispatch:
 
 permissions:
@@ -84,12 +90,15 @@ jobs:
           set -euo pipefail
           npm run apply:prompt-policy
           node --check scripts/use-ai-enhanced-mobile-4k-v23.mjs
+          node --check scripts/fix-ai-enhanced-mobile-theme-v23.mjs
           node --check public/mobile-quality.js
           grep -Fq '/media/mobile-forest-stream-video-v23-ai-2160.mp4' src/page.js
           grep -Fq '/scenes/mobile-forest-stream-v23-ai-2160.webp' src/page.js
           grep -Fq 'ai-enhanced-2160x3840' public/mobile-quality.js
           grep -Fq 'MOBILE_VIDEO_BYTES = 20_957_716' src/mobile-video-response.js
           grep -Fq 'const assetByteCache = new WeakMap();' src/mobile-video-response.js
+          grep -Fq 'mobile-forest-stream-v23-ai-2160.webp' test/shared-site-theme.test.mjs
+          grep -Fq 'guides.css?v=20260810-ai-enhanced-mobile-4k-v23-1' public/about.html
 
       - name: Commit generated application and media files
         shell: bash
@@ -98,9 +107,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
-          # Workflow files remain connector-controlled. Publish the exact media
-          # candidate and canonical generated application output before running
-          # the wider suite so ordinary PR checks can inspect any later failure.
           git restore --source=HEAD --staged --worktree .github/workflows
           git add -A -- . ':(exclude).github/workflows/**'
           git status --short
@@ -111,9 +117,13 @@ jobs:
             git commit -m 'Serve the AI-enhanced selected forest background'
           fi
 
-      - name: Publish generated release branch
+      - name: Rebase and publish generated release branch
         shell: bash
-        run: git push origin HEAD:agent/ai-enhanced-mobile-4k-v23
+        run: |
+          set -euo pipefail
+          git fetch origin agent/ai-enhanced-mobile-4k-v23
+          git rebase origin/agent/ai-enhanced-mobile-4k-v23
+          git push origin HEAD:agent/ai-enhanced-mobile-4k-v23
 
       - name: Run the complete regression and Worker build gates
         shell: bash
