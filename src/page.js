@@ -136,32 +136,17 @@ export function renderPage(options = {}) {
       type="font/woff2"
       crossorigin
     />
-    <!-- selected-mobile-4k-video-v22-preload-start -->
-    <link
-      rel="preload"
-      as="video"
-      href="/media/mobile-forest-stream-video-v24-native-1080.mp4"
-      media="(max-width: 980px) and (orientation: portrait)"
-      type="video/mp4"
-    />
-    <!-- selected-mobile-4k-video-v22-preload-end -->
     <!-- mobile-motion-canvas-v18-preloads-start -->
     <link
       rel="preload"
       as="image"
-      href="/scenes/mobile-forest-stream-v24-native-1080.webp"
+      href="/scenes/lake-valley-portrait-1440.webp"
       imagesrcset="
-        /scenes/mobile-forest-stream-v24-native-1080.webp 1080w
+        /scenes/lake-valley-portrait-720.webp 720w,
+        /scenes/lake-valley-portrait-1440.webp 1440w,
+        /scenes/lake-valley-portrait-2160.webp 2160w
       "
       imagesizes="100vw"
-      media="(max-width: 980px) and (orientation: portrait)"
-      type="image/webp"
-      fetchpriority="high"
-    />
-    <link
-      rel="preload"
-      as="image"
-      href="/scenes/mobile-forest-stream-water-sprite-v19-hd-1080.webp"
       media="(max-width: 980px) and (orientation: portrait)"
       type="image/webp"
       fetchpriority="high"
@@ -172,7 +157,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
     <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
-    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260810-native-selected-mobile-v24-1" />
+    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260811-clean-mobile-portrait-v25-1" />
   </head>
   <body>
     <canvas
@@ -185,12 +170,16 @@ export function renderPage(options = {}) {
       class="photo-backdrop"
       aria-hidden="true"
     >
-      <!-- Retired responsive references: lake-valley-portrait-720.webp 720w; lake-valley-portrait-2160.webp 2160w -->
+      <!-- Coherent portrait assets; no cropped motion overlays. -->
       <source
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="\n          /scenes/mobile-forest-stream-v24-native-1080.webp 1080w\n        "
+        srcset="
+          /scenes/lake-valley-portrait-720.webp 720w,
+          /scenes/lake-valley-portrait-1440.webp 1440w,
+          /scenes/lake-valley-portrait-2160.webp 2160w
+        "
       />
       <img
         id="photo-backdrop-image"
@@ -207,29 +196,6 @@ export function renderPage(options = {}) {
         fetchpriority="high"
       />
     </picture>
-    <!-- mobile-motion-canvas-v18-start -->
-    <canvas
-      id="mobile-motion-canvas"
-      class="mobile-motion-canvas"
-      aria-hidden="true"
-    ></canvas>
-    <!-- mobile-motion-canvas-v18-end -->
-    <!-- selected-mobile-4k-video-v22-start -->
-    <video
-      id="mobile-background-video"
-      class="mobile-background-video"
-      autoplay
-      muted
-      loop
-      playsinline
-      preload="auto"
-      poster="/scenes/mobile-forest-stream-v24-native-1080.webp"
-      aria-hidden="true"
-      tabindex="-1"
-    >
-      <source src="/media/mobile-forest-stream-video-v24-native-1080.mp4" type="video/mp4" />
-    </video>
-    <!-- selected-mobile-4k-video-v22-end -->
     <canvas
       id="photo-background"
       class="terrain-background photo-background"
@@ -338,12 +304,6 @@ export function renderPage(options = {}) {
     <!-- Legacy generator marker: 20260808-guest-summary-1 -->
     <script type="module" src="/app.js?v=20260808-full-guest-thread-1"></script>
     <script type="module" src="/reasoning-choice.js?v=20260807-instant-thinking-2-fastest-1"></script>
-    <!-- mobile-motion-canvas-v18-script-start -->
-    <script src="/mobile-motion-canvas.js?v=20260809-mobile-motion-canvas-v19-hd-2" defer></script>
-    <!-- mobile-motion-canvas-v18-script-end -->
-    <!-- selected-mobile-4k-video-v22-script-start -->
-    <script type="module" src="/mobile-quality.js?v=20260810-native-selected-mobile-v24-1"></script>
-    <!-- selected-mobile-4k-video-v22-script-end -->
   </body>
 </html>`;
 }
