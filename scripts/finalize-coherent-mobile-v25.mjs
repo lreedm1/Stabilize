@@ -18,8 +18,7 @@ const VIDEO_HEIGHT = Number(metadata.height);
 const QUALITY_LABEL = `coherent-source-${VIDEO_WIDTH}x${VIDEO_HEIGHT}`;
 const SOURCE_LABEL = "coherent-full-frame-source-motion";
 const LOADING_LABEL = "video-loading-coherent-4k";
-const ZOOM_SAFE_QUERY =
-  "(orientation: portrait) and (hover: none) and (pointer: coarse)";
+const ZOOM_SAFE_QUERY = "(hover: none) and (pointer: coarse)";
 const FOUR_K_RENDER_START = "/* mobile-video-4k-render-v1-start */";
 const FOUR_K_RENDER_END = "/* mobile-video-4k-render-v1-end */";
 const OLD_VIDEO_BYTES = 2_371_524;
@@ -95,6 +94,10 @@ await update("src/page.js", (source) =>
       /mobile-quality\.js\?v=[^"]+/,
       `mobile-quality.js?v=${CACHE_VERSION}`,
     )
+    .replaceAll(
+      'media="(max-width: 980px) and (orientation: portrait)"',
+      'media="(max-width: 980px)"',
+    )
     .replace(
       /srcset="(?:\\\\n\s*)?\/scenes\/mobile-forest-stream-v24-native-1080\.webp 2160w(?:\\\\n\s*)?"/,
       `srcset="${POSTER_ASSET} ${VIDEO_WIDTH}w"`,
@@ -107,6 +110,10 @@ await update("src/page.js", (source) =>
 
 await update("public/mobile-quality.js", (source) => {
   let next = stripLegacy4kRender(source)
+    .replaceAll(
+      "(orientation: portrait) and (hover: none) and (pointer: coarse)",
+      ZOOM_SAFE_QUERY,
+    )
     .replace(
       /const MOBILE_BACKGROUND_QUERY =\n\s+"[^"]+";/,
       `const MOBILE_BACKGROUND_QUERY =\n  "${ZOOM_SAFE_QUERY}";`,
@@ -133,7 +140,7 @@ await update("public/mobile-woodland-loop.css", (source) =>
   ),
 );
 
-await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coherent full-frame portrait-touch background. */
+await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coherent full-frame touch background. */
 @media ${ZOOM_SAFE_QUERY} {
   .photo-backdrop {
     background-image: url("${POSTER_ASSET}?v=${CACHE_VERSION}") !important;
