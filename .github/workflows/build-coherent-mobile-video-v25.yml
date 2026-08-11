@@ -89,9 +89,11 @@ jobs:
             'npm run verify:clean' \
             'git diff --exit-code'; do
             echo ">>> ${command}" | tee -a "$log"
-            if ! bash -lc "$command" >> "$log" 2>&1; then
-              status=$?
-              echo "FAILED: ${command}" | tee -a "$log"
+            bash -lc "$command" >> "$log" 2>&1
+            command_status=$?
+            if [[ "$command_status" -ne 0 ]]; then
+              status="$command_status"
+              echo "FAILED (${command_status}): ${command}" | tee -a "$log"
               break
             fi
           done
