@@ -134,3 +134,21 @@
   }
 }
 /* selected-mobile-4k-video-v22-end */
+
+/* mobile-static-poster-fallback-v25-start */
+@media (max-width: 980px) and (orientation: portrait) {
+  /* Cloudflare can serve an older HTML/static bundle while the Worker is
+     current. Pin the visual fallback to the already-deployed forest poster so
+     a missing newer poster cannot reveal the unrelated desktop lake image. */
+  .photo-backdrop {
+    background-image: url("/scenes/mobile-forest-stream-v14-retina-2160.webp") !important;
+    background-size: cover !important;
+    background-position: 50% 50% !important;
+    background-repeat: no-repeat !important;
+  }
+
+  .photo-backdrop img {
+    opacity: 0 !important;
+  }
+}
+/* mobile-static-poster-fallback-v25-end */
