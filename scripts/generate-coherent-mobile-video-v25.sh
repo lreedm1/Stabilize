@@ -31,6 +31,8 @@ poster="$work/mobile-forest-stream-v25-coherent-4k.webp"
 # creek clip over a different still image, which created the visible vertical
 # scene split on iOS. This release crops the generator edge from the motion
 # source itself and scales that single coherent frame to 4K portrait.
+# A single encoder thread keeps the committed artifact byte-stable across CI
+# runs, which matters because the Worker serves it behind a strong ETag.
 ffmpeg -hide_banner -v error -y \
   -stream_loop -1 -i "$work/source-motion.mp4" \
   -vf "scale=1080:1920:flags=lanczos,crop=956:1700:62:0,scale=2160:3840:flags=lanczos,setsar=1,fps=24,format=yuv420p" \
@@ -38,6 +40,7 @@ ffmpeg -hide_banner -v error -y \
   -c:v libx264 -profile:v high -level:v 5.1 \
   -preset slow -crf 18 -maxrate 14000k -bufsize 28000k \
   -g 24 -keyint_min 24 -sc_threshold 0 -bf 2 -refs 3 \
+  -threads 1 -x264-params "threads=1:sliced-threads=0" \
   -pix_fmt yuv420p -tag:v avc1 \
   -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
   -movflags +faststart \
@@ -97,7 +100,7 @@ unique_frames="$(
 )"
 test "$unique_frames" -ge 20
 
-ffmpeg -hide_banner -v error -y -ss 0.5 -i "$video" \
+ffmpeg -hide_banner -v error -y -threads 1 -ss 0.5 -i "$video" \
   -frames:v 1 -c:v libwebp -quality 92 -compression_level 6 "$poster"
 poster_dimensions="$(
   ffprobe -v error -select_streams v:0 \
