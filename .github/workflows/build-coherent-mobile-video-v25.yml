@@ -79,11 +79,24 @@ jobs:
       - name: Run full regression and Worker checks
         shell: bash
         run: |
-          set -euo pipefail
-          npm test
-          npm run check
-          npm run verify:clean
-          git diff --exit-code
+          set -uo pipefail
+          log=/tmp/stabilize-coherent-mobile-v25/regression.log
+          : > "$log"
+          status=0
+          for command in \
+            'npm test' \
+            'npm run check' \
+            'npm run verify:clean' \
+            'git diff --exit-code'; do
+            echo ">>> ${command}" | tee -a "$log"
+            if ! bash -lc "$command" >> "$log" 2>&1; then
+              status=$?
+              echo "FAILED: ${command}" | tee -a "$log"
+              break
+            fi
+          done
+          tail -n 240 "$log"
+          exit "$status"
 
       - name: Stage generated verifier as visible evidence
         if: always()
@@ -113,5 +126,6 @@ jobs:
             /tmp/stabilize-coherent-mobile-v25/probe.json
             /tmp/stabilize-coherent-mobile-v25/framemd5.txt
             /tmp/stabilize-coherent-mobile-v25/verify-mobile-video.yml
+            /tmp/stabilize-coherent-mobile-v25/regression.log
           if-no-files-found: warn
           retention-days: 7
