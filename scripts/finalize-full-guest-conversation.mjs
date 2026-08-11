@@ -101,6 +101,13 @@ for (const path of [
 ]) {
   const fullGuestExpectation =
     "/finalize-full-guest-conversation\\.mjs$/";
+  const nativeExpectation =
+    "/finalize-decision-grade-impact\\.mjs && node scripts\\/finalize-native-selected-mobile-v24\\.mjs && node scripts\\/finalize-native-selected-mobile-v24-regressions\\.mjs$/";
+  const changedFromNative = replaceAll(
+    path,
+    nativeExpectation,
+    fullGuestExpectation,
+  );
   const changedFromImpact = replaceAll(
     path,
     "/finalize-decision-grade-impact\\.mjs$/",
@@ -112,6 +119,7 @@ for (const path of [
     fullGuestExpectation,
   );
   if (
+    !changedFromNative &&
     !changedFromImpact &&
     !changedFromAccount &&
     !read(path).includes(fullGuestExpectation)
