@@ -1,0 +1,247 @@
+name: Verify coherent mobile background release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: verify-mobile-background-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  verify-production-assets:
+    name: Verify exact coherent mobile release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Verify the exact page, video, poster, and client are live
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          video_route="$(node -p "JSON.parse(require('fs').readFileSync('scripts/native-selected-mobile-video-v24.json','utf8')).videoRoute")"
+          poster_asset="$(node -p "JSON.parse(require('fs').readFileSync('scripts/native-selected-mobile-video-v24.json','utf8')).posterAsset")"
+          expected_video="public$(node -p "JSON.parse(require('fs').readFileSync('scripts/native-selected-mobile-video-v24.json','utf8')).videoAsset")"
+          expected_poster="public${poster_asset}"
+          expected_video_bytes="$(wc -c < "$expected_video" | tr -d '[:space:]')"
+          expected_video_sha="$(sha256sum "$expected_video" | awk '{print $1}')"
+          expected_poster_bytes="$(wc -c < "$expected_poster" | tr -d '[:space:]')"
+          expected_poster_sha="$(sha256sum "$expected_poster" | awk '{print $1}')"
+          client_path="$(grep -oE '/mobile-quality\.js\?v=[A-Za-z0-9._-]+' src/page.js | tail -n 1)"
+          fallback_path="$(grep -oE '/mobile-static-fallback-fix-20260811\.css\?v=[A-Za-z0-9._-]+' src/page.js | tail -n 1)"
+
+          publish_status() {
+            local state="$1"
+            local description="$2"
+            local payload
+            payload="$(printf '{"state":"%s","context":"verification/mobile-motion-canvas","description":"%s","target_url":"%s/%s/actions/runs/%s"}' \
+              "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header 'Accept: application/vnd.github+json' \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              --data "$payload" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+          }
+
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          publish_status pending 'Waiting for the coherent mobile background'
+
+          ready=false
+          for attempt in {1..36}; do
+            key="${GITHUB_SHA}-${attempt}"
+            page_status="$(curl --max-time 25 --silent --show-error --compressed --header 'Cache-Control: no-cache' --output "$tmpdir/page.html" --write-out '%{http_code}' "https://stabilize.info/?coherent-mobile=${key}" || true)"
+            client_status="$(curl --max-time 25 --silent --show-error --compressed --header 'Cache-Control: no-cache' --output "$tmpdir/client.js" --write-out '%{http_code}' "https://stabilize.info${client_path}&release=${key}" || true)"
+            fallback_status="$(curl --max-time 25 --silent --show-error --compressed --header 'Cache-Control: no-cache' --output "$tmpdir/fallback.css" --write-out '%{http_code}' "https://stabilize.info${fallback_path}&release=${key}" || true)"
+            poster_status="$(curl --max-time 40 --silent --show-error --header 'Cache-Control: no-cache' --output "$tmpdir/poster.webp" --write-out '%{http_code}' "https://stabilize.info${poster_asset}?release=${key}" || true)"
+            video_status="$(curl --max-time 120 --silent --show-error --header 'Cache-Control: no-cache' --output "$tmpdir/video.mp4" --write-out '%{http_code}' "https://stabilize.info${video_route}?release=${key}" || true)"
+
+            video_bytes="$(wc -c < "$tmpdir/video.mp4" | tr -d '[:space:]')"
+            video_sha="$(sha256sum "$tmpdir/video.mp4" | awk '{print $1}')"
+            poster_bytes="$(wc -c < "$tmpdir/poster.webp" | tr -d '[:space:]')"
+            poster_sha="$(sha256sum "$tmpdir/poster.webp" | awk '{print $1}')"
+
+            echo "Coherent release ${attempt}: page=${page_status:-000} client=${client_status:-000} fallback=${fallback_status:-000} poster=${poster_status:-000} video=${video_status:-000}; video=${video_bytes}/${expected_video_bytes}."
+
+            if [[ "$page_status" == 200 \
+              && "$client_status" == 200 \
+              && "$fallback_status" == 200 \
+              && "$poster_status" == 200 \
+              && "$video_status" == 200 \
+              && "$video_bytes" == "$expected_video_bytes" \
+              && "$video_sha" == "$expected_video_sha" \
+              && "$poster_bytes" == "$expected_poster_bytes" \
+              && "$poster_sha" == "$expected_poster_sha" ]] \
+              && grep -Fq 'id="mobile-background-video"' "$tmpdir/page.html" \
+              && grep -Fq 'id="message-input"' "$tmpdir/page.html" \
+              && grep -Fq "$video_route" "$tmpdir/page.html" \
+              && grep -Fq "$poster_asset?v=20260811-coherent-mobile-4k-v25-1" "$tmpdir/page.html" \
+              && grep -Fq 'coherent-source-2160x3840' "$tmpdir/client.js" \
+              && ! grep -Fq 'mobile-video-4k-render-v1-start' "$tmpdir/client.js" \
+              && grep -Fq '.mobile-motion-canvas' "$tmpdir/fallback.css" \
+              && grep -Fq 'display: none !important' "$tmpdir/fallback.css"; then
+              ready=true
+              break
+            fi
+            sleep 10
+          done
+
+          if [[ "$ready" != true ]]; then
+            publish_status failure 'Coherent mobile background is not live'
+            echo '::error::Production never exposed the exact coherent video release.'
+            exit 1
+          fi
+
+          publish_status success 'The coherent mobile background is live'
+
+  verify-webkit-video:
+    name: Verify coherent video in mobile WebKit
+    needs: verify-production-assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Playwright WebKit
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps webkit
+
+      - name: Confirm the video advances while the creek overlay stays hidden
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { webkit } from "playwright";
+
+          const browser = await webkit.launch({ headless: true });
+          try {
+            const context = await browser.newContext({
+              viewport: { width: 390, height: 844 },
+              screen: { width: 390, height: 844 },
+              deviceScaleFactor: 3,
+              isMobile: true,
+              hasTouch: true,
+              userAgent:
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) " +
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 " +
+                "Mobile/15E148 Safari/604.1",
+            });
+            const page = await context.newPage();
+            page.on("pageerror", (error) =>
+              console.error(`browser-pageerror: ${error.message}`),
+            );
+
+            await page.goto(
+              `https://stabilize.info/?webkit-coherent-mobile=${process.env.RELEASE_SHA}`,
+              { waitUntil: "domcontentloaded", timeout: 60_000 },
+            );
+            await page.waitForSelector("#mobile-background-video", {
+              state: "attached",
+              timeout: 60_000,
+            });
+            await page.waitForFunction(
+              () => {
+                const video = document.querySelector("#mobile-background-video");
+                return (
+                  video instanceof HTMLVideoElement &&
+                  video.readyState >= 2 &&
+                  !video.paused &&
+                  video.currentTime > 0
+                );
+              },
+              undefined,
+              { timeout: 60_000 },
+            );
+
+            const sample = () =>
+              page.evaluate(() => {
+                const video = document.querySelector("#mobile-background-video");
+                if (!(video instanceof HTMLVideoElement)) {
+                  throw new Error("The coherent mobile video is missing.");
+                }
+                const videoStyle = getComputedStyle(video);
+                const canvas = document.querySelector("#mobile-motion-canvas");
+                const canvasStyle = canvas ? getComputedStyle(canvas) : null;
+                const shell = document.querySelector(".page-shell");
+                const shellStyle = shell ? getComputedStyle(shell) : null;
+                return {
+                  currentTime: video.currentTime,
+                  paused: video.paused,
+                  readyState: video.readyState,
+                  videoWidth: video.videoWidth,
+                  videoHeight: video.videoHeight,
+                  videoOpacity: videoStyle.opacity,
+                  videoVisibility: videoStyle.visibility,
+                  videoDisplay: videoStyle.display,
+                  canvasVisible:
+                    Boolean(canvasStyle) &&
+                    canvasStyle.display !== "none" &&
+                    canvasStyle.visibility !== "hidden" &&
+                    canvasStyle.opacity !== "0",
+                  shellVisible:
+                    Boolean(shellStyle) &&
+                    shellStyle.display !== "none" &&
+                    shellStyle.visibility !== "hidden" &&
+                    shellStyle.opacity !== "0",
+                  inputPresent: Boolean(document.querySelector("#message-input")),
+                };
+              });
+
+            const first = await sample();
+            await page.waitForTimeout(1200);
+            const second = await sample();
+            console.log(JSON.stringify({ first, second }, null, 2));
+
+            for (const state of [first, second]) {
+              if (state.videoWidth !== 2160 || state.videoHeight !== 3840) {
+                throw new Error("Production is not decoding the 2160x3840 source.");
+              }
+              if (state.paused || state.readyState < 2) {
+                throw new Error("The coherent background video is not playing.");
+              }
+              if (
+                state.videoDisplay === "none" ||
+                state.videoVisibility === "hidden" ||
+                state.videoOpacity === "0"
+              ) {
+                throw new Error("The coherent background video is not visible.");
+              }
+              if (state.canvasVisible) {
+                throw new Error("The old creek canvas is still visible over the video.");
+              }
+              if (!state.shellVisible || !state.inputPresent) {
+                throw new Error("The chat UI is not visible over the background.");
+              }
+            }
+            if (second.currentTime <= first.currentTime) {
+              throw new Error("The coherent background video did not advance.");
+            }
+          } finally {
+            await browser.close();
+          }
+          NODE
