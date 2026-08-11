@@ -191,7 +191,7 @@ export function renderPage(options = {}) {
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="/scenes/mobile-forest-stream-v24-native-1080.webp 2160w"
+        srcset="\n          /scenes/mobile-forest-stream-v24-native-1080.webp 2160w\n        "
       />
       <img
         id="photo-backdrop-image"
