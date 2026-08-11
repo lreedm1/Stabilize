@@ -12,6 +12,7 @@
   .photo-backdrop > picture,
   .photo-backdrop > img,
   #photo-backdrop-image {
+    display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;
   }
