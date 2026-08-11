@@ -84,6 +84,16 @@ jobs:
           npm run verify:clean
           git diff --exit-code
 
+      - name: Stage generated verifier as visible evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f .github/workflows/verify-mobile-video.yml ]]; then
+            cp .github/workflows/verify-mobile-video.yml \
+              /tmp/stabilize-coherent-mobile-v25/verify-mobile-video.yml
+          fi
+
       - name: Publish verified generated commit to PR branch
         if: steps.commit.outputs.changed == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         shell: bash
@@ -101,7 +111,6 @@ jobs:
             /tmp/stabilize-coherent-mobile-v25/mobile-forest-stream-v25-coherent-4k.webp
             /tmp/stabilize-coherent-mobile-v25/probe.json
             /tmp/stabilize-coherent-mobile-v25/framemd5.txt
-            .github/workflows/verify-mobile-video.yml
-          include-hidden-files: true
+            /tmp/stabilize-coherent-mobile-v25/verify-mobile-video.yml
           if-no-files-found: warn
           retention-days: 7
