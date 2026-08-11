@@ -99,7 +99,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          branch='${{ github.event.pull_request.head.ref }}'
+
+          # Another write-enabled run can finish the same deterministic build first.
+          # Refresh the branch and treat an already-published identical/containing
+          # commit as success rather than failing with a non-fast-forward push.
+          git fetch --no-tags --depth=50 origin "$branch"
+          remote_ref='FETCH_HEAD'
+
+          if git merge-base --is-ancestor HEAD "$remote_ref"; then
+            echo 'Generated release is already published on the PR branch.'
+            exit 0
+          fi
+
+          if [[ "$(git rev-parse 'HEAD^{tree}')" == "$(git rev-parse "$remote_ref^{tree}")" ]]; then
+            echo 'An equivalent generated tree is already published on the PR branch.'
+            exit 0
+          fi
+
+          if git merge-base --is-ancestor "$remote_ref" HEAD; then
+            git push origin "HEAD:$branch"
+            exit 0
+          fi
+
+          # Preserve any concurrent branch-only edit without force pushing.
+          git rebase "$remote_ref"
+          git push origin "HEAD:$branch"
 
       - name: Upload visual build evidence
         if: always()
