@@ -105,13 +105,10 @@ function stripLegacy4kRender(source) {
 }
 
 await update("src/page.js", (source) => {
-  let next = replaceRelease(source)
-    .split(LEGACY_POSTER)
-    .join(POSTER_ASSET)
-    .replaceAll(
-      "(max-width: 980px) and (orientation: portrait)",
-      ZOOM_SAFE_QUERY,
-    );
+  // Keep the historical width-query shape in the HTML so the older generator
+  // can find and regenerate these tags on every build. Zoom stability is
+  // enforced by the final CSS/JS layer instead of changing generator anchors.
+  let next = replaceRelease(source).split(LEGACY_POSTER).join(POSTER_ASSET);
   next = next
     .replaceAll(`${POSTER_ASSET} 1080w`, `${POSTER_ASSET} ${VIDEO_WIDTH}w`)
     .replaceAll(`${POSTER_ASSET} 2160w`, `${POSTER_ASSET} ${VIDEO_WIDTH}w`)
@@ -152,16 +149,12 @@ await update("public/mobile-static-fallback-fix-20260811.css", (source) =>
 );
 
 await update("public/mobile-woodland-loop.css", (source) => {
-  let next = replaceRelease(source)
-    .split(LEGACY_POSTER)
-    .join(POSTER_ASSET)
-    .replaceAll(
-      "(max-width: 980px) and (orientation: portrait)",
-      ZOOM_SAFE_QUERY,
-    );
+  // Preserve historical media blocks for the legacy generator. The final block
+  // below is later in the cascade and uses the zoom-stable touch query.
+  let next = replaceRelease(source).split(LEGACY_POSTER).join(POSTER_ASSET);
   const start = "/* coherent-mobile-v25-start */";
   const end = "/* coherent-mobile-v25-end */";
-  const block = `${start}\n@media ${ZOOM_SAFE_QUERY} {\n  .photo-backdrop {\n    background-image: url("${POSTER_ASSET}") !important;\n    background-size: cover !important;\n    background-position: 50% 50% !important;\n    background-repeat: no-repeat !important;\n  }\n\n  #photo-backdrop-image {\n    display: none !important;\n    visibility: hidden !important;\n    opacity: 0 !important;\n  }\n\n  /* The historical water canvas remains in the DOM for its fallback tests,\n     but it must never composite over the coherent full-frame video. */\n  .mobile-motion-canvas {\n    z-index: -1 !important;\n  }\n}\n${end}`;
+  const block = `${start}\n@media ${ZOOM_SAFE_QUERY} {\n  .photo-backdrop {\n    background-image: url("${POSTER_ASSET}") !important;\n    background-size: cover !important;\n    background-position: 50% 50% !important;\n    background-repeat: no-repeat !important;\n  }\n\n  #photo-backdrop-image {\n    display: none !important;\n    visibility: hidden !important;\n    opacity: 0 !important;\n  }\n\n  .mobile-background-video {\n    position: fixed !important;\n    inset: 0 !important;\n    z-index: 0 !important;\n    display: block !important;\n    width: 100% !important;\n    height: 100% !important;\n    object-fit: cover !important;\n    object-position: 50% 50% !important;\n    pointer-events: none !important;\n  }\n\n  html[data-mobile-background="video-playing"] .mobile-background-video.is-playing,\n  .mobile-background-video.is-playing {\n    visibility: visible !important;\n    opacity: 1 !important;\n  }\n\n  /* The historical water canvas remains in the DOM for its fallback tests,\n     but it must never composite over the coherent full-frame video. */\n  .mobile-motion-canvas {\n    z-index: -1 !important;\n  }\n}\n${end}`;
   const first = next.indexOf(start);
   if (first >= 0) {
     const last = next.indexOf(end, first);
