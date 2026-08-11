@@ -130,10 +130,6 @@ await update(".github/workflows/verify-mobile-background.yml", (source) =>
     .replaceAll(
       "Production serves the exact Retina-poster plus canvas-motion release.",
       "Production serves the native video with its exact canvas fallback.",
-    )
-    .replaceAll(
-      "Exact canvas mobile release is live",
-      "Native video and canvas fallback are live",
     ),
 );
 
