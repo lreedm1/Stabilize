@@ -22,6 +22,9 @@ export {
 const CANONICAL_ORIGIN = "https://stabilize.info";
 const CANONICAL_HOST = "stabilize.info";
 const HSTS_VALUE = "max-age=31536000; includeSubDomains";
+const BROKEN_STARTUP_SCRIPT = "/favicon-refresh.js?v=20260805-8";
+const SAFE_STARTUP_SCRIPT =
+  "/favicon-refresh.js?v=20260811-safe-startup-1";
 const REDIRECT_HOSTS = new Set([
   "www.stabilize.info",
   "reedlokken.com",
@@ -68,6 +71,29 @@ function withStrictTransportSecurity(response) {
   });
 }
 
+async function withSafeHomepageStartup(request, url, response) {
+  if (
+    request.method !== "GET" ||
+    (url.pathname !== "/" && url.pathname !== "/index.html") ||
+    !response.headers.get("content-type")?.includes("text/html")
+  ) {
+    return response;
+  }
+
+  const html = await response.text();
+  const safeHtml = html.replaceAll(BROKEN_STARTUP_SCRIPT, SAFE_STARTUP_SCRIPT);
+  const headers = new Headers(response.headers);
+  headers.delete("Content-Length");
+  headers.set("Cache-Control", "no-store, max-age=0");
+  headers.set("Pragma", "no-cache");
+
+  return new Response(safeHtml, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function canonicalEnvironment(env) {
   return new Proxy(env, {
     get(target, property, receiver) {
@@ -101,11 +127,12 @@ export default {
     // Logout only expires cookies in the current browser. Handle it before the
     // inner same-origin check because iOS and embedded browsers can submit an
     // opaque Origin header (`Origin: null`).
-    const response =
+    let response =
       url.pathname === "/auth/logout" && request.method === "POST"
         ? await signOut(request, canonicalEnv)
         : await worker.fetch(request, canonicalEnv, ctx);
 
+    response = await withSafeHomepageStartup(request, url, response);
     return withStrictTransportSecurity(response);
   },
 };
