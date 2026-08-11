@@ -96,6 +96,10 @@ await update("src/page.js", (source) =>
       `mobile-quality.js?v=${CACHE_VERSION}`,
     )
     .replace(
+      /srcset="(?:\\\\n\s*)?\/scenes\/mobile-forest-stream-v24-native-1080\.webp 2160w(?:\\\\n\s*)?"/,
+      `srcset="${POSTER_ASSET} ${VIDEO_WIDTH}w"`,
+    )
+    .replace(
       new RegExp(`poster="${POSTER_ASSET.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\?v=[^"]+)?"`),
       `poster="${POSTER_ASSET}?v=${CACHE_VERSION}"`,
     ),
