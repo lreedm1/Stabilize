@@ -59,6 +59,17 @@ jobs:
                   raise SystemExit(f"Expected generator text was not found: {before[:80]!r}")
               source = source.replace(before, after, 1)
           path.write_text(source)
+
+          # Historical generators run before the final clean-portrait pass and
+          # intentionally search for a /scenes/mobile-* preload. Give them a
+          # temporary compatible anchor; the finalizer replaces the whole block.
+          page = Path("src/page.js")
+          page_source = page.read_text()
+          before = 'href="/scenes/lake-valley-portrait-1440.webp"'
+          after = 'href="/scenes/mobile-forest-stream-v24-native-1080.webp"'
+          if before not in page_source:
+              raise SystemExit("The clean portrait preload anchor was not found")
+          page.write_text(page_source.replace(before, after, 1))
           PY
           node --check scripts/finalize-native-selected-mobile-v24-regressions.mjs
 
