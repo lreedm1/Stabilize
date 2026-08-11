@@ -127,13 +127,12 @@ export default {
     // Logout only expires cookies in the current browser. Handle it before the
     // inner same-origin check because iOS and embedded browsers can submit an
     // opaque Origin header (`Origin: null`).
-    const response =
+    let response =
       url.pathname === "/auth/logout" && request.method === "POST"
         ? await signOut(request, canonicalEnv)
         : await worker.fetch(request, canonicalEnv, ctx);
 
-    return withStrictTransportSecurity(
-      await withSafeHomepageStartup(request, url, response),
-    );
+    response = await withSafeHomepageStartup(request, url, response);
+    return withStrictTransportSecurity(response);
   },
 };
