@@ -99,10 +99,6 @@ await update("src/page.js", (source) =>
       'media="(max-width: 980px)"',
     )
     .replace(
-      /srcset="(?:\\\\n\s*)?\/scenes\/mobile-forest-stream-v24-native-1080\.webp 2160w(?:\\\\n\s*)?"/,
-      `srcset="${POSTER_ASSET} ${VIDEO_WIDTH}w"`,
-    )
-    .replace(
       new RegExp(`poster="${POSTER_ASSET.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\?v=[^"]+)?"`),
       `poster="${POSTER_ASSET}?v=${CACHE_VERSION}"`,
     ),
@@ -186,12 +182,24 @@ await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coheren
 }
 `);
 
-await update("test/mobile-quality.test.mjs", (source) =>
-  replaceReleaseFacts(source).replaceAll(
+await update("test/mobile-quality.test.mjs", (source) => {
+  let next = replaceReleaseFacts(source).replaceAll(
     "20260810-native-selected-mobile-v24-1",
     CACHE_VERSION,
-  ),
-);
+  );
+  if (!next.includes('import { renderPage } from "../src/page.js";')) {
+    next = next.replace(
+      'import { readFile } from "node:fs/promises";\n',
+      'import { readFile } from "node:fs/promises";\nimport { renderPage } from "../src/page.js";\n',
+    );
+  }
+  const guardAnchor = '  assert.match(pageSource, /id="mobile-motion-canvas"/);';
+  if (!next.includes("const renderedPage = renderPage();")) {
+    const guard = `  const renderedPage = renderPage();\n  assert.match(renderedPage, /media=\"\\(max-width: 980px\\)\"/);\n  assert.doesNotMatch(\n    renderedPage,\n    /media=\"\\(max-width: 980px\\) and \\(orientation: portrait\\)\"/,\n  );\n  assert.match(\n    videoClient,\n    /\"\\(hover: none\\) and \\(pointer: coarse\\)\";/,\n  );\n  assert.doesNotMatch(\n    videoClient,\n    /\\(orientation: portrait\\) and \\(hover: none\\) and \\(pointer: coarse\\)/,\n  );\n`;
+    next = next.replace(guardAnchor, guard + guardAnchor);
+  }
+  return next;
+});
 
 await update("test/mobile-background-loading.test.mjs", (source) => {
   let next = replaceReleaseFacts(source).replaceAll(
