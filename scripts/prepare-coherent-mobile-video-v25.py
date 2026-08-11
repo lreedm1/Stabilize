@@ -134,7 +134,7 @@ const nativeV24PosterSha256 = createHash("sha256")
   .update(nativeV24Poster)
   .digest("hex");
 if (nativeV24PosterSha256 !== nativeV24PosterExpectedSha256) {{
-  throw new Error(`Native mobile poster checksum mismatch: ${{nativeV24PosterSha256}}`);
+  raise SystemExit(f"Native mobile poster checksum mismatch: {poster_sha}")
 }}
 const nativeV24PosterInfo = webpInfo(nativeV24Poster);
 if (
@@ -150,6 +150,11 @@ console.log(
   `Validated ${{nativeV24VideoPath}}: {WIDTH}x{HEIGHT}, ${{nativeV24Video.byteLength}} bytes, sha256=${{nativeV24VideoSha256}}`,
 );
 {end}'''
+# Correct the Python-only line in the JavaScript template above before writing.
+validation = validation.replace(
+    f'  raise SystemExit(f"Native mobile poster checksum mismatch: {poster_sha}")',
+    '  throw new Error(`Native mobile poster checksum mismatch: ${nativeV24PosterSha256}`);',
+)
 materializer = re.sub(
     re.escape(start) + r"[\s\S]*?" + re.escape(end),
     validation,
@@ -157,6 +162,21 @@ materializer = re.sub(
     count=1,
 )
 materializer_path.write_text(materializer)
+
+# The native finalizer validates two poster descriptors before the coherent
+# cleanup hook gets a chance to run. Seed those current v24 references with the
+# unique v25 URLs first so the legacy finalizer can rebuild successfully.
+page_path = root / "src/page.js"
+page = page_path.read_text()
+page = page.replace(
+    "/media/mobile-forest-stream-video-v24-native-1080.mp4",
+    VIDEO_ROUTE,
+)
+page = page.replace(
+    "/scenes/mobile-forest-stream-v24-native-1080.webp",
+    POSTER_ASSET,
+)
+page_path.write_text(page)
 
 # The historical regression finalizer rebuilds the old canvas fallback on every
 # pass. Run the coherent cleanup immediately after it without changing the
