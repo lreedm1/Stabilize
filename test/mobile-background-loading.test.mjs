@@ -111,19 +111,13 @@ test("the production mobile release gate verifies visible canvas motion", async 
     ".github/workflows/verify-mobile-background.yml",
   );
 
-  assert.ok(workflow.includes("mobile-motion-canvas"));
-  assert.ok(workflow.includes("mobile-woodland-loop"));
-  assert.ok(workflow.includes("water-sprite"));
-  assert.ok(workflow.includes("expected_poster_sha"));
-  assert.ok(workflow.includes("expected_sprite_sha"));
-  assert.ok(workflow.includes("expected_poster_bytes"));
-  assert.ok(workflow.includes("expected_sprite_bytes"));
   assert.ok(workflow.includes("verification/mobile-motion-canvas"));
-  assert.ok(workflow.includes("Verify visible motion in mobile WebKit"));
-  assert.ok(workflow.includes("getImageData"));
-  assert.ok(workflow.includes("first.hash === second.hash"));
-  assert.ok(workflow.includes('first.opacity !== "1"'));
-  assert.ok(workflow.includes("Native video and canvas fallback are live"));
+  assert.ok(workflow.includes("mobile-background-video"));
+  assert.ok(workflow.includes("coherent-source-2160x3840"));
+  assert.ok(workflow.includes("video.currentTime"));
+  assert.ok(workflow.includes("video.videoWidth"));
+  assert.ok(workflow.includes("canvasVisible"));
+  assert.ok(workflow.includes("The coherent mobile background is live"));
 });
 
 test("portrait mobile uses a Worker-served MP4 instead of a reconstructed blob", async () => {
@@ -147,7 +141,7 @@ test("portrait mobile uses a Worker-served MP4 instead of a reconstructed blob",
   assert.match(clientSource, /video\.loop = true/);
   assert.match(clientSource, /video\.playsInline = true/);
   assert.match(clientSource, /function bindGestureRecovery\(\)/);
-  assert.match(clientSource, /native-source-1080x1920/);
+  assert.match(clientSource, /coherent-source-2160x3840/);
   assert.doesNotMatch(clientSource, /URL\.createObjectURL|new Blob|atob\(/);
 
   assert.match(materializerSource, /retina-mobile-video-v14-validation-start/);
@@ -286,7 +280,7 @@ test("the mobile video response has a strong ETag and exact uncached ranges", as
 });
 
 // smooth-mobile-video-v12-test-start
-test("portrait mobile uses the selected 1080x1920 MP4 without a lower-resolution video fallback", async () => {
+test("portrait mobile uses the selected 2160x3840 MP4 without a lower-resolution video fallback", async () => {
   const [pageSource, clientSource, materializerSource, video] =
     await Promise.all([
       read("src/page.js"),
@@ -307,7 +301,7 @@ test("portrait mobile uses the selected 1080x1920 MP4 without a lower-resolution
   );
   assert.match(
     pageSource,
-    /mobile-quality\.js\?v=20260810-native-selected-mobile-v24-1/,
+    /mobile-quality\.js\?v=20260811-coherent-mobile-4k-v25-1/,
   );
   assert.match(
     clientSource,
@@ -318,11 +312,11 @@ test("portrait mobile uses the selected 1080x1920 MP4 without a lower-resolution
   assert.match(clientSource, /video\.muted = true/);
   assert.match(clientSource, /video\.defaultMuted = true/);
   assert.match(clientSource, /video\.playsInline = true/);
-  assert.match(clientSource, /native-source-1080x1920/);
+  assert.match(clientSource, /coherent-source-2160x3840/);
   assert.doesNotMatch(clientSource, /smooth-720-fallback|legacy-worker-fallback/);
   assert.match(materializerSource, /retina-mobile-video-v14-validation-start/);
 
-  assert.equal(video.byteLength, 2371524);
+  assert.equal(video.byteLength, 5766867);
   assert.equal(video.subarray(4, 8).toString("ascii"), "ftyp");
   for (const marker of ["moov", "mdat", "avc1"]) {
     assert.ok(video.includes(Buffer.from(marker, "ascii")));
@@ -368,6 +362,6 @@ test("portrait mobile keeps a canvas fallback beneath the selected native-resolu
   assert.match(canvasClient, /setTimeout\(step/);
   assert.doesNotMatch(canvasClient, /\.play\(/);
   assert.match(videoClient, /await video\.play\(\)/);
-  assert.match(videoClient, /native-source-1080x1920/);
+  assert.match(videoClient, /coherent-source-2160x3840/);
 });
 // mobile-motion-canvas-v18-test-end
