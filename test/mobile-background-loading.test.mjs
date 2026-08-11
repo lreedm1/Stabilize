@@ -123,7 +123,7 @@ test("the production mobile release gate verifies visible canvas motion", async 
   assert.ok(workflow.includes("getImageData"));
   assert.ok(workflow.includes("first.hash === second.hash"));
   assert.ok(workflow.includes('first.opacity !== "1"'));
-  assert.ok(workflow.includes("Exact canvas mobile release is live"));
+  assert.ok(workflow.includes("Native video and canvas fallback are live"));
 });
 
 test("portrait mobile uses a Worker-served MP4 instead of a reconstructed blob", async () => {
