@@ -125,9 +125,21 @@ await update("public/mobile-quality.js", (source) => {
   return next;
 });
 
+// Remove the final historical v14 fallback from the legacy woodland sheet too.
+// Even if iOS repaints between video frames, every remaining visual layer now
+// points at the exact poster generated from this coherent video.
+await update("public/mobile-woodland-loop.css", (source) =>
+  source.replaceAll(
+    "/scenes/mobile-forest-stream-v14-retina-2160.webp",
+    `${POSTER_ASSET}?v=${CACHE_VERSION}`,
+  ),
+);
+
 // This stylesheet loads after the legacy woodland sheet, so make it the final
 // authority: one coherent poster, one coherent video, and no creek sprite
-// painted over either of them.
+// painted over either of them. Keep the video element visible even while it is
+// paused/loading so Safari shows its matching poster instead of exposing the
+// older backdrop during a touch, focus, pagehide, or compositor transition.
 await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coherent full-frame portrait-touch background. */
 @media ${ZOOM_SAFE_QUERY} {
   .photo-backdrop {
@@ -145,7 +157,11 @@ await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coheren
     opacity: 0 !important;
   }
 
-  .mobile-background-video {
+  .mobile-background-video,
+  .mobile-background-video.is-playing,
+  .mobile-background-video.is-autoplay-blocked,
+  .mobile-background-video.is-failed,
+  html[data-mobile-background] .mobile-background-video {
     position: fixed !important;
     z-index: 0 !important;
     inset: 0 !important;
@@ -154,13 +170,9 @@ await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coheren
     height: 100% !important;
     object-fit: cover !important;
     object-position: 50% 50% !important;
-    pointer-events: none !important;
-  }
-
-  html[data-mobile-background="video-playing"] .mobile-background-video.is-playing,
-  .mobile-background-video.is-playing {
     visibility: visible !important;
     opacity: 1 !important;
+    pointer-events: none !important;
   }
 
   #mobile-background-video-4k,
@@ -175,15 +187,17 @@ await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coheren
 `);
 
 await update("test/mobile-quality.test.mjs", (source) =>
-  replaceReleaseFacts(source)
-    .replaceAll(
-      "mobile-quality.js\\?v=20260810-native-selected-mobile-v24-1",
-      `mobile-quality.js\\?v=${CACHE_VERSION}`,
-    ),
+  replaceReleaseFacts(source).replaceAll(
+    "20260810-native-selected-mobile-v24-1",
+    CACHE_VERSION,
+  ),
 );
 
 await update("test/mobile-background-loading.test.mjs", (source) => {
-  let next = replaceReleaseFacts(source);
+  let next = replaceReleaseFacts(source).replaceAll(
+    "20260810-native-selected-mobile-v24-1",
+    CACHE_VERSION,
+  );
   const oldStart =
     'test("the production mobile release gate verifies visible canvas motion", async () => {';
   const nextTest =
