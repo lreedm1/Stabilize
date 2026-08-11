@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 
 const metadata = JSON.parse(
@@ -201,10 +200,19 @@ await update("test/mobile-background-loading.test.mjs", (source) => {
 });
 
 await update(".github/workflows/verify-mobile-video.yml", (source) =>
-  replaceReleaseFacts(source).replaceAll(
-    "version='20260810-native-selected-mobile-v24-1'",
-    `version='${CACHE_VERSION}'`,
-  ),
+  replaceReleaseFacts(source)
+    .replaceAll(
+      "version='20260810-native-selected-mobile-v24-1'",
+      `version='${CACHE_VERSION}'`,
+    )
+    .replace(
+      /publish_status success 'Exact [^']+ forest video is live'/,
+      `publish_status success 'Exact coherent ${VIDEO_WIDTH}x${VIDEO_HEIGHT} forest video is live'`,
+    )
+    .replaceAll(
+      "first.width !== 1080 || first.height !== 1920",
+      `first.width !== ${VIDEO_WIDTH} || first.height !== ${VIDEO_HEIGHT}`,
+    ),
 );
 
 const coherentWorkflow = await readFile(
@@ -216,15 +224,6 @@ await writeFile(
   coherentWorkflow,
   "utf8",
 );
-
-const workflowDrift = execFileSync(
-  "git",
-  ["diff", "--", ".github/workflows/verify-mobile-video.yml"],
-  { encoding: "utf8" },
-).trim();
-if (workflowDrift) {
-  console.log("coherent-mobile-v25 verify-mobile-video diff:\n" + workflowDrift);
-}
 
 console.log(
   `Finalized coherent ${VIDEO_WIDTH}x${VIDEO_HEIGHT} mobile video on the stable Worker route.`,
