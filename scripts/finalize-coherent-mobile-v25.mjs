@@ -65,6 +65,8 @@ function replaceReleaseFacts(source) {
     .replaceAll("selected-forest-stream-native-source", SOURCE_LABEL)
     .replaceAll("video-loading-native-source", LOADING_LABEL)
     .replaceAll("1080x1920", `${VIDEO_WIDTH}x${VIDEO_HEIGHT}`)
+    .replaceAll("video.videoWidth === 1080", `video.videoWidth === ${VIDEO_WIDTH}`)
+    .replaceAll("video.videoHeight === 1920", `video.videoHeight === ${VIDEO_HEIGHT}`)
     .replaceAll(
       "{ width: 1080, height: 1920 }",
       `{ width: ${VIDEO_WIDTH}, height: ${VIDEO_HEIGHT} }`,
