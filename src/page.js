@@ -173,6 +173,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
     <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260810-native-selected-mobile-v24-1" />
+    <link rel="stylesheet" href="/mobile-static-fallback-fix-20260811.css?v=20260811-1" />
   </head>
   <body>
     <canvas
