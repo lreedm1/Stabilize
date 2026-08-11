@@ -8,6 +8,9 @@ const VERSION = "20260810-native-selected-mobile-v24-1";
 const POSTER_ASSET =
   "/scenes/mobile-forest-stream-v24-native-1080.webp";
 const POSTER_NAME = "mobile-forest-stream-v24-native-1080";
+const NATIVE_TAIL =
+  "node scripts/finalize-decision-grade-impact.mjs && " +
+  `${NATIVE_FINALIZER} && ${REGRESSION_FINALIZER}`;
 
 async function update(path, transform) {
   const before = await readFile(path, "utf8");
@@ -36,16 +39,28 @@ packageData.scripts["apply:prompt-policy"] = canonicalPolicy;
 await writeFile(packagePath, `${JSON.stringify(packageData, null, 2)}\n`, "utf8");
 
 // Several focused regression tests intentionally pin the complete generator
-// chain. Keep those literals aligned after older generators rebuild them.
+// chain. Keep those literals and tail assertions aligned after older
+// generators rebuild them.
 const commandLiteralPattern =
   /"node scripts\/prepare-signed-in-latency-v2\.mjs[^"\n]*node scripts\/finalize-decision-grade-impact\.mjs[^"\n]*"/g;
+const oldDecisionTail =
+  "/finalize-decision-grade-impact\\.mjs$/";
+const newDecisionTail =
+  "/finalize-decision-grade-impact\\.mjs && node scripts\\/finalize-native-selected-mobile-v24\\.mjs && node scripts\\/finalize-native-selected-mobile-v24-regressions\\.mjs$/";
+const oldClientTail =
+  "/apply-client-response-time\\.mjs && node scripts\\/finalize-decision-grade-impact\\.mjs$/";
+const newClientTail =
+  "/apply-client-response-time\\.mjs && node scripts\\/finalize-decision-grade-impact\\.mjs && node scripts\\/finalize-native-selected-mobile-v24\\.mjs && node scripts\\/finalize-native-selected-mobile-v24-regressions\\.mjs$/";
 const testNames = (await readdir("test"))
   .filter((name) => name.endsWith(".mjs"))
   .sort();
 
 for (const name of testNames) {
   await update(`test/${name}`, (source) =>
-    source.replace(commandLiteralPattern, JSON.stringify(canonicalPolicy)),
+    source
+      .replace(commandLiteralPattern, JSON.stringify(canonicalPolicy))
+      .replaceAll(oldClientTail, newClientTail)
+      .replaceAll(oldDecisionTail, newDecisionTail),
   );
 }
 
@@ -90,6 +105,10 @@ await update("public/mobile-quality.js", (source) => {
   }
   return next;
 });
+
+if (!canonicalPolicy.endsWith(NATIVE_TAIL)) {
+  throw new Error("The native finalizers are not the canonical policy tail.");
+}
 
 console.log(
   "Finalized repeatable native mobile media policy and regression alignment.",
