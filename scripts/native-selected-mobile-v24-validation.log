@@ -1,12 +1,13 @@
 syntax_status=0
 materialize_status=0
 test_status=1
-check_status=0
+check_status=1
 
 ===== syntax =====
 
 ===== materialize =====
 Selected the 2371524-byte native 1080x1920 forest-stream release (20260810-native-selected-mobile-v24-1).
+Finalized repeatable native mobile media policy and regression alignment.
 
 ===== test =====
 
@@ -15,7 +16,7 @@ Selected the 2371524-byte native 1080x1920 forest-stream release (20260810-nativ
 
 
 > stabilize@0.1.0 apply:prompt-policy
-> node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs && node scripts/finalize-native-selected-mobile-v24.mjs
+> node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/finalize-native-selected-mobile-v24-regressions.mjs
 
 Prepared the priority generator for signed-in latency changes.
 Applied Fast mode, explicit prompt caching, parallel chat preparation, bounded output, and frame-throttled streaming.
@@ -55,346 +56,16 @@ Selected the correct forest-stream scene's 5006520-byte 2160x3840 MP4 as the por
 Made selected 4K mobile regression alignment repeatable across historical generators.
 Preserved the historical Worker-video test anchor for repeatable canvas generation.
 Selected the 20957716-byte AI-enhanced 2160x3840 forest-stream release (20260810-ai-enhanced-mobile-4k-v23-1).
-Aligned guide pages and their shared-theme regression with mobile-forest-stream-v23-ai-2160.webp.
-Finalized decision-grade impact compatibility, canonical regression expectations, and the AI-enhanced selected forest-stream mobile release.
-Selected the 2371524-byte native 1080x1920 forest-stream release (20260810-native-selected-mobile-v24-1).
+file:///home/runner/work/Stabilize/Stabilize/scripts/fix-ai-enhanced-mobile-theme-v23.mjs:40
+    throw new Error("The shared-theme test does not require the enhanced poster.");
+          ^
 
-> stabilize@0.1.0 test:node
-> node --test test/guest-summary.test.mjs test/memory-controls.test.mjs test/clean-tree-guard.test.mjs test/safety.test.mjs test/reasoning-policy.test.mjs test/new-conversation.test.mjs test/private-chat.test.mjs test/paid-model-choice.test.mjs test/model-catalog-usage.test.mjs test/model-limit-fallback.test.mjs test/model-tile-favicon.test.mjs test/composer-placeholder-alignment.test.mjs test/composer-chat-sections.test.mjs test/favicon-source-validation.test.mjs test/favicon-workflow.test.mjs test/favicon-release-gate.test.mjs test/header-menu-copy.test.mjs test/navigation-model-placement.test.mjs test/main-box-text-color.test.mjs test/shared-site-theme.test.mjs test/markdown.test.mjs test/terrain.test.mjs test/ui.test.mjs test/thread-history.test.mjs test/streaming-response.test.mjs test/product.test.mjs test/mobile-quality.test.mjs test/mobile-background-loading.test.mjs test/domain.test.mjs test/billing.test.mjs test/feedback.test.mjs test/prompt-submit.test.mjs test/outcome-followup.test.mjs test/impact-measurement.test.mjs test/engagement-feedback.test.mjs test/organic-share-loop.test.mjs test/daily-usage-dashboard.test.mjs test/recency-memory.test.mjs test/ios-release.test.mjs test/no-document-export.test.mjs test/sustainability.test.mjs test/nightly-review.test.mjs test/nightly-cloud-state.test.mjs test/nightly-cloud-bundle.test.mjs test/nightly-cloud-workflow.test.mjs test/priority-latency.test.mjs test/signed-in-prefetch-latency.test.mjs test/account-preflight.test.mjs test/decision-grade-impact.test.mjs test/decision-grade-impact-production-gate.test.mjs test/client-response-time.test.mjs
+Error: The shared-theme test does not require the enhanced poster.
+    at file:///home/runner/work/Stabilize/Stabilize/scripts/fix-ai-enhanced-mobile-theme-v23.mjs:40:11
+    at update (file:///home/runner/work/Stabilize/Stabilize/scripts/fix-ai-enhanced-mobile-theme-v23.mjs:18:17)
+    at async file:///home/runner/work/Stabilize/Stabilize/scripts/fix-ai-enhanced-mobile-theme-v23.mjs:31:1
 
-✔ signed-in quota and subscription are checked before send (8.838695ms)
-✔ model choices are bounded, deduplicated, and include the default (1.788636ms)
-✔ free accounts get 50 GPT-5.6 messages per UTC day while subscribers remain monthly (0.433611ms)
-✔ only active and trialing subscriptions grant the larger subscriber allowance (0.526179ms)
-✔ model subscription uses standard Stripe Checkout parameters (31.17558ms)
-✔ Stripe subscription events map to one account alias (0.637263ms)
-✔ Stripe webhook verification uses the raw body and rejects stale signatures (13.723642ms)
-✔ the clean-tree verifier rejects tracked and untracked build drift (224.562209ms)
-✔ normal validation and deployment finish with the clean-tree guard (4.21767ms)
-✔ foreground browser response time reaches the private impact dashboard without chat text (9.077088ms)
-✖ the lower-left model button opens model, new chat, and private chat sections (9.226805ms)
-✖ the composer placeholder is centered horizontally while entered text stays left-aligned (7.075067ms)
-✔ impact analytics groups daily users and messages without storing chat text (1.238612ms)
-✔ daily usage merges across privacy shards and appears in the dashboard (0.305432ms)
-✖ the canonical policy preserves the repeatable daily usage implementation (1.491577ms)
-✔ successful main deployments verify live decision-grade impact metadata (6.751127ms)
-✔ versioned pricing uses provider tokens and the actual Fast tier (2.476454ms)
-✔ unknown models remain visibly unpriced rather than receiving a guess (0.329467ms)
-✔ latency histograms merge across shards and preserve p50 and p95 segments (3.788314ms)
-✔ the runtime carries provider usage into decision-grade impact without chat text (15.543034ms)
-✔ stabilize.info is canonical and reedlokken.com redirects (10.988606ms)
-✔ repository and public descriptions match the current model policy (5.916903ms)
-✔ all public guide pages use stabilize.info canonicals and remain indexable (2.971326ms)
-✔ public website attribution stays project-based rather than personal (1.578465ms)
-✔ the About page preserves the origin while stating evidence and sustainability limits (3.024675ms)
-✔ each completed assistant response receives quiet private feedback (7.732269ms)
-✔ model-relevant follow-ups move beside the feedback icons (5.655336ms)
-✔ New conversation triggers optional whole-chat feedback only after reset succeeds (2.616511ms)
-✔ engagement uses a rotating privacy-hashed conversation identifier (1.923746ms)
-✔ message feedback is verified against the recorded chat turn (1.094278ms)
-✔ the private dashboard exposes engagement, quality, and comment review (1.876426ms)
-✔ the main-branch favicon gate verifies the new icon identity and Safari assets (4.900079ms)
-✔ favicon source payloads decode to real ICO and exact-size PNG files (8.607263ms)
-✔ post-deploy favicon verification checks new URLs, Safari mask, and bytes (5.851166ms)
-✔ feedback configuration requires a scoped-looking GitHub token (1.911447ms)
-✔ feedback is normalized without collecting identity fields (1.249348ms)
-✔ feedback commits one JSON file to the isolated inbox branch (27.390321ms)
-✔ guest chats retain the full current-tab conversation without compaction (12.973012ms)
-✔ the main page keeps Home, Info, account, and Admin in menu order (4.060668ms)
-✔ the Admin menu link is styled as a full-width button (6.961258ms)
-✔ public information pages use the uppercase wordmark (8.423972ms)
-✔ orderly impact keeps verified inline next-step and whole-conversation events (2.258801ms)
-✔ chat analytics starts after the response stream and records first-token timing (0.45259ms)
-✔ each structured outcome advances from shown to a first answer (0.306653ms)
-✔ conversation starts and follow-ups use a rotating hashed boundary (0.359562ms)
-✔ the private dashboard covers outcomes, engagement, quality, reliability, and cost (0.670312ms)
-✔ the weekly decision panel aligns with the other dashboard sections (0.334015ms)
-✔ production dashboard access uses a public hash without committing the password (0.616021ms)
-✔ the private dashboard shares the Stabilize background and reading palette (2.153887ms)
-✔ Cloudflare exports and binds the impact durable object (0.650682ms)
-✔ native iOS sends only after explicit OpenAI sharing permission (10.692899ms)
-✔ iOS CI builds the generated project and enforces simulator tests (2.622745ms)
-✔ the main content box uses white text over gray reading surfaces (5.523421ms)
-✔ parses common Markdown blocks without interpreting raw HTML (3.009041ms)
-✔ allows useful links and rejects executable or data URLs (0.456275ms)
-✔ renders allowlisted elements with text nodes instead of raw HTML (0.602491ms)
-✔ memory deletion and guest tab continuity stay wired through the final pipeline (11.701801ms)
-✖ mobile clients keep the static image without loading the graphics module chain (11.382268ms)
-✔ the production mobile release gate verifies visible canvas motion (5.57064ms)
-✔ portrait mobile uses a Worker-served MP4 instead of a reconstructed blob (5.018174ms)
-✔ single byte ranges cover Safari startup and resume requests (1.095621ms)
-✔ the mobile video response has a strong ETag and exact uncached ranges (53.947268ms)
-✔ portrait mobile uses the selected 1080x1920 MP4 without a lower-resolution video fallback (5.919757ms)
-✔ portrait mobile keeps a canvas fallback beneath the selected native-resolution video (4.888962ms)
-✔ portrait mobile draws water through a canvas without media autoplay (13.488515ms)
-✔ restored tabs recover from interrupted blank thinking views (3.926018ms)
-✔ portrait mobile serves the native selected forest scene (5.347351ms)
-✔ portrait mobile plays the selected forest-stream scene through the native route (2.278481ms)
-✖ only GPT-5.4 and Current remain selectable, with instant responses by default (9.964ms)
-✔ guest and signed-in free chats begin on GPT-5.6 Fast before signed-in fallback (7.37499ms)
-✔ the model tile shows 5.x, the composer is 42px tall, and pages hard-reset browser tab icons (13.716001ms)
-✖ Home lives in the hamburger menu without chat actions, duplicate model choice, or a save notice (11.634202ms)
-✔ New conversation stays out of the hamburger menu while remaining functional (9.734331ms)
-✔ state bundle contains only the bounded files (6.999976ms)
-✔ two simultaneous pending markers are rejected (1.693805ms)
-✔ bundle parsing rejects private identifiers after the sanitization boundary (1.694807ms)
-✔ proposal bundle carries only the tested patch contract (2.54119ms)
-✔ pull request identity requires the same repository owner (0.555732ms)
-✔ state bundles record one exact atomic transition (2.368164ms)
-✔ proposal feedback totals must match their category counts (0.886942ms)
-✔ publication recovery transitions cannot be combined with another state action (12.085439ms)
-✔ state digests are canonical and bind the live starting state (2.929253ms)
-✔ state-only verification preserves the exact transition without macOS execution (4.098504ms)
-✔ checkpoint validation accepts only a full SHA (1.444837ms)
-✔ private cloud state drops identifiers, paths, and reasons (0.795927ms)
-✔ snapshot and restore persist only bounded state (45.003167ms)
-✔ tracked paths outside the exact state allowlist are rejected (50.613741ms)
-✔ symlinked state files are rejected (37.392948ms)
-✔ first state write stages only the file that exists (44.962842ms)
-✔ durable state rejects simultaneous public and private pending markers (48.366276ms)
-✔ durable state requires the exact fixed README (49.906496ms)
-✔ durable state rejects oversized blobs before parsing (53.092083ms)
-✔ durable private markers reject local-only identifiers (47.291962ms)
-✔ nightly workflow pins actions and isolates credentials by job (2.422564ms)
-✔ verification profile and executable smoke probe enforce a writable root (0.482744ms)
-✔ feedback schema and path are validated exactly (4.956112ms)
-✔ feedback history accepts only canonical append-only JSON records (146.052886ms)
-✔ protected feedback is quarantined before model analysis (4.268224ms)
-✔ analysis plans are enum-only and internally consistent (0.940952ms)
-✔ dangerous CSS additions are rejected (4.054167ms)
-✔ one small safe CSS change passes with an exact digest (50.855604ms)
-✔ ignored dependency payloads fail before any test execution (36.728265ms)
-✔ mode changes and edits outside the approved file fail (55.306939ms)
-✔ same-size edits produce different post-test hashes (103.547565ms)
-✔ unable edits must leave no diff and no target (48.249629ms)
-✔ publishing intent recovers only the exact pull request identity (1.316487ms)
-✔ Codex proxy shutdown accepts the pinned port-and-pid server-info contract (1.714436ms)
-✔ Codex edit permissions deny both platform temporary roots (0.463516ms)
-✔ the coding workspace is detached from trusted Git metadata (24.509654ms)
-✔ trusted diff gates disable executable Git fsmonitor configuration (55.092186ms)
-✔ state directory validation rejects broad, linked, and repository paths (1.754136ms)
-✔ document export is absent from the product (10.947545ms)
-✔ the homepage and share flow use one canonical product promise (8.448904ms)
-✔ positive feedback and selected actions reveal an editable share surface (2.386711ms)
-✔ sharing stays user-controlled and outside impact analytics (3.312411ms)
-✔ follow-up actions change with the response and always call the model (5.444485ms)
-✖ GPT-5.6 fast-first routing and subscriber choice share a resilient left-side picker (12.043146ms)
-✔ interactive OpenAI calls use Fast mode, bounded output, and explicit GPT-5.6 caching (6.301062ms)
-✔ signed-in chat preparation uses one billing RPC and overlaps it with memory (4.111353ms)
-✔ streaming paints plain text at most once per frame and renders Markdown once at completion (3.07565ms)
-✔ signed-in private chat stays out of the hamburger menu and disables memory end to end (10.388459ms)
-✔ the homepage gives a short product promise (7.857274ms)
-✔ the responsive background includes a real 8K WebP (4.169018ms)
-✔ photos preserve screen proportion and use a calm mobile treatment (7.55748ms)
-✔ the homepage has no predefined prompt buttons (1.179925ms)
-✔ guest conversations preserve the full current-tab transcript (2.129731ms)
-✔ ordinary replies offer useful model follow-up actions (2.243179ms)
-✔ guest model choice includes a working sign-in action (1.043083ms)
-✔ starter prompt buttons call the model with a cache-busted client (7.11122ms)
-✔ signed-out users get a one-time memory reminder on their second send (3.21078ms)
-✔ the prompt limit is 4,000 characters (3.786752ms)
-✔ uses low effort for greetings and bounded execution help (1.717331ms)
-✔ uses low effort for ordinary drafting, food, and scheduling (2.102761ms)
-✔ uses medium effort for ordinary questions and consequential drafting (1.654788ms)
-✔ keeps Floor turns low and low-sleep urgency bounded at medium (1.289788ms)
-✔ targets max effort for consequential multi-factor decisions (0.282488ms)
-✔ uses recent conversation context for short decision follow-ups (0.282368ms)
-✔ does not overthink a simple food comparison (0.201468ms)
-✔ treats the configured model effort as a ceiling (0.259224ms)
-✔ remembered risk is timestamped and devalued with age (10.072631ms)
-✔ routes explicit current self-harm intent to immediate danger (4.287203ms)
-✔ treats suicidal language without a time marker as safety-unclear (3.892899ms)
-✔ routes imminent pill-taking and self-harm method requests to human help (0.238623ms)
-✔ does not treat a clearly historical disclosure as current intent (0.678263ms)
-✔ routes a recent attempt to urgent medical help (0.208539ms)
-✔ asks a bounded safety question when safety is unclear (0.491196ms)
-✔ interprets yes or unsure after a safety question as danger (0.397198ms)
-✔ interprets no after a safety question as confirmed (0.291582ms)
-✔ routes overdose and breathing emergencies without model generation (0.268838ms)
-✔ routes medication-change requests to a fixed professional handoff (1.772121ms)
-✔ detects food and sleep floor breaches (4.147396ms)
-✔ detects low sleep plus a consequential decision (0.201888ms)
-✖ all public Stabilize pages share the chat background and reading colors (14.17822ms)
-✔ signed-in memory prefetch stays outside the guest chat application (12.026061ms)
-✔ model replies stream through NDJSON while fixed routes remain deterministic (8.860924ms)
-✔ the About page states the product limits and funding problem honestly (8.197787ms)
-✔ the public sustainability page provides a real revenue route with firm boundaries (2.335765ms)
-✔ the internal business plan includes pricing, unit economics, decision gates, and stop conditions (3.398648ms)
-✔ the lake valley opens widest in the center (3.036346ms)
-✔ token signals are local, bounded, and deterministic (1.939119ms)
-✔ Minecraft-inspired terrain is deterministic and responds to controls (1.353833ms)
-✔ photographic scene assets are responsive and bounded (11.250094ms)
-✔ reduced-motion and low-power clients skip only the animated photo scene (0.389837ms)
-✔ the current conversation keeps prior user and assistant turns visible (5.353309ms)
-✔ a content-sized output stays above the compact bottom composer (8.676305ms)
-✔ thinking is replaced with the latest Markdown reply (2.941742ms)
-✔ signed-in users can delete remembered context (1.687787ms)
-✔ the terrain background is token-modulated and motion-aware (3.017584ms)
-✔ the page has no audio or separate immediate-danger shortcut (2.853331ms)
-✔ Lexend is self-hosted and the response uses a single reading surface (1.91279ms)
-✔ layout fills the dynamic viewport without a fixed-width shell (1.104985ms)
-✔ privacy detail lives in the hamburger menu rather than the landing card (1.598996ms)
-✔ Google account controls stay compact and guest chat remains visible (2.008642ms)
-✔ the application never reads or stores a connecting-address alias (1.179976ms)
-ℹ tests 174
-ℹ suites 0
-ℹ pass 166
-ℹ fail 8
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 1773.005865
-
-✖ failing tests:
-
-test at test/composer-chat-sections.test.mjs:8:1
-✖ the lower-left model button opens model, new chat, and private chat sections (9.226805ms)
-  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
-  + actual - expected
-  
-  + 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs'
-  - 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs && node scripts/finalize-native-selected-mobile-v24.mjs'
-  
-      at TestContext.<anonymous> (file:///home/runner/work/Stabilize/Stabilize/test/composer-chat-sections.test.mjs:45:10)
-      at async Test.run (node:internal/test_runner/test:1332:7)
-      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
-    generatedMessage: true,
-    code: 'ERR_ASSERTION',
-    actual: 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs',
-    expected: 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs && node scripts/finalize-native-selected-mobile-v24.mjs',
-    operator: 'strictEqual',
-    diff: 'simple'
-  }
-
-test at test/composer-placeholder-alignment.test.mjs:8:1
-✖ the composer placeholder is centered horizontally while entered text stays left-aligned (7.075067ms)
-  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
-  + actual - expected
-  
-  + 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs'
-  - 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs && node scripts/finalize-native-selected-mobile-v24.mjs'
-  
-      at TestContext.<anonymous> (file:///home/runner/work/Stabilize/Stabilize/test/composer-placeholder-alignment.test.mjs:30:10)
-      at async Test.run (node:internal/test_runner/test:1332:7)
-      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
-    generatedMessage: true,
-    code: 'ERR_ASSERTION',
-    actual: 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs',
-    expected: 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs && node scripts/finalize-native-selected-mobile-v24.mjs',
-    operator: 'strictEqual',
-    diff: 'simple'
-  }
-
-test at test/daily-usage-dashboard.test.mjs:32:1
-✖ the canonical policy preserves the repeatable daily usage implementation (1.491577ms)
-  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
-  + actual - expected
-  
-  + 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs'
-  - 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs && node scripts/finalize-native-selected-mobile-v24.mjs'
-  
-      at TestContext.<anonymous> (file:///home/runner/work/Stabilize/Stabilize/test/daily-usage-dashboard.test.mjs:34:10)
-      at Test.runInAsyncScope (node:async_hooks:227:14)
-      at Test.run (node:internal/test_runner/test:1325:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
-      at Test.postRun (node:internal/test_runner/test:1465:19)
-      at Test.run (node:internal/test_runner/test:1390:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
-    generatedMessage: true,
-    code: 'ERR_ASSERTION',
-    actual: 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs',
-    expected: 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs && node scripts/finalize-native-selected-mobile-v24.mjs',
-    operator: 'strictEqual',
-    diff: 'simple'
-  }
-
-test at test/mobile-background-loading.test.mjs:42:1
-✖ mobile clients keep the static image without loading the graphics module chain (11.382268ms)
-  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /finalize-native-selected-mobile-v24\.mjs$/. Input:
-  
-  'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs'
-  
-      at TestContext.<anonymous> (file:///home/runner/work/Stabilize/Stabilize/test/mobile-background-loading.test.mjs:83:10)
-      at async Test.run (node:internal/test_runner/test:1332:7)
-      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
-    generatedMessage: true,
-    code: 'ERR_ASSERTION',
-    actual: 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs',
-    expected: /finalize-native-selected-mobile-v24\.mjs$/,
-    operator: 'match',
-    diff: 'simple'
-  }
-
-test at test/model-catalog-usage.test.mjs:7:1
-✖ only GPT-5.4 and Current remain selectable, with instant responses by default (9.964ms)
-  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
-  + actual - expected
-  
-  + 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs'
-  - 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs && node scripts/finalize-native-selected-mobile-v24.mjs'
-  
-      at TestContext.<anonymous> (file:///home/runner/work/Stabilize/Stabilize/test/model-catalog-usage.test.mjs:60:10)
-      at async Test.run (node:internal/test_runner/test:1332:7)
-      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
-    generatedMessage: true,
-    code: 'ERR_ASSERTION',
-    actual: 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs',
-    expected: 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs && node scripts/finalize-native-selected-mobile-v24.mjs',
-    operator: 'strictEqual',
-    diff: 'simple'
-  }
-
-test at test/navigation-model-placement.test.mjs:6:1
-✖ Home lives in the hamburger menu without chat actions, duplicate model choice, or a save notice (11.634202ms)
-  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
-  + actual - expected
-  
-  + 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs'
-  - 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs && node scripts/finalize-native-selected-mobile-v24.mjs'
-  
-      at TestContext.<anonymous> (file:///home/runner/work/Stabilize/Stabilize/test/navigation-model-placement.test.mjs:62:10)
-      at async Test.run (node:internal/test_runner/test:1332:7)
-      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
-    generatedMessage: true,
-    code: 'ERR_ASSERTION',
-    actual: 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs',
-    expected: 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs && node scripts/finalize-native-selected-mobile-v24.mjs',
-    operator: 'strictEqual',
-    diff: 'simple'
-  }
-
-test at test/paid-model-choice.test.mjs:5:1
-✖ GPT-5.6 fast-first routing and subscriber choice share a resilient left-side picker (12.043146ms)
-  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
-  + actual - expected
-  
-  + 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs'
-  - 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs && node scripts/finalize-native-selected-mobile-v24.mjs'
-  
-      at TestContext.<anonymous> (file:///home/runner/work/Stabilize/Stabilize/test/paid-model-choice.test.mjs:138:10)
-      at async Test.run (node:internal/test_runner/test:1332:7)
-      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
-    generatedMessage: true,
-    code: 'ERR_ASSERTION',
-    actual: 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs',
-    expected: 'node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs && node scripts/finalize-native-selected-mobile-v24.mjs',
-    operator: 'strictEqual',
-    diff: 'simple'
-  }
-
-test at test/shared-site-theme.test.mjs:26:1
-✖ all public Stabilize pages share the chat background and reading colors (14.17822ms)
-  AssertionError [ERR_ASSERTION]: Main page is missing /scenes/mobile-forest-stream-v23-ai-2160.webp
-      at TestContext.<anonymous> (file:///home/runner/work/Stabilize/Stabilize/test/shared-site-theme.test.mjs:98:12)
-      at async Test.run (node:internal/test_runner/test:1332:7)
-      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: false,
-    expected: true,
-    operator: '==',
-    diff: 'simple'
-  }
+Node.js v24.18.0
 
 ===== check =====
 
@@ -403,7 +74,7 @@ test at test/shared-site-theme.test.mjs:26:1
 
 
 > stabilize@0.1.0 apply:prompt-policy
-> node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs
+> node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/finalize-native-selected-mobile-v24.mjs && node scripts/finalize-native-selected-mobile-v24-regressions.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs
 
 Prepared the priority generator for signed-in latency changes.
 Applied Fast mode, explicit prompt caching, parallel chat preparation, bounded output, and frame-throttled streaming.
@@ -435,6 +106,7 @@ Validated public/scenes/mobile-forest-stream-video-v24-native-1080.mp4: 1080x192
 Installed the project-owner forest stream as the portrait mobile background.
 Installed a Retina poster plus high-resolution cropped canvas water motion for portrait mobile.
 Selected the 2371524-byte native 1080x1920 forest-stream release (20260810-native-selected-mobile-v24-1).
+Finalized repeatable native mobile media policy and regression alignment.
 Applied decision-grade provider usage, pricing, latency percentiles, and dashboard breakdowns.
 Applied foreground browser response-time measurement and dashboard reporting.
 Installed a Retina poster plus high-resolution cropped canvas water motion for portrait mobile.
@@ -444,97 +116,13 @@ Selected the correct forest-stream scene's 5006520-byte 2160x3840 MP4 as the por
 Made selected 4K mobile regression alignment repeatable across historical generators.
 Preserved the historical Worker-video test anchor for repeatable canvas generation.
 Selected the 20957716-byte AI-enhanced 2160x3840 forest-stream release (20260810-ai-enhanced-mobile-4k-v23-1).
-Aligned guide pages and their shared-theme regression with mobile-forest-stream-v23-ai-2160.webp.
-Finalized decision-grade impact compatibility, canonical regression expectations, and the AI-enhanced selected forest-stream mobile release.
+file:///home/runner/work/Stabilize/Stabilize/scripts/fix-ai-enhanced-mobile-theme-v23.mjs:40
+    throw new Error("The shared-theme test does not require the enhanced poster.");
+          ^
 
- ⛅️ wrangler 4.118.0
-────────────────────
-Generating project types...
+Error: The shared-theme test does not require the enhanced poster.
+    at file:///home/runner/work/Stabilize/Stabilize/scripts/fix-ai-enhanced-mobile-theme-v23.mjs:40:11
+    at update (file:///home/runner/work/Stabilize/Stabilize/scripts/fix-ai-enhanced-mobile-theme-v23.mjs:18:17)
+    at async file:///home/runner/work/Stabilize/Stabilize/scripts/fix-ai-enhanced-mobile-theme-v23.mjs:31:1
 
-interface __BaseEnv_Env {
-	ASSETS: Fetcher;
-	DEMO_MODE: "false";
-	OPENAI_MODEL: "gpt-5.4";
-	OPENAI_REASONING_EFFORT: "none";
-	PUBLIC_ORIGIN: "https://stabilize.info";
-	MODEL_CHOICES: "gpt-5.4|GPT-5.4,gpt-5.6-sol|Current";
-	PAID_MONTHLY_MESSAGE_LIMIT: "200";
-	FREE_DAILY_MODEL_MESSAGE_LIMIT: "50";
-	STRIPE_MODEL_CHOICE_PRICE_ID: "price_1U01Jp96tfbPOBGIbQNXDlPx";
-	FEEDBACK_REPOSITORY: "lreedm1/Stabilize";
-	FEEDBACK_BRANCH: "feedback-inbox";
-	FEEDBACK_PATH: "feedback";
-	IMPACT_ADMIN_PASSWORD_SHA256: "c1926162:cf30c39d:cab9b52f:41993fa9:81623d41:20619aed:82b56cb5:2e19de60";
-	IMPACT_RETENTION_DAYS: "180";
-	IMPACT_ESTIMATED_CHAT_COST_MICROS: "0";
-	IMPACT_MONTHLY_RECURRING_REVENUE_CENTS: "0";
-	IMPACT_MONTHLY_RECURRING_COST_CENTS: "0";
-	FREE_PLAN_PRIMARY_MODEL: "gpt-5.6-sol";
-	FREE_PLAN_FALLBACK_MODEL: "gpt-5.4";
-	OPENAI_SERVICE_TIER: "fast";
-	OPENAI_API_KEY: string;
-	GOOGLE_CLIENT_ID: string;
-	GOOGLE_CLIENT_SECRET: string;
-	AUTH_SECRET: string;
-	SESSIONS: DurableObjectNamespace<import("./src/domain-router").SessionMemory>;
-	BILLING: DurableObjectNamespace<import("./src/domain-router").BillingAccount>;
-	FEEDBACK_LIMITS: DurableObjectNamespace<import("./src/domain-router").FeedbackGate>;
-	FEEDBACK_INBOX: DurableObjectNamespace<import("./src/domain-router").FeedbackInbox>;
-	IMPACT: DurableObjectNamespace<import("./src/domain-router").ImpactAnalytics>;
-}
-declare namespace Cloudflare {
-	interface GlobalProps {
-		mainModule: typeof import("./src/domain-router");
-		durableNamespaces: "SessionMemory" | "BillingAccount" | "FeedbackGate" | "FeedbackInbox" | "ImpactAnalytics";
-	}
-	interface Env extends __BaseEnv_Env {}
-}
-interface Env extends __BaseEnv_Env {}
-type StringifyValues<EnvType extends Record<string, unknown>> = {
-	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
-};
-declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "DEMO_MODE" | "OPENAI_MODEL" | "OPENAI_REASONING_EFFORT" | "PUBLIC_ORIGIN" | "MODEL_CHOICES" | "PAID_MONTHLY_MESSAGE_LIMIT" | "FREE_DAILY_MODEL_MESSAGE_LIMIT" | "STRIPE_MODEL_CHOICE_PRICE_ID" | "FEEDBACK_REPOSITORY" | "FEEDBACK_BRANCH" | "FEEDBACK_PATH" | "IMPACT_ADMIN_PASSWORD_SHA256" | "IMPACT_RETENTION_DAYS" | "IMPACT_ESTIMATED_CHAT_COST_MICROS" | "IMPACT_MONTHLY_RECURRING_REVENUE_CENTS" | "IMPACT_MONTHLY_RECURRING_COST_CENTS" | "FREE_PLAN_PRIMARY_MODEL" | "FREE_PLAN_FALLBACK_MODEL" | "OPENAI_SERVICE_TIER" | "OPENAI_API_KEY" | "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "AUTH_SECRET">> {}
-}
-
-
-✨ Types written to worker-configuration.d.ts
-
-📣 Remember to rerun 'wrangler types' after you change your wrangler.jsonc file.
-
-
- ⛅️ wrangler 4.118.0 (update available 4.120.1)
-───────────────────────────────────────────────
-
-Cloudflare collects anonymous telemetry about your usage of Wrangler. Learn more at https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler/telemetry.md
-✨ Read 112 files from the assets directory /home/runner/work/Stabilize/Stabilize/public
-Total Upload: 326.53 KiB / gzip: 76.34 KiB
-Your Worker has access to the following bindings:
-Binding                                                                                      Resource                  
-env.SESSIONS (SessionMemory)                                                                 Durable Object            
-env.BILLING (BillingAccount)                                                                 Durable Object            
-env.FEEDBACK_LIMITS (FeedbackGate)                                                           Durable Object            
-env.FEEDBACK_INBOX (FeedbackInbox)                                                           Durable Object            
-env.IMPACT (ImpactAnalytics)                                                                 Durable Object            
-env.ASSETS                                                                                   Assets                    
-env.DEMO_MODE ("false")                                                                      Environment Variable      
-env.OPENAI_MODEL ("gpt-5.4")                                                                 Environment Variable      
-env.OPENAI_REASONING_EFFORT ("none")                                                         Environment Variable      
-env.PUBLIC_ORIGIN ("https://stabilize.info")                                                 Environment Variable      
-env.MODEL_CHOICES ("gpt-5.4|GPT-5.4,gpt-5.6-sol|Current")                                    Environment Variable      
-env.PAID_MONTHLY_MESSAGE_LIMIT ("200")                                                       Environment Variable      
-env.FREE_DAILY_MODEL_MESSAGE_LIMIT ("50")                                                    Environment Variable      
-env.STRIPE_MODEL_CHOICE_PRICE_ID ("price_1U01Jp96tfbPOBGIbQNXDlPx")                          Environment Variable      
-env.FEEDBACK_REPOSITORY ("lreedm1/Stabilize")                                                Environment Variable      
-env.FEEDBACK_BRANCH ("feedback-inbox")                                                       Environment Variable      
-env.FEEDBACK_PATH ("feedback")                                                               Environment Variable      
-env.IMPACT_ADMIN_PASSWORD_SHA256 ("c1926162:cf30c39d:cab9b52f:41993fa9:8...")                Environment Variable      
-env.IMPACT_RETENTION_DAYS ("180")                                                            Environment Variable      
-env.IMPACT_ESTIMATED_CHAT_COST_MICROS ("0")                                                  Environment Variable      
-env.IMPACT_MONTHLY_RECURRING_REVENUE_CENTS ("0")                                             Environment Variable      
-env.IMPACT_MONTHLY_RECURRING_COST_CENTS ("0")                                                Environment Variable      
-env.FREE_PLAN_PRIMARY_MODEL ("gpt-5.6-sol")                                                  Environment Variable      
-env.FREE_PLAN_FALLBACK_MODEL ("gpt-5.4")                                                     Environment Variable      
-env.OPENAI_SERVICE_TIER ("fast")                                                             Environment Variable      
-
---dry-run: exiting now.
+Node.js v24.18.0
