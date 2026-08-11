@@ -1,5 +1,4 @@
-# Native-source retry after guest-pipeline compatibility alignment.
-name: Materialize native selected mobile video v24
+name: Export native selected mobile verifier v24
 
 on:
   push:
@@ -7,19 +6,18 @@ on:
       - agent/native-selected-mobile-video-v24
     paths:
       - .github/workflows/materialize-native-selected-mobile-v24.yml
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: materialize-native-selected-mobile-v24-${{ github.sha }}
+  group: export-native-selected-mobile-verifier-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
-  materialize:
+  export:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
 
     steps:
       - name: Check out feature branch
@@ -38,88 +36,17 @@ jobs:
       - name: Install dependencies without running generators
         run: npm ci --ignore-scripts
 
-      - name: Materialize and validate the native release
-        id: validate
+      - name: Generate and export the exact native verifier
         shell: bash
-        run: |
-          set +e
-          mkdir -p /tmp/native-v24
-          {
-            node --check scripts/finalize-native-selected-mobile-v24.mjs
-            node --check scripts/finalize-native-selected-mobile-v24-regressions.mjs
-          } > /tmp/native-v24/syntax.log 2>&1
-          syntax_status=$?
-
-          {
-            node scripts/finalize-native-selected-mobile-v24.mjs
-            node scripts/finalize-native-selected-mobile-v24-regressions.mjs
-          } > /tmp/native-v24/materialize.log 2>&1
-          materialize_status=$?
-
-          npm test > /tmp/native-v24/test.log 2>&1
-          test_status=$?
-
-          npm run check > /tmp/native-v24/check.log 2>&1
-          check_status=$?
-
-          {
-            echo "syntax_status=${syntax_status}"
-            echo "materialize_status=${materialize_status}"
-            echo "test_status=${test_status}"
-            echo "check_status=${check_status}"
-            echo
-            echo "===== syntax ====="
-            cat /tmp/native-v24/syntax.log
-            echo
-            echo "===== materialize ====="
-            cat /tmp/native-v24/materialize.log
-            echo
-            echo "===== test ====="
-            cat /tmp/native-v24/test.log
-            echo
-            echo "===== check ====="
-            cat /tmp/native-v24/check.log
-          } > scripts/native-selected-mobile-v24-validation.log
-
-          cat scripts/native-selected-mobile-v24-validation.log
-
-          if [[ "$syntax_status" == 0 \
-            && "$materialize_status" == 0 \
-            && "$test_status" == 0 \
-            && "$check_status" == 0 ]]; then
-            echo "passed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "passed=false" >> "$GITHUB_OUTPUT"
-          fi
-          exit 0
-
-      - name: Commit materialized output
-        shell: bash
-        env:
-          PASSED: ${{ steps.validate.outputs.passed }}
         run: |
           set -euo pipefail
-
-          # GitHub's workflow token cannot modify workflow files. Keep the
-          # existing verifier unchanged here; it is updated through the GitHub
-          # app after the generated application files pass validation.
+          npm run apply:prompt-policy
+          cp .github/workflows/verify-mobile-video.yml \
+            scripts/generated-verify-mobile-video-v24.yml
           git checkout -- .github/workflows/verify-mobile-video.yml
-
-          if [[ "$PASSED" == true ]]; then
-            rm -f scripts/native-selected-mobile-v24-validation.log
-          fi
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'Use native-resolution selected mobile background'
+          git add scripts/generated-verify-mobile-video-v24.yml
+          git commit -m 'Export generated native mobile verifier'
           git push origin HEAD:agent/native-selected-mobile-video-v24
-
-          if [[ "$PASSED" != true ]]; then
-            echo '::error::Native release validation failed; see scripts/native-selected-mobile-v24-validation.log on the branch.'
-            exit 1
-          fi
-
-      - name: Verify committed tree remains clean
-        if: steps.validate.outputs.passed == 'true'
-        run: npm run verify:clean
