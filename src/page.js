@@ -270,7 +270,7 @@ export function renderPage(options = {}) {
           </details>
         </nav>
         <div class="header-actions">
-          ${headerAuthControl ? `<nav class="auth-actions header-auth-actions" aria-label="${escapeHtml(page.auth.label)}">${headerAuthControl}</nav>` : "";
+          ${headerAuthControl ? `<nav class="auth-actions header-auth-actions" aria-label="${escapeHtml(page.auth.label)}">${headerAuthControl}</nav>` : ""}
         </div>
       </header>
 
