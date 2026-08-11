@@ -8,6 +8,7 @@ on:
       - scripts/generate-coherent-mobile-video-v25.sh
       - scripts/prepare-coherent-mobile-video-v25.py
       - scripts/finalize-coherent-mobile-v25.mjs
+      - scripts/fix-ai-enhanced-mobile-theme-v23.mjs
       - .github/workflows/build-coherent-mobile-video-v25.yml
   workflow_dispatch:
 
