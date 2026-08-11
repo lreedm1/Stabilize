@@ -191,7 +191,7 @@ export function renderPage(options = {}) {
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="\n          /scenes/mobile-forest-stream-v24-native-1080.webp 2160w\n        "
+        srcset="/scenes/mobile-forest-stream-v24-native-1080.webp 2160w"
       />
       <img
         id="photo-backdrop-image"
@@ -270,7 +270,7 @@ export function renderPage(options = {}) {
           </details>
         </nav>
         <div class="header-actions">
-          ${headerAuthControl ? `<nav class="auth-actions header-auth-actions" aria-label="${escapeHtml(page.auth.label)}">${headerAuthControl}</nav>` : ""}
+          ${headerAuthControl ? `<nav class="auth-actions header-auth-actions" aria-label="${escapeHtml(page.auth.label)}">${headerAuthControl}</nav>` : "";
         </div>
       </header>
 
