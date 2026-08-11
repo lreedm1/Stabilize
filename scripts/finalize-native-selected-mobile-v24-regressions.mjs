@@ -106,6 +106,37 @@ await update("public/mobile-quality.js", (source) => {
   return next;
 });
 
+// The historical canvas workflow used to prove that no video existed. The
+// native release intentionally keeps the canvas as a fallback beneath one
+// visible video element, so the fallback gate must verify coexistence instead.
+await update(".github/workflows/verify-mobile-background.yml", (source) =>
+  source
+    .replaceAll(
+      "&& ! grep -Fq 'id=\"mobile-background-video\"' \"$tmpdir/live.html\" \\",
+      "&& grep -Fq 'id=\"mobile-background-video\"' \"$tmpdir/live.html\" \\",
+    )
+    .replaceAll(
+      "&& ! grep -Fq 'mobile-quality.js' \"$tmpdir/live.html\" \\",
+      "&& grep -Fq 'mobile-quality.js' \"$tmpdir/live.html\" \\",
+    )
+    .replaceAll(
+      "if (first.videoCount !== 0 || second.videoCount !== 0) {",
+      "if (first.videoCount !== 1 || second.videoCount !== 1) {",
+    )
+    .replaceAll(
+      'throw new Error("A tap-gated background video is still present.");',
+      'throw new Error("The native background video is missing or duplicated.");',
+    )
+    .replaceAll(
+      "Production serves the exact Retina-poster plus canvas-motion release.",
+      "Production serves the native video with its exact canvas fallback.",
+    )
+    .replaceAll(
+      "Exact canvas mobile release is live",
+      "Native video and canvas fallback are live",
+    ),
+);
+
 if (!canonicalPolicy.endsWith(NATIVE_TAIL)) {
   throw new Error("The native finalizers are not the canonical policy tail.");
 }
