@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - fix/mobile-background-seam
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 concurrency:
   group: generate-clean-mobile-portrait-${{ github.ref }}
@@ -86,6 +90,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/generate-clean-mobile-portrait-branch.yml
+          git rm --ignore-unmatch .clean-mobile-generation-trigger
           git add -A
           git commit -m "Generate coherent mobile portrait release"
           git push origin HEAD:fix/mobile-background-seam
