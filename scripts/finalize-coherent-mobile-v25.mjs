@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 
 const metadata = JSON.parse(
@@ -79,8 +80,6 @@ function replaceReleaseFacts(source) {
     );
 }
 
-// Keep the generated homepage shape intact. Only bump client/style cache keys
-// and the video poster URL after the native finalizer has rebuilt the page.
 await update("src/page.js", (source) =>
   source
     .replace(
@@ -101,9 +100,6 @@ await update("src/page.js", (source) =>
     ),
 );
 
-// The source is now a real 2160x3840 video, so drawing it into another 4K
-// canvas only adds a compositor layer. Remove that renderer, keep eligibility
-// zoom-stable, and make the runtime fallback use the exact matching poster.
 await update("public/mobile-quality.js", (source) => {
   let next = stripLegacy4kRender(source)
     .replace(
@@ -125,9 +121,6 @@ await update("public/mobile-quality.js", (source) => {
   return next;
 });
 
-// Remove the final historical v14 fallback from the legacy woodland sheet too.
-// Even if iOS repaints between video frames, every remaining visual layer now
-// points at the exact poster generated from this coherent video.
 await update("public/mobile-woodland-loop.css", (source) =>
   source.replaceAll(
     "/scenes/mobile-forest-stream-v14-retina-2160.webp",
@@ -135,11 +128,6 @@ await update("public/mobile-woodland-loop.css", (source) =>
   ),
 );
 
-// This stylesheet loads after the legacy woodland sheet, so make it the final
-// authority: one coherent poster, one coherent video, and no creek sprite
-// painted over either of them. Keep the video element visible even while it is
-// paused/loading so Safari shows its matching poster instead of exposing the
-// older backdrop during a touch, focus, pagehide, or compositor transition.
 await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coherent full-frame portrait-touch background. */
 @media ${ZOOM_SAFE_QUERY} {
   .photo-backdrop {
@@ -213,15 +201,10 @@ await update("test/mobile-background-loading.test.mjs", (source) => {
 });
 
 await update(".github/workflows/verify-mobile-video.yml", (source) =>
-  replaceReleaseFacts(source)
-    .replaceAll(
-      "version='20260810-native-selected-mobile-v24-1'",
-      `version='${CACHE_VERSION}'`,
-    )
-    .replaceAll(
-      "mobile-quality.js?v=${version}",
-      "mobile-quality.js?v=${version}",
-    ),
+  replaceReleaseFacts(source).replaceAll(
+    "version='20260810-native-selected-mobile-v24-1'",
+    `version='${CACHE_VERSION}'`,
+  ),
 );
 
 const coherentWorkflow = await readFile(
@@ -233,6 +216,15 @@ await writeFile(
   coherentWorkflow,
   "utf8",
 );
+
+const workflowDrift = execFileSync(
+  "git",
+  ["diff", "--", ".github/workflows/verify-mobile-video.yml"],
+  { encoding: "utf8" },
+).trim();
+if (workflowDrift) {
+  console.log("coherent-mobile-v25 verify-mobile-video diff:\n" + workflowDrift);
+}
 
 console.log(
   `Finalized coherent ${VIDEO_WIDTH}x${VIDEO_HEIGHT} mobile video on the stable Worker route.`,
