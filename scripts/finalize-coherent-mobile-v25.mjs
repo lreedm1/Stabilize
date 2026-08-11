@@ -7,7 +7,8 @@ const metadata = JSON.parse(
   ),
 );
 
-const CACHE_VERSION = "20260811-coherent-mobile-4k-v25-1";
+const PREVIOUS_CACHE_VERSION = "20260811-coherent-mobile-4k-v25-1";
+const CACHE_VERSION = "20260811-mobile-orientation-v26-1";
 const POSTER_ASSET = metadata.posterAsset;
 const VIDEO_BYTES = Number(metadata.videoBytes);
 const VIDEO_SHA256 = metadata.videoSha256;
@@ -102,6 +103,7 @@ await update("src/page.js", (source) =>
 
 await update("public/mobile-quality.js", (source) => {
   let next = stripLegacy4kRender(source)
+    .replaceAll(PREVIOUS_CACHE_VERSION, CACHE_VERSION)
     .replaceAll(
       "(orientation: portrait) and (hover: none) and (pointer: coarse)",
       ZOOM_SAFE_QUERY,
@@ -126,10 +128,12 @@ await update("public/mobile-quality.js", (source) => {
 });
 
 await update("public/mobile-woodland-loop.css", (source) =>
-  source.replaceAll(
-    "/scenes/mobile-forest-stream-v14-retina-2160.webp",
-    `${POSTER_ASSET}?v=${CACHE_VERSION}`,
-  ),
+  source
+    .replaceAll(PREVIOUS_CACHE_VERSION, CACHE_VERSION)
+    .replaceAll(
+      "/scenes/mobile-forest-stream-v14-retina-2160.webp",
+      `${POSTER_ASSET}?v=${CACHE_VERSION}`,
+    ),
 );
 
 await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coherent full-frame touch background. */
@@ -179,10 +183,9 @@ await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coheren
 `);
 
 await update("test/mobile-quality.test.mjs", (source) => {
-  let next = replaceReleaseFacts(source).replaceAll(
-    "20260810-native-selected-mobile-v24-1",
-    CACHE_VERSION,
-  );
+  let next = replaceReleaseFacts(source)
+    .replaceAll(PREVIOUS_CACHE_VERSION, CACHE_VERSION)
+    .replaceAll("20260810-native-selected-mobile-v24-1", CACHE_VERSION);
   next = next.replace('import { renderPage } from "../src/page.js";\n', "");
   const guardAnchor = '  assert.match(pageSource, /id="mobile-motion-canvas"/);';
   if (!next.includes("// mobile-touch-orientation-regression-start")) {
@@ -193,10 +196,9 @@ await update("test/mobile-quality.test.mjs", (source) => {
 });
 
 await update("test/mobile-background-loading.test.mjs", (source) => {
-  let next = replaceReleaseFacts(source).replaceAll(
-    "20260810-native-selected-mobile-v24-1",
-    CACHE_VERSION,
-  );
+  let next = replaceReleaseFacts(source)
+    .replaceAll(PREVIOUS_CACHE_VERSION, CACHE_VERSION)
+    .replaceAll("20260810-native-selected-mobile-v24-1", CACHE_VERSION);
   const oldStart =
     'test("the production mobile release gate verifies visible canvas motion", async () => {';
   const nextTest =
@@ -213,6 +215,7 @@ await update("test/mobile-background-loading.test.mjs", (source) => {
 
 await update(".github/workflows/verify-mobile-video.yml", (source) =>
   replaceReleaseFacts(source)
+    .replaceAll(PREVIOUS_CACHE_VERSION, CACHE_VERSION)
     .replaceAll(
       "version='20260810-native-selected-mobile-v24-1'",
       `version='${CACHE_VERSION}'`,
@@ -227,10 +230,12 @@ await update(".github/workflows/verify-mobile-video.yml", (source) =>
     ),
 );
 
-const coherentWorkflow = await readFile(
-  new URL("./verify-coherent-mobile-background-v25.yml", import.meta.url),
-  "utf8",
-);
+const coherentWorkflow = (
+  await readFile(
+    new URL("./verify-coherent-mobile-background-v25.yml", import.meta.url),
+    "utf8",
+  )
+).replaceAll(PREVIOUS_CACHE_VERSION, CACHE_VERSION);
 await writeFile(
   ".github/workflows/verify-mobile-background.yml",
   coherentWorkflow,
