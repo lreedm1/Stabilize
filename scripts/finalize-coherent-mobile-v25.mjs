@@ -39,6 +39,15 @@ const LEGACY_V24_POSTER_FILE =
   "mobile-forest-stream-v24-native-1080.webp";
 const LEGACY_COHERENT_VERSION = "20260811-coherent-mobile-4k-v25-1";
 const LEGACY_NATIVE_VERSION = "20260810-native-selected-mobile-v24-1";
+const SHARED_GUIDE_PAGES = [
+  "public/about.html",
+  "public/floor-first.html",
+  "public/how-it-works.html",
+  "public/privacy.html",
+  "public/safety.html",
+  "public/support.html",
+  "public/sustainability.html",
+];
 
 const OLD_VIDEO_BYTES = 2_371_524;
 const OLD_VIDEO_SHA256 =
@@ -208,6 +217,33 @@ await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coheren
   }
 }
 `);
+
+// Public guide pages share the same portrait background. Move the shared theme,
+// its test, and its stylesheet cache key to the never-before-used v25 poster so
+// no page can revive the stale immutable v24 image during navigation or touch.
+await update("public/guides.css", (source) => replaceMediaPaths(source));
+for (const path of SHARED_GUIDE_PAGES) {
+  await update(path, (source) => replaceMediaPaths(source));
+}
+await update("test/shared-site-theme.test.mjs", (source) =>
+  replaceMediaPaths(source),
+);
+
+// Keep immutable caching for media, but only on the unique v25 URLs. The old
+// v24 entries remain historical and can stay cached without affecting v25.
+await update("public/_headers", (source) => {
+  const next = replaceMediaPaths(source);
+  if (next.includes(`# native-selected-mobile-v24-end`)) {
+    return next.replaceAll(
+      "# native-selected-mobile-v24-start",
+      "# versioned-coherent-mobile-v25-start",
+    ).replaceAll(
+      "# native-selected-mobile-v24-end",
+      "# versioned-coherent-mobile-v25-end",
+    );
+  }
+  return next;
+});
 
 await update("test/mobile-quality.test.mjs", (source) =>
   replaceReleaseFacts(source),
