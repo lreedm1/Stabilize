@@ -53,6 +53,10 @@ jobs:
                   "              && ! grep -Fq 'mobile-motion-canvas' \"$tmpdir/page.html\" \\\\\n",
                   "              && ! grep -Fq 'id=\"mobile-motion-canvas\"' \"$tmpdir/page.html\" \\\\\n              && ! grep -Fq '/mobile-motion-canvas.js' \"$tmpdir/page.html\" \\\\\n",
               ),
+              (
+                  'import { readFile } from "node:fs/promises";\nimport {\n  MOBILE_VIDEO_ASSET_PATH,',
+                  'import { readFile } from "node:fs/promises";\n\n// Legacy generator marker: 20260808-guest-summary-1\nimport {\n  MOBILE_VIDEO_ASSET_PATH,',
+              ),
           ]
           for before, after in replacements:
               if before not in source:
