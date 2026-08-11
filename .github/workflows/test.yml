@@ -64,9 +64,18 @@ jobs:
               source = source.replace(before, after, 1)
           path.write_text(source)
 
-          # Historical generators run before the final clean-portrait pass and
-          # intentionally search for a /scenes/mobile-* preload. Give them a
-          # temporary compatible anchor; the finalizer replaces the whole block.
+          # Allow the historical mobile generator to consume either its old
+          # mobile-prefixed preload or the final coherent lake-valley preload.
+          legacy = Path("scripts/use-mobile-forest-stream.mjs")
+          legacy_source = legacy.read_text()
+          before = 'href="\\/scenes\\/mobile-[^"]+"'
+          after = 'href="\\/scenes\\/(?:mobile-|lake-valley-portrait-)[^"]+"'
+          if before not in legacy_source:
+              raise SystemExit("The historical preload matcher was not found")
+          legacy.write_text(legacy_source.replace(before, after, 1))
+
+          # The first run still begins from the committed clean page. Give older
+          # generators a temporary compatible anchor; the finalizer replaces it.
           page = Path("src/page.js")
           page_source = page.read_text()
           before = 'href="/scenes/lake-valley-portrait-1440.webp"'
@@ -76,6 +85,7 @@ jobs:
           page.write_text(page_source.replace(before, after, 1))
           PY
           node --check scripts/finalize-native-selected-mobile-v24-regressions.mjs
+          node --check scripts/use-mobile-forest-stream.mjs
 
       - name: Install dependencies and generate canonical files
         run: npm ci
