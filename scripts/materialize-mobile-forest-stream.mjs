@@ -422,11 +422,11 @@ console.log(
 
 // native-selected-mobile-v24-validation-start
 const nativeV24VideoPath = "public/scenes/mobile-forest-stream-video-v24-native-1080.mp4";
-const nativeV24VideoExpectedBytes = 5766397;
-const nativeV24VideoExpectedSha256 = "807cad0f229053d677429b961190f84536e9cf216e721ba9bdfcaac906fec197";
+const nativeV24VideoExpectedBytes = 5766867;
+const nativeV24VideoExpectedSha256 = "160e341439d5f962c7c0cacb81da37fec741db3fca4d52df71be7f47732f6a35";
 const nativeV24PosterPath = "public/scenes/mobile-forest-stream-v24-native-1080.webp";
-const nativeV24PosterExpectedBytes = 701930;
-const nativeV24PosterExpectedSha256 = "7511ce38801a443c85b478e9f3330471c52d68fa2810a7ac907b7b985f11ac64";
+const nativeV24PosterExpectedBytes = 701820;
+const nativeV24PosterExpectedSha256 = "a7287cbe78cd6912522ae1cf9295bc449fc53ca8cdd30bea402bc13581e152e0";
 
 const nativeV24Video = await readFile(nativeV24VideoPath);
 if (nativeV24Video.byteLength !== nativeV24VideoExpectedBytes) {

@@ -173,3 +173,7 @@ if (!canonicalPolicy.endsWith(NATIVE_TAIL)) {
 console.log(
   "Finalized repeatable native mobile media policy, zoom-stable selection, and 4K display rendering.",
 );
+
+// coherent-mobile-v25-finalizer-hook-start
+await import("./finalize-coherent-mobile-v25.mjs");
+// coherent-mobile-v25-finalizer-hook-end

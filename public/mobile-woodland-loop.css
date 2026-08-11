@@ -141,7 +141,7 @@
      current. Pin the visual fallback to the already-deployed forest poster so
      a missing newer poster cannot reveal the unrelated desktop lake image. */
   .photo-backdrop {
-    background-image: url("/scenes/mobile-forest-stream-v14-retina-2160.webp") !important;
+    background-image: url("/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260811-coherent-mobile-4k-v25-1") !important;
     background-size: cover !important;
     background-position: 50% 50% !important;
     background-repeat: no-repeat !important;

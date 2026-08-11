@@ -172,8 +172,8 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
     <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
-    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260810-native-selected-mobile-v24-1" />
-    <link rel="stylesheet" href="/mobile-static-fallback-fix-20260811.css?v=20260811-1" />
+    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260811-coherent-mobile-4k-v25-1" />
+    <link rel="stylesheet" href="/mobile-static-fallback-fix-20260811.css?v=20260811-coherent-mobile-4k-v25-1" />
   </head>
   <body>
     <canvas
@@ -224,7 +224,7 @@ export function renderPage(options = {}) {
       loop
       playsinline
       preload="auto"
-      poster="/scenes/mobile-forest-stream-v24-native-1080.webp"
+      poster="/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260811-coherent-mobile-4k-v25-1"
       aria-hidden="true"
       tabindex="-1"
     >
@@ -343,7 +343,7 @@ export function renderPage(options = {}) {
     <script src="/mobile-motion-canvas.js?v=20260809-mobile-motion-canvas-v19-hd-2" defer></script>
     <!-- mobile-motion-canvas-v18-script-end -->
     <!-- selected-mobile-4k-video-v22-script-start -->
-    <script type="module" src="/mobile-quality.js?v=20260810-native-selected-mobile-v24-1"></script>
+    <script type="module" src="/mobile-quality.js?v=20260811-coherent-mobile-4k-v25-1"></script>
     <!-- selected-mobile-4k-video-v22-script-end -->
   </body>
 </html>`;
