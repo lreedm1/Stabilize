@@ -7,8 +7,12 @@ const metadata = JSON.parse(
   ),
 );
 
-const CACHE_VERSION = "20260811-coherent-mobile-4k-v25-1";
+const CACHE_VERSION = metadata.version;
+const VIDEO_ROUTE = metadata.videoRoute;
+const VIDEO_ASSET = metadata.videoAsset;
 const POSTER_ASSET = metadata.posterAsset;
+const VIDEO_FILE = VIDEO_ASSET.split("/").at(-1);
+const POSTER_FILE = POSTER_ASSET.split("/").at(-1);
 const VIDEO_BYTES = Number(metadata.videoBytes);
 const VIDEO_SHA256 = metadata.videoSha256;
 const POSTER_BYTES = Number(metadata.posterBytes);
@@ -22,6 +26,20 @@ const ZOOM_SAFE_QUERY =
   "(orientation: portrait) and (hover: none) and (pointer: coarse)";
 const FOUR_K_RENDER_START = "/* mobile-video-4k-render-v1-start */";
 const FOUR_K_RENDER_END = "/* mobile-video-4k-render-v1-end */";
+
+const LEGACY_V24_VIDEO_ROUTE =
+  "/media/mobile-forest-stream-video-v24-native-1080.mp4";
+const LEGACY_V24_VIDEO_ASSET =
+  "/scenes/mobile-forest-stream-video-v24-native-1080.mp4";
+const LEGACY_V24_POSTER_ASSET =
+  "/scenes/mobile-forest-stream-v24-native-1080.webp";
+const LEGACY_V24_VIDEO_FILE =
+  "mobile-forest-stream-video-v24-native-1080.mp4";
+const LEGACY_V24_POSTER_FILE =
+  "mobile-forest-stream-v24-native-1080.webp";
+const LEGACY_COHERENT_VERSION = "20260811-coherent-mobile-4k-v25-1";
+const LEGACY_NATIVE_VERSION = "20260810-native-selected-mobile-v24-1";
+
 const OLD_VIDEO_BYTES = 2_371_524;
 const OLD_VIDEO_SHA256 =
   "69dd547594f86fb80f643fa7c823d076c414a630d9a5a53504b6d5f930b95ffc";
@@ -53,8 +71,27 @@ function stripLegacy4kRender(source) {
   return next;
 }
 
-function replaceReleaseFacts(source) {
+function replaceMediaPaths(source) {
   return source
+    .replaceAll(LEGACY_V24_VIDEO_ROUTE, VIDEO_ROUTE)
+    .replaceAll(LEGACY_V24_VIDEO_ASSET, VIDEO_ASSET)
+    .replaceAll(LEGACY_V24_POSTER_ASSET, POSTER_ASSET)
+    .replaceAll(LEGACY_V24_VIDEO_FILE, VIDEO_FILE)
+    .replaceAll(LEGACY_V24_POSTER_FILE, POSTER_FILE)
+    .replaceAll(
+      LEGACY_V24_VIDEO_FILE.replaceAll(".", "\\."),
+      VIDEO_FILE.replaceAll(".", "\\."),
+    )
+    .replaceAll(
+      LEGACY_V24_POSTER_FILE.replaceAll(".", "\\."),
+      POSTER_FILE.replaceAll(".", "\\."),
+    )
+    .replaceAll(LEGACY_COHERENT_VERSION, CACHE_VERSION)
+    .replaceAll(LEGACY_NATIVE_VERSION, CACHE_VERSION);
+}
+
+function replaceReleaseFacts(source) {
+  return replaceMediaPaths(source)
     .replaceAll(String(OLD_VIDEO_BYTES), String(VIDEO_BYTES))
     .replaceAll(grouped(OLD_VIDEO_BYTES), grouped(VIDEO_BYTES))
     .replaceAll(OLD_VIDEO_SHA256, VIDEO_SHA256)
@@ -70,19 +107,11 @@ function replaceReleaseFacts(source) {
     .replaceAll(
       "{ width: 1080, height: 1920 }",
       `{ width: ${VIDEO_WIDTH}, height: ${VIDEO_HEIGHT} }`,
-    )
-    .replaceAll(
-      "mobile-forest-stream-v24-native-1080\\.webp 1080w",
-      `mobile-forest-stream-v24-native-1080\\.webp ${VIDEO_WIDTH}w`,
-    )
-    .replaceAll(
-      "mobile-forest-stream-v24-native-1080.webp 1080w",
-      `mobile-forest-stream-v24-native-1080.webp ${VIDEO_WIDTH}w`,
     );
 }
 
-await update("src/page.js", (source) =>
-  source
+await update("src/page.js", (source) => {
+  let next = replaceMediaPaths(source)
     .replace(
       /mobile-woodland-loop\.css\?v=[^"]+/,
       `mobile-woodland-loop.css?v=${CACHE_VERSION}`,
@@ -94,15 +123,20 @@ await update("src/page.js", (source) =>
     .replace(
       /mobile-quality\.js\?v=[^"]+/,
       `mobile-quality.js?v=${CACHE_VERSION}`,
-    )
-    .replace(
-      new RegExp(`poster="${POSTER_ASSET.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\?v=[^"]+)?"`),
-      `poster="${POSTER_ASSET}?v=${CACHE_VERSION}"`,
-    ),
-);
+    );
+
+  const posterPattern = new RegExp(
+    `poster="${POSTER_ASSET.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\?v=[^"]+)?"`,
+  );
+  next = next.replace(
+    posterPattern,
+    `poster="${POSTER_ASSET}?v=${CACHE_VERSION}"`,
+  );
+  return next;
+});
 
 await update("public/mobile-quality.js", (source) => {
-  let next = stripLegacy4kRender(source)
+  let next = stripLegacy4kRender(replaceMediaPaths(source))
     .replace(
       /const MOBILE_BACKGROUND_QUERY =\n\s+"[^"]+";/,
       `const MOBILE_BACKGROUND_QUERY =\n  "${ZOOM_SAFE_QUERY}";`,
@@ -123,9 +157,9 @@ await update("public/mobile-quality.js", (source) => {
 });
 
 await update("public/mobile-woodland-loop.css", (source) =>
-  source.replaceAll(
+  replaceMediaPaths(source).replaceAll(
     "/scenes/mobile-forest-stream-v14-retina-2160.webp",
-    `${POSTER_ASSET}?v=${CACHE_VERSION}`,
+    POSTER_ASSET,
   ),
 );
 
@@ -176,17 +210,11 @@ await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coheren
 `);
 
 await update("test/mobile-quality.test.mjs", (source) =>
-  replaceReleaseFacts(source).replaceAll(
-    "20260810-native-selected-mobile-v24-1",
-    CACHE_VERSION,
-  ),
+  replaceReleaseFacts(source),
 );
 
 await update("test/mobile-background-loading.test.mjs", (source) => {
-  let next = replaceReleaseFacts(source).replaceAll(
-    "20260810-native-selected-mobile-v24-1",
-    CACHE_VERSION,
-  );
+  let next = replaceReleaseFacts(source);
   const oldStart =
     'test("the production mobile release gate verifies visible canvas motion", async () => {';
   const nextTest =
@@ -203,13 +231,9 @@ await update("test/mobile-background-loading.test.mjs", (source) => {
 
 await update(".github/workflows/verify-mobile-video.yml", (source) =>
   replaceReleaseFacts(source)
-    .replaceAll(
-      "version='20260810-native-selected-mobile-v24-1'",
-      `version='${CACHE_VERSION}'`,
-    )
     .replace(
       /publish_status success 'Exact [^']+ forest video is live'/,
-      `publish_status success 'Exact coherent ${VIDEO_WIDTH}x${VIDEO_HEIGHT} forest video is live'`,
+      `publish_status success 'Exact versioned coherent ${VIDEO_WIDTH}x${VIDEO_HEIGHT} forest video is live'`,
     )
     .replaceAll(
       "first.width !== 1080 || first.height !== 1920",
@@ -223,10 +247,10 @@ const coherentWorkflow = await readFile(
 );
 await writeFile(
   ".github/workflows/verify-mobile-background.yml",
-  coherentWorkflow,
+  replaceReleaseFacts(coherentWorkflow),
   "utf8",
 );
 
 console.log(
-  `Finalized coherent ${VIDEO_WIDTH}x${VIDEO_HEIGHT} mobile video on the stable Worker route.`,
+  `Finalized versioned coherent ${VIDEO_WIDTH}x${VIDEO_HEIGHT} mobile video on ${VIDEO_ROUTE}.`,
 );
