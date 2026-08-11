@@ -8,8 +8,6 @@ const VERSION = "20260810-native-selected-mobile-v24-1";
 const POSTER_ASSET =
   "/scenes/mobile-forest-stream-v24-native-1080.webp";
 const POSTER_NAME = "mobile-forest-stream-v24-native-1080";
-const STABLE_STATIC_POSTER_ASSET =
-  "/scenes/mobile-forest-stream-v14-retina-2160.webp";
 const NATIVE_TAIL =
   "node scripts/finalize-decision-grade-impact.mjs && " +
   `${NATIVE_FINALIZER} && ${REGRESSION_FINALIZER}`;
@@ -140,34 +138,10 @@ await update(".github/workflows/verify-mobile-background.yml", (source) =>
     ),
 );
 
-// The v24 native poster is part of the media payload, but it has not been
-// reliably published by the current Cloudflare static-asset bundle. Keep the
-// already-proven 2160px forest poster as the browser-visible static fallback so
-// Safari never falls through to the unrelated desktop lake image. The native
-// MP4 remains the primary moving background and keeps its own matching poster.
-await update("src/page.js", (source) =>
-  source
-    .replace(
-      `href="${POSTER_ASSET}"\n      imagesrcset="\n        ${POSTER_ASSET} 1080w`,
-      `href="${STABLE_STATIC_POSTER_ASSET}"\n      imagesrcset="\n        ${STABLE_STATIC_POSTER_ASSET} 2160w`,
-    )
-    .replace(
-      `srcset="\\n          ${POSTER_ASSET} 1080w\\n        "`,
-      `srcset="\\n          ${STABLE_STATIC_POSTER_ASSET} 2160w\\n        "`,
-    ),
-);
-
-await update("test/mobile-quality.test.mjs", (source) =>
-  source.replaceAll(
-    "mobile-forest-stream-v24-native-1080\\\\.webp 1080w",
-    "mobile-forest-stream-v14-retina-2160\\\\.webp 2160w",
-  ),
-);
-
 if (!canonicalPolicy.endsWith(NATIVE_TAIL)) {
   throw new Error("The native finalizers are not the canonical policy tail.");
 }
 
 console.log(
-  "Finalized repeatable native mobile media policy, stable static fallback, and regression alignment.",
+  "Finalized repeatable native mobile media policy and regression alignment.",
 );
