@@ -17,7 +17,7 @@ function installZoomStableStyles() {
       background-position: 50% 50% !important;
       background-repeat: no-repeat !important;
     }
-    #photo-backdrop-image { visibility: hidden !important; opacity: 0 !important; }
+    #photo-backdrop-image { display: none !important; visibility: hidden !important; opacity: 0 !important; }
     .mobile-background-video {
       position: fixed !important; inset: 0 !important; z-index: 0 !important;
       display: block !important; width: 100% !important; height: 100% !important;
