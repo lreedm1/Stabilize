@@ -186,15 +186,13 @@ await update("test/mobile-background-loading.test.mjs", (source) => {
   let next = replaceReleaseFacts(source);
   const oldStart =
     'test("the production mobile release gate verifies visible canvas motion", async () => {';
-  const newStart =
-    'test("the production mobile release gate verifies the coherent video without a creek overlay", async () => {';
   const nextTest =
     'test("portrait mobile uses a Worker-served MP4 instead of a reconstructed blob"';
   if (next.includes(oldStart)) {
     const start = next.indexOf(oldStart);
     const end = next.indexOf(nextTest, start);
     if (end < 0) throw new Error("Could not locate the next mobile loading test.");
-    const block = `${newStart}\n  const workflow = await read(\n    ".github/workflows/verify-mobile-background.yml",\n  );\n\n  assert.ok(workflow.includes("verification/mobile-motion-canvas"));\n  assert.ok(workflow.includes("mobile-background-video"));\n  assert.ok(workflow.includes("coherent-source-2160x3840"));\n  assert.ok(workflow.includes("video.currentTime"));\n  assert.ok(workflow.includes("video.videoWidth"));\n  assert.ok(workflow.includes("canvasVisible"));\n  assert.ok(workflow.includes("The coherent mobile background is live"));\n});\n\n`;
+    const block = `${oldStart}\n  const workflow = await read(\n    ".github/workflows/verify-mobile-background.yml",\n  );\n\n  assert.ok(workflow.includes("verification/mobile-motion-canvas"));\n  assert.ok(workflow.includes("mobile-background-video"));\n  assert.ok(workflow.includes("coherent-source-2160x3840"));\n  assert.ok(workflow.includes("video.currentTime"));\n  assert.ok(workflow.includes("video.videoWidth"));\n  assert.ok(workflow.includes("canvasVisible"));\n  assert.ok(workflow.includes("The coherent mobile background is live"));\n});\n\n`;
     next = next.slice(0, start) + block + next.slice(end);
   }
   return next;
