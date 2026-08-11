@@ -11,6 +11,9 @@ const POSTER_NAME = "mobile-forest-stream-v24-native-1080";
 const NATIVE_TAIL =
   "node scripts/finalize-decision-grade-impact.mjs && " +
   `${NATIVE_FINALIZER} && ${REGRESSION_FINALIZER}`;
+const ZOOM_SAFE_QUERY =
+  "(orientation: portrait) and (hover: none) and (pointer: coarse)";
+const ZOOM_STYLE_MARKER = "mobile-zoom-stable-style";
 
 async function update(path, transform) {
   const before = await readFile(path, "utf8");
@@ -96,6 +99,9 @@ await update("test/shared-site-theme.test.mjs", (source) =>
 
 // The older v23 selector performs one intentionally broad source-label
 // replacement. Collapse any repetition it creates before the clean-tree gate.
+// Also make mobile eligibility independent of CSS viewport width. Pinch zoom in
+// iOS Safari can change width-query results even though the device is still the
+// same portrait touch phone.
 await update("public/mobile-quality.js", (source) => {
   let next = source;
   while (
@@ -108,8 +114,25 @@ await update("public/mobile-quality.js", (source) => {
       "selected-forest-stream-native-source",
     );
   }
+
+  next = next.replace(
+    /const MOBILE_BACKGROUND_QUERY =\n\s+"[^"]+";/,
+    `const MOBILE_BACKGROUND_QUERY =\n  "${ZOOM_SAFE_QUERY}";`,
+  );
+
+  if (!next.includes(ZOOM_STYLE_MARKER)) {
+    const anchor = "const MAX_AUTOPLAY_RETRIES = 10;";
+    if (!next.includes(anchor)) {
+      throw new Error("Could not find mobile video configuration anchor.");
+    }
+    const runtimeStyle = `${anchor}\n\nfunction installZoomStableStyles() {\n  if (document.getElementById("${ZOOM_STYLE_MARKER}")) return;\n  const style = document.createElement("style");\n  style.id = "${ZOOM_STYLE_MARKER}";\n  style.textContent = \`@media ${ZOOM_SAFE_QUERY} {\n    .photo-backdrop {\n      background-image: url("/scenes/mobile-forest-stream-v14-retina-2160.webp") !important;\n      background-size: cover !important;\n      background-position: 50% 50% !important;\n      background-repeat: no-repeat !important;\n    }\n    #photo-backdrop-image { visibility: hidden !important; opacity: 0 !important; }\n    .mobile-background-video {\n      position: fixed !important; inset: 0 !important; z-index: 0 !important;\n      display: block !important; width: 100% !important; height: 100% !important;\n      object-fit: cover !important; object-position: 50% 50% !important;\n      pointer-events: none !important;\n    }\n    html[data-mobile-background="video-playing"] .mobile-background-video.is-playing,\n    .mobile-background-video.is-playing { visibility: visible !important; opacity: 1 !important; }\n    .mobile-motion-canvas.is-ready {\n      display: block !important; visibility: visible !important; opacity: 1 !important;\n    }\n  }\`;\n  document.head.append(style);\n}\n\ninstallZoomStableStyles();`;
+    next = next.replace(anchor, runtimeStyle);
+  }
+
   return next;
 });
+
+await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Zoom-stable portrait-touch background rules.\n   Do not key these layers to CSS viewport width: iOS Safari can reevaluate\n   width media queries while pinch-zooming and expose the desktop lake asset. */\n@media ${ZOOM_SAFE_QUERY} {\n  .photo-backdrop {\n    background-image: url("/scenes/mobile-forest-stream-v14-retina-2160.webp") !important;\n    background-size: cover !important;\n    background-position: 50% 50% !important;\n    background-repeat: no-repeat !important;\n  }\n\n  .photo-backdrop > picture,\n  .photo-backdrop > img,\n  #photo-backdrop-image {\n    visibility: hidden !important;\n    opacity: 0 !important;\n  }\n\n  .mobile-background-video {\n    position: fixed !important;\n    z-index: 0 !important;\n    inset: 0 !important;\n    display: block !important;\n    width: 100% !important;\n    height: 100% !important;\n    object-fit: cover !important;\n    object-position: 50% 50% !important;\n    pointer-events: none !important;\n  }\n\n  html[data-mobile-background="video-playing"] .mobile-background-video.is-playing,\n  .mobile-background-video.is-playing {\n    visibility: visible !important;\n    opacity: 1 !important;\n  }\n\n  .mobile-motion-canvas.is-ready {\n    display: block !important;\n    visibility: visible !important;\n    opacity: 1 !important;\n  }\n}\n`);
 
 // The historical canvas workflow used to prove that no video existed. The
 // native release intentionally keeps the canvas as a fallback beneath one
@@ -143,5 +166,5 @@ if (!canonicalPolicy.endsWith(NATIVE_TAIL)) {
 }
 
 console.log(
-  "Finalized repeatable native mobile media policy and regression alignment.",
+  "Finalized repeatable native mobile media policy and zoom-stable regression alignment.",
 );
