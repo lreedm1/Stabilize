@@ -102,5 +102,6 @@ jobs:
             /tmp/stabilize-coherent-mobile-v25/probe.json
             /tmp/stabilize-coherent-mobile-v25/framemd5.txt
             .github/workflows/verify-mobile-video.yml
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 7
