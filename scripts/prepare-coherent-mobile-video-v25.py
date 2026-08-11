@@ -28,7 +28,6 @@ POSTER_ASSET = f"/scenes/{POSTER_FILE}"
 WIDTH = 2160
 HEIGHT = 3840
 FPS = 24
-FINALIZER = "node scripts/finalize-coherent-mobile-v25.mjs"
 OLD_VIDEO_ROUTE = "/media/mobile-forest-stream-video-v24-native-1080.mp4"
 OLD_POSTER_ASSET = "/scenes/mobile-forest-stream-v24-native-1080.webp"
 OLD_VERSION = "20260810-native-selected-mobile-v24-1"
@@ -170,16 +169,27 @@ page = page.replace(OLD_VERSION, VERSION)
 page = page.replace(f"{POSTER_ASSET} 1080w", f"{POSTER_ASSET} {WIDTH}w")
 page_path.write_text(page)
 
-# Ensure the coherent finalizer executes after the older native/regression
-# finalizers on this very first generation run.
-package_path = root / "package.json"
-package = json.loads(package_path.read_text())
-policy = package.get("scripts", {}).get("apply:prompt-policy", "")
-commands = [command for command in policy.split(" && ") if command]
-commands = [command for command in commands if command != FINALIZER]
-commands.append(FINALIZER)
-package["scripts"]["apply:prompt-policy"] = " && ".join(commands)
-package_path.write_text(json.dumps(package, indent=2) + "\n")
+# Keep the project's existing canonical apply:prompt-policy tail unchanged.
+# The native regression finalizer already owns all global pipeline assertions,
+# so invoke the coherent media finalizer from that script instead of adding a
+# new command to package.json. This makes repeated npm test/check runs stable.
+regression_path = root / "scripts/finalize-native-selected-mobile-v24-regressions.mjs"
+regression = regression_path.read_text()
+hook_start = "// coherent-mobile-v25-finalizer-hook-start"
+hook_end = "// coherent-mobile-v25-finalizer-hook-end"
+hook = f'''{hook_start}
+await import("./finalize-coherent-mobile-v25.mjs");
+{hook_end}'''
+if hook_start in regression:
+    regression = re.sub(
+        re.escape(hook_start) + r"[\s\S]*?" + re.escape(hook_end),
+        hook,
+        regression,
+        count=1,
+    )
+else:
+    regression = regression.rstrip() + "\n\n" + hook + "\n"
+regression_path.write_text(regression)
 
 print(
     f"Prepared coherent mobile release {VIDEO_FILE}: {WIDTH}x{HEIGHT}, "
