@@ -419,3 +419,81 @@ console.log(
   `Validated ${hdWaterSpritePath}: 2400x6000, ${hdWaterSprite.byteLength} bytes, sha256=${hdWaterSpriteSha256}`,
 );
 // mobile-water-sprite-v19-hd-validation-end
+
+// native-selected-mobile-v24-validation-start
+const nativeV24VideoPath = "public/scenes/mobile-forest-stream-video-v24-native-1080.mp4";
+const nativeV24VideoExpectedBytes = 2371524;
+const nativeV24VideoExpectedSha256 = "69dd547594f86fb80f643fa7c823d076c414a630d9a5a53504b6d5f930b95ffc";
+const nativeV24PosterPath = "public/scenes/mobile-forest-stream-v24-native-1080.webp";
+const nativeV24PosterExpectedBytes = 179600;
+const nativeV24PosterExpectedSha256 = "c505ce3a83d342d7d47d7c0a09f3f3899225823d08156f2c757b940049b164ab";
+
+const nativeV24Video = await readFile(nativeV24VideoPath);
+if (nativeV24Video.byteLength !== nativeV24VideoExpectedBytes) {
+  throw new Error(
+    `Unexpected native mobile video size: ${nativeV24Video.byteLength}; expected ${nativeV24VideoExpectedBytes}`,
+  );
+}
+const nativeV24VideoSha256 = createHash("sha256")
+  .update(nativeV24Video)
+  .digest("hex");
+if (nativeV24VideoSha256 !== nativeV24VideoExpectedSha256) {
+  throw new Error(
+    `Native mobile video checksum mismatch: ${nativeV24VideoSha256}`,
+  );
+}
+if (
+  nativeV24Video.byteLength < 12 ||
+  nativeV24Video.subarray(4, 8).toString("ascii") !== "ftyp"
+) {
+  throw new Error("Native mobile video is not an MP4 file");
+}
+for (const marker of ["moov", "mdat", "vide", "avc1"]) {
+  if (!nativeV24Video.includes(Buffer.from(marker, "ascii"))) {
+    throw new Error(`Native mobile video is missing the ${marker} marker`);
+  }
+}
+if (
+  nativeV24Video.includes(Buffer.from("mp4a", "ascii")) ||
+  nativeV24Video.includes(Buffer.from("soun", "ascii"))
+) {
+  throw new Error("Native mobile video must not contain audio");
+}
+const nativeV24MoovOffset = nativeV24Video.indexOf(Buffer.from("moov", "ascii"));
+const nativeV24MdatOffset = nativeV24Video.indexOf(Buffer.from("mdat", "ascii"));
+if (
+  nativeV24MoovOffset < 0 ||
+  nativeV24MdatOffset < 0 ||
+  nativeV24MoovOffset >= nativeV24MdatOffset
+) {
+  throw new Error("Native mobile video must use fast-start MP4 ordering");
+}
+
+const nativeV24Poster = await readFile(nativeV24PosterPath);
+if (nativeV24Poster.byteLength !== nativeV24PosterExpectedBytes) {
+  throw new Error(
+    `Unexpected native mobile poster size: ${nativeV24Poster.byteLength}; expected ${nativeV24PosterExpectedBytes}`,
+  );
+}
+const nativeV24PosterSha256 = createHash("sha256")
+  .update(nativeV24Poster)
+  .digest("hex");
+if (nativeV24PosterSha256 !== nativeV24PosterExpectedSha256) {
+  throw new Error(
+    `Native mobile poster checksum mismatch: ${nativeV24PosterSha256}`,
+  );
+}
+const nativeV24PosterInfo = webpInfo(nativeV24Poster);
+if (
+  nativeV24PosterInfo.width !== 1080 ||
+  nativeV24PosterInfo.height !== 1920 ||
+  nativeV24PosterInfo.animated
+) {
+  throw new Error(
+    `Unexpected native mobile poster: ${nativeV24PosterInfo.width}x${nativeV24PosterInfo.height}, animated=${nativeV24PosterInfo.animated}`,
+  );
+}
+console.log(
+  `Validated ${nativeV24VideoPath}: 1080x1920, ${nativeV24Video.byteLength} bytes, sha256=${nativeV24VideoSha256}`,
+);
+// native-selected-mobile-v24-validation-end
