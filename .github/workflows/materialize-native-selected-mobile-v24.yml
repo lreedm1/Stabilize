@@ -43,12 +43,16 @@ jobs:
         run: |
           set +e
           mkdir -p /tmp/native-v24
-          node --check scripts/finalize-native-selected-mobile-v24.mjs \
-            > /tmp/native-v24/syntax.log 2>&1
+          {
+            node --check scripts/finalize-native-selected-mobile-v24.mjs
+            node --check scripts/finalize-native-selected-mobile-v24-regressions.mjs
+          } > /tmp/native-v24/syntax.log 2>&1
           syntax_status=$?
 
-          node scripts/finalize-native-selected-mobile-v24.mjs \
-            > /tmp/native-v24/materialize.log 2>&1
+          {
+            node scripts/finalize-native-selected-mobile-v24.mjs
+            node scripts/finalize-native-selected-mobile-v24-regressions.mjs
+          } > /tmp/native-v24/materialize.log 2>&1
           materialize_status=$?
 
           npm test > /tmp/native-v24/test.log 2>&1
