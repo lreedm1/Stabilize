@@ -7,10 +7,7 @@ const REGRESSION_FINALIZER =
 const VERSION = "20260810-native-selected-mobile-v24-1";
 const POSTER_ASSET =
   "/scenes/mobile-forest-stream-v24-native-1080.webp";
-const OLD_POSTER_ASSETS = [
-  "/scenes/mobile-forest-stream-v23-ai-2160.webp",
-  "/scenes/mobile-forest-stream-v14-retina-2160.webp",
-];
+const POSTER_NAME = "mobile-forest-stream-v24-native-1080";
 
 async function update(path, transform) {
   const before = await readFile(path, "utf8");
@@ -38,6 +35,8 @@ const canonicalPolicy = [
 packageData.scripts["apply:prompt-policy"] = canonicalPolicy;
 await writeFile(packagePath, `${JSON.stringify(packageData, null, 2)}\n`, "utf8");
 
+// Several focused regression tests intentionally pin the complete generator
+// chain. Keep those literals aligned after older generators rebuild them.
 const commandLiteralPattern =
   /"node scripts\/prepare-signed-in-latency-v2\.mjs[^"\n]*node scripts\/finalize-decision-grade-impact\.mjs[^"\n]*"/g;
 const testNames = (await readdir("test"))
@@ -45,48 +44,38 @@ const testNames = (await readdir("test"))
   .sort();
 
 for (const name of testNames) {
-  await update(`test/${name}`, (source) => {
-    let next = source.replace(
-      commandLiteralPattern,
-      JSON.stringify(canonicalPolicy),
-    );
-    next = next.replaceAll(
-      /finalize-native-selected-mobile-v24\\\.mjs\$\//g,
-      /finalize-native-selected-mobile-v24-regressions\\.mjs$\//,
-    );
-    return next;
-  });
+  await update(`test/${name}`, (source) =>
+    source.replace(commandLiteralPattern, JSON.stringify(canonicalPolicy)),
+  );
 }
 
 await update("test/mobile-background-loading.test.mjs", (source) =>
-  source
-    .replace(
-      /finalize-native-selected-mobile-v24\\\.mjs\$\//g,
-      "finalize-native-selected-mobile-v24-regressions\\\\.mjs$/",
-    )
-    .replace(
-      /finalize-native-selected-mobile-v24\\\.mjs\$/g,
-      "finalize-native-selected-mobile-v24-regressions\\\\.mjs$",
-    ),
+  source.replace(
+    "/finalize-native-selected-mobile-v24\\.mjs$/",
+    "/finalize-native-selected-mobile-v24-regressions\\.mjs$/",
+  ),
 );
 
-await update("test/shared-site-theme.test.mjs", (source) => {
-  let next = source.replace(
-    /^const VERSION = "[^"]+";/m,
-    `const VERSION = "${VERSION}";`,
-  );
-  for (const oldAsset of OLD_POSTER_ASSETS) {
-    next = next.split(oldAsset).join(POSTER_ASSET);
-    next = next
-      .split(oldAsset.slice(1).replaceAll(".", "\\."))
-      .join(POSTER_ASSET.slice(1).replaceAll(".", "\\."));
-  }
-  next = next
-    .replaceAll("mobile-forest-stream-v23-ai-2160", "mobile-forest-stream-v24-native-1080")
-    .replaceAll("mobile-forest-stream-v14-retina-2160", "mobile-forest-stream-v24-native-1080");
-  return next;
-});
+await update("test/shared-site-theme.test.mjs", (source) =>
+  source
+    .replace(
+      /^const VERSION = "[^"]+";/m,
+      `const VERSION = "${VERSION}";`,
+    )
+    .replaceAll(
+      "/scenes/mobile-forest-stream-v23-ai-2160.webp",
+      POSTER_ASSET,
+    )
+    .replaceAll(
+      "/scenes/mobile-forest-stream-v14-retina-2160.webp",
+      POSTER_ASSET,
+    )
+    .replaceAll("mobile-forest-stream-v23-ai-2160", POSTER_NAME)
+    .replaceAll("mobile-forest-stream-v14-retina-2160", POSTER_NAME),
+);
 
+// The older v23 selector performs one intentionally broad source-label
+// replacement. Collapse any repetition it creates before the clean-tree gate.
 await update("public/mobile-quality.js", (source) => {
   let next = source;
   while (
