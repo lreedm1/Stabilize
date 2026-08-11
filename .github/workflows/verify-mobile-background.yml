@@ -202,8 +202,8 @@ jobs:
               && grep -Fq "$expected_client_path" "$tmpdir/live.html" \
               && grep -Fq "$expected_style_path" "$tmpdir/live.html" \
               && grep -Fq "${expected_poster_asset} ${expected_poster_width}w" "$tmpdir/live.html" \
-              && ! grep -Fq 'id="mobile-background-video"' "$tmpdir/live.html" \
-              && ! grep -Fq 'mobile-quality.js' "$tmpdir/live.html" \
+              && grep -Fq 'id="mobile-background-video"' "$tmpdir/live.html" \
+              && grep -Fq 'mobile-quality.js' "$tmpdir/live.html" \
               && grep -Fq "const SPRITE_ASSET" "$tmpdir/client.js" \
               && grep -Fq "$expected_sprite_asset" "$tmpdir/client.js" \
               && grep -Fq 'const FRAME_RATE = 6;' "$tmpdir/client.js" \
@@ -214,8 +214,8 @@ jobs:
               && grep -Fq 'mobile-motion-canvas-v18-start' "$tmpdir/mobile.css" \
               && grep -Fq '.mobile-motion-canvas.is-ready' "$tmpdir/mobile.css" \
               && grep -Fq 'opacity: 1;' "$tmpdir/mobile.css"; then
-              echo "Production serves the exact Retina-poster plus canvas-motion release."
-              publish_status success "Exact canvas mobile release is live"
+              echo "Production serves the native video with its exact canvas fallback."
+              publish_status success "Native video and canvas fallback are live"
               exit 0
             fi
 
@@ -360,8 +360,8 @@ jobs:
             if (first.hash === second.hash) {
               throw new Error("The production canvas did not advance visible frames.");
             }
-            if (first.videoCount !== 0 || second.videoCount !== 0) {
-              throw new Error("A tap-gated background video is still present.");
+            if (first.videoCount !== 1 || second.videoCount !== 1) {
+              throw new Error("The native background video is missing or duplicated.");
             }
           } finally {
             await browser.close();
