@@ -6,6 +6,35 @@ const POSTER_ASSET =
   "/scenes/mobile-forest-stream-v24-native-1080.webp";
 const MAX_AUTOPLAY_RETRIES = 10;
 
+function installZoomStableStyles() {
+  if (document.getElementById("mobile-zoom-stable-style")) return;
+  const style = document.createElement("style");
+  style.id = "mobile-zoom-stable-style";
+  style.textContent = `@media (orientation: portrait) and (hover: none) and (pointer: coarse) {
+    .photo-backdrop {
+      background-image: url("/scenes/mobile-forest-stream-v14-retina-2160.webp") !important;
+      background-size: cover !important;
+      background-position: 50% 50% !important;
+      background-repeat: no-repeat !important;
+    }
+    #photo-backdrop-image { visibility: hidden !important; opacity: 0 !important; }
+    .mobile-background-video {
+      position: fixed !important; inset: 0 !important; z-index: 0 !important;
+      display: block !important; width: 100% !important; height: 100% !important;
+      object-fit: cover !important; object-position: 50% 50% !important;
+      pointer-events: none !important;
+    }
+    html[data-mobile-background="video-playing"] .mobile-background-video.is-playing,
+    .mobile-background-video.is-playing { visibility: visible !important; opacity: 1 !important; }
+    .mobile-motion-canvas.is-ready {
+      display: block !important; visibility: visible !important; opacity: 1 !important;
+    }
+  }`;
+  document.head.append(style);
+}
+
+installZoomStableStyles();
+
 const mobilePortrait = globalThis.matchMedia?.(MOBILE_BACKGROUND_QUERY);
 const video = document.querySelector("#mobile-background-video");
 let retryTimer = null;
