@@ -81,6 +81,8 @@ jobs:
             cat /tmp/native-v24/check.log
           } > scripts/native-selected-mobile-v24-validation.log
 
+          cat scripts/native-selected-mobile-v24-validation.log
+
           if [[ "$syntax_status" == 0 \
             && "$materialize_status" == 0 \
             && "$test_status" == 0 \
@@ -97,10 +99,14 @@ jobs:
           PASSED: ${{ steps.validate.outputs.passed }}
         run: |
           set -euo pipefail
+
+          # GitHub's workflow token cannot modify workflow files. Keep the
+          # existing verifier unchanged here; it is updated through the GitHub
+          # app after the generated application files pass validation.
+          git checkout -- .github/workflows/verify-mobile-video.yml
+
           if [[ "$PASSED" == true ]]; then
-            rm -f \
-              .github/workflows/materialize-native-selected-mobile-v24.yml \
-              scripts/native-selected-mobile-v24-validation.log
+            rm -f scripts/native-selected-mobile-v24-validation.log
           fi
 
           git config user.name 'github-actions[bot]'
