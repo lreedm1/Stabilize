@@ -84,7 +84,7 @@ test("portrait mobile draws water through a canvas without media autoplay", asyn
   const spriteInfo = webpInfo(sprite);
   assert.deepEqual(
     { width: posterInfo.width, height: posterInfo.height },
-    { width: 1080, height: 1920 },
+    { width: 2160, height: 3840 },
   );
   assert.deepEqual(
     { width: spriteInfo.width, height: spriteInfo.height },
@@ -94,7 +94,7 @@ test("portrait mobile draws water through a canvas without media autoplay", asyn
   assert.equal(spriteInfo.chunks.includes("ANIM"), false);
 
   assert.equal(
-    [...pageSource.matchAll(/mobile-forest-stream-v24-native-1080\.webp 1080w/g)]
+    [...pageSource.matchAll(/mobile-forest-stream-v24-native-1080\.webp 2160w/g)]
       .length,
     2,
   );
@@ -146,7 +146,7 @@ test("portrait mobile serves the native selected forest scene", async () => {
       readFile(new URL("../public/scenes/mobile-forest-stream-v24-native-1080.webp", import.meta.url)),
     ]);
 
-  assert.equal(video.byteLength, 2371524);
+  assert.equal(video.byteLength, 5766397);
   assert.equal(video.subarray(4, 8).toString("ascii"), "ftyp");
   for (const marker of ["moov", "mdat", "avc1"]) {
     assert.ok(video.includes(Buffer.from(marker, "ascii")));
@@ -154,15 +154,15 @@ test("portrait mobile serves the native selected forest scene", async () => {
   const posterInfo = webpInfo(poster);
   assert.deepEqual(
     { width: posterInfo.width, height: posterInfo.height },
-    { width: 1080, height: 1920 },
+    { width: 2160, height: 3840 },
   );
   assert.match(pageSource, /mobile-forest-stream-video-v24-native-1080\.mp4/);
   assert.match(pageSource, /mobile-forest-stream-v24-native-1080\.webp/);
   assert.match(pageSource, /mobile-quality\.js\?v=20260810-native-selected-mobile-v24-1/);
   assert.match(clientSource, /native-source-1080x1920/);
   assert.match(responderSource, /const assetByteCache = new WeakMap\(\)/);
-  assert.match(responderSource, /MOBILE_VIDEO_BYTES = 2_371_524/);
-  assert.match(responderSource, /69dd547594f86fb80f643fa7c823d076c414a630d9a5a53504b6d5f930b95ffc/);
+  assert.match(responderSource, /MOBILE_VIDEO_BYTES = 5_766_397/);
+  assert.match(responderSource, /807cad0f229053d677429b961190f84536e9cf216e721ba9bdfcaac906fec197/);
 });
 // ai-enhanced-mobile-4k-v23-test-end
 
@@ -177,7 +177,7 @@ test("portrait mobile plays the selected forest-stream scene through the native 
     ]);
 
   assert.equal(
-    [...pageSource.matchAll(/mobile-forest-stream-v24-native-1080\.webp 1080w/g)]
+    [...pageSource.matchAll(/mobile-forest-stream-v24-native-1080\.webp 2160w/g)]
       .length,
     2,
   );

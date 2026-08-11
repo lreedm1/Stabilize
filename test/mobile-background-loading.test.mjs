@@ -286,7 +286,7 @@ test("the mobile video response has a strong ETag and exact uncached ranges", as
 });
 
 // smooth-mobile-video-v12-test-start
-test("portrait mobile uses the selected 1080x1920 MP4 without a lower-resolution video fallback", async () => {
+test("portrait mobile uses the selected 2160x3840 MP4 without a lower-resolution video fallback", async () => {
   const [pageSource, clientSource, materializerSource, video] =
     await Promise.all([
       read("src/page.js"),
@@ -322,7 +322,7 @@ test("portrait mobile uses the selected 1080x1920 MP4 without a lower-resolution
   assert.doesNotMatch(clientSource, /smooth-720-fallback|legacy-worker-fallback/);
   assert.match(materializerSource, /retina-mobile-video-v14-validation-start/);
 
-  assert.equal(video.byteLength, 2371524);
+  assert.equal(video.byteLength, 5766397);
   assert.equal(video.subarray(4, 8).toString("ascii"), "ftyp");
   for (const marker of ["moov", "mdat", "avc1"]) {
     assert.ok(video.includes(Buffer.from(marker, "ascii")));

@@ -151,7 +151,7 @@ export function renderPage(options = {}) {
       as="image"
       href="/scenes/mobile-forest-stream-v24-native-1080.webp"
       imagesrcset="
-        /scenes/mobile-forest-stream-v24-native-1080.webp 1080w
+        /scenes/mobile-forest-stream-v24-native-1080.webp 2160w
       "
       imagesizes="100vw"
       media="(max-width: 980px) and (orientation: portrait)"
@@ -191,7 +191,7 @@ export function renderPage(options = {}) {
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="\n          /scenes/mobile-forest-stream-v24-native-1080.webp 1080w\n        "
+        srcset="\n          /scenes/mobile-forest-stream-v24-native-1080.webp 2160w\n        "
       />
       <img
         id="photo-backdrop-image"

@@ -422,11 +422,11 @@ console.log(
 
 // native-selected-mobile-v24-validation-start
 const nativeV24VideoPath = "public/scenes/mobile-forest-stream-video-v24-native-1080.mp4";
-const nativeV24VideoExpectedBytes = 2371524;
-const nativeV24VideoExpectedSha256 = "69dd547594f86fb80f643fa7c823d076c414a630d9a5a53504b6d5f930b95ffc";
+const nativeV24VideoExpectedBytes = 5766397;
+const nativeV24VideoExpectedSha256 = "807cad0f229053d677429b961190f84536e9cf216e721ba9bdfcaac906fec197";
 const nativeV24PosterPath = "public/scenes/mobile-forest-stream-v24-native-1080.webp";
-const nativeV24PosterExpectedBytes = 179600;
-const nativeV24PosterExpectedSha256 = "c505ce3a83d342d7d47d7c0a09f3f3899225823d08156f2c757b940049b164ab";
+const nativeV24PosterExpectedBytes = 701930;
+const nativeV24PosterExpectedSha256 = "7511ce38801a443c85b478e9f3330471c52d68fa2810a7ac907b7b985f11ac64";
 
 const nativeV24Video = await readFile(nativeV24VideoPath);
 if (nativeV24Video.byteLength !== nativeV24VideoExpectedBytes) {
@@ -485,8 +485,8 @@ if (nativeV24PosterSha256 !== nativeV24PosterExpectedSha256) {
 }
 const nativeV24PosterInfo = webpInfo(nativeV24Poster);
 if (
-  nativeV24PosterInfo.width !== 1080 ||
-  nativeV24PosterInfo.height !== 1920 ||
+  nativeV24PosterInfo.width !== 2160 ||
+  nativeV24PosterInfo.height !== 3840 ||
   nativeV24PosterInfo.animated
 ) {
   throw new Error(
@@ -494,6 +494,6 @@ if (
   );
 }
 console.log(
-  `Validated ${nativeV24VideoPath}: 1080x1920, ${nativeV24Video.byteLength} bytes, sha256=${nativeV24VideoSha256}`,
+  `Validated ${nativeV24VideoPath}: 2160x3840, ${nativeV24Video.byteLength} bytes, sha256=${nativeV24VideoSha256}`,
 );
 // native-selected-mobile-v24-validation-end
