@@ -1,0 +1,15 @@
+@media (max-width: 980px) and (orientation: portrait) {
+  .photo-backdrop {
+    background-image: url("/scenes/mobile-forest-stream-v14-retina-2160.webp") !important;
+    background-size: cover !important;
+    background-position: 50% 50% !important;
+    background-repeat: no-repeat !important;
+  }
+
+  .photo-backdrop > picture,
+  .photo-backdrop > img,
+  #photo-backdrop-image {
+    visibility: hidden !important;
+    opacity: 0 !important;
+  }
+}
