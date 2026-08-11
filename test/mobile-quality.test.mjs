@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { renderPage } from "../src/page.js";
 
 function webpInfo(buffer) {
   assert.equal(buffer.subarray(0, 4).toString("ascii"), "RIFF");
@@ -99,6 +98,28 @@ test("portrait mobile draws water through a canvas without media autoplay", asyn
       .length,
     2,
   );
+  // mobile-touch-orientation-regression-start
+  const touchFallbackStyles = await readFile(
+    new URL(
+      "../public/mobile-static-fallback-fix-20260811.css",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(
+    videoClient,
+    /"\(hover: none\) and \(pointer: coarse\)";/,
+  );
+  assert.doesNotMatch(
+    videoClient,
+    /\(orientation: portrait\) and \(hover: none\) and \(pointer: coarse\)/,
+  );
+  assert.match(
+    touchFallbackStyles,
+    /@media \(hover: none\) and \(pointer: coarse\)/,
+  );
+  assert.doesNotMatch(touchFallbackStyles, /orientation: portrait/);
+  // mobile-touch-orientation-regression-end
   assert.match(pageSource, /id="mobile-motion-canvas"/);
   assert.match(pageSource, /id="mobile-background-video"/);
   assert.match(
