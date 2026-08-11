@@ -1,5 +1,5 @@
 const MOBILE_BACKGROUND_QUERY =
-  "(orientation: portrait) and (hover: none) and (pointer: coarse)";
+  "(hover: none) and (pointer: coarse)";
 const VIDEO_ASSET =
   "/media/mobile-forest-stream-video-v24-native-1080.mp4";
 const POSTER_ASSET =
@@ -10,7 +10,7 @@ function installZoomStableStyles() {
   if (document.getElementById("mobile-zoom-stable-style")) return;
   const style = document.createElement("style");
   style.id = "mobile-zoom-stable-style";
-  style.textContent = `@media (orientation: portrait) and (hover: none) and (pointer: coarse) {
+  style.textContent = `@media (hover: none) and (pointer: coarse) {
     .photo-backdrop {
       background-image: url("/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260811-coherent-mobile-4k-v25-1") !important;
       background-size: cover !important;
