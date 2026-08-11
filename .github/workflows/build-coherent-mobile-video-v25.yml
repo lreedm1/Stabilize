@@ -8,6 +8,7 @@ on:
       - scripts/generate-coherent-mobile-video-v25.sh
       - scripts/prepare-coherent-mobile-video-v25.py
       - scripts/finalize-coherent-mobile-v25.mjs
+      - scripts/fix-ai-enhanced-mobile-theme-v23.mjs
       - .github/workflows/build-coherent-mobile-video-v25.yml
   workflow_dispatch:
 
@@ -78,11 +79,26 @@ jobs:
       - name: Run full regression and Worker checks
         shell: bash
         run: |
-          set -euo pipefail
-          npm test
-          npm run check
-          npm run verify:clean
-          git diff --exit-code
+          set -uo pipefail
+          log=/tmp/stabilize-coherent-mobile-v25/regression.log
+          : > "$log"
+          status=0
+          for command in \
+            'npm test' \
+            'npm run check' \
+            'npm run verify:clean' \
+            'git diff --exit-code'; do
+            echo ">>> ${command}" | tee -a "$log"
+            bash -lc "$command" >> "$log" 2>&1
+            command_status=$?
+            if [[ "$command_status" -ne 0 ]]; then
+              status="$command_status"
+              echo "FAILED (${command_status}): ${command}" | tee -a "$log"
+              break
+            fi
+          done
+          tail -n 240 "$log"
+          exit "$status"
 
       - name: Stage generated verifier as visible evidence
         if: always()
@@ -112,5 +128,6 @@ jobs:
             /tmp/stabilize-coherent-mobile-v25/probe.json
             /tmp/stabilize-coherent-mobile-v25/framemd5.txt
             /tmp/stabilize-coherent-mobile-v25/verify-mobile-video.yml
+            /tmp/stabilize-coherent-mobile-v25/regression.log
           if-no-files-found: warn
           retention-days: 7
