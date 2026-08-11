@@ -18,8 +18,7 @@ const VIDEO_HEIGHT = Number(metadata.height);
 const QUALITY_LABEL = `coherent-source-${VIDEO_WIDTH}x${VIDEO_HEIGHT}`;
 const SOURCE_LABEL = "coherent-full-frame-source-motion";
 const LOADING_LABEL = "video-loading-coherent-4k";
-const ZOOM_SAFE_QUERY =
-  "(orientation: portrait) and (hover: none) and (pointer: coarse)";
+const ZOOM_SAFE_QUERY = "(hover: none) and (pointer: coarse)";
 const FOUR_K_RENDER_START = "/* mobile-video-4k-render-v1-start */";
 const FOUR_K_RENDER_END = "/* mobile-video-4k-render-v1-end */";
 const OLD_VIDEO_BYTES = 2_371_524;
@@ -103,6 +102,10 @@ await update("src/page.js", (source) =>
 
 await update("public/mobile-quality.js", (source) => {
   let next = stripLegacy4kRender(source)
+    .replaceAll(
+      "(orientation: portrait) and (hover: none) and (pointer: coarse)",
+      ZOOM_SAFE_QUERY,
+    )
     .replace(
       /const MOBILE_BACKGROUND_QUERY =\n\s+"[^"]+";/,
       `const MOBILE_BACKGROUND_QUERY =\n  "${ZOOM_SAFE_QUERY}";`,
@@ -129,7 +132,7 @@ await update("public/mobile-woodland-loop.css", (source) =>
   ),
 );
 
-await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coherent full-frame portrait-touch background. */
+await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coherent full-frame touch background. */
 @media ${ZOOM_SAFE_QUERY} {
   .photo-backdrop {
     background-image: url("${POSTER_ASSET}?v=${CACHE_VERSION}") !important;
@@ -175,12 +178,19 @@ await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coheren
 }
 `);
 
-await update("test/mobile-quality.test.mjs", (source) =>
-  replaceReleaseFacts(source).replaceAll(
+await update("test/mobile-quality.test.mjs", (source) => {
+  let next = replaceReleaseFacts(source).replaceAll(
     "20260810-native-selected-mobile-v24-1",
     CACHE_VERSION,
-  ),
-);
+  );
+  next = next.replace('import { renderPage } from "../src/page.js";\n', "");
+  const guardAnchor = '  assert.match(pageSource, /id="mobile-motion-canvas"/);';
+  if (!next.includes("// mobile-touch-orientation-regression-start")) {
+    const guard = `  // mobile-touch-orientation-regression-start\n  const touchFallbackStyles = await readFile(\n    new URL(\n      \"../public/mobile-static-fallback-fix-20260811.css\",\n      import.meta.url,\n    ),\n    \"utf8\",\n  );\n  assert.match(\n    videoClient,\n    /\"\\(hover: none\\) and \\(pointer: coarse\\)\";/,\n  );\n  assert.doesNotMatch(\n    videoClient,\n    /\\(orientation: portrait\\) and \\(hover: none\\) and \\(pointer: coarse\\)/,\n  );\n  assert.match(\n    touchFallbackStyles,\n    /@media \\(hover: none\\) and \\(pointer: coarse\\)/,\n  );\n  assert.doesNotMatch(touchFallbackStyles, /orientation: portrait/);\n  // mobile-touch-orientation-regression-end\n`;
+    next = next.replace(guardAnchor, guard + guardAnchor);
+  }
+  return next;
+});
 
 await update("test/mobile-background-loading.test.mjs", (source) => {
   let next = replaceReleaseFacts(source).replaceAll(
