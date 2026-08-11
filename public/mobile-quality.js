@@ -1,5 +1,5 @@
 const MOBILE_BACKGROUND_QUERY =
-  "(max-width: 980px) and (orientation: portrait)";
+  "(orientation: portrait) and (hover: none) and (pointer: coarse)";
 const VIDEO_ASSET =
   "/media/mobile-forest-stream-video-v24-native-1080.mp4";
 const POSTER_ASSET =
