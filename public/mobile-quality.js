@@ -206,3 +206,150 @@ if (mobilePortrait?.matches) {
   bindGestureRecovery();
   startVideo();
 }
+
+/* mobile-video-4k-render-v1-start */
+(() => {
+  const RENDER_WIDTH = 2160;
+  const RENDER_HEIGHT = 3840;
+  const sourceVideo = document.querySelector("#mobile-background-video");
+  const portraitTouch = globalThis.matchMedia?.(MOBILE_BACKGROUND_QUERY);
+  let canvas = null;
+  let context = null;
+  let frameHandle = null;
+  let frameMode = null;
+
+  function eligible4k() {
+    return (
+      sourceVideo instanceof HTMLVideoElement &&
+      portraitTouch?.matches === true &&
+      !document.hidden
+    );
+  }
+
+  function ensureCanvas() {
+    if (!(sourceVideo instanceof HTMLVideoElement)) return null;
+    if (canvas instanceof HTMLCanvasElement && context) return canvas;
+
+    canvas = document.createElement("canvas");
+    canvas.id = "mobile-background-video-4k";
+    canvas.width = RENDER_WIDTH;
+    canvas.height = RENDER_HEIGHT;
+    canvas.setAttribute("aria-hidden", "true");
+    canvas.style.position = "fixed";
+    canvas.style.inset = "0";
+    canvas.style.zIndex = "0";
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+    canvas.style.pointerEvents = "none";
+    canvas.style.userSelect = "none";
+    canvas.style.transform = "translate3d(0, 0, 0)";
+    canvas.style.backfaceVisibility = "hidden";
+    canvas.style.setProperty("opacity", "0", "important");
+    canvas.style.setProperty("visibility", "hidden", "important");
+
+    context = canvas.getContext("2d", { alpha: false, desynchronized: true });
+    if (!context) {
+      canvas = null;
+      return null;
+    }
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    sourceVideo.insertAdjacentElement("afterend", canvas);
+    return canvas;
+  }
+
+  function drawFrame() {
+    if (
+      !eligible4k() ||
+      !(canvas instanceof HTMLCanvasElement) ||
+      !context ||
+      sourceVideo.readyState < 2 ||
+      sourceVideo.videoWidth <= 0 ||
+      sourceVideo.videoHeight <= 0
+    ) return false;
+
+    const sourceAspect = sourceVideo.videoWidth / sourceVideo.videoHeight;
+    const targetAspect = RENDER_WIDTH / RENDER_HEIGHT;
+    let sx = 0;
+    let sy = 0;
+    let sw = sourceVideo.videoWidth;
+    let sh = sourceVideo.videoHeight;
+    if (sourceAspect > targetAspect) {
+      sw = sourceVideo.videoHeight * targetAspect;
+      sx = (sourceVideo.videoWidth - sw) / 2;
+    } else if (sourceAspect < targetAspect) {
+      sh = sourceVideo.videoWidth / targetAspect;
+      sy = (sourceVideo.videoHeight - sh) / 2;
+    }
+
+    context.drawImage(sourceVideo, sx, sy, sw, sh, 0, 0, RENDER_WIDTH, RENDER_HEIGHT);
+    canvas.style.setProperty("visibility", "visible", "important");
+    canvas.style.setProperty("opacity", "1", "important");
+    sourceVideo.style.setProperty("visibility", "hidden", "important");
+    sourceVideo.style.setProperty("opacity", "0", "important");
+    document.documentElement.dataset.mobileVideoSourceQuality = "native-source-1080x1920";
+    document.documentElement.dataset.mobileVideoRender = "2160x3840";
+    document.documentElement.dataset.mobileVideoQuality = "4k-render-2160x3840";
+    return true;
+  }
+
+  function loop() {
+    frameHandle = null;
+    frameMode = null;
+    if (!drawFrame() || sourceVideo.paused) return;
+    if (typeof sourceVideo.requestVideoFrameCallback === "function") {
+      frameMode = "video";
+      frameHandle = sourceVideo.requestVideoFrameCallback(loop);
+    } else {
+      frameMode = "animation";
+      frameHandle = requestAnimationFrame(loop);
+    }
+  }
+
+  function start() {
+    if (!eligible4k() || sourceVideo.paused) return;
+    if (!ensureCanvas() || frameHandle !== null) return;
+    loop();
+  }
+
+  function stop() {
+    if (frameHandle !== null) {
+      if (frameMode === "video" && typeof sourceVideo.cancelVideoFrameCallback === "function") {
+        try { sourceVideo.cancelVideoFrameCallback(frameHandle); } catch {}
+      } else if (frameMode === "animation") {
+        cancelAnimationFrame(frameHandle);
+      }
+    }
+    frameHandle = null;
+    frameMode = null;
+    if (canvas instanceof HTMLCanvasElement) {
+      canvas.style.setProperty("opacity", "0", "important");
+      canvas.style.setProperty("visibility", "hidden", "important");
+    }
+    if (sourceVideo instanceof HTMLVideoElement) {
+      sourceVideo.style.removeProperty("opacity");
+      sourceVideo.style.removeProperty("visibility");
+    }
+  }
+
+  if (sourceVideo instanceof HTMLVideoElement) {
+    for (const event of ["playing", "loadeddata", "canplay"]) {
+      sourceVideo.addEventListener(event, start);
+    }
+    sourceVideo.addEventListener("pause", stop);
+    sourceVideo.addEventListener("error", stop);
+  }
+  portraitTouch?.addEventListener?.("change", (event) => {
+    if (event.matches) start();
+    else stop();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stop();
+    else start();
+  });
+  globalThis.addEventListener("pageshow", start);
+  globalThis.addEventListener("orientationchange", () => setTimeout(start, 0));
+  globalThis.addEventListener("pagehide", stop);
+  start();
+})();
+/* mobile-video-4k-render-v1-end */
