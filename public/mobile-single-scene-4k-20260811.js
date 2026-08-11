@@ -47,8 +47,39 @@
       backface-visibility: hidden !important;
       -webkit-backface-visibility: hidden !important;
     }
+
+    html.${ROOT_CLASS} .page-shell {
+      position: relative !important;
+      z-index: 20 !important;
+      display: flex !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+    }
+
+    html.${ROOT_CLASS} .site-header,
+    html.${ROOT_CLASS} .chat-card,
+    html.${ROOT_CLASS} .conversation-surface,
+    html.${ROOT_CLASS} .composer-dock {
+      position: relative !important;
+      z-index: 21 !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
   `;
   document.head.append(style);
+
+  const enforceUiLayer = () => {
+    const shell = document.querySelector(".page-shell");
+    if (shell instanceof HTMLElement) {
+      shell.style.setProperty("position", "relative", "important");
+      shell.style.setProperty("z-index", "20", "important");
+      shell.style.setProperty("display", "flex", "important");
+      shell.style.setProperty("visibility", "visible", "important");
+      shell.style.setProperty("opacity", "1", "important");
+      shell.style.setProperty("pointer-events", "auto", "important");
+    }
+  };
 
   let video = document.getElementById(VIDEO_ID);
   if (!(video instanceof HTMLVideoElement)) {
@@ -81,15 +112,19 @@
   }
 
   const play = () => {
+    enforceUiLayer();
     if (!(video instanceof HTMLVideoElement) || document.hidden) return;
     video.muted = true;
     video.defaultMuted = true;
     video.play().catch(() => {});
   };
 
-  for (const event of ["pageshow", "focus", "online"]) {
+  for (const event of ["pageshow", "focus", "online", "resize", "orientationchange"]) {
     globalThis.addEventListener(event, play);
   }
+  globalThis.visualViewport?.addEventListener("resize", enforceUiLayer);
+  globalThis.visualViewport?.addEventListener("scroll", enforceUiLayer);
+  document.addEventListener("DOMContentLoaded", enforceUiLayer, { once: true });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       try { video.pause(); } catch {}
@@ -100,5 +135,6 @@
 
   document.documentElement.dataset.mobileVideoSource = "retina-4k-single-scene";
   document.documentElement.dataset.mobileVideoQuality = "native-2160x3840";
+  enforceUiLayer();
   play();
 })();
