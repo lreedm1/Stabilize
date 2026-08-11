@@ -1,4 +1,4 @@
-name: Verify AI-enhanced selected mobile video
+name: Verify native selected mobile video
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: verify-ai-enhanced-mobile-video-${{ github.ref }}
+  group: verify-native-selected-mobile-video-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -40,46 +40,46 @@ jobs:
           sudo apt-get install -y ffmpeg
           npm ci --ignore-scripts
 
-      - name: Verify canonical enhanced selected-scene output
+      - name: Verify canonical native selected-scene output
         shell: bash
         run: |
           set -euo pipefail
           npm run apply:prompt-policy
           git diff --exit-code
 
-          video='public/scenes/mobile-forest-stream-video-v23-ai-2160.mp4'
-          poster='public/scenes/mobile-forest-stream-v23-ai-2160.webp'
-          route='/media/mobile-forest-stream-video-v23-ai-2160.mp4'
-          version='20260810-ai-enhanced-mobile-4k-v23-1'
+          video='public/scenes/mobile-forest-stream-video-v24-native-1080.mp4'
+          poster='public/scenes/mobile-forest-stream-v24-native-1080.webp'
+          route='/media/mobile-forest-stream-video-v24-native-1080.mp4'
+          version='20260810-native-selected-mobile-v24-1'
 
           test -s "$video"
           test -s "$poster"
-          test "$(wc -c < "$video" | tr -d '[:space:]')" -eq 20957716
+          test "$(wc -c < "$video" | tr -d '[:space:]')" -eq 2371524
           test "$(sha256sum "$video" | awk '{print $1}')" = \
-            'be5995746c6137f9f63121eead3883ce1469279563738e1ccbd813abf9d7becf'
+            '69dd547594f86fb80f643fa7c823d076c414a630d9a5a53504b6d5f930b95ffc'
           test "$(sha256sum "$poster" | awk '{print $1}')" = \
-            'a2455ef18233b4085691a004629a793bbbce053ca43938f3dcd7a62ee469ca63'
+            'c505ce3a83d342d7d47d7c0a09f3f3899225823d08156f2c757b940049b164ab'
           test "$(dd if="$video" bs=1 skip=4 count=4 status=none)" = 'ftyp'
           grep -aFq 'moov' "$video"
           grep -aFq 'mdat' "$video"
           grep -aFq 'avc1' "$video"
-          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video")" = 2160x3840
-          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$poster")" = 2160x3840
-          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of default=nw=1:nk=1 "$video")" -gt 30000000
+          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video")" = 1080x1920
+          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$poster")" = 1080x1920
+          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of default=nw=1:nk=1 "$video")" -gt 1500000
 
           grep -Fq 'id="mobile-background-video"' src/page.js
           grep -Fq "$route" src/page.js
-          grep -Fq '/scenes/mobile-forest-stream-v23-ai-2160.webp' src/page.js
+          grep -Fq '/scenes/mobile-forest-stream-v24-native-1080.webp' src/page.js
           grep -Fq "mobile-quality.js?v=${version}" src/page.js
           grep -Fq "mobile-woodland-loop.css?v=${version}" src/page.js
           grep -Fq "$route" public/mobile-quality.js
-          grep -Fq 'ai-enhanced-2160x3840' public/mobile-quality.js
+          grep -Fq 'native-source-1080x1920' public/mobile-quality.js
           grep -Fq 'video.autoplay = true' public/mobile-quality.js
           grep -Fq 'video.muted = true' public/mobile-quality.js
           grep -Fq 'video.defaultMuted = true' public/mobile-quality.js
           grep -Fq 'video.playsInline = true' public/mobile-quality.js
           grep -Fq 'video.play()' public/mobile-quality.js
-          grep -Fq 'MOBILE_VIDEO_BYTES = 20_957_716' src/mobile-video-response.js
+          grep -Fq 'MOBILE_VIDEO_BYTES = 2_371_524' src/mobile-video-response.js
           grep -Fq "$route" src/mobile-video-response.js
           grep -Fq 'const assetByteCache = new WeakMap();' src/mobile-video-response.js
           grep -Fq 'Accept-Ranges' src/mobile-video-response.js
@@ -105,22 +105,22 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
 
-      - name: Wait for and verify the exact enhanced release
+      - name: Wait for and verify the exact native release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          route='/media/mobile-forest-stream-video-v23-ai-2160.mp4'
-          poster_route='/scenes/mobile-forest-stream-v23-ai-2160.webp'
-          expected_video='public/scenes/mobile-forest-stream-video-v23-ai-2160.mp4'
-          expected_poster='public/scenes/mobile-forest-stream-v23-ai-2160.webp'
+          route='/media/mobile-forest-stream-video-v24-native-1080.mp4'
+          poster_route='/scenes/mobile-forest-stream-v24-native-1080.webp'
+          expected_video='public/scenes/mobile-forest-stream-video-v24-native-1080.mp4'
+          expected_poster='public/scenes/mobile-forest-stream-v24-native-1080.webp'
           expected_video_bytes="$(wc -c < "$expected_video" | tr -d '[:space:]')"
           expected_video_sha="$(sha256sum "$expected_video" | awk '{print $1}')"
           expected_video_etag="\"${expected_video_sha}\""
           expected_poster_bytes="$(wc -c < "$expected_poster" | tr -d '[:space:]')"
           expected_poster_sha="$(sha256sum "$expected_poster" | awk '{print $1}')"
-          version='20260810-ai-enhanced-mobile-4k-v23-1'
+          version='20260810-native-selected-mobile-v24-1'
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
 
@@ -150,7 +150,7 @@ jobs:
             ' "$file" | tail -n 1
           }
 
-          publish_status pending 'Waiting for the enhanced selected forest video'
+          publish_status pending 'Waiting for the native selected forest native video'
 
           ready=false
           for attempt in {1..36}; do
@@ -161,14 +161,14 @@ jobs:
                 --dump-header "$tmpdir/page.headers" \
                 --output "$tmpdir/page.html" \
                 --write-out '%{http_code}' \
-                "https://stabilize.info/?ai-enhanced-mobile=${key}" || true
+                "https://stabilize.info/?native-selected-mobile=${key}" || true
             )"
             script_status="$(
               curl --max-time 25 --silent --show-error --compressed \
                 --header 'Cache-Control: no-cache' \
                 --output "$tmpdir/mobile-quality.js" \
                 --write-out '%{http_code}' \
-                "https://stabilize.info/mobile-quality.js?ai-enhanced-mobile=${key}" || true
+                "https://stabilize.info/mobile-quality.js?native-selected-mobile=${key}" || true
             )"
             poster_status="$(
               curl --max-time 40 --silent --show-error \
@@ -192,7 +192,7 @@ jobs:
               && grep -Fq "$poster_route" "$tmpdir/page.html" \
               && grep -Fq "mobile-quality.js?v=${version}" "$tmpdir/page.html" \
               && grep -Fq "$route" "$tmpdir/mobile-quality.js" \
-              && grep -Fq 'ai-enhanced-2160x3840' "$tmpdir/mobile-quality.js" \
+              && grep -Fq 'native-source-1080x1920' "$tmpdir/mobile-quality.js" \
               && grep -Fqi "media-src 'self'" "$tmpdir/page.headers"; then
               ready=true
               break
@@ -248,15 +248,15 @@ jobs:
             || "$accept_ranges" != bytes \
             || "$range_bytes" != 1024 \
             || "$range_content" != "bytes 0-1023/${expected_video_bytes}" \
-            || "$dimensions" != 2160x3840 \
-            || "$bitrate" -le 30000000 ]]; then
-            publish_status failure 'Exact enhanced video delivery failed verification'
+            || "$dimensions" != 1080x1920 \
+            || "$bitrate" -le 1500000 ]]; then
+            publish_status failure 'Exact native video delivery failed verification'
             echo "::error::video=${video_status}, range=${range_status}, bytes=${video_bytes}, sha=${video_sha}, dimensions=${dimensions}, bitrate=${bitrate}"
             exit 1
           fi
 
-          publish_status success 'Exact AI-enhanced 2160x3840 forest video is live'
-          echo 'Production serves the exact enhanced selected forest release.'
+          publish_status success 'Exact native-source 1080x1920 forest video is live'
+          echo 'Production serves the exact native selected forest release.'
 
   verify-mobile-webkit:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -276,7 +276,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/ai-enhanced-mobile-4k
+          mkdir -p /tmp/native-selected-mobile-v24
           node --input-type=module <<'NODE'
           import { webkit } from "playwright";
           import { writeFile } from "node:fs/promises";
@@ -317,8 +317,8 @@ jobs:
                 const video = document.querySelector("#mobile-background-video");
                 return (
                   video instanceof HTMLVideoElement &&
-                  video.videoWidth === 2160 &&
-                  video.videoHeight === 3840 &&
+                  video.videoWidth === 1080 &&
+                  video.videoHeight === 1920 &&
                   video.readyState >= 2 &&
                   !video.paused &&
                   document.documentElement.dataset.mobileBackground ===
@@ -340,8 +340,8 @@ jobs:
                 const video = document.querySelector("#mobile-background-video");
                 return (
                   video instanceof HTMLVideoElement &&
-                  video.videoWidth === 2160 &&
-                  video.videoHeight === 3840 &&
+                  video.videoWidth === 1080 &&
+                  video.videoHeight === 1920 &&
                   video.readyState >= 2 &&
                   !video.paused &&
                   document.documentElement.dataset.mobileBackground ===
@@ -382,35 +382,35 @@ jobs:
             evidence.second = await sample();
 
             const { first, second } = evidence;
-            if (first.width !== 2160 || first.height !== 3840) {
-              throw new Error("WebKit did not decode the 2160x3840 source.");
+            if (first.width !== 1080 || first.height !== 1920) {
+              throw new Error("WebKit did not decode the 1080x1920 source.");
             }
             if (first.opacity !== "1" || second.opacity !== "1") {
-              throw new Error("The enhanced video is not visibly opaque.");
+              throw new Error("The native video is not visibly opaque.");
             }
             if (first.display === "none" || first.visibility === "hidden") {
-              throw new Error("The enhanced video is hidden.");
+              throw new Error("The native video is hidden.");
             }
             if (first.paused || second.paused) {
-              throw new Error("The enhanced video is paused.");
+              throw new Error("The native video is paused.");
             }
             if (second.currentTime - first.currentTime < 0.4) {
-              throw new Error("The enhanced video timeline did not advance.");
+              throw new Error("The native video timeline did not advance.");
             }
-            if (second.quality !== "ai-enhanced-2160x3840") {
-              throw new Error("The page did not report enhanced 2160x3840 quality.");
+            if (second.quality !== "native-source-1080x1920") {
+              throw new Error("The page did not report enhanced 1080x1920 quality.");
             }
-            if (!second.source.includes("mobile-forest-stream-video-v23-ai-2160.mp4")) {
+            if (!second.source.includes("mobile-forest-stream-video-v24-native-1080.mp4")) {
               throw new Error("WebKit decoded the wrong mobile source.");
             }
 
             await page.screenshot({
-              path: "/tmp/ai-enhanced-mobile-4k/production.png",
+              path: "/tmp/native-selected-mobile-v24/production.png",
               fullPage: false,
             });
           } finally {
             await writeFile(
-              "/tmp/ai-enhanced-mobile-4k/evidence.json",
+              "/tmp/native-selected-mobile-v24/evidence.json",
               JSON.stringify(evidence, null, 2),
             );
             await browser.close();
@@ -421,7 +421,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ai-enhanced-mobile-4k-v23-webkit-evidence
-          path: /tmp/ai-enhanced-mobile-4k
+          name: native-selected-mobile-v24-v23-webkit-evidence
+          path: /tmp/native-selected-mobile-v24
           if-no-files-found: warn
           retention-days: 7
