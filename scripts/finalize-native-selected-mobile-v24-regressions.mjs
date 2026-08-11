@@ -65,10 +65,15 @@ for (const name of testNames) {
 }
 
 await update("test/mobile-background-loading.test.mjs", (source) =>
-  source.replace(
-    "/finalize-native-selected-mobile-v24\\.mjs$/",
-    "/finalize-native-selected-mobile-v24-regressions\\.mjs$/",
-  ),
+  source
+    .replace(
+      "/finalize-native-selected-mobile-v24\\.mjs$/",
+      "/finalize-native-selected-mobile-v24-regressions\\.mjs$/",
+    )
+    .replaceAll(
+      "Exact canvas mobile release is live",
+      "Native video and canvas fallback are live",
+    ),
 );
 
 await update("test/shared-site-theme.test.mjs", (source) =>
