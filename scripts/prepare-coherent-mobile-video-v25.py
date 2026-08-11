@@ -19,12 +19,12 @@ poster_source = Path(sys.argv[2])
 if not video_source.is_file() or not poster_source.is_file():
     raise SystemExit("generated coherent video or poster is missing")
 
-# Keep the established route and filenames so the repository's historical
-# generators remain repeatable. The Worker serves the MP4 route with no-store,
-# so replacing the payload does not strand browsers on the old composite.
-VERSION = "20260810-native-selected-mobile-v24-1"
-VIDEO_FILE = "mobile-forest-stream-video-v24-native-1080.mp4"
-POSTER_FILE = "mobile-forest-stream-v24-native-1080.webp"
+# Never reuse an immutable production media URL for different bytes. The v24
+# poster remained cached at Cloudflare after its payload changed, so this
+# coherent release gets unique video and poster paths end to end.
+VERSION = "20260811-versioned-coherent-mobile-v25-2"
+VIDEO_FILE = "mobile-forest-stream-video-v25-coherent-4k.mp4"
+POSTER_FILE = "mobile-forest-stream-v25-coherent-4k.webp"
 VIDEO_ROUTE = f"/media/{VIDEO_FILE}"
 VIDEO_ASSET = f"/scenes/{VIDEO_FILE}"
 POSTER_ASSET = f"/scenes/{POSTER_FILE}"
@@ -158,14 +158,6 @@ materializer = re.sub(
 )
 materializer_path.write_text(materializer)
 
-# Seed the two current poster descriptors for the first generation run. The
-# existing native finalizer then derives all responsive dimensions from the
-# metadata and remains the single canonical owner of the release.
-page_path = root / "src/page.js"
-page = page_path.read_text()
-page = page.replace(f"{POSTER_ASSET} 1080w", f"{POSTER_ASSET} {WIDTH}w")
-page_path.write_text(page)
-
 # The historical regression finalizer rebuilds the old canvas fallback on every
 # pass. Run the coherent cleanup immediately after it without changing the
 # global package.json command contract.
@@ -188,7 +180,7 @@ else:
 regression_path.write_text(regression)
 
 print(
-    f"Prepared coherent 4K payload behind stable route {VIDEO_ROUTE}: "
+    f"Prepared coherent 4K payload on unique route {VIDEO_ROUTE}: "
     f"{WIDTH}x{HEIGHT}, {video_bytes} bytes, sha256={video_sha}; "
     f"poster={poster_bytes} bytes, sha256={poster_sha}."
 )
