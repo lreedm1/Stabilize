@@ -166,6 +166,27 @@ page = page_path.read_text()
 page = page.replace(f"{POSTER_ASSET} 1080w", f"{POSTER_ASSET} {WIDTH}w")
 page_path.write_text(page)
 
+# The historical regression finalizer rebuilds the old canvas fallback on every
+# pass. Run the coherent cleanup immediately after it without changing the
+# global package.json command contract.
+regression_path = root / "scripts/finalize-native-selected-mobile-v24-regressions.mjs"
+regression = regression_path.read_text()
+hook_start = "// coherent-mobile-v25-finalizer-hook-start"
+hook_end = "// coherent-mobile-v25-finalizer-hook-end"
+hook = f'''{hook_start}
+await import("./finalize-coherent-mobile-v25.mjs");
+{hook_end}'''
+if hook_start in regression:
+    regression = re.sub(
+        re.escape(hook_start) + r"[\s\S]*?" + re.escape(hook_end),
+        hook,
+        regression,
+        count=1,
+    )
+else:
+    regression = regression.rstrip() + "\n\n" + hook + "\n"
+regression_path.write_text(regression)
+
 print(
     f"Prepared coherent 4K payload behind stable route {VIDEO_ROUTE}: "
     f"{WIDTH}x{HEIGHT}, {video_bytes} bytes, sha256={video_sha}; "
