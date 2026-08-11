@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { renderPage } from "../src/page.js";
 
 function webpInfo(buffer) {
   assert.equal(buffer.subarray(0, 4).toString("ascii"), "RIFF");
@@ -98,6 +99,12 @@ test("portrait mobile draws water through a canvas without media autoplay", asyn
       .length,
     2,
   );
+  const renderedPage = renderPage();
+  assert.match(
+    renderedPage,
+    /srcset="\/scenes\/mobile-forest-stream-v24-native-1080\.webp 2160w"/,
+  );
+  assert.doesNotMatch(renderedPage, /srcset="\\n/);
   assert.match(pageSource, /id="mobile-motion-canvas"/);
   assert.match(pageSource, /id="mobile-background-video"/);
   assert.match(
