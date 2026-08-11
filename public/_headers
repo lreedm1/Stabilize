@@ -102,3 +102,17 @@
   Cross-Origin-Resource-Policy: same-origin
   X-Content-Type-Options: nosniff
 # ai-enhanced-mobile-4k-v23-end
+
+# native-selected-mobile-v24-start
+/scenes/mobile-forest-stream-video-v24-native-1080.mp4
+  Content-Type: video/mp4
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+
+/scenes/mobile-forest-stream-v24-native-1080.webp
+  Content-Type: image/webp
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+# native-selected-mobile-v24-end

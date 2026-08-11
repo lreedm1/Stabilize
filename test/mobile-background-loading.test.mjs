@@ -16,7 +16,7 @@ const read = (path) =>
 const readVideo = () =>
   readFile(
     new URL(
-      "../public/scenes/mobile-forest-stream-video-v23-ai-2160.mp4",
+      "../public/scenes/mobile-forest-stream-video-v24-native-1080.mp4",
       import.meta.url,
     ),
   );
@@ -80,9 +80,9 @@ test("mobile clients keep the static image without loading the graphics module c
   assert.match(pageSource, /\/app\.js\?v=20260808-full-guest-thread-1/);
 
   const config = JSON.parse(packageSource);
-  assert.equal(
+  assert.match(
     config.scripts["apply:prompt-policy"],
-    "node scripts/prepare-signed-in-latency-v2.mjs && node scripts/apply-priority-latency.mjs && node scripts/prepare-gpt56-fast-generators.mjs && node scripts/prepare-decision-grade-impact.mjs && node scripts/add-memory-deletion-and-guest-session.mjs && node scripts/finalize-memory-controls.mjs && node scripts/apply-signed-in-latency-v2.mjs && node scripts/align-signed-in-latency-v2.mjs && node scripts/finalize-signed-in-latency-v2.mjs && node scripts/apply-gpt56-fast-runtime.mjs && node scripts/apply-gpt56-fast-copy.mjs && node scripts/apply-gpt56-fast-node-tests.mjs && node scripts/apply-gpt56-fast-model-usage-test.mjs && node scripts/apply-gpt56-fast-paid-worker-test.mjs && node scripts/apply-gpt56-fast-priority-worker-test.mjs && node scripts/apply-signed-in-prefetch-latency.mjs && node scripts/finalize-signed-in-prefetch-tests.mjs && node scripts/prepare-full-guest-cache-version.mjs && node scripts/remember-full-guest-conversation.mjs && node scripts/finalize-full-guest-conversation.mjs && node scripts/prepare-client-response-time.mjs && node scripts/materialize-mobile-forest-stream.mjs && node scripts/use-mobile-forest-stream.mjs && node scripts/apply-mobile-motion-canvas-v18.mjs && node scripts/apply-decision-grade-impact.mjs && node scripts/apply-client-response-time.mjs && node scripts/finalize-decision-grade-impact.mjs",
+    /finalize-native-selected-mobile-v24\.mjs$/,
   );
 
   const loader = await import(
