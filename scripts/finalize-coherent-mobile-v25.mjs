@@ -13,6 +13,8 @@ const VIDEO_ASSET = metadata.videoAsset;
 const POSTER_ASSET = metadata.posterAsset;
 const VIDEO_FILE = VIDEO_ASSET.split("/").at(-1);
 const POSTER_FILE = POSTER_ASSET.split("/").at(-1);
+const VIDEO_STEM = VIDEO_FILE.replace(/\.mp4$/i, "");
+const POSTER_STEM = POSTER_FILE.replace(/\.webp$/i, "");
 const VIDEO_BYTES = Number(metadata.videoBytes);
 const VIDEO_SHA256 = metadata.videoSha256;
 const POSTER_BYTES = Number(metadata.posterBytes);
@@ -37,6 +39,10 @@ const LEGACY_V24_VIDEO_FILE =
   "mobile-forest-stream-video-v24-native-1080.mp4";
 const LEGACY_V24_POSTER_FILE =
   "mobile-forest-stream-v24-native-1080.webp";
+const LEGACY_V24_VIDEO_STEM =
+  "mobile-forest-stream-video-v24-native-1080";
+const LEGACY_V24_POSTER_STEM =
+  "mobile-forest-stream-v24-native-1080";
 const LEGACY_COHERENT_VERSION = "20260811-coherent-mobile-4k-v25-1";
 const LEGACY_NATIVE_VERSION = "20260810-native-selected-mobile-v24-1";
 const SHARED_GUIDE_PAGES = [
@@ -95,6 +101,8 @@ function replaceMediaPaths(source) {
       LEGACY_V24_POSTER_FILE.replaceAll(".", "\\."),
       POSTER_FILE.replaceAll(".", "\\."),
     )
+    .replaceAll(LEGACY_V24_VIDEO_STEM, VIDEO_STEM)
+    .replaceAll(LEGACY_V24_POSTER_STEM, POSTER_STEM)
     .replaceAll(LEGACY_COHERENT_VERSION, CACHE_VERSION)
     .replaceAll(LEGACY_NATIVE_VERSION, CACHE_VERSION);
 }
@@ -218,9 +226,6 @@ await update("public/mobile-static-fallback-fix-20260811.css", () => `/* Coheren
 }
 `);
 
-// Public guide pages share the same portrait background. Move the shared theme,
-// its test, and its stylesheet cache key to the never-before-used v25 poster so
-// no page can revive the stale immutable v24 image during navigation or touch.
 await update("public/guides.css", (source) => replaceMediaPaths(source));
 for (const path of SHARED_GUIDE_PAGES) {
   await update(path, (source) => replaceMediaPaths(source));
@@ -229,8 +234,6 @@ await update("test/shared-site-theme.test.mjs", (source) =>
   replaceMediaPaths(source),
 );
 
-// Keep immutable caching for media, but only on the unique v25 URLs. The old
-// v24 entries remain historical and can stay cached without affecting v25.
 await update("public/_headers", (source) => {
   const next = replaceMediaPaths(source);
   if (next.includes(`# native-selected-mobile-v24-end`)) {
