@@ -1,4 +1,7 @@
-@media (max-width: 980px) and (orientation: portrait) {
+/* Zoom-stable portrait-touch background rules.
+   Do not key these layers to CSS viewport width: iOS Safari can reevaluate
+   width media queries while pinch-zooming and expose the desktop lake asset. */
+@media (orientation: portrait) and (hover: none) and (pointer: coarse) {
   .photo-backdrop {
     background-image: url("/scenes/mobile-forest-stream-v14-retina-2160.webp") !important;
     background-size: cover !important;
@@ -11,5 +14,29 @@
   #photo-backdrop-image {
     visibility: hidden !important;
     opacity: 0 !important;
+  }
+
+  .mobile-background-video {
+    position: fixed !important;
+    z-index: 0 !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: 50% 50% !important;
+    pointer-events: none !important;
+  }
+
+  html[data-mobile-background="video-playing"] .mobile-background-video.is-playing,
+  .mobile-background-video.is-playing {
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  .mobile-motion-canvas.is-ready {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 }
