@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: materialize-native-selected-mobile-v24
+  group: materialize-native-selected-mobile-v24-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
