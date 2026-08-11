@@ -6,11 +6,6 @@ on:
       - agent/native-selected-mobile-video-v24
     paths:
       - .github/workflows/materialize-native-selected-mobile-v24.yml
-  pull_request:
-    branches:
-      - main
-    paths:
-      - .github/workflows/materialize-native-selected-mobile-v24.yml
   workflow_dispatch:
 
 permissions:
