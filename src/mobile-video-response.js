@@ -1,10 +1,10 @@
 export const MOBILE_VIDEO_ROUTE =
-  "/media/mobile-forest-stream-video-v23-ai-2160.mp4";
+  "/media/mobile-forest-stream-video-v24-native-1080.mp4";
 export const MOBILE_VIDEO_ASSET_PATH =
-  "/scenes/mobile-forest-stream-video-v23-ai-2160.mp4";
-export const MOBILE_VIDEO_BYTES = 20_957_716;
+  "/scenes/mobile-forest-stream-video-v24-native-1080.mp4";
+export const MOBILE_VIDEO_BYTES = 2_371_524;
 export const MOBILE_VIDEO_ETAG =
-  '"be5995746c6137f9f63121eead3883ce1469279563738e1ccbd813abf9d7becf"';
+  '"69dd547594f86fb80f643fa7c823d076c414a630d9a5a53504b6d5f930b95ffc"';
 
 const assetByteCache = new WeakMap();
 

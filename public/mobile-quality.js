@@ -1,9 +1,9 @@
 const MOBILE_BACKGROUND_QUERY =
   "(max-width: 980px) and (orientation: portrait)";
 const VIDEO_ASSET =
-  "/media/mobile-forest-stream-video-v23-ai-2160.mp4";
+  "/media/mobile-forest-stream-video-v24-native-1080.mp4";
 const POSTER_ASSET =
-  "/scenes/mobile-forest-stream-v23-ai-2160.webp";
+  "/scenes/mobile-forest-stream-v24-native-1080.webp";
 const MAX_AUTOPLAY_RETRIES = 10;
 
 const mobilePortrait = globalThis.matchMedia?.(MOBILE_BACKGROUND_QUERY);
@@ -63,8 +63,8 @@ function markPlaying() {
   if (!eligible() || video.paused || video.readyState < 2) return;
   video.classList.add("is-playing");
   video.classList.remove("is-autoplay-blocked", "is-failed");
-  document.documentElement.dataset.mobileVideoSource = "selected-forest-stream-ai-enhanced";
-  document.documentElement.dataset.mobileVideoQuality = "ai-enhanced-2160x3840";
+  document.documentElement.dataset.mobileVideoSource = "selected-forest-stream-native-source";
+  document.documentElement.dataset.mobileVideoQuality = "native-source-1080x1920";
   setState("video-playing");
   clearRetry();
   autoplayAttempts = 0;
@@ -108,7 +108,7 @@ async function requestPlayback(fromGesture = false) {
   if (!eligible()) return;
   configure();
   requestedPause = false;
-  setState("video-loading-ai-enhanced");
+  setState("video-loading-native-source");
 
   try {
     await video.play();

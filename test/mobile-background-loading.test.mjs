@@ -138,7 +138,7 @@ test("portrait mobile uses a Worker-served MP4 instead of a reconstructed blob",
 
   assert.match(
     clientSource,
-    /const VIDEO_ASSET =[\s\S]*\/media\/mobile-forest-stream-video-v23-ai-2160\.mp4/,
+    /const VIDEO_ASSET =[\s\S]*\/media\/mobile-forest-stream-video-v24-native-1080\.mp4/,
   );
   assert.match(clientSource, /video\.src = VIDEO_ASSET/);
   assert.match(clientSource, /video\.autoplay = true/);
@@ -147,7 +147,7 @@ test("portrait mobile uses a Worker-served MP4 instead of a reconstructed blob",
   assert.match(clientSource, /video\.loop = true/);
   assert.match(clientSource, /video\.playsInline = true/);
   assert.match(clientSource, /function bindGestureRecovery\(\)/);
-  assert.match(clientSource, /ai-enhanced-2160x3840/);
+  assert.match(clientSource, /native-source-1080x1920/);
   assert.doesNotMatch(clientSource, /URL\.createObjectURL|new Blob|atob\(/);
 
   assert.match(materializerSource, /retina-mobile-video-v14-validation-start/);
@@ -159,7 +159,7 @@ test("portrait mobile uses a Worker-served MP4 instead of a reconstructed blob",
   assert.match(routerSource, /await serveMobileVideo\(request, canonicalEnv\)/);
   assert.match(
     responderSource,
-    /mobile-forest-stream-video-v23-ai-2160\.mp4/,
+    /mobile-forest-stream-video-v24-native-1080\.mp4/,
   );
   assert.match(responderSource, /Accept-Ranges/);
   assert.match(responderSource, /Content-Range/);
@@ -286,7 +286,7 @@ test("the mobile video response has a strong ETag and exact uncached ranges", as
 });
 
 // smooth-mobile-video-v12-test-start
-test("portrait mobile uses the selected 2160x3840 MP4 without a lower-resolution video fallback", async () => {
+test("portrait mobile uses the selected 1080x1920 MP4 without a lower-resolution video fallback", async () => {
   const [pageSource, clientSource, materializerSource, video] =
     await Promise.all([
       read("src/page.js"),
@@ -294,7 +294,7 @@ test("portrait mobile uses the selected 2160x3840 MP4 without a lower-resolution
       read("scripts/materialize-mobile-forest-stream.mjs"),
       readFile(
         new URL(
-          "../public/scenes/mobile-forest-stream-video-v23-ai-2160.mp4",
+          "../public/scenes/mobile-forest-stream-video-v24-native-1080.mp4",
           import.meta.url,
         ),
       ),
@@ -303,26 +303,26 @@ test("portrait mobile uses the selected 2160x3840 MP4 without a lower-resolution
   assert.match(pageSource, /id="mobile-background-video"/);
   assert.match(
     pageSource,
-    /\/media\/mobile-forest-stream-video-v23-ai-2160\.mp4/,
+    /\/media\/mobile-forest-stream-video-v24-native-1080\.mp4/,
   );
   assert.match(
     pageSource,
-    /mobile-quality\.js\?v=20260810-ai-enhanced-mobile-4k-v23-1/,
+    /mobile-quality\.js\?v=20260810-native-selected-mobile-v24-1/,
   );
   assert.match(
     clientSource,
-    /const VIDEO_ASSET =[\s\S]*\/media\/mobile-forest-stream-video-v23-ai-2160\.mp4/,
+    /const VIDEO_ASSET =[\s\S]*\/media\/mobile-forest-stream-video-v24-native-1080\.mp4/,
   );
   assert.match(clientSource, /video\.src = VIDEO_ASSET/);
   assert.match(clientSource, /video\.autoplay = true/);
   assert.match(clientSource, /video\.muted = true/);
   assert.match(clientSource, /video\.defaultMuted = true/);
   assert.match(clientSource, /video\.playsInline = true/);
-  assert.match(clientSource, /ai-enhanced-2160x3840/);
+  assert.match(clientSource, /native-source-1080x1920/);
   assert.doesNotMatch(clientSource, /smooth-720-fallback|legacy-worker-fallback/);
   assert.match(materializerSource, /retina-mobile-video-v14-validation-start/);
 
-  assert.equal(video.byteLength, 20957716);
+  assert.equal(video.byteLength, 2371524);
   assert.equal(video.subarray(4, 8).toString("ascii"), "ftyp");
   for (const marker of ["moov", "mdat", "avc1"]) {
     assert.ok(video.includes(Buffer.from(marker, "ascii")));
@@ -332,7 +332,7 @@ test("portrait mobile uses the selected 2160x3840 MP4 without a lower-resolution
 
 
 // mobile-motion-canvas-v18-test-start
-test("portrait mobile keeps a canvas fallback beneath the selected 4K video", async () => {
+test("portrait mobile keeps a canvas fallback beneath the selected native-resolution video", async () => {
   const [pageSource, styleSource, canvasClient, videoClient, sprite] =
     await Promise.all([
       read("src/page.js"),
@@ -356,7 +356,7 @@ test("portrait mobile keeps a canvas fallback beneath the selected 4K video", as
   assert.match(pageSource, /id="mobile-background-video"/);
   assert.match(
     pageSource,
-    /\/media\/mobile-forest-stream-video-v23-ai-2160\.mp4/,
+    /\/media\/mobile-forest-stream-video-v24-native-1080\.mp4/,
   );
   assert.match(
     pageSource,
@@ -368,6 +368,6 @@ test("portrait mobile keeps a canvas fallback beneath the selected 4K video", as
   assert.match(canvasClient, /setTimeout\(step/);
   assert.doesNotMatch(canvasClient, /\.play\(/);
   assert.match(videoClient, /await video\.play\(\)/);
-  assert.match(videoClient, /ai-enhanced-2160x3840/);
+  assert.match(videoClient, /native-source-1080x1920/);
 });
 // mobile-motion-canvas-v18-test-end
