@@ -50,21 +50,21 @@ jobs:
           video='public/scenes/mobile-forest-stream-video-v24-native-1080.mp4'
           poster='public/scenes/mobile-forest-stream-v24-native-1080.webp'
           route='/media/mobile-forest-stream-video-v24-native-1080.mp4'
-          version='20260810-native-selected-mobile-v24-1'
+          version='20260811-coherent-mobile-4k-v25-1'
 
           test -s "$video"
           test -s "$poster"
-          test "$(wc -c < "$video" | tr -d '[:space:]')" -eq 2371524
+          test "$(wc -c < "$video" | tr -d '[:space:]')" -eq 5766867
           test "$(sha256sum "$video" | awk '{print $1}')" = \
-            '69dd547594f86fb80f643fa7c823d076c414a630d9a5a53504b6d5f930b95ffc'
+            '160e341439d5f962c7c0cacb81da37fec741db3fca4d52df71be7f47732f6a35'
           test "$(sha256sum "$poster" | awk '{print $1}')" = \
-            'c505ce3a83d342d7d47d7c0a09f3f3899225823d08156f2c757b940049b164ab'
+            'a7287cbe78cd6912522ae1cf9295bc449fc53ca8cdd30bea402bc13581e152e0'
           test "$(dd if="$video" bs=1 skip=4 count=4 status=none)" = 'ftyp'
           grep -aFq 'moov' "$video"
           grep -aFq 'mdat' "$video"
           grep -aFq 'avc1' "$video"
-          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video")" = 1080x1920
-          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$poster")" = 1080x1920
+          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video")" = 2160x3840
+          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$poster")" = 2160x3840
           test "$(ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of default=nw=1:nk=1 "$video")" -gt 1500000
 
           grep -Fq 'id="mobile-background-video"' src/page.js
@@ -73,13 +73,13 @@ jobs:
           grep -Fq "mobile-quality.js?v=${version}" src/page.js
           grep -Fq "mobile-woodland-loop.css?v=${version}" src/page.js
           grep -Fq "$route" public/mobile-quality.js
-          grep -Fq 'native-source-1080x1920' public/mobile-quality.js
+          grep -Fq 'coherent-source-2160x3840' public/mobile-quality.js
           grep -Fq 'video.autoplay = true' public/mobile-quality.js
           grep -Fq 'video.muted = true' public/mobile-quality.js
           grep -Fq 'video.defaultMuted = true' public/mobile-quality.js
           grep -Fq 'video.playsInline = true' public/mobile-quality.js
           grep -Fq 'video.play()' public/mobile-quality.js
-          grep -Fq 'MOBILE_VIDEO_BYTES = 2_371_524' src/mobile-video-response.js
+          grep -Fq 'MOBILE_VIDEO_BYTES = 5_766_867' src/mobile-video-response.js
           grep -Fq "$route" src/mobile-video-response.js
           grep -Fq 'const assetByteCache = new WeakMap();' src/mobile-video-response.js
           grep -Fq 'Accept-Ranges' src/mobile-video-response.js
@@ -120,7 +120,7 @@ jobs:
           expected_video_etag="\"${expected_video_sha}\""
           expected_poster_bytes="$(wc -c < "$expected_poster" | tr -d '[:space:]')"
           expected_poster_sha="$(sha256sum "$expected_poster" | awk '{print $1}')"
-          version='20260810-native-selected-mobile-v24-1'
+          version='20260811-coherent-mobile-4k-v25-1'
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
 
@@ -192,7 +192,7 @@ jobs:
               && grep -Fq "$poster_route" "$tmpdir/page.html" \
               && grep -Fq "mobile-quality.js?v=${version}" "$tmpdir/page.html" \
               && grep -Fq "$route" "$tmpdir/mobile-quality.js" \
-              && grep -Fq 'native-source-1080x1920' "$tmpdir/mobile-quality.js" \
+              && grep -Fq 'coherent-source-2160x3840' "$tmpdir/mobile-quality.js" \
               && grep -Fqi "media-src 'self'" "$tmpdir/page.headers"; then
               ready=true
               break
@@ -248,14 +248,14 @@ jobs:
             || "$accept_ranges" != bytes \
             || "$range_bytes" != 1024 \
             || "$range_content" != "bytes 0-1023/${expected_video_bytes}" \
-            || "$dimensions" != 1080x1920 \
+            || "$dimensions" != 2160x3840 \
             || "$bitrate" -le 1500000 ]]; then
             publish_status failure 'Exact native video delivery failed verification'
             echo "::error::video=${video_status}, range=${range_status}, bytes=${video_bytes}, sha=${video_sha}, dimensions=${dimensions}, bitrate=${bitrate}"
             exit 1
           fi
 
-          publish_status success 'Exact native-source 1080x1920 forest video is live'
+          publish_status success 'Exact coherent 2160x3840 forest video is live'
           echo 'Production serves the exact native selected forest release.'
 
   verify-mobile-webkit:
@@ -317,8 +317,8 @@ jobs:
                 const video = document.querySelector("#mobile-background-video");
                 return (
                   video instanceof HTMLVideoElement &&
-                  video.videoWidth === 1080 &&
-                  video.videoHeight === 1920 &&
+                  video.videoWidth === 2160 &&
+                  video.videoHeight === 3840 &&
                   video.readyState >= 2 &&
                   !video.paused &&
                   document.documentElement.dataset.mobileBackground ===
@@ -340,8 +340,8 @@ jobs:
                 const video = document.querySelector("#mobile-background-video");
                 return (
                   video instanceof HTMLVideoElement &&
-                  video.videoWidth === 1080 &&
-                  video.videoHeight === 1920 &&
+                  video.videoWidth === 2160 &&
+                  video.videoHeight === 3840 &&
                   video.readyState >= 2 &&
                   !video.paused &&
                   document.documentElement.dataset.mobileBackground ===
@@ -382,8 +382,8 @@ jobs:
             evidence.second = await sample();
 
             const { first, second } = evidence;
-            if (first.width !== 1080 || first.height !== 1920) {
-              throw new Error("WebKit did not decode the 1080x1920 source.");
+            if (first.width !== 2160 || first.height !== 3840) {
+              throw new Error("WebKit did not decode the 2160x3840 source.");
             }
             if (first.opacity !== "1" || second.opacity !== "1") {
               throw new Error("The native video is not visibly opaque.");
@@ -397,8 +397,8 @@ jobs:
             if (second.currentTime - first.currentTime < 0.4) {
               throw new Error("The native video timeline did not advance.");
             }
-            if (second.quality !== "native-source-1080x1920") {
-              throw new Error("The page did not report enhanced 1080x1920 quality.");
+            if (second.quality !== "coherent-source-2160x3840") {
+              throw new Error("The page did not report enhanced 2160x3840 quality.");
             }
             if (!second.source.includes("mobile-forest-stream-video-v24-native-1080.mp4")) {
               throw new Error("WebKit decoded the wrong mobile source.");
