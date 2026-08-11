@@ -5,9 +5,6 @@ const VIDEO_ASSET =
 const POSTER_ASSET =
   "/scenes/mobile-forest-stream-v24-native-1080.webp";
 const MAX_AUTOPLAY_RETRIES = 10;
-const VIDEO_RENDER_WIDTH = 2160;
-const VIDEO_RENDER_HEIGHT = 3840;
-const SOURCE_VIDEO_QUALITY = "native-source-1080x1920";
 
 function installZoomStableStyles() {
   if (document.getElementById("mobile-zoom-stable-style")) return;
@@ -44,146 +41,9 @@ let retryTimer = null;
 let autoplayAttempts = 0;
 let requestedPause = false;
 let gestureRecoveryBound = false;
-let renderCanvas = null;
-let renderContext = null;
-let renderFrameHandle = null;
-let renderedFirstFrame = false;
 
 function setState(state) {
   document.documentElement.dataset.mobileBackground = state;
-}
-
-function ensure4kRenderTarget() {
-  if (!(video instanceof HTMLVideoElement)) return null;
-  if (renderCanvas instanceof HTMLCanvasElement && renderContext) {
-    return renderCanvas;
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.id = "mobile-background-video-4k";
-  canvas.width = VIDEO_RENDER_WIDTH;
-  canvas.height = VIDEO_RENDER_HEIGHT;
-  canvas.setAttribute("aria-hidden", "true");
-  canvas.style.position = "fixed";
-  canvas.style.inset = "0";
-  canvas.style.zIndex = "0";
-  canvas.style.width = "100%";
-  canvas.style.height = "100%";
-  canvas.style.pointerEvents = "none";
-  canvas.style.userSelect = "none";
-  canvas.style.objectFit = "cover";
-  canvas.style.opacity = "0";
-  canvas.style.visibility = "hidden";
-  canvas.style.transform = "translate3d(0, 0, 0)";
-  canvas.style.backfaceVisibility = "hidden";
-
-  const context = canvas.getContext("2d", {
-    alpha: false,
-    desynchronized: true,
-  });
-  if (!context) return null;
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
-
-  video.insertAdjacentElement("beforebegin", canvas);
-  renderCanvas = canvas;
-  renderContext = context;
-  return canvas;
-}
-
-function draw4kFrame() {
-  if (
-    !(video instanceof HTMLVideoElement) ||
-    !(renderCanvas instanceof HTMLCanvasElement) ||
-    !renderContext ||
-    !eligible() ||
-    video.readyState < 2 ||
-    video.videoWidth <= 0 ||
-    video.videoHeight <= 0
-  ) {
-    return;
-  }
-
-  const sourceAspect = video.videoWidth / video.videoHeight;
-  const targetAspect = VIDEO_RENDER_WIDTH / VIDEO_RENDER_HEIGHT;
-  let sourceX = 0;
-  let sourceY = 0;
-  let sourceWidth = video.videoWidth;
-  let sourceHeight = video.videoHeight;
-
-  if (sourceAspect > targetAspect) {
-    sourceWidth = video.videoHeight * targetAspect;
-    sourceX = (video.videoWidth - sourceWidth) / 2;
-  } else if (sourceAspect < targetAspect) {
-    sourceHeight = video.videoWidth / targetAspect;
-    sourceY = (video.videoHeight - sourceHeight) / 2;
-  }
-
-  renderContext.drawImage(
-    video,
-    sourceX,
-    sourceY,
-    sourceWidth,
-    sourceHeight,
-    0,
-    0,
-    VIDEO_RENDER_WIDTH,
-    VIDEO_RENDER_HEIGHT,
-  );
-
-  if (!renderedFirstFrame) {
-    renderedFirstFrame = true;
-    renderCanvas.style.visibility = "visible";
-    renderCanvas.style.opacity = "1";
-    video.style.opacity = "0";
-    video.style.visibility = "hidden";
-    document.documentElement.dataset.mobileVideoSourceQuality = SOURCE_VIDEO_QUALITY;
-    document.documentElement.dataset.mobileVideoRender = "2160x3840";
-    document.documentElement.dataset.mobileVideoQuality = "4k-render-2160x3840";
-  }
-}
-
-function schedule4kFrame() {
-  draw4kFrame();
-  if (!eligible() || video.paused) return;
-
-  if (typeof video.requestVideoFrameCallback === "function") {
-    renderFrameHandle = video.requestVideoFrameCallback(() => schedule4kFrame());
-  } else {
-    renderFrameHandle = requestAnimationFrame(() => schedule4kFrame());
-  }
-}
-
-function start4kRender() {
-  if (!eligible()) return;
-  const canvas = ensure4kRenderTarget();
-  if (!canvas || renderFrameHandle !== null) return;
-  renderedFirstFrame = false;
-  schedule4kFrame();
-}
-
-function stop4kRender() {
-  if (
-    renderFrameHandle !== null &&
-    video instanceof HTMLVideoElement &&
-    typeof video.cancelVideoFrameCallback === "function"
-  ) {
-    try {
-      video.cancelVideoFrameCallback(renderFrameHandle);
-    } catch {}
-  } else if (renderFrameHandle !== null) {
-    cancelAnimationFrame(renderFrameHandle);
-  }
-  renderFrameHandle = null;
-  renderedFirstFrame = false;
-  if (renderCanvas instanceof HTMLCanvasElement) {
-    renderCanvas.style.opacity = "0";
-    renderCanvas.style.visibility = "hidden";
-  }
-  if (video instanceof HTMLVideoElement) {
-    video.style.removeProperty("opacity");
-    video.style.removeProperty("visibility");
-  }
 }
 
 function clearRetry() {
@@ -233,17 +93,14 @@ function markPlaying() {
   video.classList.add("is-playing");
   video.classList.remove("is-autoplay-blocked", "is-failed");
   document.documentElement.dataset.mobileVideoSource = "selected-forest-stream-native-source";
-  document.documentElement.dataset.mobileVideoSourceQuality = SOURCE_VIDEO_QUALITY;
-  document.documentElement.dataset.mobileVideoQuality = "4k-render-2160x3840";
+  document.documentElement.dataset.mobileVideoQuality = "native-source-1080x1920";
   setState("video-playing");
-  start4kRender();
   clearRetry();
   autoplayAttempts = 0;
 }
 
 function revealFallback(state, error = null) {
   if (!(video instanceof HTMLVideoElement)) return;
-  stop4kRender();
   video.classList.remove("is-playing");
   if (state === "video-failed") video.classList.add("is-failed");
   else video.classList.add("is-autoplay-blocked");
@@ -303,7 +160,6 @@ function startVideo() {
 
 function stopVideo() {
   clearRetry();
-  stop4kRender();
   if (!(video instanceof HTMLVideoElement)) return;
   requestedPause = true;
   video.pause();
@@ -350,3 +206,150 @@ if (mobilePortrait?.matches) {
   bindGestureRecovery();
   startVideo();
 }
+
+/* mobile-video-4k-render-v1-start */
+(() => {
+  const RENDER_WIDTH = 2160;
+  const RENDER_HEIGHT = 3840;
+  const sourceVideo = document.querySelector("#mobile-background-video");
+  const portraitTouch = globalThis.matchMedia?.(MOBILE_BACKGROUND_QUERY);
+  let canvas = null;
+  let context = null;
+  let frameHandle = null;
+  let frameMode = null;
+
+  function eligible4k() {
+    return (
+      sourceVideo instanceof HTMLVideoElement &&
+      portraitTouch?.matches === true &&
+      !document.hidden
+    );
+  }
+
+  function ensureCanvas() {
+    if (!(sourceVideo instanceof HTMLVideoElement)) return null;
+    if (canvas instanceof HTMLCanvasElement && context) return canvas;
+
+    canvas = document.createElement("canvas");
+    canvas.id = "mobile-background-video-4k";
+    canvas.width = RENDER_WIDTH;
+    canvas.height = RENDER_HEIGHT;
+    canvas.setAttribute("aria-hidden", "true");
+    canvas.style.position = "fixed";
+    canvas.style.inset = "0";
+    canvas.style.zIndex = "0";
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+    canvas.style.pointerEvents = "none";
+    canvas.style.userSelect = "none";
+    canvas.style.transform = "translate3d(0, 0, 0)";
+    canvas.style.backfaceVisibility = "hidden";
+    canvas.style.setProperty("opacity", "0", "important");
+    canvas.style.setProperty("visibility", "hidden", "important");
+
+    context = canvas.getContext("2d", { alpha: false, desynchronized: true });
+    if (!context) {
+      canvas = null;
+      return null;
+    }
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    sourceVideo.insertAdjacentElement("afterend", canvas);
+    return canvas;
+  }
+
+  function drawFrame() {
+    if (
+      !eligible4k() ||
+      !(canvas instanceof HTMLCanvasElement) ||
+      !context ||
+      sourceVideo.readyState < 2 ||
+      sourceVideo.videoWidth <= 0 ||
+      sourceVideo.videoHeight <= 0
+    ) return false;
+
+    const sourceAspect = sourceVideo.videoWidth / sourceVideo.videoHeight;
+    const targetAspect = RENDER_WIDTH / RENDER_HEIGHT;
+    let sx = 0;
+    let sy = 0;
+    let sw = sourceVideo.videoWidth;
+    let sh = sourceVideo.videoHeight;
+    if (sourceAspect > targetAspect) {
+      sw = sourceVideo.videoHeight * targetAspect;
+      sx = (sourceVideo.videoWidth - sw) / 2;
+    } else if (sourceAspect < targetAspect) {
+      sh = sourceVideo.videoWidth / targetAspect;
+      sy = (sourceVideo.videoHeight - sh) / 2;
+    }
+
+    context.drawImage(sourceVideo, sx, sy, sw, sh, 0, 0, RENDER_WIDTH, RENDER_HEIGHT);
+    canvas.style.setProperty("visibility", "visible", "important");
+    canvas.style.setProperty("opacity", "1", "important");
+    sourceVideo.style.setProperty("visibility", "hidden", "important");
+    sourceVideo.style.setProperty("opacity", "0", "important");
+    document.documentElement.dataset.mobileVideoSourceQuality = "native-source-1080x1920";
+    document.documentElement.dataset.mobileVideoRender = "2160x3840";
+    document.documentElement.dataset.mobileVideoQuality = "4k-render-2160x3840";
+    return true;
+  }
+
+  function loop() {
+    frameHandle = null;
+    frameMode = null;
+    if (!drawFrame() || sourceVideo.paused) return;
+    if (typeof sourceVideo.requestVideoFrameCallback === "function") {
+      frameMode = "video";
+      frameHandle = sourceVideo.requestVideoFrameCallback(loop);
+    } else {
+      frameMode = "animation";
+      frameHandle = requestAnimationFrame(loop);
+    }
+  }
+
+  function start() {
+    if (!eligible4k() || sourceVideo.paused) return;
+    if (!ensureCanvas() || frameHandle !== null) return;
+    loop();
+  }
+
+  function stop() {
+    if (frameHandle !== null) {
+      if (frameMode === "video" && typeof sourceVideo.cancelVideoFrameCallback === "function") {
+        try { sourceVideo.cancelVideoFrameCallback(frameHandle); } catch {}
+      } else if (frameMode === "animation") {
+        cancelAnimationFrame(frameHandle);
+      }
+    }
+    frameHandle = null;
+    frameMode = null;
+    if (canvas instanceof HTMLCanvasElement) {
+      canvas.style.setProperty("opacity", "0", "important");
+      canvas.style.setProperty("visibility", "hidden", "important");
+    }
+    if (sourceVideo instanceof HTMLVideoElement) {
+      sourceVideo.style.removeProperty("opacity");
+      sourceVideo.style.removeProperty("visibility");
+    }
+  }
+
+  if (sourceVideo instanceof HTMLVideoElement) {
+    for (const event of ["playing", "loadeddata", "canplay"]) {
+      sourceVideo.addEventListener(event, start);
+    }
+    sourceVideo.addEventListener("pause", stop);
+    sourceVideo.addEventListener("error", stop);
+  }
+  portraitTouch?.addEventListener?.("change", (event) => {
+    if (event.matches) start();
+    else stop();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stop();
+    else start();
+  });
+  globalThis.addEventListener("pageshow", start);
+  globalThis.addEventListener("orientationchange", () => setTimeout(start, 0));
+  globalThis.addEventListener("pagehide", stop);
+  start();
+})();
+/* mobile-video-4k-render-v1-end */
