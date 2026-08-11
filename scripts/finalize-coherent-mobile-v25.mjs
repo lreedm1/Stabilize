@@ -94,10 +94,6 @@ await update("src/page.js", (source) =>
       /mobile-quality\.js\?v=[^"]+/,
       `mobile-quality.js?v=${CACHE_VERSION}`,
     )
-    .replaceAll(
-      'media="(max-width: 980px) and (orientation: portrait)"',
-      'media="(max-width: 980px)"',
-    )
     .replace(
       new RegExp(`poster="${POSTER_ASSET.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\?v=[^"]+)?"`),
       `poster="${POSTER_ASSET}?v=${CACHE_VERSION}"`,
@@ -187,15 +183,10 @@ await update("test/mobile-quality.test.mjs", (source) => {
     "20260810-native-selected-mobile-v24-1",
     CACHE_VERSION,
   );
-  if (!next.includes('import { renderPage } from "../src/page.js";')) {
-    next = next.replace(
-      'import { readFile } from "node:fs/promises";\n',
-      'import { readFile } from "node:fs/promises";\nimport { renderPage } from "../src/page.js";\n',
-    );
-  }
+  next = next.replace('import { renderPage } from "../src/page.js";\n', "");
   const guardAnchor = '  assert.match(pageSource, /id="mobile-motion-canvas"/);';
-  if (!next.includes("const renderedPage = renderPage();")) {
-    const guard = `  const renderedPage = renderPage();\n  assert.match(renderedPage, /media=\"\\(max-width: 980px\\)\"/);\n  assert.doesNotMatch(\n    renderedPage,\n    /media=\"\\(max-width: 980px\\) and \\(orientation: portrait\\)\"/,\n  );\n  assert.match(\n    videoClient,\n    /\"\\(hover: none\\) and \\(pointer: coarse\\)\";/,\n  );\n  assert.doesNotMatch(\n    videoClient,\n    /\\(orientation: portrait\\) and \\(hover: none\\) and \\(pointer: coarse\\)/,\n  );\n`;
+  if (!next.includes("// mobile-touch-orientation-regression-start")) {
+    const guard = `  // mobile-touch-orientation-regression-start\n  const touchFallbackStyles = await readFile(\n    new URL(\n      \"../public/mobile-static-fallback-fix-20260811.css\",\n      import.meta.url,\n    ),\n    \"utf8\",\n  );\n  assert.match(\n    videoClient,\n    /\"\\(hover: none\\) and \\(pointer: coarse\\)\";/,\n  );\n  assert.doesNotMatch(\n    videoClient,\n    /\\(orientation: portrait\\) and \\(hover: none\\) and \\(pointer: coarse\\)/,\n  );\n  assert.match(\n    touchFallbackStyles,\n    /@media \\(hover: none\\) and \\(pointer: coarse\\)/,\n  );\n  assert.doesNotMatch(touchFallbackStyles, /orientation: portrait/);\n  // mobile-touch-orientation-regression-end\n`;
     next = next.replace(guardAnchor, guard + guardAnchor);
   }
   return next;
