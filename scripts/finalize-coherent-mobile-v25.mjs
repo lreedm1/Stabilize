@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 
 const metadata = JSON.parse(
   await readFile(
@@ -22,12 +22,6 @@ const SOURCE_LABEL = "coherent-full-frame-source-motion";
 const LOADING_LABEL = "video-loading-coherent-4k";
 const ZOOM_SAFE_QUERY =
   "(orientation: portrait) and (hover: none) and (pointer: coarse)";
-const FINALIZER_COMMAND =
-  "node scripts/finalize-coherent-mobile-v25.mjs";
-const NATIVE_FINALIZER =
-  "node scripts/finalize-native-selected-mobile-v24.mjs";
-const REGRESSION_FINALIZER =
-  "node scripts/finalize-native-selected-mobile-v24-regressions.mjs";
 
 const OLD = {
   version: "20260810-native-selected-mobile-v24-1",
@@ -48,6 +42,8 @@ const OLD = {
 };
 
 const LEGACY_POSTER = "/scenes/mobile-forest-stream-v14-retina-2160.webp";
+const FOUR_K_RENDER_START = "/* mobile-video-4k-render-v1-start */";
+const FOUR_K_RENDER_END = "/* mobile-video-4k-render-v1-end */";
 
 function grouped(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, "_");
@@ -96,29 +92,17 @@ function replaceRelease(source) {
   return next;
 }
 
-// The prior regression finalizer deliberately runs before this one. Restore
-// the intended command order after it canonicalizes the older tail.
-const packagePath = "package.json";
-const packageData = JSON.parse(await readFile(packagePath, "utf8"));
-const policy = packageData.scripts?.["apply:prompt-policy"];
-if (typeof policy !== "string" || !policy.trim()) {
-  throw new Error("package.json is missing apply:prompt-policy");
+function stripLegacy4kRender(source) {
+  if (!source.includes(FOUR_K_RENDER_START)) return source;
+  const start = source.indexOf(FOUR_K_RENDER_START);
+  const end = source.indexOf(FOUR_K_RENDER_END, start);
+  if (end < 0) throw new Error("Legacy 4K render block is unterminated.");
+  return (
+    source.slice(0, start).trimEnd() +
+    "\n" +
+    source.slice(end + FOUR_K_RENDER_END.length).trimStart()
+  );
 }
-const canonicalPolicy = [
-  ...policy
-    .split(" && ")
-    .filter(
-      (command) =>
-        command !== NATIVE_FINALIZER &&
-        command !== REGRESSION_FINALIZER &&
-        command !== FINALIZER_COMMAND,
-    ),
-  NATIVE_FINALIZER,
-  REGRESSION_FINALIZER,
-  FINALIZER_COMMAND,
-].join(" && ");
-packageData.scripts["apply:prompt-policy"] = canonicalPolicy;
-await writeFile(packagePath, `${JSON.stringify(packageData, null, 2)}\n`, "utf8");
 
 await update("src/page.js", (source) => {
   let next = replaceRelease(source)
@@ -143,7 +127,9 @@ await update("src/page.js", (source) => {
 });
 
 await update("public/mobile-quality.js", (source) => {
-  let next = replaceRelease(source).split(LEGACY_POSTER).join(POSTER_ASSET);
+  let next = stripLegacy4kRender(
+    replaceRelease(source).split(LEGACY_POSTER).join(POSTER_ASSET),
+  );
   next = next.replace(
     /const MOBILE_BACKGROUND_QUERY =\n\s+"[^"]+";/,
     `const MOBILE_BACKGROUND_QUERY =\n  "${ZOOM_SAFE_QUERY}";`,
@@ -166,14 +152,28 @@ await update("public/mobile-static-fallback-fix-20260811.css", (source) =>
 );
 
 await update("public/mobile-woodland-loop.css", (source) => {
-  let next = replaceRelease(source).split(LEGACY_POSTER).join(POSTER_ASSET);
+  let next = replaceRelease(source)
+    .split(LEGACY_POSTER)
+    .join(POSTER_ASSET)
+    .replaceAll(
+      "(max-width: 980px) and (orientation: portrait)",
+      ZOOM_SAFE_QUERY,
+    );
   const start = "/* coherent-mobile-v25-start */";
   const end = "/* coherent-mobile-v25-end */";
-  const block = `${start}\n@media ${ZOOM_SAFE_QUERY} {\n  .photo-backdrop {\n    background-image: url("${POSTER_ASSET}") !important;\n    background-size: cover !important;\n    background-position: 50% 50% !important;\n    background-repeat: no-repeat !important;\n  }\n\n  #photo-backdrop-image {\n    display: none !important;\n    visibility: hidden !important;\n    opacity: 0 !important;\n  }\n\n  /* Keep the legacy water canvas beneath the selected full-frame video. It can\n     still satisfy its diagnostic checks without ever painting over the scene. */\n  .mobile-motion-canvas {\n    z-index: -1 !important;\n  }\n}\n${end}`;
-  const pattern = new RegExp(
-    `/\\* coherent-mobile-v25-start \\*/[\\s\\S]*?/\\* coherent-mobile-v25-end \\*/`,
-  );
-  if (pattern.test(next)) return next.replace(pattern, block);
+  const block = `${start}\n@media ${ZOOM_SAFE_QUERY} {\n  .photo-backdrop {\n    background-image: url("${POSTER_ASSET}") !important;\n    background-size: cover !important;\n    background-position: 50% 50% !important;\n    background-repeat: no-repeat !important;\n  }\n\n  #photo-backdrop-image {\n    display: none !important;\n    visibility: hidden !important;\n    opacity: 0 !important;\n  }\n\n  /* The historical water canvas remains in the DOM for its fallback tests,\n     but it must never composite over the coherent full-frame video. */\n  .mobile-motion-canvas {\n    z-index: -1 !important;\n  }\n}\n${end}`;
+  const first = next.indexOf(start);
+  if (first >= 0) {
+    const last = next.indexOf(end, first);
+    if (last < 0) throw new Error("Coherent mobile CSS block is unterminated.");
+    return (
+      next.slice(0, first).trimEnd() +
+      "\n\n" +
+      block +
+      "\n" +
+      next.slice(last + end.length).trimStart()
+    );
+  }
   return `${next.trimEnd()}\n\n${block}\n`;
 });
 
@@ -186,39 +186,35 @@ for (const path of [
   await update(path, (source) => replaceRelease(source));
 }
 
-// The video release workflow contains literal dimension checks that are not
-// represented by a path or checksum. Keep those aligned with the 4K source.
 await update(".github/workflows/verify-mobile-video.yml", (source) =>
   source
     .replaceAll("1080x1920", `${VIDEO_WIDTH}x${VIDEO_HEIGHT}`)
-    .replaceAll("native-source 1080x1920", `coherent-source ${VIDEO_WIDTH}x${VIDEO_HEIGHT}`),
+    .replaceAll(
+      "native-source 1080x1920",
+      `coherent-source ${VIDEO_WIDTH}x${VIDEO_HEIGHT}`,
+    ),
 );
 
-const testNames = (await readdir("test"))
-  .filter((name) => name.endsWith(".mjs"))
-  .sort();
-const commandLiteralPattern =
-  /"node scripts\/prepare-signed-in-latency-v2\.mjs[^"\n]*node scripts\/finalize-coherent-mobile-v25\.mjs"|"node scripts\/prepare-signed-in-latency-v2\.mjs[^"\n]*node scripts\/finalize-native-selected-mobile-v24-regressions\.mjs"/g;
+// Only media-focused tests are rewritten here. General pipeline assertions are
+// deliberately left to the existing canonical regression finalizer so this
+// release stays idempotent across repeated npm test / npm run check passes.
+await update("test/mobile-quality.test.mjs", (source) =>
+  replaceRelease(source)
+    .replaceAll(`${POSTER_ASSET} 1080w`, `${POSTER_ASSET} ${VIDEO_WIDTH}w`)
+    .replaceAll(
+      "{ width: 1080, height: 1920 }",
+      `{ width: ${VIDEO_WIDTH}, height: ${VIDEO_HEIGHT} }`,
+    )
+    .replaceAll("native-source-1080x1920", QUALITY_LABEL),
+);
 
-for (const name of testNames) {
-  await update(`test/${name}`, (source) => {
-    let next = replaceRelease(source)
-      .replace(commandLiteralPattern, JSON.stringify(canonicalPolicy))
-      .replaceAll(
-        "/finalize-native-selected-mobile-v24-regressions\\.mjs$/",
-        "/finalize-native-selected-mobile-v24-regressions\\.mjs && node scripts\\/finalize-coherent-mobile-v25\\.mjs$/",
-      );
-    if (name === "mobile-quality.test.mjs") {
-      next = next
-        .replaceAll(`${POSTER_ASSET} 1080w`, `${POSTER_ASSET} ${VIDEO_WIDTH}w`)
-        .replaceAll(
-          "{ width: 1080, height: 1920 }",
-          `{ width: ${VIDEO_WIDTH}, height: ${VIDEO_HEIGHT} }`,
-        );
-    }
-    return next;
-  });
-}
+await update("test/mobile-background-loading.test.mjs", (source) =>
+  replaceRelease(source),
+);
+
+await update("test/shared-site-theme.test.mjs", (source) =>
+  replaceRelease(source).split(LEGACY_POSTER).join(POSTER_ASSET),
+);
 
 console.log(
   `Finalized coherent mobile video ${VIDEO_WIDTH}x${VIDEO_HEIGHT}: ${VIDEO_ROUTE}.`,
