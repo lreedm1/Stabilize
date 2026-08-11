@@ -174,6 +174,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
     <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260811-coherent-mobile-4k-v25-1" />
     <link rel="stylesheet" href="/mobile-static-fallback-fix-20260811.css?v=20260811-coherent-mobile-4k-v25-1" />
+    <link rel="stylesheet" href="/mobile-orientation-v26.css?v=20260811-mobile-orientation-v26-1" />
   </head>
   <body>
     <canvas
@@ -345,6 +346,7 @@ export function renderPage(options = {}) {
     <!-- selected-mobile-4k-video-v22-script-start -->
     <script type="module" src="/mobile-quality.js?v=20260811-coherent-mobile-4k-v25-1"></script>
     <!-- selected-mobile-4k-video-v22-script-end -->
+    <script type="module" src="/mobile-orientation-v26.js?v=20260811-mobile-orientation-v26-1"></script>
   </body>
 </html>`;
 }
