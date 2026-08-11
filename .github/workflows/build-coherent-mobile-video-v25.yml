@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: true
 
       - name: Set up Node.js
@@ -100,12 +100,11 @@ jobs:
         run: |
           set -euo pipefail
           branch='${{ github.event.pull_request.head.ref }}'
+          remote_ref="refs/remotes/origin/$branch"
 
-          # Another write-enabled run can finish the same deterministic build first.
-          # Refresh the branch and treat an already-published identical/containing
-          # commit as success rather than failing with a non-fast-forward push.
-          git fetch --no-tags --depth=50 origin "$branch"
-          remote_ref='FETCH_HEAD'
+          # Materialization workflows can overlap. Refresh a real remote-tracking
+          # ref so ancestry checks and any rebase use complete, unambiguous history.
+          git fetch --no-tags origin "+refs/heads/$branch:$remote_ref"
 
           if git merge-base --is-ancestor HEAD "$remote_ref"; then
             echo 'Generated release is already published on the PR branch.'
@@ -118,13 +117,13 @@ jobs:
           fi
 
           if git merge-base --is-ancestor "$remote_ref" HEAD; then
-            git push origin "HEAD:$branch"
+            git push origin "HEAD:refs/heads/$branch"
             exit 0
           fi
 
-          # Preserve any concurrent branch-only edit without force pushing.
+          # Preserve concurrent branch changes instead of force-pushing over them.
           git rebase "$remote_ref"
-          git push origin "HEAD:$branch"
+          git push origin "HEAD:refs/heads/$branch"
 
       - name: Upload visual build evidence
         if: always()
