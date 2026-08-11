@@ -7,6 +7,7 @@ const POSTER_ASSET =
 const MAX_AUTOPLAY_RETRIES = 10;
 const VIDEO_RENDER_WIDTH = 2160;
 const VIDEO_RENDER_HEIGHT = 3840;
+const SOURCE_VIDEO_QUALITY = "native-source-1080x1920";
 
 function installZoomStableStyles() {
   if (document.getElementById("mobile-zoom-stable-style")) return;
@@ -136,6 +137,7 @@ function draw4kFrame() {
     renderCanvas.style.opacity = "1";
     video.style.opacity = "0";
     video.style.visibility = "hidden";
+    document.documentElement.dataset.mobileVideoSourceQuality = SOURCE_VIDEO_QUALITY;
     document.documentElement.dataset.mobileVideoRender = "2160x3840";
     document.documentElement.dataset.mobileVideoQuality = "4k-render-2160x3840";
   }
@@ -231,6 +233,7 @@ function markPlaying() {
   video.classList.add("is-playing");
   video.classList.remove("is-autoplay-blocked", "is-failed");
   document.documentElement.dataset.mobileVideoSource = "selected-forest-stream-native-source";
+  document.documentElement.dataset.mobileVideoSourceQuality = SOURCE_VIDEO_QUALITY;
   document.documentElement.dataset.mobileVideoQuality = "4k-render-2160x3840";
   setState("video-playing");
   start4kRender();
