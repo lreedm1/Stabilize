@@ -1,0 +1,56 @@
+name: Temporary verify mobile autoplay v28 live
+
+on:
+  push:
+    branches:
+      - fix/mobile-autoplay-visible-v28
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify exact v28 homepage and assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          version="20260812-mobile-autoplay-v28-1"
+
+          for attempt in {1..30}; do
+            nonce="${GITHUB_RUN_ID}-${attempt}-$(date +%s)"
+            curl --fail --max-time 30 --silent --show-error \
+              --header 'Cache-Control: no-cache, no-store, max-age=0' \
+              "https://stabilize.info/?verify-mobile-autoplay-v28=${nonce}" \
+              --output "$tmpdir/page.html" || true
+
+            if grep -Fq "/mobile-autoplay-v27.css?v=${version}" "$tmpdir/page.html" \
+              && grep -Fq "/mobile-autoplay-v27.js?v=${version}" "$tmpdir/page.html"; then
+              curl --fail --max-time 30 --silent --show-error \
+                --header 'Cache-Control: no-cache, no-store, max-age=0' \
+                "https://stabilize.info/mobile-autoplay-v27.css?v=${version}&verify=${nonce}" \
+                --output "$tmpdir/mobile.css"
+              curl --fail --max-time 30 --silent --show-error \
+                --header 'Cache-Control: no-cache, no-store, max-age=0' \
+                "https://stabilize.info/mobile-autoplay-v27.js?v=${version}&verify=${nonce}" \
+                --output "$tmpdir/mobile.js"
+
+              grep -Fq 'data-mobile-autoplay-v28' "$tmpdir/mobile.css"
+              grep -Fq 'visibility: visible !important' "$tmpdir/mobile.css"
+              grep -Fq 'opacity: 1 !important' "$tmpdir/mobile.css"
+              grep -Fq 'mobileAutoplayV28' "$tmpdir/mobile.js"
+              grep -Fq 'video.src = VIDEO_ASSET' "$tmpdir/mobile.js"
+              grep -Fq 'video.addEventListener("playing", markPlaying)' "$tmpdir/mobile.js"
+              echo "Exact mobile autoplay v28 release is live."
+              exit 0
+            fi
+
+            echo "Attempt ${attempt}: live homepage has not reached v28 yet."
+            sleep 10
+          done
+
+          echo '::error::The live homepage did not expose the v28 mobile autoplay release.'
+          exit 1
