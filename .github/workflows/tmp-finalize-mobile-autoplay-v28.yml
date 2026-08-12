@@ -1,0 +1,105 @@
+name: Temporary finalize mobile autoplay v28
+
+on:
+  push:
+    branches:
+      - fix/mobile-autoplay-visible-v28
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/mobile-autoplay-visible-v28
+          fetch-depth: 0
+
+      - name: Apply cache key and regression assertions
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          version = "20260812-mobile-autoplay-v28-1"
+
+          page_path = Path("src/page.js")
+          page = page_path.read_text()
+          page = page.replace(
+              "/mobile-autoplay-v27.css?v=20260812-mobile-autoplay-v27-1",
+              f"/mobile-autoplay-v27.css?v={version}",
+          )
+          page = page.replace(
+              "/mobile-autoplay-v27.js?v=20260812-mobile-autoplay-v27-1",
+              f"/mobile-autoplay-v27.js?v={version}",
+          )
+          page_path.write_text(page)
+
+          finalizer_path = Path("scripts/finalize-mobile-autoplay-v27.mjs")
+          finalizer = finalizer_path.read_text()
+          finalizer = finalizer.replace(
+              'const VERSION = "20260812-mobile-autoplay-v27-1";',
+              f'const VERSION = "{version}";',
+          )
+          finalizer = finalizer.replace(
+              "Finalized parser-early mobile autoplay with animated fallback v27.",
+              "Finalized render-visible parser-early mobile autoplay v28.",
+          )
+          finalizer_path.write_text(finalizer)
+
+          test_path = Path("test/mobile-autoplay-v27.test.mjs")
+          test = test_path.read_text()
+          test = test.replace(
+              'const VERSION = "20260812-mobile-autoplay-v27-1";',
+              f'const VERSION = "{version}";',
+          )
+          test = test.replace(
+              'test("mobile autoplay starts beside the parsed video and preserves motion fallback", async () => {',
+              'test("mobile autoplay keeps the video render-visible before the first tap", async () => {',
+          )
+          test = test.replace(
+              'assert.match(client, /setState\\("blocked", error\\)/);',
+              'assert.match(client, /setState\\("blocked", error\\)/);\n  assert.match(client, /video\\.removeAttribute\\("poster"\\)/);\n  assert.match(client, /video\\.src = VIDEO_ASSET/);\n  assert.match(client, /mobileAutoplayV28/);',
+          )
+          old_style_assertion = '''  assert.match(
+    styles,
+    /data-mobile-autoplay-v27="playing"[\\s\\S]*#mobile-background-video/,
+  );
+  assert.match(
+    styles,
+    /not\\(\\[data-mobile-autoplay-v27="playing"\\]\\)[\\s\\S]*#mobile-motion-canvas/,
+  );
+  assert.match(styles, /visibility: hidden !important;[\\s\\S]*opacity: 0 !important;/);'''
+          new_style_assertion = '''  assert.match(styles, /data-mobile-autoplay-v28/);
+  assert.match(
+    styles,
+    /#mobile-background-video[\\s\\S]*visibility: visible !important;[\\s\\S]*opacity: 1 !important;/,
+  );
+  assert.doesNotMatch(
+    styles,
+    /not\\(\\[data-mobile-autoplay-v28="playing"\\]\\)[\\s\\S]{0,500}#mobile-background-video[\\s\\S]{0,300}visibility: hidden/,
+  );
+  assert.match(
+    styles,
+    /not\\(\\[data-mobile-autoplay-v28="playing"\\]\\)[\\s\\S]*#mobile-motion-canvas/,
+  );'''
+          if old_style_assertion not in test:
+              raise SystemExit("old autoplay style assertion block was not found")
+          test = test.replace(old_style_assertion, new_style_assertion)
+          test_path.write_text(test)
+          PY
+
+      - name: Commit finalized release
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/page.js scripts/finalize-mobile-autoplay-v27.mjs test/mobile-autoplay-v27.test.mjs
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Finalize render-visible mobile autoplay v28"
+          git push origin HEAD:fix/mobile-autoplay-visible-v28
