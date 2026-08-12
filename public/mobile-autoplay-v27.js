@@ -43,12 +43,6 @@
     video.setAttribute("preload", "auto");
     video.setAttribute("x-webkit-airplay", "deny");
 
-    // The separate forest backdrop is the loading/error fallback. Removing the
-    // video poster prevents WebKit from treating the visible media layer as a
-    // poster-only element while the first muted-inline play request is pending.
-    video.removeAttribute("poster");
-    video.poster = "";
-
     // Keep a direct src on the element. Some iOS WebViews defer selecting a
     // nested <source> until the first gesture even though preload="auto" is set.
     if (!(video.currentSrc || video.src || "").includes(VIDEO_ASSET)) {
