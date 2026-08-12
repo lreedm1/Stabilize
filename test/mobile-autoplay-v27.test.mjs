@@ -27,8 +27,9 @@ test("mobile autoplay starts beside the parsed video and preserves motion fallba
 
   assert.match(client, /video\.defaultMuted = true/);
   assert.match(client, /video\.setAttribute\("webkit-playsinline", "true"\)/);
-  assert.match(client, /video\.addEventListener\("playing", markPlaying\)/);
-  assert.match(client, /setState\("blocked", error\)/);
+  assert.match(client, /\["playing", "timeupdate"\]/);
+  assert.match(client, /video\.addEventListener\(event, markPlaying\)/);
+  assert.match(client, /markFallback\("blocked", error\)/);
   assert.doesNotMatch(
     client,
     /classList\.add\("is-playing"\)[\s\S]{0,120}await video\.play\(\)/,
