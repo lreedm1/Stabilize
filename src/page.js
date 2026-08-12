@@ -175,6 +175,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260811-coherent-mobile-4k-v25-1" />
     <link rel="stylesheet" href="/mobile-static-fallback-fix-20260811.css?v=20260811-coherent-mobile-4k-v25-1" />
     <link rel="stylesheet" href="/mobile-orientation-v26.css?v=20260811-mobile-orientation-v26-1" />
+    <link rel="stylesheet" href="/mobile-autoplay-v27.css?v=20260812-mobile-autoplay-v27-1" />
   </head>
   <body>
     <canvas
@@ -232,6 +233,7 @@ export function renderPage(options = {}) {
       <source src="/media/mobile-forest-stream-video-v24-native-1080.mp4" type="video/mp4" />
     </video>
     <!-- selected-mobile-4k-video-v22-end -->
+    <script src="/mobile-autoplay-v27.js?v=20260812-mobile-autoplay-v27-1"></script>
     <canvas
       id="photo-background"
       class="terrain-background photo-background"
@@ -346,7 +348,6 @@ export function renderPage(options = {}) {
     <!-- selected-mobile-4k-video-v22-script-start -->
     <script type="module" src="/mobile-quality.js?v=20260811-coherent-mobile-4k-v25-1"></script>
     <!-- selected-mobile-4k-video-v22-script-end -->
-    <script type="module" src="/mobile-orientation-v26.js?v=20260811-mobile-orientation-v26-1"></script>
   </body>
 </html>`;
 }
