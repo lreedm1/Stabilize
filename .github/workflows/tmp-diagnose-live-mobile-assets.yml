@@ -1,0 +1,32 @@
+name: Temporary diagnose live mobile assets
+
+on:
+  push:
+    branches:
+      - fix/mobile-autoplay-visible-v28
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read current production asset keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          headers="$(mktemp)"
+          page="$(mktemp)"
+          nonce="${GITHUB_RUN_ID}-$(date +%s)"
+          curl --fail --max-time 30 --silent --show-error \
+            --header 'Cache-Control: no-cache, no-store, max-age=0' \
+            --dump-header "$headers" \
+            "https://stabilize.info/?diagnose-mobile-assets=${nonce}" \
+            --output "$page"
+          echo '--- response headers ---'
+          grep -Ei '^(date|age|cache-control|cf-cache-status|etag|server|x-|cf-ray):' "$headers" || true
+          echo '--- mobile asset references ---'
+          grep -oE '/[^" ]*(mobile-autoplay|mobile-orientation|mobile-quality|mobile-motion-canvas)[^" ]*' "$page" | sort -u || true
+          echo '--- version tokens ---'
+          grep -oE '202608[0-9A-Za-z._-]+' "$page" | sort -u | tail -n 40 || true
