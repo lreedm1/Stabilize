@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 
 const PAGE_PATH = "src/page.js";
-const VERSION = "20260812-mobile-autoplay-v27-1";
+const VERSION = "20260812-mobile-autoplay-v28-1";
 const STYLE_HREF = `/mobile-autoplay-v27.css?v=${VERSION}`;
 const SCRIPT_SRC = `/mobile-autoplay-v27.js?v=${VERSION}`;
 const VIDEO_END = "<!-- selected-mobile-4k-video-v22-end -->";
@@ -57,4 +57,4 @@ if (after.indexOf(SCRIPT_SRC) < after.indexOf(VIDEO_END)) {
 }
 
 if (after !== before) await writeFile(PAGE_PATH, after, "utf8");
-console.log("Finalized parser-early mobile autoplay with animated fallback v27.");
+console.log("Finalized render-visible parser-early mobile autoplay v28.");

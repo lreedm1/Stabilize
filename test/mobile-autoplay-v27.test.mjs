@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const VERSION = "20260812-mobile-autoplay-v27-1";
+const VERSION = "20260812-mobile-autoplay-v28-1";
 
-test("mobile autoplay starts beside the parsed video and preserves motion fallback", async () => {
+test("mobile autoplay keeps the video render-visible before the first tap", async () => {
   const [page, client, styles, finalizer] = await Promise.all([
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
     readFile(new URL("../public/mobile-autoplay-v27.js", import.meta.url), "utf8"),
@@ -35,15 +35,19 @@ test("mobile autoplay starts beside the parsed video and preserves motion fallba
     /classList\.add\("is-playing"\)[\s\S]{0,120}await video\.play\(\)/,
   );
 
+  assert.match(styles, /data-mobile-autoplay-v28/);
   assert.match(
     styles,
-    /data-mobile-autoplay-v27="playing"[\s\S]*#mobile-background-video/,
+    /#mobile-background-video[\s\S]*visibility: visible !important;[\s\S]*opacity: 1 !important;/,
+  );
+  assert.doesNotMatch(
+    styles,
+    /not\(\[data-mobile-autoplay-v28="playing"\]\)[\s\S]{0,500}#mobile-background-video[\s\S]{0,300}visibility: hidden/,
   );
   assert.match(
     styles,
-    /not\(\[data-mobile-autoplay-v27="playing"\]\)[\s\S]*#mobile-motion-canvas/,
+    /not\(\[data-mobile-autoplay-v28="playing"\]\)[\s\S]*#mobile-motion-canvas/,
   );
-  assert.match(styles, /visibility: hidden !important;[\s\S]*opacity: 0 !important;/);
 
   assert.match(finalizer, /mobile-orientation-v26\.js/);
   assert.match(finalizer, /selected-mobile-4k-video-v22-end/);
