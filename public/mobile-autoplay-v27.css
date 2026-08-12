@@ -1,0 +1,59 @@
+/* Safari may deny background-video autoplay because of a device or site policy.
+   Keep the parser-started video attempt, but never let its static poster cover
+   the canvas fallback unless an actual playing event has fired. */
+@media (max-width: 980px), (hover: none) and (pointer: coarse) {
+  #photo-backdrop.photo-backdrop {
+    z-index: 0 !important;
+  }
+
+  html[data-mobile-autoplay-v27]
+    #mobile-motion-canvas.mobile-motion-canvas.is-ready {
+    position: fixed !important;
+    z-index: 1 !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    pointer-events: none !important;
+  }
+
+  html[data-mobile-autoplay-v27]:not([data-mobile-autoplay-v27="playing"])
+    #mobile-motion-canvas.mobile-motion-canvas.is-ready {
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  html[data-mobile-autoplay-v27]:not([data-mobile-autoplay-v27="playing"])
+    #mobile-background-video.mobile-background-video {
+    position: fixed !important;
+    z-index: 1 !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  html[data-mobile-autoplay-v27="playing"]
+    #mobile-background-video.mobile-background-video {
+    position: fixed !important;
+    z-index: 1 !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: 50% 50% !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: none !important;
+  }
+
+  html[data-mobile-autoplay-v27="playing"]
+    #mobile-motion-canvas.mobile-motion-canvas {
+    visibility: hidden !important;
+    opacity: 0 !important;
+  }
+}
