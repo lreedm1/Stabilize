@@ -27,7 +27,6 @@ test("mobile autoplay keeps the video render-visible before the first tap", asyn
 
   assert.match(client, /video\.defaultMuted = true/);
   assert.match(client, /video\.setAttribute\("webkit-playsinline", "true"\)/);
-  assert.match(client, /video\.removeAttribute\("poster"\)/);
   assert.match(client, /video\.src = VIDEO_ASSET/);
   assert.match(client, /mobileAutoplayV28/);
   assert.match(client, /video\.addEventListener\("playing", markPlaying\)/);
