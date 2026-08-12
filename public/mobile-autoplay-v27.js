@@ -1,6 +1,8 @@
 (() => {
   const MOBILE_QUERY =
     "(max-width: 980px), (hover: none) and (pointer: coarse)";
+  const VIDEO_ASSET =
+    "/media/mobile-forest-stream-video-v24-native-1080.mp4";
   const root = document.documentElement;
   const mobile = globalThis.matchMedia?.(MOBILE_QUERY);
   const video = document.querySelector("#mobile-background-video");
@@ -10,10 +12,12 @@
   let attempt = 0;
   let retryTimer = null;
   let gestureRecoveryBound = false;
-  const retryDelays = [0, 120, 350, 800, 1600, 3000];
+  let loadRequested = false;
+  const retryDelays = [0, 120, 350, 800, 1600, 3000, 5000];
 
   function setState(state, error = null) {
-    root.dataset.mobileAutoplayV27 = state;
+    root.dataset.mobileAutoplayV28 = state;
+    delete root.dataset.mobileAutoplayV27;
     if (error && typeof error.name === "string") {
       root.dataset.mobileVideoAutoplayError = error.name;
     } else if (state === "playing") {
@@ -38,6 +42,18 @@
     video.setAttribute("webkit-playsinline", "true");
     video.setAttribute("preload", "auto");
     video.setAttribute("x-webkit-airplay", "deny");
+
+    // Keep a direct src on the element. Some iOS WebViews defer selecting a
+    // nested <source> until the first gesture even though preload="auto" is set.
+    if (!(video.currentSrc || video.src || "").includes(VIDEO_ASSET)) {
+      video.src = VIDEO_ASSET;
+      loadRequested = false;
+    }
+
+    if (!loadRequested && video.readyState === HTMLMediaElement.HAVE_NOTHING) {
+      loadRequested = true;
+      video.load();
+    }
   }
 
   function clearRetry() {
@@ -48,7 +64,9 @@
   }
 
   function markPlaying() {
-    if (video.paused || video.readyState < 2) return;
+    if (video.paused || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      return;
+    }
     clearRetry();
     attempt = 0;
     video.classList.add("is-playing");
@@ -89,15 +107,20 @@
   async function tryPlayback() {
     if (document.hidden || mobile?.matches !== true) return;
     configure();
-    if (!video.paused && video.readyState >= 2) {
+    if (!video.paused && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
       markPlaying();
       return;
     }
 
     setState("starting");
     try {
-      await video.play();
-      markPlaying();
+      const result = video.play();
+      if (result && typeof result.then === "function") await result;
+      if (!video.paused) markPlaying();
+      else {
+        markFallback("paused");
+        scheduleRetry();
+      }
     } catch (error) {
       markFallback("blocked", error);
       bindGestureRecovery();
@@ -108,9 +131,8 @@
   configure();
   setState("starting");
 
-  for (const event of ["playing", "timeupdate"]) {
-    video.addEventListener(event, markPlaying);
-  }
+  video.addEventListener("playing", markPlaying);
+  video.addEventListener("timeupdate", markPlaying);
   for (const event of ["loadedmetadata", "loadeddata", "canplay"]) {
     video.addEventListener(event, tryPlayback);
   }
@@ -147,9 +169,10 @@
     });
   }
 
-  // Run while the parser is still directly below the video element, then once
-  // more after layout. This gives WebKit its earliest valid muted-inline play
-  // request instead of waiting for the rest of the application modules.
+  // Keep the media element render-visible from the start. WebKit may refuse to
+  // autoplay a muted video that CSS marks hidden, even when play() is called.
+  // The transparent canvas fallback may sit above it, but the video itself
+  // remains an on-screen element throughout the autoplay decision.
   tryPlayback();
   queueMicrotask(tryPlayback);
   requestAnimationFrame(tryPlayback);
