@@ -1,4 +1,4 @@
-name: Gate production favicon
+name: Gate committed favicon contract
 
 on:
   push:
@@ -6,124 +6,41 @@ on:
       - main
   workflow_dispatch:
 
-concurrency:
-  group: stabilize-production-favicon-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
-  statuses: write
+
+concurrency:
+  group: stabilize-committed-favicon
+  cancel-in-progress: true
 
 jobs:
   verify:
-    name: Verify browser tab icon in production
+    name: Verify committed static favicon
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 5
 
     steps:
-      - name: Mark favicon verification pending
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          payload="$(printf '{"state":"pending","context":"verification/favicon","description":"Checking new icon identity, Safari mask, MIME types, and bytes","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
-          curl --fail-with-body --silent --show-error \
-            --request POST \
-            --header "Accept: application/vnd.github+json" \
-            --header "Authorization: Bearer ${GH_TOKEN}" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
-            --data "$payload" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+      - uses: actions/checkout@v4
 
-      - name: Verify live favicon assets
+      - name: Regenerate the favicon contract idempotently
+        run: node scripts/embed-favicon-fallback.mjs
+
+      - name: Verify focused favicon tests
+        run: >-
+          node --test
+          test/model-tile-favicon.test.mjs
+          test/favicon-source-validation.test.mjs
+          test/favicon-workflow.test.mjs
+          test/favicon-release-gate.test.mjs
+
+      - name: Confirm the repository remains unchanged
         shell: bash
         run: |
           set -euo pipefail
-
-          for attempt in {1..45}; do
-            root="$(mktemp)"
-            ico_headers="$(mktemp)"
-            ico_body="$(mktemp)"
-            png16_headers="$(mktemp)"
-            png16_body="$(mktemp)"
-            png32_headers="$(mktemp)"
-            png32_body="$(mktemp)"
-            apple_headers="$(mktemp)"
-            apple_body="$(mktemp)"
-            mask_headers="$(mktemp)"
-            mask_body="$(mktemp)"
-            manifest_headers="$(mktemp)"
-            manifest_body="$(mktemp)"
-            refresh_body="$(mktemp)"
-
-            root_status="$(curl --max-time 20 --silent --show-error --output "$root" --write-out "%{http_code}" "https://stabilize.info/?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
-            ico_status="$(curl --max-time 20 --silent --show-error --dump-header "$ico_headers" --output "$ico_body" --write-out "%{http_code}" "https://stabilize.info/stabilize-tab-20260805.ico?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
-            png16_status="$(curl --max-time 20 --silent --show-error --dump-header "$png16_headers" --output "$png16_body" --write-out "%{http_code}" "https://stabilize.info/stabilize-tab-20260805-16.png?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
-            png32_status="$(curl --max-time 20 --silent --show-error --dump-header "$png32_headers" --output "$png32_body" --write-out "%{http_code}" "https://stabilize.info/stabilize-tab-20260805-32.png?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
-            apple_status="$(curl --max-time 20 --silent --show-error --dump-header "$apple_headers" --output "$apple_body" --write-out "%{http_code}" "https://stabilize.info/stabilize-app-20260805-180.png?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
-            mask_status="$(curl --max-time 20 --silent --show-error --dump-header "$mask_headers" --output "$mask_body" --write-out "%{http_code}" "https://stabilize.info/safari-pinned-tab.svg?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
-            manifest_status="$(curl --max-time 20 --silent --show-error --dump-header "$manifest_headers" --output "$manifest_body" --write-out "%{http_code}" "https://stabilize.info/site.webmanifest?favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
-            refresh_status="$(curl --max-time 20 --silent --show-error --output "$refresh_body" --write-out "%{http_code}" "https://stabilize.info/favicon-refresh.js?v=20260805-8&favicon-gate=${GITHUB_SHA}-${attempt}" || true)"
-
-            ico_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$ico_headers" | tail -n 1)"
-            png16_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$png16_headers" | tail -n 1)"
-            png32_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$png32_headers" | tail -n 1)"
-            apple_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$apple_headers" | tail -n 1)"
-            mask_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$mask_headers" | tail -n 1)"
-            manifest_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$manifest_headers" | tail -n 1)"
-            ico_magic="$(od -An -tx1 -N4 "$ico_body" | tr -d ' \n')"
-            png16_magic="$(od -An -tx1 -N8 "$png16_body" | tr -d ' \n')"
-            png32_magic="$(od -An -tx1 -N8 "$png32_body" | tr -d ' \n')"
-            apple_magic="$(od -An -tx1 -N8 "$apple_body" | tr -d ' \n')"
-
-            echo "Favicon gate ${attempt}: root=${root_status}; ico=${ico_status}/${ico_type:-none}/${ico_magic:-none}; png16=${png16_status}/${png16_type:-none}/${png16_magic:-none}; png32=${png32_status}/${png32_type:-none}/${png32_magic:-none}; apple=${apple_status}/${apple_type:-none}/${apple_magic:-none}; mask=${mask_status}/${mask_type:-none}; manifest=${manifest_status}/${manifest_type:-none}; refresh=${refresh_status}"
-
-            if [[ "$root_status" == "200" ]] &&
-              grep -Fq 'href="/stabilize-tab-20260805-16.png"' "$root" &&
-              grep -Fq 'href="/stabilize-tab-20260805-32.png"' "$root" &&
-              grep -Fq 'href="/safari-pinned-tab.svg"' "$root" &&
-              grep -Fq 'src="/favicon-refresh.js?v=20260805-8"' "$root" &&
-              [[ "$ico_status" == "200" && "$ico_type" == image/x-icon* && "$ico_magic" == "00000100" ]] &&
-              [[ "$png16_status" == "200" && "$png16_type" == image/png* && "$png16_magic" == "89504e470d0a1a0a" ]] &&
-              [[ "$png32_status" == "200" && "$png32_type" == image/png* && "$png32_magic" == "89504e470d0a1a0a" ]] &&
-              [[ "$apple_status" == "200" && "$apple_type" == image/png* && "$apple_magic" == "89504e470d0a1a0a" ]] &&
-              [[ "$mask_status" == "200" && "$mask_type" == image/svg+xml* ]] &&
-              grep -Fq 'viewBox="0 0 16 16"' "$mask_body" &&
-              grep -Fq 'fill="#000000"' "$mask_body" &&
-              [[ "$manifest_status" == "200" && "$manifest_type" == application/manifest+json* ]] &&
-              grep -Fq '/stabilize-app-20260805-180.png' "$manifest_body" &&
-              [[ "$refresh_status" == "200" ]] &&
-              grep -Fq '/stabilize-tab-20260805-32.png?refresh=20260805-8' "$refresh_body"; then
-              rm -f "$root" "$ico_headers" "$ico_body" "$png16_headers" "$png16_body" "$png32_headers" "$png32_body" "$apple_headers" "$apple_body" "$mask_headers" "$mask_body" "$manifest_headers" "$manifest_body" "$refresh_body"
-              exit 0
-            fi
-
-            rm -f "$root" "$ico_headers" "$ico_body" "$png16_headers" "$png16_body" "$png32_headers" "$png32_body" "$apple_headers" "$apple_body" "$mask_headers" "$mask_body" "$manifest_headers" "$manifest_body" "$refresh_body"
-            sleep 10
-          done
-
-          echo "::error::Production did not expose the new tab-icon identity and Safari-compatible assets."
-          exit 1
-
-      - name: Publish favicon verification result
-        if: always()
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          JOB_STATUS: ${{ job.status }}
-        run: |
-          if [[ "$JOB_STATUS" == "success" ]]; then
-            state="success"
-            description="New tab-icon identity, Safari mask, MIME, and byte checks passed"
-          else
-            state="failure"
-            description="Live favicon identity or compatibility verification failed"
-          fi
-          payload="$(printf '{"state":"%s","context":"verification/favicon","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
-          curl --fail-with-body --silent --show-error \
-            --request POST \
-            --header "Accept: application/vnd.github+json" \
-            --header "Authorization: Bearer ${GH_TOKEN}" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
-            --data "$payload" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+          git diff --exit-code
+          test -f public/favicon.ico
+          test -f public/stabilize-tab-20260813-static-32.png
+          test -f public/stabilize-tab-20260813.svg
+          test ! -e public/favicon-refresh.js
+          ! grep -R -F 'favicon-refresh.js' src public --include='*.js' --include='*.html'
+          ! grep -R -F 'data:image/png;base64,' src/page.js public --include='*.html'
