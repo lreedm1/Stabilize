@@ -42,6 +42,7 @@ test("mobile video is parser-loaded and first-touch playback remains synchronous
   assert.match(gestureFunction, /video\.play\(\)/);
   assert.doesNotMatch(gestureFunction, /await|setTimeout|requestAnimationFrame/);
   assert.match(client, /requestVideoFrameCallback/);
+  assert.match(client, /native-video-2160x3840-24fps/);
   assert.match(client, /video\.videoWidth < 2000/);
   assert.match(
     client,

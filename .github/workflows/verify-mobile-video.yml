@@ -47,13 +47,15 @@ jobs:
           npm run apply:prompt-policy
           git diff --exit-code
 
-          version='20260813-mobile-background-v31-1'
+          background_version='20260813-mobile-background-v31-1'
+          handoff_version='20260813-mobile-video-handoff-v31-1'
           video='public/scenes/mobile-forest-stream-video-v24-native-1080.mp4'
           poster='public/scenes/mobile-forest-stream-v24-native-1080.webp'
           atlas='public/scenes/mobile-forest-stream-full-atlas-v29-1080.webp'
           video_route='/media/mobile-forest-stream-video-v24-native-1080.mp4'
           client_route='/mobile-background/runtime'
           style_route='/mobile-background/styles'
+          handoff_route='/mobile-video-handoff-v31.js'
 
           test -s "$video"
           test -s "$poster"
@@ -77,12 +79,13 @@ jobs:
 
           test "$(grep -o 'id="mobile-background-video"' src/page.js | wc -l | tr -d '[:space:]')" -eq 1
           test "$(grep -o 'id="mobile-background-v30"' src/page.js | wc -l | tr -d '[:space:]')" -eq 1
-          grep -Fq "$video_route?v=${version}" src/page.js
-          grep -Fq "$client_route?v=${version}" src/page.js
-          grep -Fq "$style_route?v=${version}" src/page.js
+          grep -Fq "$video_route?v=${handoff_version}" src/page.js
+          grep -Fq "$client_route?v=${background_version}" src/page.js
+          grep -Fq "$style_route?v=${background_version}" src/page.js
+          grep -Fq "$handoff_route?v=${handoff_version}" src/page.js
           grep -Fq 'autoplay' src/page.js
           grep -Fq 'preload="auto"' src/page.js
-          grep -Fq "src=\"${video_route}?v=${version}\"" src/page.js
+          grep -Fq "src=\"${video_route}?v=${handoff_version}\"" src/page.js
           ! grep -Fq 'data-src="/media/mobile-forest-stream-video' src/page.js
           ! grep -Fq '/mobile-background-v30.js' src/page.js
           ! grep -Fq '/mobile-background-v30.css' src/page.js
@@ -96,6 +99,9 @@ jobs:
           grep -Fq 'native-video-2160x3840-24fps' public/mobile-background-v30.js
           grep -Fq 'opacity: 0.001 !important' public/mobile-background-v30.css
           grep -Fq -- '--mobile-background-v30-fade: 180ms' public/mobile-background-v30.css
+          grep -Fq 'const VERSION = \"20260813-mobile-video-handoff-v31-1\"' public/mobile-video-handoff-v31.js
+          grep -Fq 'const result = video.play();' public/mobile-video-handoff-v31.js
+          grep -Fq 'playInsideUserGesture' public/mobile-video-handoff-v31.js
 
           grep -Fq 'MOBILE_BACKGROUND_CLIENT_ROUTE = "/mobile-background/runtime"' src/mobile-background-response.js
           grep -Fq 'MOBILE_BACKGROUND_STYLE_ROUTE = "/mobile-background/styles"' src/mobile-background-response.js
@@ -134,12 +140,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          version='20260813-mobile-background-v31-1'
+          background_version='20260813-mobile-background-v31-1'
+          handoff_version='20260813-mobile-video-handoff-v31-1'
           video_route='/media/mobile-forest-stream-video-v24-native-1080.mp4'
           poster_route='/scenes/mobile-forest-stream-v24-native-1080.webp'
           atlas_route='/scenes/mobile-forest-stream-full-atlas-v29-1080.webp'
           client_route='/mobile-background/runtime'
           style_route='/mobile-background/styles'
+          handoff_route='/mobile-video-handoff-v31.js'
           expected_video='public/scenes/mobile-forest-stream-video-v24-native-1080.mp4'
           expected_poster='public/scenes/mobile-forest-stream-v24-native-1080.webp'
           expected_atlas='public/scenes/mobile-forest-stream-full-atlas-v29-1080.webp'
@@ -185,10 +193,11 @@ jobs:
           for attempt in {1..36}; do
             key="${GITHUB_SHA}-${attempt}"
             page_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/page.headers" -o "$tmpdir/page.html" -w '%{http_code}' "https://stabilize.info/?mobile-v31=${key}" || true)"
-            client_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/client.headers" -o "$tmpdir/client.js" -w '%{http_code}' "https://stabilize.info${client_route}?v=${version}&release=${key}" || true)"
-            style_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/style.headers" -o "$tmpdir/styles.css" -w '%{http_code}' "https://stabilize.info${style_route}?v=${version}&release=${key}" || true)"
-            poster_status="$(curl --max-time 40 --silent --show-error -H 'Cache-Control: no-cache' -o "$tmpdir/poster.webp" -w '%{http_code}' "https://stabilize.info${poster_route}?v=${version}&release=${key}" || true)"
-            atlas_status="$(curl --max-time 40 --silent --show-error -H 'Cache-Control: no-cache' -o "$tmpdir/atlas.webp" -w '%{http_code}' "https://stabilize.info${atlas_route}?v=${version}&release=${key}" || true)"
+            client_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/client.headers" -o "$tmpdir/client.js" -w '%{http_code}' "https://stabilize.info${client_route}?v=${background_version}&release=${key}" || true)"
+            style_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/style.headers" -o "$tmpdir/styles.css" -w '%{http_code}' "https://stabilize.info${style_route}?v=${background_version}&release=${key}" || true)"
+            handoff_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/handoff.headers" -o "$tmpdir/handoff.js" -w '%{http_code}' "https://stabilize.info${handoff_route}?v=${handoff_version}&release=${key}" || true)"
+            poster_status="$(curl --max-time 40 --silent --show-error -H 'Cache-Control: no-cache' -o "$tmpdir/poster.webp" -w '%{http_code}' "https://stabilize.info${poster_route}?v=${background_version}&release=${key}" || true)"
+            atlas_status="$(curl --max-time 40 --silent --show-error -H 'Cache-Control: no-cache' -o "$tmpdir/atlas.webp" -w '%{http_code}' "https://stabilize.info${atlas_route}?v=${background_version}&release=${key}" || true)"
 
             poster_bytes="$(wc -c < "$tmpdir/poster.webp" | tr -d '[:space:]')"
             poster_sha="$(sha256sum "$tmpdir/poster.webp" | awk '{print $1}')"
@@ -196,26 +205,32 @@ jobs:
             atlas_sha="$(sha256sum "$tmpdir/atlas.webp" | awk '{print $1}')"
             client_type="$(header_value "$tmpdir/client.headers" content-type | tr '[:upper:]' '[:lower:]')"
             style_type="$(header_value "$tmpdir/style.headers" content-type | tr '[:upper:]' '[:lower:]')"
+            handoff_type="$(header_value "$tmpdir/handoff.headers" content-type | tr '[:upper:]' '[:lower:]')"
 
-            echo "v31 attempt ${attempt}: page=${page_status:-000} client=${client_status:-000} style=${style_status:-000} poster=${poster_status:-000} atlas=${atlas_status:-000}"
+            echo "v31 attempt ${attempt}: page=${page_status:-000} client=${client_status:-000} style=${style_status:-000} handoff=${handoff_status:-000} poster=${poster_status:-000} atlas=${atlas_status:-000}"
 
             if [[ "$page_status" == 200 \
               && "$client_status" == 200 \
               && "$style_status" == 200 \
+              && "$handoff_status" == 200 \
               && "$poster_status" == 200 \
               && "$atlas_status" == 200 \
               && "$client_type" == text/javascript* \
               && "$style_type" == text/css* \
+              && "$handoff_type" == text/javascript* \
               && "$poster_bytes" == "$expected_poster_bytes" \
               && "$poster_sha" == "$expected_poster_sha" \
               && "$atlas_bytes" == "$expected_atlas_bytes" \
               && "$atlas_sha" == "$expected_atlas_sha" ]] \
-              && grep -Fq "$video_route?v=${version}" "$tmpdir/page.html" \
-              && grep -Fq "$client_route?v=${version}" "$tmpdir/page.html" \
-              && grep -Fq "$style_route?v=${version}" "$tmpdir/page.html" \
+              && grep -Fq "$video_route?v=${handoff_version}" "$tmpdir/page.html" \
+              && grep -Fq "$client_route?v=${background_version}" "$tmpdir/page.html" \
+              && grep -Fq "$style_route?v=${background_version}" "$tmpdir/page.html" \
+              && grep -Fq "$handoff_route?v=${handoff_version}" "$tmpdir/page.html" \
               && grep -Fq 'autoplay' "$tmpdir/page.html" \
               && grep -Fq 'requestAnimationFrame(drawFallback)' "$tmpdir/client.js" \
               && grep -Fq 'result = video.play()' "$tmpdir/client.js" \
+              && grep -Fq 'playInsideUserGesture' "$tmpdir/handoff.js" \
+              && grep -Fq '20260813-mobile-video-handoff-v31-1' "$tmpdir/handoff.js" \
               && grep -Fq 'data-mobile-background-v30="video"' "$tmpdir/styles.css" \
               && grep -Fqi "media-src 'self'" "$tmpdir/page.headers"; then
               ready=true
@@ -231,8 +246,8 @@ jobs:
           fi
 
           key="${GITHUB_SHA}-exact"
-          video_status="$(curl --max-time 120 --silent --show-error -H 'Cache-Control: no-cache' -D "$tmpdir/video.headers" -o "$tmpdir/video.mp4" -w '%{http_code}' "https://stabilize.info${video_route}?v=${version}&release=${key}" || true)"
-          range_status="$(curl --max-time 60 --silent --show-error -H 'Cache-Control: no-cache' -H 'Range: bytes=0-1023' -D "$tmpdir/range.headers" -o "$tmpdir/range.bin" -w '%{http_code}' "https://stabilize.info${video_route}?v=${version}&range=${key}" || true)"
+          video_status="$(curl --max-time 120 --silent --show-error -H 'Cache-Control: no-cache' -D "$tmpdir/video.headers" -o "$tmpdir/video.mp4" -w '%{http_code}' "https://stabilize.info${video_route}?v=${handoff_version}&release=${key}" || true)"
+          range_status="$(curl --max-time 60 --silent --show-error -H 'Cache-Control: no-cache' -H 'Range: bytes=0-1023' -D "$tmpdir/range.headers" -o "$tmpdir/range.bin" -w '%{http_code}' "https://stabilize.info${video_route}?v=${handoff_version}&range=${key}" || true)"
 
           video_bytes="$(wc -c < "$tmpdir/video.mp4" | tr -d '[:space:]')"
           video_sha="$(sha256sum "$tmpdir/video.mp4" | awk '{print $1}')"
