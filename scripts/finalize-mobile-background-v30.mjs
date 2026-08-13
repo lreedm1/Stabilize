@@ -154,7 +154,10 @@ await update("src/page.js", (source) => {
   }
   next = next.replace(headAnchor, `${headBlock}\n${headAnchor}`);
 
-  const mediaAnchor = "    <canvas\n      id=\"photo-background\"";
+  // Keep </picture> immediately followed by #photo-background so the older
+  // canvas generator can run on the next pass. The v30 media elements still
+  // parse before the application shell and long before the app modules.
+  const mediaAnchor = '    <div class="page-shell">';
   if (!next.includes(mediaAnchor)) {
     throw new Error("Could not find the mobile background insertion point.");
   }
