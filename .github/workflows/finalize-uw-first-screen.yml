@@ -1,0 +1,35 @@
+name: Finalize compact UW first screen
+
+on:
+  push:
+    branches:
+      - improve/uw-chat-first-screen
+    paths:
+      - .github/workflows/finalize-uw-first-screen.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Apply cleanup
+        run: python scripts/finalize-uw-first-screen.py
+
+      - name: Remove one-time files and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/finalize-uw-first-screen.yml scripts/finalize-uw-first-screen.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/uw-madison-chat.js public/uwmadison-chat.css test/uw-madison-chat.test.mjs
+          git commit -m "Finalize the compact UW first screen"
+          git push origin HEAD:improve/uw-chat-first-screen
