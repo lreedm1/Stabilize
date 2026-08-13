@@ -1,0 +1,1 @@
+Static favicon contract canonicalized and ready for production verification.
