@@ -12,7 +12,7 @@ const shareEditors = new Map();
 
 function readShareCopy() {
   const fallback = {
-    promise: "Stabilize helps you turn an overloaded moment into one safe, practical next step.",
+    promise: "Stabilize adapts to your capacity, keeps memory bounded and deletable, and helps you move from conversation to real-world action.",
     url: "https://stabilize.info/",
     title: "Stabilize",
     editorLabel: "Keep or share one next step",

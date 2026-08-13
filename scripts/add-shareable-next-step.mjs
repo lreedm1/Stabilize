@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 
 const PRODUCT_PROMISE =
-  "Stabilize helps you turn an overloaded moment into one safe, practical next step.";
+  "Stabilize adapts to your capacity, keeps memory bounded and deletable, and helps you move from conversation to real-world action.";
 const SHARE_URL = "https://stabilize.info/";
 
 async function update(path, transform) {

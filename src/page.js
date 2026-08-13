@@ -136,6 +136,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
     <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
     <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
+    <link rel="stylesheet" href="/landing.css?v=20260813-human-aligned-1" />
     <!-- mobile-background-v30-head-start -->
     <!-- Keep this preload in the historical responsive shape. Older media
          generators run before this finalizer and need an idempotent target on
@@ -296,16 +297,86 @@ export function renderPage(options = {}) {
             hidden
           ></div>
 
-          <section id="seo-intro" class="seo-intro product-intro" aria-labelledby="seo-heading">
-            <h1 id="seo-heading">Get unstuck.</h1>
-            <p class="product-promise">${escapeHtml(page.promise)}</p>
+          <section id="seo-intro" class="seo-intro product-intro landing-content" aria-labelledby="seo-heading">
+            <!-- human-aligned-homepage-v1 -->
+            <div class="landing-hero">
+              <p class="landing-kicker">A personal AI for real life</p>
+              <h1 id="seo-heading">A personal AI that helps you steady what matters and take the next useful step.</h1>
+              <p class="product-promise">${escapeHtml(page.promise)}</p>
 
-            <div
-              class="landing-meta"
-              data-support-note="${escapeHtml(page.chat.supportNote)}"
-            >
-              <p class="privacy-signal">${escapeHtml(landingPrivacySignal)} ${escapeHtml(emergencyBoundary)}</p>
+              <div class="landing-trust-strip" aria-label="Stabilize principles">
+                <span>Bounded memory</span>
+                <span class="landing-trust-separator" aria-hidden="true">·</span>
+                <span>User-chosen direction</span>
+                <span class="landing-trust-separator" aria-hidden="true">·</span>
+                <span>Human support stays central</span>
+              </div>
+
+              <div
+                class="landing-meta"
+                data-support-note="${escapeHtml(page.chat.supportNote)}"
+              >
+                <p class="privacy-signal">${escapeHtml(landingPrivacySignal)} ${escapeHtml(emergencyBoundary)}</p>
+              </div>
+
+              <a class="landing-learn-more" href="#why-stabilize">
+                See why Stabilize is different <span aria-hidden="true">↓</span>
+              </a>
             </div>
+
+            <section id="why-stabilize" class="landing-section landing-why" aria-labelledby="why-stabilize-heading">
+              <p class="landing-section-label">Why Stabilize?</p>
+              <h2 id="why-stabilize-heading">Built for the moment between knowing and doing.</h2>
+              <div class="landing-card-grid">
+                <article class="landing-card">
+                  <h3>Built around your capacity</h3>
+                  <p>Stabilize changes how it responds based on what you can reasonably handle right now. When you have capacity, it can think deeply with you. When you are overloaded, it reduces the problem to one manageable action.</p>
+                </article>
+                <article class="landing-card">
+                  <h3>Memory with boundaries</h3>
+                  <p>Signed-in chats use condensed context for up to 30 days. You can delete it at any time, and Private chat turns Stabilize memory off.</p>
+                </article>
+                <article class="landing-card">
+                  <h3>Designed for life outside the chat</h3>
+                  <p>Success is not a longer conversation. It is a completed task, a protected need, a better decision, or a connection to the right person.</p>
+                </article>
+              </div>
+            </section>
+
+            <section class="landing-section landing-how" aria-labelledby="landing-how-heading">
+              <p class="landing-section-label">How it works</p>
+              <h2 id="landing-how-heading">From overload to one useful action.</h2>
+              <ol class="landing-step-grid">
+                <li>
+                  <span class="landing-step-number" aria-hidden="true">1</span>
+                  <div>
+                    <h3>Understand the situation</h3>
+                    <p>Stabilize separates the immediate request from assumptions, constraints, and urgency.</p>
+                  </div>
+                </li>
+                <li>
+                  <span class="landing-step-number" aria-hidden="true">2</span>
+                  <div>
+                    <h3>Match the response to capacity</h3>
+                    <p>The response becomes lighter or more detailed depending on what you can handle.</p>
+                  </div>
+                </li>
+                <li>
+                  <span class="landing-step-number" aria-hidden="true">3</span>
+                  <div>
+                    <h3>Choose one useful action</h3>
+                    <p>Stabilize favors specific, reversible steps over sprawling plans.</p>
+                  </div>
+                </li>
+                <li>
+                  <span class="landing-step-number" aria-hidden="true">4</span>
+                  <div>
+                    <h3>Check what actually happened</h3>
+                    <p>You can say what worked, what got in the way, or whether the next step needs to be smaller.</p>
+                  </div>
+                </li>
+              </ol>
+            </section>
           </section>
 
           <div class="composer-dock">
