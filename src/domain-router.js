@@ -10,6 +10,10 @@ import {
   MOBILE_VIDEO_ROUTE,
   serveMobileVideo,
 } from "./mobile-video-response.js";
+import {
+  isMobileBackgroundAssetRoute,
+  serveMobileBackgroundAsset,
+} from "./mobile-background-response.js";
 
 export {
   BillingAccount,
@@ -95,6 +99,12 @@ export default {
     if (url.pathname === MOBILE_VIDEO_ROUTE) {
       return withStrictTransportSecurity(
         await serveMobileVideo(request, canonicalEnv),
+      );
+    }
+
+    if (isMobileBackgroundAssetRoute(url.pathname)) {
+      return withStrictTransportSecurity(
+        serveMobileBackgroundAsset(request),
       );
     }
 
