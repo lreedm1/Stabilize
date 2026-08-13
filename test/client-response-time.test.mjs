@@ -74,7 +74,7 @@ test("foreground browser response time reaches the private impact dashboard with
   const packageJson = JSON.parse(packageSource);
   assert.match(
     packageJson.scripts["apply:prompt-policy"],
-    /apply-client-response-time\.mjs && node scripts\/finalize-decision-grade-impact\.mjs && node scripts\/finalize-native-selected-mobile-v24\.mjs && node scripts\/finalize-native-selected-mobile-v24-regressions\.mjs && node scripts\/finalize-mobile-video-handoff-v31\.mjs$/,
+    /apply-client-response-time\.mjs && node scripts\/finalize-decision-grade-impact\.mjs && node scripts\/finalize-native-selected-mobile-v24\.mjs && node scripts\/finalize-native-selected-mobile-v24-regressions\.mjs && node scripts\/finalize-mobile-video-handoff-v31\.mjs && node scripts\/finalize-mobile-smooth-v32\.mjs$/,
   );
   assert.match(
     packageJson.scripts["test:node"],
