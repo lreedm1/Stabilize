@@ -203,7 +203,14 @@
     video.setAttribute("webkit-playsinline", "true");
     video.setAttribute("preload", "auto");
 
-    if (!video.getAttribute("src")) {
+    // mobile-v31-parser-source-guard
+    // Keep the parser-owned <source> stable. Assigning video.src here would
+    // cancel the v31 request and make the two controllers fight over playback.
+    const parserSource = video.querySelector("source[src]");
+    if (
+      !video.getAttribute("src") &&
+      !(parserSource instanceof HTMLSourceElement)
+    ) {
       video.src = VIDEO_ASSET;
       video.load();
     }
