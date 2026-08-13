@@ -7,6 +7,7 @@ on:
     paths:
       - scripts/generate-mobile-video-smooth-v33.sh
       - scripts/finalize-mobile-smooth-v33.py
+      - scripts/place-mobile-smooth-v33-css.py
       - .github/workflows/build-mobile-smooth-v33.yml
   workflow_dispatch:
 
@@ -50,7 +51,14 @@ jobs:
         run: |
           set -euo pipefail
           bash -n scripts/generate-mobile-video-smooth-v33.sh
-          python3 -m py_compile scripts/finalize-mobile-smooth-v33.py
+          python3 - <<'PY'
+          from pathlib import Path
+          for path in (
+              "scripts/finalize-mobile-smooth-v33.py",
+              "scripts/place-mobile-smooth-v33-css.py",
+          ):
+              compile(Path(path).read_text(encoding="utf-8"), path, "exec")
+          PY
 
       - name: Generate genuine 60 fps mobile video
         shell: bash
@@ -66,6 +74,7 @@ jobs:
           python3 scripts/finalize-mobile-smooth-v33.py \
             /tmp/stabilize-mobile-smooth-v33/mobile-forest-stream-video-v12-720.mp4 \
             | tee /tmp/stabilize-mobile-smooth-v33/release.json
+          python3 scripts/place-mobile-smooth-v33-css.py
           npm ci --ignore-scripts
           npm run apply:prompt-policy
 
@@ -105,8 +114,11 @@ jobs:
           test "$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$video")" = ''
           grep -Fq 'native-video-720x1280-60fps' public/mobile-video-handoff-v31.js
           grep -Fq 'public, max-age=31536000, immutable' src/mobile-video-response.js
-          grep -Fq 'mobile-video-smooth-v33-start' public/main-box-white.css
-          grep -Fq -- '-webkit-backdrop-filter: none' public/main-box-white.css
+          grep -Fq 'mobile-video-smooth-v33-start' public/mobile-background-v30.css
+          grep -Fq -- '-webkit-backdrop-filter: none' public/mobile-background-v30.css
+          grep -Fq 'mobile-video-smooth-v33-start' src/mobile-background-response.js
+          grep -Fq '/main-box-white.css?v=20260805-2' src/page.js
+          ! grep -Fq 'mobile-video-smooth-v33-start' public/main-box-white.css
 
       - name: Publish verified generated commit to PR branch
         if: steps.commit.outputs.changed == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
