@@ -51,7 +51,34 @@ jobs:
               grep -Fq 'User-agent: *' "$workdir/robots.txt" || ready=false
               grep -Fq 'Allow: /' "$workdir/robots.txt" || ready=false
               grep -Fq 'Sitemap: https://stabilize.info/sitemap.xml' "$workdir/robots.txt" || ready=false
-              ! grep -Eq '^Disallow: /[[:space:]]*$' "$workdir/robots.txt" || ready=false
+              if node -e '
+                const fs = require("node:fs");
+                const blocks = fs
+                  .readFileSync(process.argv[1], "utf8")
+                  .split(/\r?\n\s*\r?\n/);
+                const blocksGoogle = blocks.some((block) => {
+                  const lines = block
+                    .split(/\r?\n/)
+                    .map((line) => line.trim());
+                  const agents = lines
+                    .filter((line) => /^user-agent\s*:/i.test(line))
+                    .map((line) =>
+                      line.replace(/^user-agent\s*:/i, "").trim().toLowerCase(),
+                    );
+                  const disallows = lines
+                    .filter((line) => /^disallow\s*:/i.test(line))
+                    .map((line) =>
+                      line.replace(/^disallow\s*:/i, "").trim(),
+                    );
+                  return (
+                    (agents.includes("*") || agents.includes("googlebot")) &&
+                    disallows.includes("/")
+                  );
+                });
+                process.exit(blocksGoogle ? 0 : 1);
+              ' "$workdir/robots.txt"; then
+                ready=false
+              fi
               [[ ${#urls[@]} -ge 8 ]] || ready=false
               grep -Fq '<loc>https://stabilize.info/</loc>' "$workdir/sitemap.xml" || ready=false
               grep -Fq '<loc>https://stabilize.info/support.html</loc>' "$workdir/sitemap.xml" || ready=false
@@ -133,8 +160,16 @@ jobs:
                 --write-out '%{http_code}' \
                 "$base/this-route-should-not-exist" || true
             )"
+            chat_location="$(
+              awk -F': ' '
+                tolower($1) == "location" {
+                  gsub("\r", "", $2);
+                  print $2;
+                }
+              ' "$workdir/chat.headers" | tail -n 1
+            )"
 
-            echo "HTTP root=${root_status:-unavailable} robots=${robots_status:-unavailable} sitemap=${sitemap_status:-unavailable} chat=${chat_status:-unavailable} missing=${missing_status:-unavailable}"
+            echo "HTTP root=${root_status:-unavailable} robots=${robots_status:-unavailable} sitemap=${sitemap_status:-unavailable} chat=${chat_status:-unavailable} chat_location=${chat_location:-none} missing=${missing_status:-unavailable}"
 
             ready=true
             [[ "$root_status" == "200" ]] || ready=false
@@ -154,7 +189,7 @@ jobs:
             grep -Eqi '^strict-transport-security:[[:space:]]*max-age=31536000; includeSubDomains' "$workdir/root.headers" 2>/dev/null || ready=false
             grep -Eqi "^content-security-policy:.*default-src 'self'" "$workdir/root.headers" 2>/dev/null || ready=false
             grep -Eqi '^x-frame-options:[[:space:]]*DENY' "$workdir/root.headers" 2>/dev/null || ready=false
-            grep -Eqi '^location:[[:space:]]*https://stabilize\.info/\?source=uwmadison\r?$' "$workdir/chat.headers" 2>/dev/null || ready=false
+            [[ "$chat_location" == "https://stabilize.info/?source=uwmadison" ]] || ready=false
 
             grep -Fq 'Sitemap: https://uwmadison.stabilize.info/sitemap.xml' "$workdir/robots.txt" 2>/dev/null || ready=false
             grep -Fq '<loc>https://uwmadison.stabilize.info/</loc>' "$workdir/sitemap.xml" 2>/dev/null || ready=false
