@@ -48,6 +48,18 @@ finalizer = replace_once(
     "      !parserSource\n",
     "constructor-based parser-source guard",
 )
+finalizer = replace_once(
+    finalizer,
+    "  if (source.includes(PARSER_SOURCE_GUARD)) return source;\n",
+    """  if (source.includes(PARSER_SOURCE_GUARD)) {
+    return source.replace(
+      "      !(parserSource instanceof HTMLSourceElement)",
+      "      !parserSource",
+    );
+  }
+""",
+    "marker-based parser-source early return",
+)
 
 helper_anchor = "async function writeMobileBackgroundRouteModule() {\n"
 helper = """function requireTimelineAdvanceBeforeLegacyReveal(source) {
