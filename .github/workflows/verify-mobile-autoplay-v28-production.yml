@@ -1,0 +1,119 @@
+name: Verify exact mobile autoplay v28 production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: verify-mobile-autoplay-v28-production
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Mark exact production release pending
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          payload="$(printf '{"state":"pending","context":"deployment/cloudflare-exact-v28","description":"Waiting for exact mobile autoplay v28 assets","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+
+      - name: Wait for the exact v28 homepage and assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          version="20260812-mobile-autoplay-v28-1"
+          ready=false
+
+          for attempt in {1..180}; do
+            nonce="${GITHUB_SHA}-${attempt}-$(date +%s)"
+            page_status="$(
+              curl --max-time 30 --silent --show-error --compressed \
+                --header 'Cache-Control: no-cache, no-store, max-age=0' \
+                --output "$tmpdir/page.html" \
+                --write-out '%{http_code}' \
+                "https://stabilize.info/?exact-mobile-autoplay-v28=${nonce}" || true
+            )"
+
+            if [[ "$page_status" == 200 ]] \
+              && grep -Fq "/mobile-autoplay-v27.css?v=${version}" "$tmpdir/page.html" \
+              && grep -Fq "/mobile-autoplay-v27.js?v=${version}" "$tmpdir/page.html"; then
+              css_status="$(
+                curl --max-time 30 --silent --show-error --compressed \
+                  --header 'Cache-Control: no-cache, no-store, max-age=0' \
+                  --output "$tmpdir/mobile.css" \
+                  --write-out '%{http_code}' \
+                  "https://stabilize.info/mobile-autoplay-v27.css?v=${version}&verify=${nonce}" || true
+              )"
+              js_status="$(
+                curl --max-time 30 --silent --show-error --compressed \
+                  --header 'Cache-Control: no-cache, no-store, max-age=0' \
+                  --output "$tmpdir/mobile.js" \
+                  --write-out '%{http_code}' \
+                  "https://stabilize.info/mobile-autoplay-v27.js?v=${version}&verify=${nonce}" || true
+              )"
+
+              if [[ "$css_status" == 200 && "$js_status" == 200 ]] \
+                && grep -Fq 'data-mobile-autoplay-v28' "$tmpdir/mobile.css" \
+                && grep -Fq 'visibility: visible !important' "$tmpdir/mobile.css" \
+                && grep -Fq 'opacity: 1 !important' "$tmpdir/mobile.css" \
+                && grep -Fq 'mobileAutoplayV28' "$tmpdir/mobile.js" \
+                && grep -Fq 'video.src = VIDEO_ASSET' "$tmpdir/mobile.js" \
+                && grep -Fq 'video.addEventListener("playing", markPlaying)' "$tmpdir/mobile.js"; then
+                ready=true
+                break
+              fi
+            fi
+
+            if (( attempt % 6 == 0 )); then
+              echo "Attempt ${attempt}: production still does not expose exact v28."
+            fi
+            sleep 10
+          done
+
+          if [[ "$ready" != true ]]; then
+            echo '::error::Production did not expose the exact v28 mobile autoplay release.'
+            exit 1
+          fi
+
+          echo 'Exact mobile autoplay v28 homepage, CSS, and JavaScript are live.'
+
+      - name: Publish exact production result
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [[ "$JOB_STATUS" == "success" ]]; then
+            state="success"
+            description="Exact mobile autoplay v28 assets are live"
+          else
+            state="failure"
+            description="Exact mobile autoplay v28 assets did not reach production"
+          fi
+          payload="$(printf '{"state":"%s","context":"deployment/cloudflare-exact-v28","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
