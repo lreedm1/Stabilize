@@ -99,7 +99,7 @@ jobs:
           grep -Fq 'native-video-2160x3840-24fps' public/mobile-background-v30.js
           grep -Fq 'opacity: 0.001 !important' public/mobile-background-v30.css
           grep -Fq -- '--mobile-background-v30-fade: 180ms' public/mobile-background-v30.css
-          grep -Fq 'const VERSION = \"20260813-mobile-video-handoff-v31-1\"' public/mobile-video-handoff-v31.js
+          grep -Fq 'const VERSION = "20260813-mobile-video-handoff-v31-1"' public/mobile-video-handoff-v31.js
           grep -Fq 'const result = video.play();' public/mobile-video-handoff-v31.js
           grep -Fq 'playInsideUserGesture' public/mobile-video-handoff-v31.js
 
