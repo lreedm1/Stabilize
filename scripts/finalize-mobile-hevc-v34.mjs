@@ -197,11 +197,7 @@ await update("public/mobile-video-handoff-v31.js", (source) => {
     }
 
     const hevc = ensureSource("hevc", HEVC_ASSET, 'video/mp4; codecs="hvc1"');
-    const h264 = ensureSource(
-      "h264",
-      H264_ASSET,
-      'video/mp4; codecs="avc1.42E020"',
-    );
+    const h264 = ensureSource("h264", H264_ASSET, 'video/mp4; codecs="avc1.42E020"');
     if (video.firstElementChild !== hevc) {
       video.insertBefore(hevc, video.firstElementChild);
       changed = true;
