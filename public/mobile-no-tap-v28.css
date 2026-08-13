@@ -1,0 +1,75 @@
+/* No-tap mobile background release.
+   The canvas fallback is visible from first paint. The video is revealed only
+   after WebKit reports a decoded playing frame. */
+@media (max-width: 980px), (hover: none) and (pointer: coarse) {
+  body,
+  .photo-backdrop {
+    background-image: url("/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260812-mobile-no-tap-v28-1") !important;
+    background-size: cover !important;
+    background-position: 50% 50% !important;
+    background-repeat: no-repeat !important;
+  }
+
+  .photo-backdrop > img,
+  #photo-backdrop-image,
+  #terrain-background,
+  #photo-background {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+  }
+
+  #mobile-motion-canvas,
+  .mobile-motion-canvas,
+  .mobile-motion-canvas.is-ready,
+  html:not([data-mobile-no-tap-v28="playing"]) #mobile-motion-canvas {
+    position: fixed !important;
+    z-index: 1 !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: none !important;
+    user-select: none !important;
+    transition: none !important;
+  }
+
+  #mobile-background-video,
+  .mobile-background-video,
+  .mobile-background-video.is-playing,
+  .mobile-background-video.is-autoplay-blocked,
+  .mobile-background-video.is-failed {
+    position: fixed !important;
+    z-index: 2 !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: 50% 50% !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    user-select: none !important;
+    transition: none !important;
+  }
+
+  html[data-mobile-no-tap-v28="playing"] #mobile-background-video,
+  html[data-mobile-no-tap-v28="playing"] .mobile-background-video {
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  html[data-mobile-no-tap-v28="playing"] #mobile-motion-canvas,
+  html[data-mobile-no-tap-v28="playing"] .mobile-motion-canvas {
+    visibility: hidden !important;
+    opacity: 0 !important;
+  }
+
+  .page-shell {
+    position: relative !important;
+    z-index: 10 !important;
+  }
+}
