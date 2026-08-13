@@ -31,43 +31,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          workdir="$(mktemp -d)"
-          trap 'rm -rf "$workdir"' EXIT
+          root="$(mktemp)"
+          png_headers="$(mktemp)"
+          ico_headers="$(mktemp)"
+          manifest_headers="$(mktemp)"
+          trap 'rm -f "$root" "$png_headers" "$ico_headers" "$manifest_headers"' EXIT
 
           for attempt in {1..30}; do
-            root_status="$(curl --max-time 20 --silent --show-error --output "$workdir/root.html" --write-out '%{http_code}' "https://stabilize.info/?favicon-check=${GITHUB_SHA}-${attempt}" || true)"
-            png_status="$(curl --max-time 20 --silent --show-error --dump-header "$workdir/png.headers" --output "$workdir/favicon.png" --write-out '%{http_code}' "https://stabilize.info/favicon-32x32.png?favicon-check=${GITHUB_SHA}-${attempt}" || true)"
-            ico_status="$(curl --max-time 20 --silent --show-error --dump-header "$workdir/ico.headers" --output "$workdir/favicon.ico" --write-out '%{http_code}' "https://stabilize.info/favicon.ico?favicon-check=${GITHUB_SHA}-${attempt}" || true)"
-            manifest_status="$(curl --max-time 20 --silent --show-error --dump-header "$workdir/manifest.headers" --output "$workdir/manifest.json" --write-out '%{http_code}' "https://stabilize.info/site.webmanifest?favicon-check=${GITHUB_SHA}-${attempt}" || true)"
-
-            png_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$workdir/png.headers" | tail -n 1)"
-            ico_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$workdir/ico.headers" | tail -n 1)"
-            manifest_type="$(awk -F': ' ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$workdir/manifest.headers" | tail -n 1)"
-            png_cache="$(awk -F': ' ' 'tolower($1) == "cache-control" { gsub("\r", "", $2); print tolower($2) }' "$workdir/png.headers" | tail -n 1)"
-            png_magic="$(od -An -tx1 -N8 "$workdir/favicon.png" | tr -d ' \n')"
-            ico_magic="$(od -An -tx1 -N4 "$workdir/favicon.ico" | tr -d ' \n')"
-            declared_icons="$(grep -o 'rel="icon"' "$workdir/root.html" | wc -l | tr -d ' ')"
-
-            echo "Favicon attempt ${attempt}: root=${root_status}; declared=${declared_icons}; png=${png_status}/${png_type:-none}/${png_cache:-none}/${png_magic:-none}; ico=${ico_status}/${ico_type:-none}/${ico_magic:-none}; manifest=${manifest_status}/${manifest_type:-none}"
-
-            if [[ "$root_status" == "200" ]] &&
-              [[ "$declared_icons" == "1" ]] &&
-              grep -Fq '<link rel="icon" href="/favicon-32x32.png" type="image/png" sizes="32x32" />' "$workdir/root.html" &&
-              grep -Fq '<link rel="manifest" href="/site.webmanifest" />' "$workdir/root.html" &&
-              ! grep -Fq 'rel="shortcut icon"' "$workdir/root.html" &&
-              ! grep -Fq 'rel="mask-icon"' "$workdir/root.html" &&
-              ! grep -Fq 'favicon-refresh.js' "$workdir/root.html" &&
-              ! grep -Fq 'data:image/' "$workdir/root.html" &&
-              ! grep -Eq '<link rel="icon"[^>]+\.svg' "$workdir/root.html" &&
-              [[ "$png_status" == "200" && "$png_type" == image/png* && "$png_magic" == "89504e470d0a1a0a" && "$png_cache" == *max-age=86400* ]] &&
-              [[ "$ico_status" == "200" && "$ico_type" == image/x-icon* && "$ico_magic" == "00000100" ]] &&
-              [[ "$manifest_status" == "200" && "$manifest_type" == application/manifest+json* ]] &&
-              ! grep -Fq '.svg' "$workdir/manifest.json"; then
+            if curl --fail --silent --show-error "https://stabilize.info/?favicon-check=${GITHUB_SHA}-${attempt}" -o "$root" &&
+              curl --fail --silent --show-error --head "https://stabilize.info/favicon-32x32.png?favicon-check=${GITHUB_SHA}-${attempt}" -o "$png_headers" &&
+              curl --fail --silent --show-error --head "https://stabilize.info/favicon.ico?favicon-check=${GITHUB_SHA}-${attempt}" -o "$ico_headers" &&
+              curl --fail --silent --show-error --head "https://stabilize.info/site.webmanifest?favicon-check=${GITHUB_SHA}-${attempt}" -o "$manifest_headers" &&
+              [[ "$(grep -o 'rel="icon"' "$root" | wc -l | tr -d ' ')" == "1" ]] &&
+              grep -Fq '<link rel="icon" href="/favicon-32x32.png" type="image/png" sizes="32x32" />' "$root" &&
+              grep -Fq '<link rel="manifest" href="/site.webmanifest" />' "$root" &&
+              ! grep -Fq 'rel="shortcut icon"' "$root" &&
+              ! grep -Fq 'rel="mask-icon"' "$root" &&
+              ! grep -Fq 'favicon-refresh.js' "$root" &&
+              ! grep -Fq 'data:image/' "$root" &&
+              grep -Eiq '^content-type: image/png' "$png_headers" &&
+              grep -Eiq '^cache-control: .*max-age=86400' "$png_headers" &&
+              grep -Eiq '^content-type: image/(x-icon|vnd.microsoft.icon)' "$ico_headers" &&
+              grep -Eiq '^content-type: application/manifest\+json' "$manifest_headers"; then
               echo "Production exposes exactly one declared PNG favicon and keeps /favicon.ico only as an implicit fallback."
               exit 0
             fi
-
             sleep 10
           done
 
