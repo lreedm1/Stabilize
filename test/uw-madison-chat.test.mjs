@@ -62,13 +62,14 @@ test("the campus chat homepage is branded, independent, and resource-forward", a
     /rel="canonical" href="https:\/\/chat\.uwmadison\.stabilize\.info\/"/,
   );
   assert.match(html, /UW–Madison support, one step at a time/);
-  assert.match(html, /Independent project/);
+  assert.match(html, /Independent from UW–Madison/i);
+  assert.match(html, /Not operated or endorsed by UW/i);
+  assert.match(html, /UW resources/);
   assert.match(html, /Urgent help/);
   assert.match(html, /Do not wait on this chat during an emergency/);
-  assert.match(html, /Independent from UW–Madison/i);
+  assert.match(html, /Call 911/);
   assert.match(html, /UHS option 9/);
-  assert.match(html, /Basic Needs/);
-  assert.match(html, /OSAS/);
+  assert.match(html, /Call or text 988/);
   assert.match(
     html,
     /uwmadison-chat\.css\?v=20260813-first-screen-1/,
