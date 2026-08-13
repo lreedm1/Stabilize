@@ -442,38 +442,6 @@ async function generateCampusReply(messages, route, env) {
   return { reply, model };
 }
 
-function resourceCardsMarkup() {
-  const cards = [
-    {
-      label: "UHS crisis · option 9",
-      href: "tel:+16082655600",
-      detail: "608-265-5600 · 24/7",
-    },
-    {
-      label: "Basic Needs",
-      href: "https://basicneeds.students.wisc.edu/",
-      detail: "Food, housing, essentials",
-    },
-    {
-      label: "OSAS",
-      href: "https://osas.wisc.edu/contact-us/",
-      detail: "Not sure where to start",
-    },
-    {
-      label: "UHS Access · option 2",
-      href: "https://www.uhs.wisc.edu/mental-health/appointment/",
-      detail: "Mental-health care",
-    },
-  ];
-  return cards
-    .map(
-      ({ label, href, detail }) => `<a class="uw-resource-card" href="${escapeHtml(href)}"${
-        href.startsWith("http") ? ' rel="noreferrer"' : ""
-      }><strong>${escapeHtml(label)}</strong><span>${escapeHtml(detail)}</span></a>`,
-    )
-    .join("");
-}
-
 function campusPage() {
   let html = renderPage({
     signedIn: false,
@@ -484,28 +452,20 @@ function campusPage() {
   const title = "Stabilize for UW–Madison — Resource-Aware Chat";
   const description =
     "An independent Stabilize chat that routes UW–Madison students toward verified campus and crisis resources.";
-  const banner = `<section class="uw-chat-banner" aria-labelledby="uw-chat-banner-heading">
-    <div class="uw-chat-banner-copy">
-      <p class="uw-chat-kicker">Independent UW–Madison resource-aware chat</p>
-      <h2 id="uw-chat-banner-heading">Campus help is built into the conversation.</h2>
-      <p>Stabilize can match food, housing, health, academic, safety, and other practical needs to a verified UW–Madison doorway. It is not affiliated with, operated by, or endorsed by UW–Madison.</p>
+  const campusChrome = `<section class="uw-campus-strip" aria-label="About this UW–Madison chat">
+    <p class="uw-campus-strip-copy"><strong>Independent from UW–Madison.</strong> Not operated or endorsed by UW; resources are built in.</p>
+    <div class="uw-campus-strip-actions">
+      <a class="uw-resource-link" href="https://uwmadison.stabilize.info/#campus-resources">UW resources</a>
+      <details class="uw-urgent-disclosure">
+        <summary>Urgent help</summary>
+        <div class="uw-urgent-panel" role="group" aria-label="Urgent support options">
+          <p class="uw-urgent-note">Do not wait on this chat during an emergency.</p>
+          <a href="tel:911"><strong>Call 911</strong><span>Immediate danger or medical emergency</span></a>
+          <a href="tel:+16082655600"><strong>Call UHS · option 9</strong><span>24/7 mental-health crisis support</span></a>
+          <a href="tel:988"><strong>Call or text 988</strong><span>Suicide &amp; Crisis Lifeline</span></a>
+        </div>
+      </details>
     </div>
-    <div class="uw-emergency-links" aria-label="Urgent support">
-      <a href="tel:911"><strong>911</strong><span>Emergency</span></a>
-      <a href="tel:+16082655600"><strong>UHS option 9</strong><span>24/7 crisis</span></a>
-      <a href="tel:988"><strong>988</strong><span>Call or text</span></a>
-    </div>
-    <details class="uw-resource-disclosure">
-      <summary>Open quick UW resources</summary>
-      <div class="uw-resource-cards">${resourceCardsMarkup()}</div>
-      <div class="uw-resource-prompts" aria-label="Start with a common need">
-        <button type="button" data-example-message="I need food today. Help me choose the best UW–Madison resource and the first step.">I need food today</button>
-        <button type="button" data-example-message="I may not have stable housing. Help me find the right UW–Madison resource and one immediate step.">I need housing help</button>
-        <button type="button" data-example-message="I need mental-health support at UW–Madison. Help me choose between urgent and nonurgent options.">I need mental-health support</button>
-        <button type="button" data-example-message="I am a UW–Madison student and I am not sure where to start. Help me choose one campus doorway.">I’m not sure where to start</button>
-      </div>
-      <p class="uw-resource-update-note">Hours, appointment availability, and program details can change. Confirm them on the linked official UW pages.</p>
-    </details>
   </section>`;
 
   html = html
@@ -548,7 +508,7 @@ function campusPage() {
     )
     .replace(
       "</head>",
-      '    <link rel="stylesheet" href="/uwmadison-chat.css?v=20260813-document-scroll-1" />\n  </head>',
+      '    <link rel="stylesheet" href="/uwmadison-chat.css?v=20260813-first-screen-1" />\n  </head>',
     )
     .replace(
       /<nav class="menu-links" aria-label="Site pages">[\s\S]*?<\/nav>/,
@@ -566,7 +526,7 @@ function campusPage() {
     )
     .replace(
       '<main class="chat-card" aria-label="Stabilize AI check-in">',
-      `${banner}\n      <main class="chat-card" aria-label="UW–Madison resource-aware Stabilize chat">`,
+      `<main class="chat-card" aria-label="UW–Madison resource-aware Stabilize chat">\n        ${campusChrome}`,
     )
     .replace(
       '<h1 id="seo-heading">Get unstuck.</h1>',

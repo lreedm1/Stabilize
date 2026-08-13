@@ -1,10 +1,10 @@
-name: Verify UW mobile scrolling
+name: Verify UW mobile first screen
 
 on:
   push:
     branches:
       - main
-      - fix/**
+      - improve/**
     paths:
       - public/uwmadison-chat.css
       - src/uw-madison-chat.js
@@ -22,16 +22,16 @@ permissions:
   contents: read
 
 concurrency:
-  group: uw-mobile-scroll-${{ github.workflow }}-${{ github.ref }}
+  group: uw-mobile-first-screen-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   verify-webkit:
-    name: Verify iPhone-sized document scrolling
+    name: Verify iPhone-sized first screen
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      EXPECTED_STYLESHEET_VERSION: 20260813-document-scroll-1
+      EXPECTED_STYLESHEET_VERSION: 20260813-first-screen-1
       LIVE_MODE: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
 
     steps:
@@ -47,7 +47,7 @@ jobs:
           npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
           npx playwright install --with-deps webkit
 
-      - name: Verify the page can scroll from the resource banner to the composer
+      - name: Verify the composer and urgent drawer on an iPhone-sized viewport
         shell: bash
         run: |
           set -euo pipefail
@@ -58,7 +58,12 @@ jobs:
           const baseUrl = "https://chat.uwmadison.stabilize.info/";
           const expectedVersion = process.env.EXPECTED_STYLESHEET_VERSION;
           const liveMode = process.env.LIVE_MODE === "true";
-          const proposedCss = await readFile("public/uwmadison-chat.css", "utf8");
+          const sharedCss = await Promise.all([
+            readFile("public/styles.css", "utf8"),
+            readFile("public/product.css", "utf8"),
+            readFile("public/seo.css", "utf8"),
+            readFile("public/uwmadison-chat.css", "utf8"),
+          ]).then((parts) => parts.join("\n"));
 
           const browser = await webkit.launch({ headless: true });
           const context = await browser.newContext({
@@ -79,16 +84,16 @@ jobs:
             if (liveMode) {
               let deployed = false;
               for (let attempt = 1; attempt <= 36; attempt += 1) {
-                await page.goto(`${baseUrl}?scroll-gate=${Date.now()}`, {
+                await page.goto(`${baseUrl}?first-screen-gate=${Date.now()}`, {
                   waitUntil: "domcontentloaded",
                   timeout: 60_000,
                 });
                 const html = await page.content();
-                deployed = html.includes(
-                  `/uwmadison-chat.css?v=${expectedVersion}`,
-                );
+                deployed =
+                  html.includes(`/uwmadison-chat.css?v=${expectedVersion}`) &&
+                  html.includes('class="uw-campus-strip"');
                 console.log(
-                  `Production stylesheet attempt ${attempt}: ${
+                  `Production first-screen attempt ${attempt}: ${
                     deployed ? "current" : "waiting"
                   }`,
                 );
@@ -97,121 +102,134 @@ jobs:
               }
               if (!deployed) {
                 throw new Error(
-                  `Production did not serve stylesheet version ${expectedVersion}.`,
+                  `Production did not serve UW first-screen version ${expectedVersion}.`,
                 );
               }
             } else {
-              await page.goto(`${baseUrl}?scroll-proposal=${Date.now()}`, {
-                waitUntil: "domcontentloaded",
-                timeout: 60_000,
-              });
-              // Exercise the proposed stylesheet against the real production DOM
-              // before merge; this catches flex and viewport interactions that a
-              // string-only CSS test cannot see.
-              await page.addStyleTag({ content: proposedCss });
+              await page.setContent(`<!doctype html>
+                <html lang="en" data-campus-chat="uwmadison">
+                  <head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${sharedCss}</style></head>
+                  <body>
+                    <div class="page-shell">
+                      <header class="site-header"><button type="button">Menu</button></header>
+                      <main class="chat-card" aria-label="UW–Madison resource-aware Stabilize chat">
+                        <section class="uw-campus-strip" aria-label="About this UW–Madison chat">
+                          <p class="uw-campus-strip-copy"><strong>Independent from UW–Madison.</strong> Resources built in.</p>
+                          <div class="uw-campus-strip-actions">
+                            <a class="uw-resource-link" href="#resources">UW resources</a>
+                            <details class="uw-urgent-disclosure">
+                              <summary>Urgent help</summary>
+                              <div class="uw-urgent-panel" role="group" aria-label="Urgent support options">
+                                <p class="uw-urgent-note">Do not wait on this chat during an emergency.</p>
+                                <a href="tel:911"><strong>Call 911</strong><span>Immediate danger or medical emergency</span></a>
+                                <a href="tel:+16082655600"><strong>Call UHS · option 9</strong><span>24/7 mental-health crisis support</span></a>
+                                <a href="tel:988"><strong>Call or text 988</strong><span>Suicide &amp; Crisis Lifeline</span></a>
+                              </div>
+                            </details>
+                          </div>
+                        </section>
+                        <section class="conversation-surface" data-view="compose">
+                          <section class="seo-intro product-intro"><h1>UW–Madison support, one step at a time.</h1><p class="product-promise">Tell me what is blocking the next step.</p></section>
+                          <div class="composer-dock"><form class="chat-form"><textarea id="message-input" placeholder="What is happening at UW–Madison?"></textarea><button id="send-button" type="button">Send</button></form></div>
+                        </section>
+                      </main>
+                    </div>
+                  </body>
+                </html>`, { waitUntil: "domcontentloaded" });
             }
 
-            await page.waitForSelector(".uw-chat-banner", { timeout: 30_000 });
+            await page.waitForSelector(".uw-campus-strip", { timeout: 30_000 });
+            await page.waitForSelector(".uw-urgent-disclosure", { timeout: 30_000 });
             await page.waitForSelector(".composer-dock", { timeout: 30_000 });
             await page.waitForTimeout(500);
 
             const before = await page.evaluate(() => {
               const scrolling = document.scrollingElement;
-              const shell = document.querySelector(".page-shell");
+              const strip = document.querySelector(".uw-campus-strip");
               const chat = document.querySelector(".chat-card");
               const composer = document.querySelector(".composer-dock");
+              const input = document.querySelector("#message-input");
               if (
                 !(scrolling instanceof HTMLElement) ||
-                !(shell instanceof HTMLElement) ||
+                !(strip instanceof HTMLElement) ||
                 !(chat instanceof HTMLElement) ||
-                !(composer instanceof HTMLElement)
+                !(composer instanceof HTMLElement) ||
+                !(input instanceof HTMLElement)
               ) {
-                throw new Error("Required UW chat layout elements are missing.");
+                throw new Error("Required UW first-screen elements are missing.");
               }
-              const shellStyle = getComputedStyle(shell);
-              const chatStyle = getComputedStyle(chat);
+              const viewportHeight = window.visualViewport?.height || window.innerHeight;
               return {
-                viewportHeight: window.visualViewport?.height || window.innerHeight,
+                viewportHeight,
                 documentClientHeight: scrolling.clientHeight,
                 documentScrollHeight: scrolling.scrollHeight,
                 scrollY: window.scrollY,
-                bodyOverflowY: getComputedStyle(document.body).overflowY,
-                rootOverflowY: getComputedStyle(document.documentElement).overflowY,
-                shellHeight: shell.getBoundingClientRect().height,
-                shellOverflowY: shellStyle.overflowY,
+                stripHeight: strip.getBoundingClientRect().height,
                 chatHeight: chat.getBoundingClientRect().height,
-                chatFlex: chatStyle.flex,
                 composer: composer.getBoundingClientRect().toJSON(),
+                input: input.getBoundingClientRect().toJSON(),
               };
             });
 
-            console.log("Before scroll:", JSON.stringify(before, null, 2));
+            console.log("Initial UW first screen:", JSON.stringify(before, null, 2));
 
+            if (before.documentScrollHeight > before.documentClientHeight + 2) {
+              throw new Error(
+                `The initial page still requires document scrolling: ${before.documentScrollHeight}px for ${before.documentClientHeight}px.`,
+              );
+            }
+            if (before.stripHeight > 70) {
+              throw new Error(
+                `The compact campus strip is too tall (${before.stripHeight}px).`,
+              );
+            }
             if (
-              before.documentScrollHeight <=
-              before.documentClientHeight + 250
+              before.composer.top < 0 ||
+              before.composer.bottom > before.viewportHeight + 2 ||
+              before.input.top < 0 ||
+              before.input.bottom > before.viewportHeight + 2
             ) {
               throw new Error(
-                `The document still has no useful vertical overflow: ${before.documentScrollHeight}px for a ${before.documentClientHeight}px viewport.`,
-              );
-            }
-            if (before.chatHeight < 560) {
-              throw new Error(
-                `The chat was compressed to ${before.chatHeight}px instead of remaining usable.`,
-              );
-            }
-            if (before.shellOverflowY !== "visible") {
-              throw new Error(
-                `The page shell is still acting as a nested scroller (${before.shellOverflowY}).`,
+                `The composer is not fully visible on load: composer=${before.composer.top}-${before.composer.bottom}, input=${before.input.top}-${before.input.bottom}, viewport=${before.viewportHeight}.`,
               );
             }
 
-            await page.evaluate(() => {
-              const scrolling = document.scrollingElement;
-              window.scrollTo({
-                top: scrolling?.scrollHeight || document.body.scrollHeight,
-                behavior: "instant",
-              });
-            });
-            await page.waitForTimeout(500);
+            await page.locator(".uw-urgent-disclosure > summary").click();
+            await page.waitForTimeout(200);
 
-            const after = await page.evaluate(() => {
-              const composer = document.querySelector(".composer-dock");
-              if (!(composer instanceof HTMLElement)) {
-                throw new Error("Composer is missing after scroll.");
+            const urgent = await page.evaluate(() => {
+              const panel = document.querySelector(".uw-urgent-panel");
+              const details = document.querySelector(".uw-urgent-disclosure");
+              if (!(panel instanceof HTMLElement) || !(details instanceof HTMLDetailsElement)) {
+                throw new Error("Urgent help did not open.");
               }
-              const viewportHeight =
-                window.visualViewport?.height || window.innerHeight;
-              const rect = composer.getBoundingClientRect();
+              const viewportHeight = window.visualViewport?.height || window.innerHeight;
+              const rect = panel.getBoundingClientRect();
               return {
+                open: details.open,
                 viewportHeight,
-                scrollY: window.scrollY,
-                composerTop: rect.top,
-                composerBottom: rect.bottom,
-                composerHeight: rect.height,
+                top: rect.top,
+                bottom: rect.bottom,
+                height: rect.height,
+                links: panel.querySelectorAll("a").length,
               };
             });
 
-            console.log("After scroll:", JSON.stringify(after, null, 2));
+            console.log("Open urgent drawer:", JSON.stringify(urgent, null, 2));
 
-            if (after.scrollY < 100) {
-              throw new Error(
-                `The document did not move after scrolling (scrollY=${after.scrollY}).`,
-              );
+            if (!urgent.open || urgent.links !== 3) {
+              throw new Error("Urgent help must expose exactly three direct support routes.");
             }
-            if (
-              after.composerTop < -2 ||
-              after.composerBottom > after.viewportHeight + 2
-            ) {
+            if (urgent.top < 0 || urgent.bottom > urgent.viewportHeight + 2) {
               throw new Error(
-                `The composer is not fully reachable after scrolling: top=${after.composerTop}, bottom=${after.composerBottom}, viewport=${after.viewportHeight}.`,
+                `The urgent drawer is clipped: top=${urgent.top}, bottom=${urgent.bottom}, viewport=${urgent.viewportHeight}.`,
               );
             }
 
             console.log(
               liveMode
-                ? "The deployed UW chat scrolls from the resource banner to a full-height chat composer in WebKit."
-                : "The proposed UW stylesheet creates real document scrolling and keeps the composer reachable in WebKit.",
+                ? "The deployed UW chat opens with the composer visible and urgent help in one bounded drawer."
+                : "The proposed UW first screen keeps the composer visible and urgent help in one bounded drawer.",
             );
           } finally {
             await browser.close();

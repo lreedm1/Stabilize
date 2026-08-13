@@ -62,46 +62,42 @@ test("the campus chat homepage is branded, independent, and resource-forward", a
     /rel="canonical" href="https:\/\/chat\.uwmadison\.stabilize\.info\/"/,
   );
   assert.match(html, /UW–Madison support, one step at a time/);
-  assert.match(html, /Campus help is built into the conversation/);
-  assert.match(html, /not affiliated with, operated by, or endorsed by UW–Madison/i);
+  assert.match(html, /Independent from UW–Madison/i);
+  assert.match(html, /Not operated or endorsed by UW/i);
+  assert.match(html, /UW resources/);
+  assert.match(html, /Urgent help/);
+  assert.match(html, /Do not wait on this chat during an emergency/);
+  assert.match(html, /Call 911/);
   assert.match(html, /UHS option 9/);
-  assert.match(html, /Basic Needs/);
-  assert.match(html, /OSAS/);
+  assert.match(html, /Call or text 988/);
   assert.match(
     html,
-    /uwmadison-chat\.css\?v=20260813-document-scroll-1/,
+    /uwmadison-chat\.css\?v=20260813-first-screen-1/,
   );
   assert.match(html, /What is happening at UW–Madison\?/);
 });
 
-test("the campus stylesheet creates document overflow instead of shrinking the chat", async () => {
+test("the campus stylesheet keeps the composer above the fold with compact urgent help", async () => {
   const css = await readFile(
     new URL("../public/uwmadison-chat.css", import.meta.url),
     "utf8",
   );
 
+  assert.match(css, /\.uw-campus-strip/);
+  assert.match(css, /\.uw-urgent-disclosure/);
+  assert.match(css, /\.uw-urgent-panel/);
   assert.match(
     css,
-    /html\[data-campus-chat="uwmadison"\][\s\S]*?overflow-y:\s*auto\s*!important/,
-  );
-  assert.match(
-    css,
-    /html\[data-campus-chat="uwmadison"\]\s+body[\s\S]*?overflow-y:\s*auto\s*!important/,
-  );
-  assert.match(
-    css,
-    /html\[data-campus-chat="uwmadison"\]\s+\.page-shell[\s\S]*?height:\s*auto\s*!important[\s\S]*?overflow:\s*visible\s*!important/,
+    /html\[data-campus-chat="uwmadison"\]\s+\.page-shell[\s\S]*?height:\s*100dvh\s*!important[\s\S]*?overflow:\s*hidden\s*!important/,
   );
   assert.match(
     css,
-    /html\[data-campus-chat="uwmadison"\]\s+\.chat-card[\s\S]*?min-height:\s*560px[\s\S]*?flex:\s*0 0 auto/,
+    /html\[data-campus-chat="uwmadison"\]\s+\.chat-card[\s\S]*?flex:\s*1 1 auto[\s\S]*?min-height:\s*0/,
   );
-  assert.match(css, /touch-action:\s*pan-y/);
-  assert.match(css, /-webkit-overflow-scrolling:\s*touch/);
-  assert.doesNotMatch(
-    css,
-    /html\[data-campus-chat="uwmadison"\]\s+\.page-shell\s*\{[^}]*overflow-y:\s*auto/,
-  );
+  assert.match(css, /position:\s*absolute/);
+  assert.match(css, /max-height:\s*calc\(100dvh - 120px\)/);
+  assert.doesNotMatch(css, /\.uw-chat-banner/);
+  assert.doesNotMatch(css, /\.uw-emergency-links/);
 });
 
 test("immediate-danger routing uses UW crisis contacts without calling OpenAI", async () => {
