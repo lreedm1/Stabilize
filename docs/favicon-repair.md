@@ -1,5 +1,5 @@
 # Favicon compatibility repair
 
-Stabilize serves a real multi-size `favicon.ico`, a 32×32 PNG fallback, the existing SVG icon, and a 180×180 Apple touch icon. The generated page links all formats with a cache-busting version, while the Worker normalizes MIME types and prevents stale long-lived caching during rollout.
+Stabilize now supplies Safari with a newly named SVG icon plus a PNG data URL embedded directly in every page. The inline PNG removes Cloudflare routing, response MIME, and external-asset caching from Safari's final fallback path.
 
-Production verification checks the HTML references, response status and MIME type, ICO header bytes, and PNG signatures after each successful main deployment.
+A freshly versioned same-origin script removes older icon links and reinstalls the new SVG followed by the inline PNG whenever the page is shown or becomes visible. The existing PNG, Apple touch, Safari mask, and web-app manifest fallbacks remain available.

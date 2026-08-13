@@ -27,6 +27,7 @@ test("the model tile shows 5.x, the composer is 42px tall, and pages hard-reset 
     client,
     css,
     page,
+    vectorIcon,
     faviconIco,
     favicon16,
     favicon32,
@@ -40,6 +41,7 @@ test("the model tile shows 5.x, the composer is 42px tall, and pages hard-reset 
     read("public/billing-client.js"),
     read("public/billing.css"),
     read("src/page.js"),
+    read("public/stabilize-tab-20260813.svg"),
     readBytes("public/stabilize-tab-20260805.ico"),
     readBytes("public/stabilize-tab-20260805-16.png"),
     readBytes("public/stabilize-tab-20260805-32.png"),
@@ -77,14 +79,15 @@ test("the model tile shows 5.x, the composer is 42px tall, and pages hard-reset 
   assert.match(css, /\.composer-model-kicker \{[\s\S]*?display: none;/);
 
   const pageIconPatterns = [
-    /<link rel="shortcut icon" href="\/stabilize-tab-20260805\.ico" type="image\/x-icon" \/>/,
-    /<link rel="icon" href="\/stabilize-tab-20260805-16\.png" type="image\/png" sizes="16x16" \/>/,
-    /<link rel="icon" href="\/stabilize-tab-20260805-32\.png" type="image\/png" sizes="32x32" \/>/,
-    /<link rel="apple-touch-icon" href="\/stabilize-app-20260805-180\.png" sizes="180x180" \/>/,
-    /<link rel="mask-icon" href="\/safari-pinned-tab\.svg" color="#173f31" \/>/,
-    /<link rel="manifest" href="\/site\.webmanifest\?v=20260805-8" \/>/,
-    /<script src="\/favicon-refresh\.js\?v=20260805-8" defer><\/script>/,
-  ];
+  /<link rel="icon" href="\/stabilize-tab-20260805-16\.png" type="image\/png" sizes="16x16" \/>/,
+  /<link rel="icon" href="\/stabilize-tab-20260805-32\.png" type="image\/png" sizes="32x32" \/>/,
+  /<link rel="icon" href="\/stabilize-tab-20260813\.svg" type="image\/svg\+xml" sizes="any" \/>/,
+  /<link rel="icon" href="data:image\/png;base64,/,
+  /<link rel="apple-touch-icon" href="\/stabilize-app-20260805-180\.png" sizes="180x180" \/>/,
+  /<link rel="mask-icon" href="\/safari-pinned-tab\.svg" color="#173f31" \/>/,
+  /<link rel="manifest" href="\/site\.webmanifest\?v=20260813-safari-inline-1" \/>/,
+  /<script src="\/favicon-refresh\.js\?v=20260813-safari-inline-1" defer><\/script>/,
+];
   for (const pattern of pageIconPatterns) assert.match(page, pattern);
   assert.match(page, /<meta name="application-name" content="STABILIZE" \/>/);
   assert.match(
@@ -93,6 +96,7 @@ test("the model tile shows 5.x, the composer is 42px tall, and pages hard-reset 
   );
   assert.doesNotMatch(page, /href="\/favicon\.svg/);
   assert.doesNotMatch(page, /data:image\/svg\+xml/);
+  assert.match(page, /data:image\/png;base64,/);
 
   for (const html of staticPages) {
     for (const pattern of pageIconPatterns) assert.match(html, pattern);
@@ -113,6 +117,10 @@ test("the model tile shows 5.x, the composer is 42px tall, and pages hard-reset 
   assert.equal(appleTouch.readUInt32BE(16), 180);
   assert.equal(appleTouch.readUInt32BE(20), 180);
 
+  assert.match(vectorIcon, /viewBox="0 0 64 64"/);
+  assert.match(vectorIcon, /fill="#173f31"/);
+  assert.match(vectorIcon, /stroke="#fffaf0"/);
+
   assert.match(safariMask, /viewBox="0 0 16 16"/);
   assert.match(safariMask, /<path fill="#000000"/);
   assert.doesNotMatch(safariMask, /<rect|<circle/);
@@ -122,10 +130,9 @@ test("the model tile shows 5.x, the composer is 42px tall, and pages hard-reset 
   assert.equal(manifest.icons[0].src, "/stabilize-app-20260805-180.png");
   assert.equal(manifest.icons[0].sizes, "180x180");
 
-  assert.match(refreshScript, /stabilize-live-tab-icon/);
-  assert.match(
-    refreshScript,
-    /\/stabilize-tab-20260805-32\.png\?refresh=20260805-8/,
-  );
+  assert.match(refreshScript, /stabilize-vector-tab-icon/);
+  assert.match(refreshScript, /stabilize-inline-tab-icon/);
+  assert.match(refreshScript, /\/stabilize-tab-20260813\.svg/);
+  assert.match(refreshScript, /data:image\/png;base64,/);
   assert.match(refreshScript, /document\.head\.append\(icon\)/);
 });

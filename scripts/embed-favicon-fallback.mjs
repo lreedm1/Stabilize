@@ -11,7 +11,12 @@ const STATIC_PAGES = [
 ];
 
 const ICON_RELEASE = "20260805";
-const REFRESH_VERSION = "20260805-8";
+const VECTOR_ICON_RELEASE = "20260813";
+const REFRESH_VERSION = "20260813-safari-inline-1";
+const INLINE_ICON_DATA =
+  "data:image/png;base64," +
+  (await readFile("scripts/favicon-assets/favicon-32x32.png.b64", "utf8"))
+    .replace(/\s+/g, "");
 const BINARY_ASSETS = [
   ["scripts/favicon-assets/favicon.ico.b64", "public/favicon.ico"],
   [
@@ -35,10 +40,10 @@ const BINARY_ASSETS = [
   ],
 ];
 
-const ICON_LINKS = `    <link rel="shortcut icon" href="/stabilize-tab-${ICON_RELEASE}.ico" type="image/x-icon" />
-    <link rel="icon" href="/stabilize-tab-${ICON_RELEASE}.ico" type="image/x-icon" sizes="16x16 32x32 48x48" />
-    <link rel="icon" href="/stabilize-tab-${ICON_RELEASE}-16.png" type="image/png" sizes="16x16" />
+const ICON_LINKS = `    <link rel="icon" href="/stabilize-tab-${ICON_RELEASE}-16.png" type="image/png" sizes="16x16" />
     <link rel="icon" href="/stabilize-tab-${ICON_RELEASE}-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/stabilize-tab-${VECTOR_ICON_RELEASE}.svg" type="image/svg+xml" sizes="any" />
+    <link rel="icon" href="${INLINE_ICON_DATA}" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/stabilize-app-${ICON_RELEASE}-180.png" sizes="180x180" />
     <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#173f31" />
     <link rel="manifest" href="/site.webmanifest?v=${REFRESH_VERSION}" />
@@ -224,5 +229,5 @@ await update("test/worker.test.mjs", (source) => {
 });
 
 console.log(
-  "Hard-reset favicon identity with new tab-icon URLs, a true 16px PNG, and a valid Safari mask.",
+  "Install a fresh Safari SVG identity and an inline PNG fallback.",
 );

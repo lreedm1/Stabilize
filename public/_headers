@@ -124,3 +124,12 @@
   Cross-Origin-Resource-Policy: same-origin
   X-Content-Type-Options: nosniff
 # mobile-video-handoff-v31-end
+
+# cache-independent-safari-tab-icon-start
+/stabilize-tab-20260813.svg
+  Content-Type: image/svg+xml; charset=utf-8
+  Cache-Control: no-store, max-age=0
+  Content-Disposition: inline
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+# cache-independent-safari-tab-icon-end
