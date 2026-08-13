@@ -548,7 +548,7 @@ function campusPage() {
     )
     .replace(
       "</head>",
-      '    <link rel="stylesheet" href="/uwmadison-chat.css?v=20260813-2" />\n  </head>',
+      '    <link rel="stylesheet" href="/uwmadison-chat.css?v=20260813-document-scroll-1" />\n  </head>',
     )
     .replace(
       /<nav class="menu-links" aria-label="Site pages">[\s\S]*?<\/nav>/,

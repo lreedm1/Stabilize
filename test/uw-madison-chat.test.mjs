@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 import {
   CHAT_UW_MADISON_HOST,
@@ -66,8 +67,41 @@ test("the campus chat homepage is branded, independent, and resource-forward", a
   assert.match(html, /UHS option 9/);
   assert.match(html, /Basic Needs/);
   assert.match(html, /OSAS/);
-  assert.match(html, /uwmadison-chat\.css/);
+  assert.match(
+    html,
+    /uwmadison-chat\.css\?v=20260813-document-scroll-1/,
+  );
   assert.match(html, /What is happening at UW–Madison\?/);
+});
+
+test("the campus stylesheet creates document overflow instead of shrinking the chat", async () => {
+  const css = await readFile(
+    new URL("../public/uwmadison-chat.css", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    css,
+    /html\[data-campus-chat="uwmadison"\][\s\S]*?overflow-y:\s*auto\s*!important/,
+  );
+  assert.match(
+    css,
+    /html\[data-campus-chat="uwmadison"\]\s+body[\s\S]*?overflow-y:\s*auto\s*!important/,
+  );
+  assert.match(
+    css,
+    /html\[data-campus-chat="uwmadison"\]\s+\.page-shell[\s\S]*?height:\s*auto\s*!important[\s\S]*?overflow:\s*visible\s*!important/,
+  );
+  assert.match(
+    css,
+    /html\[data-campus-chat="uwmadison"\]\s+\.chat-card[\s\S]*?min-height:\s*560px[\s\S]*?flex:\s*0 0 auto/,
+  );
+  assert.match(css, /touch-action:\s*pan-y/);
+  assert.match(css, /-webkit-overflow-scrolling:\s*touch/);
+  assert.doesNotMatch(
+    css,
+    /html\[data-campus-chat="uwmadison"\]\s+\.page-shell\s*\{[^}]*overflow-y:\s*auto/,
+  );
 });
 
 test("immediate-danger routing uses UW crisis contacts without calling OpenAI", async () => {
