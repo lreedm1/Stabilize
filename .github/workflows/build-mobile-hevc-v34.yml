@@ -7,6 +7,7 @@ on:
     paths:
       - scripts/build-mobile-hevc-v34.sh
       - scripts/finalize-mobile-hevc-v34.mjs
+      - scripts/finalize-full-guest-conversation.mjs
       - scripts/verify-mobile-hevc-v34.yml
       - test/mobile-hevc-v34.test.mjs
       - .github/workflows/build-mobile-hevc-v34.yml
