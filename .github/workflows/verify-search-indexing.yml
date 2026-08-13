@@ -189,7 +189,7 @@ jobs:
             grep -Eqi '^strict-transport-security:[[:space:]]*max-age=31536000; includeSubDomains' "$workdir/root.headers" 2>/dev/null || ready=false
             grep -Eqi "^content-security-policy:.*default-src 'self'" "$workdir/root.headers" 2>/dev/null || ready=false
             grep -Eqi '^x-frame-options:[[:space:]]*DENY' "$workdir/root.headers" 2>/dev/null || ready=false
-            [[ "$chat_location" == "https://stabilize.info/?source=uwmadison" ]] || ready=false
+            [[ "$chat_location" == "https://chat.uwmadison.stabilize.info/" ]] || ready=false
 
             grep -Fq 'Sitemap: https://uwmadison.stabilize.info/sitemap.xml' "$workdir/robots.txt" 2>/dev/null || ready=false
             grep -Fq '<loc>https://uwmadison.stabilize.info/</loc>' "$workdir/sitemap.xml" 2>/dev/null || ready=false
@@ -198,7 +198,7 @@ jobs:
               curl --fail --max-time 20 --silent --show-error \
                 --output /dev/null \
                 "$base/uwmadison.css?v=20260812-uw-1"; then
-              echo "UW–Madison custom domain, student page, safety boundaries, resource map, and chat handoff are live."
+              echo "UW–Madison custom domain, student page, safety boundaries, resource map, and dedicated chat handoff are live."
               exit 0
             fi
 
