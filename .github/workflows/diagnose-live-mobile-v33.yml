@@ -1,0 +1,101 @@
+name: Diagnose live mobile smooth v33
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/diagnose-live-mobile-v33.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install WebKit
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps webkit
+      - name: Capture playback state
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/v33-diagnostic"
+          OUTPUT="$RUNNER_TEMP/v33-diagnostic/result.json" node --input-type=module <<'NODE'
+          import { webkit } from "playwright";
+          import { writeFile } from "node:fs/promises";
+
+          const browser = await webkit.launch({ headless: true });
+          const result = { errors: [], snapshots: [] };
+          const context = await browser.newContext({
+            viewport: { width: 390, height: 844 },
+            deviceScaleFactor: 3,
+            isMobile: true,
+            hasTouch: true,
+            userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1",
+          });
+          const page = await context.newPage();
+          page.on("pageerror", (error) => result.errors.push(error.message));
+          page.on("requestfailed", (request) => result.errors.push(`${request.url()}: ${request.failure()?.errorText || "failed"}`));
+
+          const snapshot = async (label) => {
+            result.snapshots.push(await page.evaluate((name) => {
+              const video = document.querySelector("#mobile-background-video");
+              const root = document.documentElement;
+              return {
+                label: name,
+                coarseNoHover: matchMedia("(hover: none) and (pointer: coarse)").matches,
+                portrait: matchMedia("(max-width: 980px) and (orientation: portrait)").matches,
+                canPlayBaseline: video?.canPlayType('video/mp4; codecs="avc1.42E020"') || "",
+                currentSrc: video?.currentSrc || "",
+                readyState: video?.readyState ?? -1,
+                networkState: video?.networkState ?? -1,
+                paused: video?.paused ?? true,
+                currentTime: video?.currentTime ?? 0,
+                duration: video?.duration ?? null,
+                width: video?.videoWidth ?? 0,
+                height: video?.videoHeight ?? 0,
+                error: video?.error ? { code: video.error.code, message: video.error.message || "" } : null,
+                handoffState: root.dataset.mobileVideoHandoffV31 || "",
+                handoffDetail: root.dataset.mobileVideoHandoffV31Detail || "",
+                backgroundState: root.dataset.mobileBackgroundV30 || "",
+                quality: root.dataset.mobileBackgroundV30Quality || "",
+              };
+            }, label));
+          };
+
+          await page.goto(`https://stabilize.info/?v33-diagnostic=${Date.now()}`, { waitUntil: "domcontentloaded", timeout: 60000 });
+          await page.waitForSelector("#mobile-background-video", { state: "attached", timeout: 60000 });
+          await page.waitForTimeout(5000);
+          await snapshot("before-tap");
+          await page.tap("body", { position: { x: 20, y: 20 } });
+          await page.waitForTimeout(5000);
+          await snapshot("after-tap");
+          result.directPlay = await page.evaluate(async () => {
+            const video = document.querySelector("#mobile-background-video");
+            if (!(video instanceof HTMLVideoElement)) return { outcome: "missing" };
+            try {
+              await video.play();
+              return { outcome: "resolved" };
+            } catch (error) {
+              return { outcome: "rejected", name: error?.name || "", message: error?.message || "" };
+            }
+          });
+          await page.waitForTimeout(3000);
+          await snapshot("after-direct-play");
+          await context.close();
+          await browser.close();
+          await writeFile(process.env.OUTPUT, JSON.stringify(result, null, 2) + "\n");
+          NODE
+          cat "$RUNNER_TEMP/v33-diagnostic/result.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v33-diagnostic
+          path: ${{ runner.temp }}/v33-diagnostic
+          retention-days: 7
