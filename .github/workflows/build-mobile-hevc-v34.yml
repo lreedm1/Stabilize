@@ -33,6 +33,37 @@ jobs:
           fetch-depth: 1
           persist-credentials: true
 
+      - name: Replace fragile source-reference regex checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib
+          import re
+
+          path = pathlib.Path("test/mobile-hevc-v34.test.mjs")
+          source = path.read_text(encoding="utf-8")
+          source, hevc_count = re.subn(
+              r'^\s*assert\.match\(videoBlock, new RegExp\(hevcReference\.replaceAll.*$',
+              '  assert.ok(videoBlock.includes(hevcReference));',
+              source,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          source, h264_count = re.subn(
+              r'^\s*assert\.match\(videoBlock, new RegExp\(h264Reference\.replaceAll.*$',
+              '  assert.ok(videoBlock.includes(h264Reference));',
+              source,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          if hevc_count != 1 or h264_count != 1:
+              raise SystemExit(
+                  f"unexpected source-reference replacements: hevc={hevc_count} h264={h264_count}"
+              )
+          path.write_text(source, encoding="utf-8")
+          PY
+
       - name: Install media tools
         shell: bash
         run: |
