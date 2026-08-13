@@ -15,6 +15,10 @@
       "zone_name": "stabilize.info"
     },
     {
+      "pattern": "uwmadison.stabilize.info",
+      "custom_domain": true
+    },
+    {
       "pattern": "reedlokken.com",
       "custom_domain": true
     },
