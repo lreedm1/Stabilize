@@ -138,8 +138,9 @@ test("mobile HEVC v34 uses a high-quality direct static source with H.264 fallba
   assert.match(client, /mobile-forest-stream-video-v34-hevc-720\.mp4/);
   assert.match(client, /native-video-hevc-720x1280-60fps/);
   assert.match(client, /mobileBackgroundV30Codec/);
+  assert.match(client, /mobile-hevc-v34-quality-start/);
   const configure = client.match(
-    /function configureVideo\(\) \{[\s\S]*?\n  \}/,
+    /function configureVideo\(\) \{[\s\S]*?\n  \}\n\n  function keepFallbackVisible/,
   )?.[0];
   assert.ok(configure);
   assert.match(configure, /HEVC_ASSET/);
@@ -176,5 +177,6 @@ test("mobile HEVC v34 uses a high-quality direct static source with H.264 fallba
   assert.match(builder, /-tag:v hvc1/);
   assert.match(builder, /-movflags \+faststart/);
   assert.match(finalizer, /HEVC must be the first parser-visible video source/);
+  assert.match(finalizer, /mobile-hevc-v34-quality-start/);
   assert.match(finalizer, /no Worker buffering in the parser-visible sources/);
 });
