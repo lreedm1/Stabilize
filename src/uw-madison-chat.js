@@ -307,115 +307,102 @@ async function readBoundedJson(request) {
   }
 }
 
-function normalizeText(value, maxChars = MAX_MESSAGE_CHARS) {
-  return String(value || "")
-    .replaceAll("\u0000", "")
-    .trim()
-    .slice(0, maxChars);
-}
-
 function latestUserText(body) {
-  const direct = normalizeText(body?.message);
-  if (direct) return direct;
+  if (typeof body?.message === "string") return body.message.trim();
   if (!Array.isArray(body?.messages)) return "";
   for (let index = body.messages.length - 1; index >= 0; index -= 1) {
     const message = body.messages[index];
-    if (message?.role !== "user") continue;
-    const text = normalizeText(message?.content);
-    if (text) return text;
+    if (message?.role === "user" && typeof message?.content === "string") {
+      return message.content.trim();
+    }
   }
   return "";
 }
 
-function normalizeRole(value) {
-  const role = String(value || "").trim().toLowerCase();
-  return role === "assistant" ? "assistant" : role === "user" ? "user" : "";
+function normalizeMessages(rawMessages = []) {
+  if (!Array.isArray(rawMessages)) return [];
+  return rawMessages
+    .slice(-MAX_MESSAGES)
+    .map((message) => {
+      const role = message?.role === "assistant" ? "assistant" : "user";
+      const content = String(message?.content || "").trim().slice(0, MAX_MESSAGE_CHARS);
+      return content ? { role, content } : null;
+    })
+    .filter(Boolean);
 }
 
 function modelMessages(body, latestText) {
-  const messages = [];
-  if (Array.isArray(body?.messages)) {
-    for (const candidate of body.messages.slice(-MAX_MESSAGES)) {
-      const role = normalizeRole(candidate?.role);
-      const content = normalizeText(candidate?.content);
-      if (!role || !content) continue;
-      messages.push({ role, content });
-    }
-  }
-  if (!messages.length || messages.at(-1)?.content !== latestText) {
-    messages.push({ role: "user", content: latestText });
-  }
-  return messages.slice(-MAX_MESSAGES);
-}
-
-function modelName(env) {
-  return String(
-    env.FREE_PLAN_PRIMARY_MODEL || env.OPENAI_MODEL || "gpt-5.4",
-  ).trim();
-}
-
-function serviceTier(env) {
-  const configured = String(env.OPENAI_SERVICE_TIER || "fast")
-    .trim()
-    .toLowerCase();
-  return ALLOWED_SERVICE_TIERS.has(configured) ? configured : "fast";
+  const normalized = normalizeMessages(body?.messages);
+  if (!normalized.length) return [{ role: "user", content: latestText }];
+  const last = normalized.at(-1);
+  if (last?.role === "user" && last.content === latestText) return normalized;
+  return [...normalized, { role: "user", content: latestText }].slice(-MAX_MESSAGES);
 }
 
 function responseText(body) {
-  if (typeof body?.output_text === "string") return body.output_text;
-  const output = Array.isArray(body?.output) ? body.output : [];
-  const parts = [];
-  for (const item of output) {
-    if (item?.type !== "message" || !Array.isArray(item.content)) continue;
-    for (const part of item.content) {
-      if (part?.type === "output_text" && typeof part.text === "string") {
-        parts.push(part.text);
+  if (typeof body?.output_text === "string" && body.output_text.trim()) {
+    return body.output_text.trim();
+  }
+  if (!Array.isArray(body?.output)) return "";
+  const chunks = [];
+  for (const item of body.output) {
+    if (!Array.isArray(item?.content)) continue;
+    for (const content of item.content) {
+      if (typeof content?.text === "string" && content.text.trim()) {
+        chunks.push(content.text.trim());
       }
     }
   }
-  return parts.join("\n");
+  return chunks.join("\n\n").trim();
 }
 
-function validateReply(value) {
-  const reply = String(value || "").trim();
-  if (!reply || reply.length > 16_000) return "";
-  return reply;
+function validateReply(reply) {
+  const value = String(reply || "").trim();
+  if (!value) return "";
+  return value.slice(0, 8_000);
+}
+
+function configuredModel(env) {
+  return String(
+    env.FREE_PLAN_PRIMARY_MODEL || env.OPENAI_MODEL || "gpt-5.6-sol",
+  ).trim();
+}
+
+function configuredServiceTier(env) {
+  const tier = String(env.OPENAI_SERVICE_TIER || "default").trim().toLowerCase();
+  return ALLOWED_SERVICE_TIERS.has(tier) ? tier : "default";
 }
 
 async function generateCampusReply(messages, route, env) {
-  const apiKey = String(env.OPENAI_API_KEY || "").trim();
-  if (!apiKey) {
-    throw new CampusRequestError(
-      503,
-      "The UW–Madison chat is temporarily unavailable.",
-    );
+  const key = String(env.OPENAI_API_KEY || "").trim();
+  if (!key) {
+    throw new CampusRequestError(503, "The UW–Madison chat is temporarily unavailable.");
   }
 
-  const model = modelName(env);
+  const model = configuredModel(env);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 35_000);
+  const timeout = setTimeout(() => controller.abort(), 30_000);
   let response;
   try {
     response = await fetch(OPENAI_RESPONSES_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model,
         instructions: CAMPUS_SYSTEM_PROMPT,
-        input: messages.map((message) => ({
-          role: message.role,
-          content: [{ type: "input_text", text: message.content }],
+        input: messages.map(({ role, content }) => ({
+          role,
+          content: [{ type: "input_text", text: content }],
         })),
         max_output_tokens: OUTPUT_TOKEN_LIMIT,
-        reasoning: { effort: "none" },
-        service_tier: serviceTier(env),
+        service_tier: configuredServiceTier(env),
         store: true,
         metadata: {
           experience: "uwmadison-resource-aware-chat",
-          safety_route: route,
+          safety_route: route || "DIRECT",
         },
       }),
       signal: controller.signal,
