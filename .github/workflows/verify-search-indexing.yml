@@ -84,7 +84,7 @@ jobs:
               grep -Fq '<loc>https://stabilize.info/support.html</loc>' "$workdir/sitemap.xml" || ready=false
               grep -Fq '<link rel="canonical" href="https://stabilize.info/"' "$workdir/home.html" || ready=false
               grep -Fq '<meta name="robots" content="index,follow' "$workdir/home.html" || ready=false
-              grep -Fq '<h1 id="seo-heading">Get unstuck.</h1>' "$workdir/home.html" || ready=false
+              grep -Fq '<h1 id="seo-heading">A personal AI that helps you steady what matters and take the next useful step.</h1>' "$workdir/home.html" || ready=false
               ! grep -Eqi '^x-robots-tag:.*noindex' "$workdir/home.headers" || ready=false
 
               if [[ "$ready" == true ]]; then
