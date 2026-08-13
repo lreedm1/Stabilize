@@ -177,3 +177,7 @@ console.log(
 // coherent-mobile-v25-finalizer-hook-start
 await import("./finalize-coherent-mobile-v25.mjs");
 // coherent-mobile-v25-finalizer-hook-end
+
+// mobile-full-motion-v29-finalizer-hook-start
+await import("./finalize-mobile-full-motion-v29.mjs");
+// mobile-full-motion-v29-finalizer-hook-end
