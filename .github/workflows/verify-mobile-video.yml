@@ -1,4 +1,4 @@
-name: Verify mobile background v30 video
+name: Verify mobile background v31 video
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: verify-mobile-background-v30-video-${{ github.ref }}
+  group: verify-mobile-background-v31-video-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -40,18 +40,20 @@ jobs:
           sudo apt-get install -y ffmpeg
           npm ci --ignore-scripts
 
-      - name: Verify canonical v30 media and controller output
+      - name: Verify canonical v31 media and Worker routes
         shell: bash
         run: |
           set -euo pipefail
           npm run apply:prompt-policy
           git diff --exit-code
 
-          version='20260813-mobile-background-v30-1'
+          version='20260813-mobile-background-v31-1'
           video='public/scenes/mobile-forest-stream-video-v24-native-1080.mp4'
           poster='public/scenes/mobile-forest-stream-v24-native-1080.webp'
           atlas='public/scenes/mobile-forest-stream-full-atlas-v29-1080.webp'
-          route='/media/mobile-forest-stream-video-v24-native-1080.mp4'
+          video_route='/media/mobile-forest-stream-video-v24-native-1080.mp4'
+          client_route='/mobile-background/runtime'
+          style_route='/mobile-background/styles'
 
           test -s "$video"
           test -s "$poster"
@@ -72,32 +74,38 @@ jobs:
           test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video")" = 2160x3840
           test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$poster")" = 2160x3840
           test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$atlas")" = 4320x3840
-          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of default=nw=1:nk=1 "$video")" -gt 1500000
 
           test "$(grep -o 'id="mobile-background-video"' src/page.js | wc -l | tr -d '[:space:]')" -eq 1
           test "$(grep -o 'id="mobile-background-v30"' src/page.js | wc -l | tr -d '[:space:]')" -eq 1
-          grep -Fq "$route?v=${version}" src/page.js
-          grep -Fq "/mobile-background-v30.js?v=${version}" src/page.js
-          grep -Fq "/mobile-background-v30.css?v=${version}" src/page.js
-          grep -Fq "/scenes/mobile-forest-stream-v24-native-1080.webp?v=${version}" src/page.js
-          grep -Fq "/scenes/mobile-forest-stream-full-atlas-v29-1080.webp?v=${version}" src/page.js
-          ! grep -Fq '/mobile-quality.js' src/page.js
-          ! grep -Fq '/mobile-motion-canvas.js' src/page.js
-          ! grep -Fq '/mobile-full-motion-v29.js' src/page.js
-          ! grep -Fq '/mobile-autoplay-v27.js' src/page.js
+          grep -Fq "$video_route?v=${version}" src/page.js
+          grep -Fq "$client_route?v=${version}" src/page.js
+          grep -Fq "$style_route?v=${version}" src/page.js
+          grep -Fq 'autoplay' src/page.js
+          grep -Fq 'preload="auto"' src/page.js
+          grep -Fq "src=\"${video_route}?v=${version}\"" src/page.js
+          ! grep -Fq 'data-src="/media/mobile-forest-stream-video' src/page.js
+          ! grep -Fq '/mobile-background-v30.js' src/page.js
+          ! grep -Fq '/mobile-background-v30.css' src/page.js
 
-          grep -Fq 'motionDelta = interpolatedFrame - referenceFrame' public/mobile-background-v30.js
-          grep -Fq 'sharpPoster + motionDelta * uMotionGain' public/mobile-background-v30.js
+          grep -Fq 'const MOBILE_QUERY = "(max-width: 980px) and (orientation: portrait)"' public/mobile-background-v30.js
+          grep -Fq 'canvas.getContext("2d"' public/mobile-background-v30.js
+          ! grep -Fq 'getContext("webgl"' public/mobile-background-v30.js
           grep -Fq 'requestAnimationFrame(drawFallback)' public/mobile-background-v30.js
           grep -Fq 'requestVideoFrameCallback' public/mobile-background-v30.js
-          grep -Fq 'const result = video.play();' public/mobile-background-v30.js
+          grep -Fq 'result = video.play()' public/mobile-background-v30.js
           grep -Fq 'native-video-2160x3840-24fps' public/mobile-background-v30.js
           grep -Fq 'opacity: 0.001 !important' public/mobile-background-v30.css
-          grep -Fq -- '--mobile-background-v30-fade: 260ms' public/mobile-background-v30.css
+          grep -Fq -- '--mobile-background-v30-fade: 180ms' public/mobile-background-v30.css
+
+          grep -Fq 'MOBILE_BACKGROUND_CLIENT_ROUTE = "/mobile-background/runtime"' src/mobile-background-response.js
+          grep -Fq 'MOBILE_BACKGROUND_STYLE_ROUTE = "/mobile-background/styles"' src/mobile-background-response.js
+          grep -Fq 'text/javascript; charset=utf-8' src/mobile-background-response.js
+          grep -Fq 'text/css; charset=utf-8' src/mobile-background-response.js
+          grep -Fq 'isMobileBackgroundAssetRoute' src/domain-router.js
+          grep -Fq 'serveMobileBackgroundAsset' src/domain-router.js
 
           grep -Fq 'MOBILE_VIDEO_BYTES = 5_766_867' src/mobile-video-response.js
-          grep -Fq "$route" src/mobile-video-response.js
-          grep -Fq 'const assetByteCache = new WeakMap();' src/mobile-video-response.js
+          grep -Fq "$video_route" src/mobile-video-response.js
           grep -Fq 'Accept-Ranges' src/mobile-video-response.js
           grep -Fq 'Content-Range' src/mobile-video-response.js
 
@@ -120,16 +128,18 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
 
-      - name: Wait for and verify the exact v30 production release
+      - name: Wait for and verify the exact v31 production release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          version='20260813-mobile-background-v30-1'
-          route='/media/mobile-forest-stream-video-v24-native-1080.mp4'
+          version='20260813-mobile-background-v31-1'
+          video_route='/media/mobile-forest-stream-video-v24-native-1080.mp4'
           poster_route='/scenes/mobile-forest-stream-v24-native-1080.webp'
           atlas_route='/scenes/mobile-forest-stream-full-atlas-v29-1080.webp'
+          client_route='/mobile-background/runtime'
+          style_route='/mobile-background/styles'
           expected_video='public/scenes/mobile-forest-stream-video-v24-native-1080.mp4'
           expected_poster='public/scenes/mobile-forest-stream-v24-native-1080.webp'
           expected_atlas='public/scenes/mobile-forest-stream-full-atlas-v29-1080.webp'
@@ -169,14 +179,14 @@ jobs:
             ' "$file" | tail -n 1
           }
 
-          publish_status pending 'Waiting for mobile background v30'
+          publish_status pending 'Waiting for mobile background v31'
 
           ready=false
           for attempt in {1..36}; do
             key="${GITHUB_SHA}-${attempt}"
-            page_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/page.headers" -o "$tmpdir/page.html" -w '%{http_code}' "https://stabilize.info/?mobile-v30=${key}" || true)"
-            client_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -o "$tmpdir/client.js" -w '%{http_code}' "https://stabilize.info/mobile-background-v30.js?v=${version}&release=${key}" || true)"
-            style_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -o "$tmpdir/styles.css" -w '%{http_code}' "https://stabilize.info/mobile-background-v30.css?v=${version}&release=${key}" || true)"
+            page_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/page.headers" -o "$tmpdir/page.html" -w '%{http_code}' "https://stabilize.info/?mobile-v31=${key}" || true)"
+            client_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/client.headers" -o "$tmpdir/client.js" -w '%{http_code}' "https://stabilize.info${client_route}?v=${version}&release=${key}" || true)"
+            style_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/style.headers" -o "$tmpdir/styles.css" -w '%{http_code}' "https://stabilize.info${style_route}?v=${version}&release=${key}" || true)"
             poster_status="$(curl --max-time 40 --silent --show-error -H 'Cache-Control: no-cache' -o "$tmpdir/poster.webp" -w '%{http_code}' "https://stabilize.info${poster_route}?v=${version}&release=${key}" || true)"
             atlas_status="$(curl --max-time 40 --silent --show-error -H 'Cache-Control: no-cache' -o "$tmpdir/atlas.webp" -w '%{http_code}' "https://stabilize.info${atlas_route}?v=${version}&release=${key}" || true)"
 
@@ -184,25 +194,28 @@ jobs:
             poster_sha="$(sha256sum "$tmpdir/poster.webp" | awk '{print $1}')"
             atlas_bytes="$(wc -c < "$tmpdir/atlas.webp" | tr -d '[:space:]')"
             atlas_sha="$(sha256sum "$tmpdir/atlas.webp" | awk '{print $1}')"
+            client_type="$(header_value "$tmpdir/client.headers" content-type | tr '[:upper:]' '[:lower:]')"
+            style_type="$(header_value "$tmpdir/style.headers" content-type | tr '[:upper:]' '[:lower:]')"
 
-            echo "v30 attempt ${attempt}: page=${page_status:-000} client=${client_status:-000} style=${style_status:-000} poster=${poster_status:-000} atlas=${atlas_status:-000}"
+            echo "v31 attempt ${attempt}: page=${page_status:-000} client=${client_status:-000} style=${style_status:-000} poster=${poster_status:-000} atlas=${atlas_status:-000}"
 
             if [[ "$page_status" == 200 \
               && "$client_status" == 200 \
               && "$style_status" == 200 \
               && "$poster_status" == 200 \
               && "$atlas_status" == 200 \
+              && "$client_type" == text/javascript* \
+              && "$style_type" == text/css* \
               && "$poster_bytes" == "$expected_poster_bytes" \
               && "$poster_sha" == "$expected_poster_sha" \
               && "$atlas_bytes" == "$expected_atlas_bytes" \
               && "$atlas_sha" == "$expected_atlas_sha" ]] \
-              && grep -Fq "$route?v=${version}" "$tmpdir/page.html" \
-              && grep -Fq "/mobile-background-v30.js?v=${version}" "$tmpdir/page.html" \
-              && grep -Fq "/mobile-background-v30.css?v=${version}" "$tmpdir/page.html" \
-              && ! grep -Fq '/mobile-quality.js' "$tmpdir/page.html" \
-              && ! grep -Fq '/mobile-motion-canvas.js' "$tmpdir/page.html" \
-              && grep -Fq 'motionDelta = interpolatedFrame - referenceFrame' "$tmpdir/client.js" \
-              && grep -Fq 'requestVideoFrameCallback' "$tmpdir/client.js" \
+              && grep -Fq "$video_route?v=${version}" "$tmpdir/page.html" \
+              && grep -Fq "$client_route?v=${version}" "$tmpdir/page.html" \
+              && grep -Fq "$style_route?v=${version}" "$tmpdir/page.html" \
+              && grep -Fq 'autoplay' "$tmpdir/page.html" \
+              && grep -Fq 'requestAnimationFrame(drawFallback)' "$tmpdir/client.js" \
+              && grep -Fq 'result = video.play()' "$tmpdir/client.js" \
               && grep -Fq 'data-mobile-background-v30="video"' "$tmpdir/styles.css" \
               && grep -Fqi "media-src 'self'" "$tmpdir/page.headers"; then
               ready=true
@@ -212,14 +225,14 @@ jobs:
           done
 
           if [[ "$ready" != true ]]; then
-            publish_status failure 'Mobile background v30 is not live'
-            echo '::error::Production did not expose the exact v30 page and fallback assets.'
+            publish_status failure 'Mobile background v31 is not live'
+            echo '::error::Production did not expose the exact v31 page and Worker routes.'
             exit 1
           fi
 
           key="${GITHUB_SHA}-exact"
-          video_status="$(curl --max-time 120 --silent --show-error -H 'Cache-Control: no-cache' -D "$tmpdir/video.headers" -o "$tmpdir/video.mp4" -w '%{http_code}' "https://stabilize.info${route}?v=${version}&release=${key}" || true)"
-          range_status="$(curl --max-time 60 --silent --show-error -H 'Cache-Control: no-cache' -H 'Range: bytes=0-1023' -D "$tmpdir/range.headers" -o "$tmpdir/range.bin" -w '%{http_code}' "https://stabilize.info${route}?v=${version}&range=${key}" || true)"
+          video_status="$(curl --max-time 120 --silent --show-error -H 'Cache-Control: no-cache' -D "$tmpdir/video.headers" -o "$tmpdir/video.mp4" -w '%{http_code}' "https://stabilize.info${video_route}?v=${version}&release=${key}" || true)"
+          range_status="$(curl --max-time 60 --silent --show-error -H 'Cache-Control: no-cache' -H 'Range: bytes=0-1023' -D "$tmpdir/range.headers" -o "$tmpdir/range.bin" -w '%{http_code}' "https://stabilize.info${video_route}?v=${version}&range=${key}" || true)"
 
           video_bytes="$(wc -c < "$tmpdir/video.mp4" | tr -d '[:space:]')"
           video_sha="$(sha256sum "$tmpdir/video.mp4" | awk '{print $1}')"
@@ -231,7 +244,6 @@ jobs:
           range_content="$(header_value "$tmpdir/range.headers" content-range | tr '[:upper:]' '[:lower:]')"
           range_etag="$(header_value "$tmpdir/range.headers" etag)"
           dimensions="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$tmpdir/video.mp4" 2>/dev/null || true)"
-          bitrate="$(ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of default=nw=1:nk=1 "$tmpdir/video.mp4" 2>/dev/null || echo 0)"
 
           if [[ "$video_status" != 200 \
             || "$range_status" != 206 \
@@ -244,21 +256,20 @@ jobs:
             || "$accept_ranges" != bytes \
             || "$range_bytes" != 1024 \
             || "$range_content" != "bytes 0-1023/${expected_video_bytes}" \
-            || "$dimensions" != 2160x3840 \
-            || "$bitrate" -le 1500000 ]]; then
-            publish_status failure 'Exact v30 native video delivery failed'
-            echo "::error::video=${video_status}, range=${range_status}, bytes=${video_bytes}, sha=${video_sha}, dimensions=${dimensions}, bitrate=${bitrate}"
+            || "$dimensions" != 2160x3840 ]]; then
+            publish_status failure 'Exact v31 native video delivery failed'
+            echo "::error::video=${video_status}, range=${range_status}, bytes=${video_bytes}, sha=${video_sha}, dimensions=${dimensions}"
             exit 1
           fi
 
-          publish_status success 'Exact v30 2160x3840 video and fallback are live'
-          echo 'Production serves the exact v30 hybrid mobile release.'
+          publish_status success 'Mobile v31 routes and exact 2160x3840 video are live'
+          echo 'Production serves the exact v31 mobile release.'
 
   verify-mobile-webkit:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: verify-production
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Install mobile WebKit
@@ -268,29 +279,40 @@ jobs:
           npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
           npx playwright install --with-deps webkit
 
-      - name: Verify the fallback hands off to the native video
+      - name: Verify immediate motion and native-video advancement
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/mobile-background-v30
+          mkdir -p /tmp/mobile-background-v31
           node --input-type=module <<'NODE'
           import { webkit } from "playwright";
+          import { createHash } from "node:crypto";
           import { writeFile } from "node:fs/promises";
 
           const browser = await webkit.launch({ headless: true });
-          const evidence = { requiredTap: false, errors: [] };
+          const evidence = {
+            requiredTap: false,
+            initialMode: "",
+            errors: [],
+          };
+
+          const options = {
+            viewport: { width: 390, height: 844 },
+            screen: { width: 390, height: 844 },
+            deviceScaleFactor: 3,
+            isMobile: true,
+            hasTouch: true,
+            userAgent:
+              "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) " +
+              "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 " +
+              "Mobile/15E148 Safari/604.1",
+          };
+
+          const hash = (value) =>
+            createHash("sha256").update(value).digest("hex");
+
           try {
-            const context = await browser.newContext({
-              viewport: { width: 390, height: 844 },
-              screen: { width: 390, height: 844 },
-              deviceScaleFactor: 3,
-              isMobile: true,
-              hasTouch: true,
-              userAgent:
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) " +
-                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 " +
-                "Mobile/15E148 Safari/604.1",
-            });
+            const context = await browser.newContext(options);
             const page = await context.newPage();
             page.on("pageerror", (error) => evidence.errors.push(error.message));
             page.on("requestfailed", (request) =>
@@ -300,32 +322,42 @@ jobs:
             );
 
             await page.goto(
-              `https://stabilize.info/?mobile-background-v30-webkit=${Date.now()}`,
+              `https://stabilize.info/?mobile-background-v31-webkit=${Date.now()}`,
               { waitUntil: "domcontentloaded", timeout: 60_000 },
             );
             await page.waitForSelector("#mobile-background-video", {
               state: "attached",
               timeout: 60_000,
             });
+            await page.waitForSelector("#mobile-background-v30", {
+              state: "attached",
+              timeout: 60_000,
+            });
 
-            const isNativeVideoVisible = () =>
-              page.evaluate(() => {
-                const video = document.querySelector("#mobile-background-video");
-                return (
-                  video instanceof HTMLVideoElement &&
-                  video.videoWidth === 2160 &&
-                  video.videoHeight === 3840 &&
-                  video.readyState >= 2 &&
-                  !video.paused &&
-                  document.documentElement.dataset.mobileBackgroundV30 === "video"
-                );
-              });
+            await page.waitForFunction(
+              () => {
+                const state = document.documentElement.dataset.mobileBackgroundV30;
+                return state === "video" || state === "fallback";
+              },
+              undefined,
+              { timeout: 30_000 },
+            );
 
-            const deadline = Date.now() + 20_000;
-            while (Date.now() < deadline && !(await isNativeVideoVisible())) {
+            evidence.initialMode = await page.evaluate(
+              () => document.documentElement.dataset.mobileBackgroundV30 || "",
+            );
+
+            if (evidence.initialMode === "fallback") {
+              const first = await page.locator("#mobile-background-v30").screenshot();
               await page.waitForTimeout(500);
-            }
-            if (!(await isNativeVideoVisible())) {
+              const second = await page.locator("#mobile-background-v30").screenshot();
+              evidence.fallbackBeforeTap = {
+                first: hash(first),
+                second: hash(second),
+              };
+              if (evidence.fallbackBeforeTap.first === evidence.fallbackBeforeTap.second) {
+                throw new Error("The no-tap fallback canvas did not move.");
+              }
               evidence.requiredTap = true;
               await page.tap("body", { position: { x: 20, y: 20 } });
             }
@@ -350,8 +382,8 @@ jobs:
               page.evaluate(() => {
                 const video = document.querySelector("#mobile-background-video");
                 const canvas = document.querySelector("#mobile-background-v30");
-                if (!(video instanceof HTMLVideoElement)) throw new Error("v30 video missing");
-                if (!(canvas instanceof HTMLCanvasElement)) throw new Error("v30 canvas missing");
+                if (!(video instanceof HTMLVideoElement)) throw new Error("v31 video missing");
+                if (!(canvas instanceof HTMLCanvasElement)) throw new Error("v31 canvas missing");
                 const videoStyle = getComputedStyle(video);
                 const canvasStyle = getComputedStyle(canvas);
                 return {
@@ -380,7 +412,7 @@ jobs:
               throw new Error("WebKit did not decode the 2160x3840 source.");
             }
             if (first.videoOpacity !== "1" || second.videoOpacity !== "1") {
-              throw new Error("The native video did not complete its crossfade.");
+              throw new Error("The native video is not visibly opaque.");
             }
             if (first.videoDisplay === "none" || first.videoVisibility === "hidden") {
               throw new Error("The native video is hidden.");
@@ -401,19 +433,82 @@ jobs:
               throw new Error("WebKit decoded the wrong mobile source.");
             }
             if (!second.inputPresent) {
-              throw new Error("The application UI disappeared during the handoff.");
+              throw new Error("The application UI disappeared during playback.");
             }
             if (evidence.errors.length) {
               throw new Error(`Page errors: ${JSON.stringify(evidence.errors)}`);
             }
 
             await page.screenshot({
-              path: "/tmp/mobile-background-v30/production.png",
+              path: "/tmp/mobile-background-v31/native-video.png",
               fullPage: false,
             });
+            await context.close();
+
+            const blockedContext = await browser.newContext(options);
+            await blockedContext.route(
+              "**/media/mobile-forest-stream-video-v24-native-1080.mp4**",
+              (route) => route.abort("blockedbyclient"),
+            );
+            const blockedPage = await blockedContext.newPage();
+            const blockedErrors = [];
+            blockedPage.on("pageerror", (error) => blockedErrors.push(error.message));
+
+            await blockedPage.goto(
+              `https://stabilize.info/?mobile-background-v31-blocked=${Date.now()}`,
+              { waitUntil: "domcontentloaded", timeout: 60_000 },
+            );
+            await blockedPage.waitForFunction(
+              () =>
+                document.documentElement.dataset.mobileBackgroundV30 === "fallback",
+              undefined,
+              { timeout: 30_000 },
+            );
+
+            const blockedCanvas = blockedPage.locator("#mobile-background-v30");
+            const blockedFirst = await blockedCanvas.screenshot();
+            await blockedPage.waitForTimeout(500);
+            const blockedSecond = await blockedCanvas.screenshot();
+            evidence.blockedFallback = {
+              first: hash(blockedFirst),
+              second: hash(blockedSecond),
+              errors: blockedErrors,
+            };
+            if (evidence.blockedFallback.first === evidence.blockedFallback.second) {
+              throw new Error("The fallback stayed static when video delivery was blocked.");
+            }
+
+            const blockedState = await blockedPage.evaluate(() => {
+              const canvas = document.querySelector("#mobile-background-v30");
+              const video = document.querySelector("#mobile-background-video");
+              return {
+                state: document.documentElement.dataset.mobileBackgroundV30 || "",
+                quality: document.documentElement.dataset.mobileBackgroundV30Quality || "",
+                canvasOpacity:
+                  canvas instanceof HTMLCanvasElement ? getComputedStyle(canvas).opacity : "missing",
+                videoPresent: video instanceof HTMLVideoElement,
+                inputPresent: Boolean(document.querySelector("#message-input")),
+              };
+            });
+            evidence.blockedState = blockedState;
+            if (blockedState.state !== "fallback") {
+              throw new Error("Blocked video did not preserve the fallback state.");
+            }
+            if (blockedState.canvasOpacity !== "1") {
+              throw new Error("Blocked video did not leave the fallback visible.");
+            }
+            if (!blockedState.videoPresent || !blockedState.inputPresent) {
+              throw new Error("Blocked playback removed required page elements.");
+            }
+
+            await blockedPage.screenshot({
+              path: "/tmp/mobile-background-v31/blocked-fallback.png",
+              fullPage: false,
+            });
+            await blockedContext.close();
           } finally {
             await writeFile(
-              "/tmp/mobile-background-v30/evidence.json",
+              "/tmp/mobile-background-v31/evidence.json",
               JSON.stringify(evidence, null, 2),
             );
             await browser.close();
@@ -424,7 +519,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-background-v30-webkit-evidence
-          path: /tmp/mobile-background-v30
+          name: mobile-background-v31-webkit-evidence
+          path: /tmp/mobile-background-v31
           if-no-files-found: warn
           retention-days: 7

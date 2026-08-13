@@ -1,11 +1,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const VERSION = "20260813-mobile-background-v30-1";
+const VERSION = "20260813-mobile-background-v31-1";
 const POSTER_ASSET = "/scenes/mobile-forest-stream-v24-native-1080.webp";
 const ATLAS_ASSET = "/scenes/mobile-forest-stream-full-atlas-v29-1080.webp";
 const VIDEO_ASSET = "/media/mobile-forest-stream-video-v24-native-1080.mp4";
-const STYLE_ASSET = "/mobile-background-v30.css";
-const CLIENT_ASSET = "/mobile-background-v30.js";
+const STYLE_ASSET = "/mobile-background/styles";
+const CLIENT_ASSET = "/mobile-background/runtime";
 const TEST_PATH = "test/mobile-background-v30.test.mjs";
 
 const HEAD_START = "<!-- mobile-background-v30-head-start -->";
@@ -72,7 +72,7 @@ const headBlock = `    ${HEAD_START}
       rel="preload"
       as="image"
       href="${ATLAS_ASSET}?v=${VERSION}"
-      media="(hover: none) and (pointer: coarse)"
+      media="(max-width: 980px) and (orientation: portrait)"
       type="image/webp"
       fetchpriority="high"
     />
@@ -83,12 +83,13 @@ const mediaBlock = `    ${MEDIA_START}
     <video
       id="mobile-background-video"
       class="mobile-background-video"
+      autoplay
       muted
       loop
       playsinline
-      preload="none"
+      preload="auto"
       poster="${POSTER_ASSET}?v=${VERSION}"
-      data-src="${VIDEO_ASSET}?v=${VERSION}"
+      src="${VIDEO_ASSET}?v=${VERSION}"
       aria-hidden="true"
       tabindex="-1"
       disablepictureinpicture
@@ -237,32 +238,61 @@ await update("package.json", (source) => {
 await update("public/_headers", (source) => {
   const start = "# mobile-background-v30-start";
   const end = "# mobile-background-v30-end";
-  const block = `${start}
-/mobile-background-v30.js
-  Content-Type: text/javascript; charset=utf-8
-  Cache-Control: public, max-age=31536000, immutable
-  Cross-Origin-Resource-Policy: same-origin
-  X-Content-Type-Options: nosniff
-
-/mobile-background-v30.css
-  Content-Type: text/css; charset=utf-8
-  Cache-Control: public, max-age=31536000, immutable
-  Cross-Origin-Resource-Policy: same-origin
-  X-Content-Type-Options: nosniff
-${end}`;
-
-  if (source.includes(start) || source.includes(end)) {
-    if (!source.includes(start) || !source.includes(end)) {
-      throw new Error("Incomplete v30 header block.");
-    }
-    const pattern = new RegExp(
-      `${escapeRegExp(start)}[\\s\\S]*?${escapeRegExp(end)}`,
-      "g",
-    );
-    return source.replace(pattern, block);
-  }
-  return `${source.trimEnd()}\n\n${block}\n`;
+  return removeMarked(source, start, end).trimEnd() + "\n";
 });
+
+async function writeMobileBackgroundRouteModule() {
+  const client = await readFile("public/mobile-background-v30.js", "utf8");
+  const styles = await readFile("public/mobile-background-v30.css", "utf8");
+  const moduleSource = [
+    'export const MOBILE_BACKGROUND_VERSION = "' + VERSION + '";',
+    'export const MOBILE_BACKGROUND_CLIENT_ROUTE = "' + CLIENT_ASSET + '";',
+    'export const MOBILE_BACKGROUND_STYLE_ROUTE = "' + STYLE_ASSET + '";',
+    "",
+    "const CLIENT_SOURCE = " + JSON.stringify(client) + ";",
+    "const STYLE_SOURCE = " + JSON.stringify(styles) + ";",
+    "",
+    "export function isMobileBackgroundAssetRoute(pathname) {",
+    "  return (",
+    "    pathname === MOBILE_BACKGROUND_CLIENT_ROUTE ||",
+    "    pathname === MOBILE_BACKGROUND_STYLE_ROUTE",
+    "  );",
+    "}",
+    "",
+    "export function serveMobileBackgroundAsset(request) {",
+    "  const url = new URL(request.url);",
+    "  const isClient = url.pathname === MOBILE_BACKGROUND_CLIENT_ROUTE;",
+    "  const isStyle = url.pathname === MOBILE_BACKGROUND_STYLE_ROUTE;",
+    "  if (!isClient && !isStyle) {",
+    "    return new Response(\"Not found.\", { status: 404 });",
+    "  }",
+    "  if (request.method !== \"GET\" && request.method !== \"HEAD\") {",
+    "    return new Response(\"Method not allowed.\", {",
+    "      status: 405,",
+    "      headers: { Allow: \"GET, HEAD\" },",
+    "    });",
+    "  }",
+    "  const body = isClient ? CLIENT_SOURCE : STYLE_SOURCE;",
+    "  const headers = new Headers({",
+    "    \"Cache-Control\": \"no-store, max-age=0\",",
+    "    \"Content-Type\": isClient",
+    "      ? \"text/javascript; charset=utf-8\"",
+    "      : \"text/css; charset=utf-8\",",
+    "    \"Cross-Origin-Resource-Policy\": \"same-origin\",",
+    "    \"Referrer-Policy\": \"no-referrer\",",
+    "    \"X-Content-Type-Options\": \"nosniff\",",
+    "  });",
+    "  return new Response(request.method === \"HEAD\" ? null : body, {",
+    "    status: 200,",
+    "    headers,",
+    "  });",
+    "}",
+    "",
+  ].join("\n");
+  await writeFile("src/mobile-background-response.js", moduleSource, "utf8");
+}
+
+await writeMobileBackgroundRouteModule();
 
 console.log(
   `Finalized the single-controller mobile background ${VERSION}: sharp poster, display-refresh interpolation, and native 4K handoff.`,

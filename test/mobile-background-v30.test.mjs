@@ -10,14 +10,21 @@ import {
   parseSingleByteRange,
   serveMobileVideo,
 } from "../src/mobile-video-response.js";
+import {
+  MOBILE_BACKGROUND_CLIENT_ROUTE,
+  MOBILE_BACKGROUND_STYLE_ROUTE,
+  MOBILE_BACKGROUND_VERSION,
+  isMobileBackgroundAssetRoute,
+  serveMobileBackgroundAsset,
+} from "../src/mobile-background-response.js";
 
-const VERSION = "20260813-mobile-background-v30-1";
+const VERSION = "20260813-mobile-background-v31-1";
 const POSTER = "mobile-forest-stream-v24-native-1080.webp";
 const ATLAS = "mobile-forest-stream-full-atlas-v29-1080.webp";
 const VIDEO = "mobile-forest-stream-video-v24-native-1080.mp4";
 
-const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
-const readBytes = (path) => readFile(new URL(`../${path}`, import.meta.url));
+const read = (path) => readFile(new URL("../" + path, import.meta.url), "utf8");
+const readBytes = (path) => readFile(new URL("../" + path, import.meta.url));
 
 function webpInfo(buffer) {
   assert.equal(buffer.subarray(0, 4).toString("ascii"), "RIFF");
@@ -30,7 +37,7 @@ function webpInfo(buffer) {
     const size = buffer.readUInt32LE(offset + 4);
     const data = offset + 8;
     const next = data + size + (size % 2);
-    assert.ok(next <= buffer.length, `WebP chunk ${type} is complete`);
+    assert.ok(next <= buffer.length, "WebP chunk " + type + " is complete");
     if (type === "VP8X" && data + 10 <= buffer.length) {
       width = 1 + buffer.readUIntLE(data + 4, 3);
       height = 1 + buffer.readUIntLE(data + 7, 3);
@@ -54,14 +61,13 @@ function webpInfo(buffer) {
   return { width, height };
 }
 
-test("mobile v30 is one controller with a sharp interpolated fallback and native video handoff", async () => {
+test("mobile v31 is Worker-served, starts video from HTML, and keeps a no-tap canvas fallback", async () => {
   const [
     page,
     client,
     styles,
-    packageSource,
     finalizer,
-    regressionFinalizer,
+    domainRouter,
     poster,
     atlas,
     atlasMetadataSource,
@@ -70,24 +76,48 @@ test("mobile v30 is one controller with a sharp interpolated fallback and native
     read("src/page.js"),
     read("public/mobile-background-v30.js"),
     read("public/mobile-background-v30.css"),
-    read("package.json"),
     read("scripts/finalize-mobile-background-v30.mjs"),
-    read("scripts/finalize-native-selected-mobile-v24-regressions.mjs"),
-    readBytes(`public/scenes/${POSTER}`),
-    readBytes(`public/scenes/${ATLAS}`),
+    read("src/domain-router.js"),
+    readBytes("public/scenes/" + POSTER),
+    readBytes("public/scenes/" + ATLAS),
     read("scripts/mobile-full-motion-v29.json"),
     read("scripts/native-selected-mobile-video-v24.json"),
   ]);
+
+  assert.equal(MOBILE_BACKGROUND_VERSION, VERSION);
+  assert.equal(MOBILE_BACKGROUND_CLIENT_ROUTE, "/mobile-background/runtime");
+  assert.equal(MOBILE_BACKGROUND_STYLE_ROUTE, "/mobile-background/styles");
+  assert.equal(isMobileBackgroundAssetRoute(MOBILE_BACKGROUND_CLIENT_ROUTE), true);
+  assert.equal(isMobileBackgroundAssetRoute(MOBILE_BACKGROUND_STYLE_ROUTE), true);
+  assert.equal(isMobileBackgroundAssetRoute("/mobile-background-v30.js"), false);
+
+  const clientResponse = serveMobileBackgroundAsset(
+    new Request("https://stabilize.info" + MOBILE_BACKGROUND_CLIENT_ROUTE + "?v=" + VERSION),
+  );
+  assert.equal(clientResponse.status, 200);
+  assert.equal(clientResponse.headers.get("content-type"), "text/javascript; charset=utf-8");
+  assert.equal(clientResponse.headers.get("cache-control"), "no-store, max-age=0");
+  assert.equal(await clientResponse.text(), client);
+
+  const styleResponse = serveMobileBackgroundAsset(
+    new Request("https://stabilize.info" + MOBILE_BACKGROUND_STYLE_ROUTE + "?v=" + VERSION),
+  );
+  assert.equal(styleResponse.status, 200);
+  assert.equal(styleResponse.headers.get("content-type"), "text/css; charset=utf-8");
+  assert.equal(await styleResponse.text(), styles);
+
+  const headResponse = serveMobileBackgroundAsset(
+    new Request("https://stabilize.info" + MOBILE_BACKGROUND_CLIENT_ROUTE, { method: "HEAD" }),
+  );
+  assert.equal(headResponse.status, 200);
+  assert.equal(await headResponse.text(), "");
 
   const atlasMetadata = JSON.parse(atlasMetadataSource);
   const videoMetadata = JSON.parse(videoMetadataSource);
   assert.deepEqual(webpInfo(poster), { width: 2160, height: 3840 });
   assert.deepEqual(webpInfo(atlas), { width: 4320, height: 3840 });
   assert.equal(atlas.byteLength, atlasMetadata.bytes);
-  assert.equal(
-    createHash("sha256").update(atlas).digest("hex"),
-    atlasMetadata.sha256,
-  );
+  assert.equal(createHash("sha256").update(atlas).digest("hex"), atlasMetadata.sha256);
   assert.equal(videoMetadata.width, 2160);
   assert.equal(videoMetadata.height, 3840);
   assert.equal(videoMetadata.fps, 24);
@@ -95,80 +125,44 @@ test("mobile v30 is one controller with a sharp interpolated fallback and native
 
   assert.equal(page.split('id="mobile-background-video"').length - 1, 1);
   assert.equal(page.split('id="mobile-background-v30"').length - 1, 1);
-  assert.match(page, new RegExp(`/mobile-background-v30\\.css\\?v=${VERSION}`));
-  assert.match(page, new RegExp(`/mobile-background-v30\\.js\\?v=${VERSION}`));
-  assert.match(page, new RegExp(`/scenes/${POSTER}\\?v=${VERSION}`));
-  assert.match(page, new RegExp(`/scenes/${ATLAS}\\?v=${VERSION}`));
-  assert.match(page, new RegExp(`/media/${VIDEO}\\?v=${VERSION}`));
+  assert.match(page, new RegExp(MOBILE_BACKGROUND_STYLE_ROUTE + "\\?v=" + VERSION));
+  assert.match(page, new RegExp(MOBILE_BACKGROUND_CLIENT_ROUTE + "\\?v=" + VERSION));
+  assert.match(page, new RegExp("/scenes/" + POSTER + "\\?v=" + VERSION));
+  assert.match(page, new RegExp("/scenes/" + ATLAS + "\\?v=" + VERSION));
+  assert.match(page, new RegExp("/media/" + VIDEO + "\\?v=" + VERSION));
+  assert.match(page, /<video[\s\S]*autoplay[\s\S]*muted[\s\S]*playsinline[\s\S]*preload="auto"/);
+  assert.match(page, new RegExp('src="/media/' + VIDEO + "\\?v=" + VERSION + '"'));
+  assert.doesNotMatch(page, /data-src="\/media\/mobile-forest-stream-video/);
   assert.ok(
-    page.indexOf(`/mobile-background-v30.js?v=${VERSION}`) <
+    page.indexOf(MOBILE_BACKGROUND_CLIENT_ROUTE + "?v=" + VERSION) <
       page.indexOf("/app.js?v="),
     "the mobile controller starts before the application modules",
   );
-  for (const obsolete of [
-    "/mobile-autoplay-v27.js",
-    "/mobile-motion-canvas.js",
-    "/mobile-quality.js",
-    "/mobile-full-motion-v29.js",
-    'id="mobile-motion-canvas"',
-    'id="mobile-full-motion-v29"',
-  ]) {
-    assert.doesNotMatch(page, new RegExp(obsolete.replaceAll(".", "\\.")));
-  }
 
-  assert.match(client, /const SOURCE_FPS = 8/);
-  assert.match(client, /const REFERENCE_FRAME = 4/);
+  assert.match(client, /const MOBILE_QUERY = "\(max-width: 980px\) and \(orientation: portrait\)"/);
+  assert.match(client, /canvas\.getContext\("2d"/);
+  assert.doesNotMatch(client, /getContext\("webgl"/);
   assert.match(client, /requestAnimationFrame\(drawFallback\)/);
-  assert.match(client, /motionDelta = interpolatedFrame - referenceFrame/);
-  assert.match(client, /sharpPoster \+ motionDelta \* uMotionGain/);
-  assert.match(client, /createWebGLRenderer\(\) \|\| createCanvas2DRenderer\(\)/);
-  assert.match(client, /const result = video\.play\(\)/);
+  assert.match(client, /const blend = linearBlend \* linearBlend \* \(3 - 2 \* linearBlend\)/);
+  assert.match(client, /result = video\.play\(\)/);
   assert.match(client, /requestVideoFrameCallback/);
   assert.match(client, /setState\("video", "decoded-playing-frame"\)/);
   assert.match(client, /bindGestureRecovery\(\)/);
-  assert.doesNotMatch(client, /retireGestureGatedMedia/);
-  assert.doesNotMatch(
-    client,
-    /video\.style\.setProperty\("display", "none"/,
-  );
 
-  assert.match(
-    styles,
-    /#mobile-background-video\.mobile-background-video[\s\S]*opacity: 0\.001 !important;/,
-  );
-  assert.match(
-    styles,
-    /data-mobile-background-v30="fallback"[\s\S]*#mobile-background-v30/,
-  );
-  assert.match(
-    styles,
-    /data-mobile-background-v30="video"[\s\S]*#mobile-background-video/,
-  );
-  assert.match(styles, /--mobile-background-v30-fade: 260ms/);
-  assert.match(styles, /@media \(hover: none\) and \(pointer: coarse\)/);
-  assert.doesNotMatch(styles, /orientation: portrait/);
+  assert.match(styles, /@media \(max-width: 980px\) and \(orientation: portrait\)/);
+  assert.doesNotMatch(styles, /@media \(hover: none\) and \(pointer: coarse\)/);
+  assert.match(styles, /data-mobile-background-v30="video"[\s\S]*#mobile-background-video/);
+  assert.match(styles, /opacity: 0\.001 !important/);
 
-  const packageJson = JSON.parse(packageSource);
-  assert.match(packageJson.scripts["test:node"], /mobile-background-v30\.test\.mjs/);
-  assert.doesNotMatch(packageJson.scripts["test:node"], /mobile-quality\.test\.mjs/);
-  assert.doesNotMatch(packageJson.scripts["test:node"], /mobile-autoplay-v27\.test\.mjs/);
-  assert.doesNotMatch(packageJson.scripts["test:node"], /mobile-full-motion-v29\.test\.mjs/);
-  assert.doesNotMatch(packageJson.scripts["test:node"], /mobile-background-loading\.test\.mjs/);
-
-  assert.match(finalizer, /mobile-background-v30-head-start/);
-  assert.match(finalizer, /mobile-background-v30-media-start/);
-  assert.match(
-    regressionFinalizer,
-    /await import\("\.\/finalize-mobile-background-v30\.mjs"\)/,
-  );
-  assert.doesNotMatch(
-    regressionFinalizer,
-    /await import\("\.\/finalize-mobile-full-motion-v29\.mjs"\)/,
-  );
+  assert.match(domainRouter, /isMobileBackgroundAssetRoute/);
+  assert.match(domainRouter, /serveMobileBackgroundAsset/);
+  assert.match(finalizer, /writeMobileBackgroundRouteModule/);
+  assert.match(finalizer, /mobile-background\/runtime/);
+  assert.match(finalizer, /mobile-background\/styles/);
 });
 
 test("the coherent video route still supplies exact Safari byte ranges", async () => {
-  const video = await readBytes(`public/scenes/${VIDEO}`);
+  const video = await readBytes("public/scenes/" + VIDEO);
   assert.equal(video.byteLength, MOBILE_VIDEO_BYTES);
   assert.equal(video.subarray(4, 8).toString("ascii"), "ftyp");
   for (const marker of ["moov", "mdat", "avc1"]) {
@@ -188,7 +182,7 @@ test("the coherent video route still supplies exact Safari byte ranges", async (
       },
     },
   };
-  const url = `https://stabilize.info${MOBILE_VIDEO_ROUTE}?v=${VERSION}`;
+  const url = "https://stabilize.info" + MOBILE_VIDEO_ROUTE + "?v=" + VERSION;
 
   const full = await serveMobileVideo(new Request(url), env);
   assert.equal(full.status, 200);
@@ -204,7 +198,7 @@ test("the coherent video route still supplies exact Safari byte ranges", async (
   assert.equal(partial.status, 206);
   assert.equal(
     partial.headers.get("content-range"),
-    `bytes 0-1023/${MOBILE_VIDEO_BYTES}`,
+    "bytes 0-1023/" + MOBILE_VIDEO_BYTES,
   );
   assert.equal((await partial.arrayBuffer()).byteLength, 1024);
 

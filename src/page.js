@@ -148,9 +148,9 @@ export function renderPage(options = {}) {
     <link
       rel="preload"
       as="image"
-      href="/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260813-mobile-background-v30-1"
+      href="/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260813-mobile-background-v31-1"
       imagesrcset="
-        /scenes/mobile-forest-stream-v24-native-1080.webp?v=20260813-mobile-background-v30-1 2160w
+        /scenes/mobile-forest-stream-v24-native-1080.webp?v=20260813-mobile-background-v31-1 2160w
       "
       imagesizes="100vw"
       media="(max-width: 980px) and (orientation: portrait)"
@@ -160,12 +160,12 @@ export function renderPage(options = {}) {
     <link
       rel="preload"
       as="image"
-      href="/scenes/mobile-forest-stream-full-atlas-v29-1080.webp?v=20260813-mobile-background-v30-1"
-      media="(hover: none) and (pointer: coarse)"
+      href="/scenes/mobile-forest-stream-full-atlas-v29-1080.webp?v=20260813-mobile-background-v31-1"
+      media="(max-width: 980px) and (orientation: portrait)"
       type="image/webp"
       fetchpriority="high"
     />
-    <link rel="stylesheet" href="/mobile-background-v30.css?v=20260813-mobile-background-v30-1" />
+    <link rel="stylesheet" href="/mobile-background/styles?v=20260813-mobile-background-v31-1" />
     <!-- mobile-background-v30-head-end -->
   </head>
   <body>
@@ -210,12 +210,13 @@ export function renderPage(options = {}) {
     <video
       id="mobile-background-video"
       class="mobile-background-video"
+      autoplay
       muted
       loop
       playsinline
-      preload="none"
-      poster="/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260813-mobile-background-v30-1"
-      data-src="/media/mobile-forest-stream-video-v24-native-1080.mp4?v=20260813-mobile-background-v30-1"
+      preload="auto"
+      poster="/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260813-mobile-background-v31-1"
+      src="/media/mobile-forest-stream-video-v24-native-1080.mp4?v=20260813-mobile-background-v31-1"
       aria-hidden="true"
       tabindex="-1"
       disablepictureinpicture
@@ -227,7 +228,7 @@ export function renderPage(options = {}) {
       class="mobile-background-v30"
       aria-hidden="true"
     ></canvas>
-    <script src="/mobile-background-v30.js?v=20260813-mobile-background-v30-1"></script>
+    <script src="/mobile-background/runtime?v=20260813-mobile-background-v31-1"></script>
     <!-- mobile-background-v30-media-end -->
     <div class="page-shell">
       <header class="site-header">
