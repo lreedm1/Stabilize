@@ -1,0 +1,91 @@
+name: Materialize mobile no-tap v28
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - public/mobile-no-tap-v28.js
+      - public/mobile-no-tap-v28.css
+      - scripts/finalize-mobile-no-tap-v28.mjs
+      - test/mobile-no-tap-v28.test.mjs
+      - .github/workflows/materialize-mobile-no-tap-v28.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize-test-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out the pull request branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies without generation
+        run: npm ci --ignore-scripts
+
+      - name: Materialize the canonical v28 release
+        run: node scripts/finalize-mobile-no-tap-v28.mjs
+
+      - name: Commit generated output locally
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json src/page.js test
+          if git diff --cached --quiet; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            echo 'The no-tap release is already materialized.'
+          else
+            git commit -m 'Materialize no-tap mobile background v28'
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run tests and Worker validation
+        run: |
+          npm test
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+      - name: Publish the verified generated commit
+        if: steps.commit.outputs.changed == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='${{ github.event.pull_request.head.ref }}'
+          remote_ref="refs/remotes/origin/$branch"
+          git fetch --no-tags origin "+refs/heads/$branch:$remote_ref"
+
+          if git merge-base --is-ancestor HEAD "$remote_ref"; then
+            echo 'Generated release is already on the pull request branch.'
+            exit 0
+          fi
+
+          if [[ "$(git rev-parse 'HEAD^{tree}')" == "$(git rev-parse "$remote_ref^{tree}")" ]]; then
+            echo 'An equivalent generated tree is already on the branch.'
+            exit 0
+          fi
+
+          if git merge-base --is-ancestor "$remote_ref" HEAD; then
+            git push origin "HEAD:refs/heads/$branch"
+            exit 0
+          fi
+
+          git rebase "$remote_ref"
+          git push origin "HEAD:refs/heads/$branch"
