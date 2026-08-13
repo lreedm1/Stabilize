@@ -1,0 +1,108 @@
+name: Diagnose mobile v31 production gate
+
+on:
+  push:
+    branches:
+      - fix/diagnose-mobile-v31-production
+    paths:
+      - .github/workflows/diagnose-mobile-v31-production.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out diagnostic branch
+        uses: actions/checkout@v6
+
+      - name: Probe every production predicate
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          background_version='20260813-mobile-background-v31-1'
+          handoff_version='20260813-mobile-video-handoff-v31-1'
+          video_route='/media/mobile-forest-stream-video-v24-native-1080.mp4'
+          poster_route='/scenes/mobile-forest-stream-v24-native-1080.webp'
+          atlas_route='/scenes/mobile-forest-stream-full-atlas-v29-1080.webp'
+          client_route='/mobile-background/runtime'
+          style_route='/mobile-background/styles'
+          handoff_route='/mobile-video-handoff-v31.js'
+
+          expected_poster='public/scenes/mobile-forest-stream-v24-native-1080.webp'
+          expected_atlas='public/scenes/mobile-forest-stream-full-atlas-v29-1080.webp'
+          expected_poster_bytes="$(wc -c < "$expected_poster" | tr -d '[:space:]')"
+          expected_poster_sha="$(sha256sum "$expected_poster" | awk '{print $1}')"
+          expected_atlas_bytes="$(wc -c < "$expected_atlas" | tr -d '[:space:]')"
+          expected_atlas_sha="$(sha256sum "$expected_atlas" | awk '{print $1}')"
+
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          key="${GITHUB_SHA}-diagnostic"
+
+          header_value() {
+            local file="$1"
+            local name="$2"
+            awk -F': ' -v target="$name" '
+              tolower($1) == tolower(target) {
+                gsub("\r", "", $2)
+                print $2
+              }
+            ' "$file" | tail -n 1
+          }
+
+          yesno() {
+            if "$@"; then printf 'PASS'; else printf 'FAIL'; fi
+          }
+
+          page_status="$(curl --max-time 30 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/page.headers" -o "$tmpdir/page.html" -w '%{http_code}' "https://stabilize.info/?mobile-v31-diagnostic=${key}" || true)"
+          client_status="$(curl --max-time 30 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/client.headers" -o "$tmpdir/client.js" -w '%{http_code}' "https://stabilize.info${client_route}?v=${background_version}&diagnostic=${key}" || true)"
+          style_status="$(curl --max-time 30 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/style.headers" -o "$tmpdir/styles.css" -w '%{http_code}' "https://stabilize.info${style_route}?v=${background_version}&diagnostic=${key}" || true)"
+          handoff_status="$(curl --max-time 30 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/handoff.headers" -o "$tmpdir/handoff.js" -w '%{http_code}' "https://stabilize.info${handoff_route}?v=${handoff_version}&diagnostic=${key}" || true)"
+          poster_status="$(curl --max-time 45 --silent --show-error -H 'Cache-Control: no-cache' -D "$tmpdir/poster.headers" -o "$tmpdir/poster.webp" -w '%{http_code}' "https://stabilize.info${poster_route}?v=${background_version}&diagnostic=${key}" || true)"
+          atlas_status="$(curl --max-time 45 --silent --show-error -H 'Cache-Control: no-cache' -D "$tmpdir/atlas.headers" -o "$tmpdir/atlas.webp" -w '%{http_code}' "https://stabilize.info${atlas_route}?v=${background_version}&diagnostic=${key}" || true)"
+
+          client_type="$(header_value "$tmpdir/client.headers" content-type | tr '[:upper:]' '[:lower:]')"
+          style_type="$(header_value "$tmpdir/style.headers" content-type | tr '[:upper:]' '[:lower:]')"
+          handoff_type="$(header_value "$tmpdir/handoff.headers" content-type | tr '[:upper:]' '[:lower:]')"
+          csp="$(header_value "$tmpdir/page.headers" content-security-policy)"
+          poster_bytes="$(wc -c < "$tmpdir/poster.webp" | tr -d '[:space:]')"
+          poster_sha="$(sha256sum "$tmpdir/poster.webp" | awk '{print $1}')"
+          atlas_bytes="$(wc -c < "$tmpdir/atlas.webp" | tr -d '[:space:]')"
+          atlas_sha="$(sha256sum "$tmpdir/atlas.webp" | awk '{print $1}')"
+
+          echo '=== HTTP and headers ==='
+          printf 'page_status=%s\nclient_status=%s\nstyle_status=%s\nhandoff_status=%s\nposter_status=%s\natlas_status=%s\n' "$page_status" "$client_status" "$style_status" "$handoff_status" "$poster_status" "$atlas_status"
+          printf 'client_type=%q\nstyle_type=%q\nhandoff_type=%q\ncontent_security_policy=%q\n' "$client_type" "$style_type" "$handoff_type" "$csp"
+
+          echo '=== Exact static asset comparison ==='
+          printf 'poster_bytes actual=%s expected=%s result=%s\n' "$poster_bytes" "$expected_poster_bytes" "$(yesno test "$poster_bytes" = "$expected_poster_bytes")"
+          printf 'poster_sha actual=%s expected=%s result=%s\n' "$poster_sha" "$expected_poster_sha" "$(yesno test "$poster_sha" = "$expected_poster_sha")"
+          printf 'atlas_bytes actual=%s expected=%s result=%s\n' "$atlas_bytes" "$expected_atlas_bytes" "$(yesno test "$atlas_bytes" = "$expected_atlas_bytes")"
+          printf 'atlas_sha actual=%s expected=%s result=%s\n' "$atlas_sha" "$expected_atlas_sha" "$(yesno test "$atlas_sha" = "$expected_atlas_sha")"
+
+          echo '=== Page predicates ==='
+          printf 'video_url=%s\n' "$(yesno grep -Fq "$video_route?v=${handoff_version}" "$tmpdir/page.html")"
+          printf 'runtime_url=%s\n' "$(yesno grep -Fq "$client_route?v=${background_version}" "$tmpdir/page.html")"
+          printf 'style_url=%s\n' "$(yesno grep -Fq "$style_route?v=${background_version}" "$tmpdir/page.html")"
+          printf 'handoff_url=%s\n' "$(yesno grep -Fq "$handoff_route?v=${handoff_version}" "$tmpdir/page.html")"
+          printf 'autoplay=%s\n' "$(yesno grep -Fq 'autoplay' "$tmpdir/page.html")"
+          printf 'csp_media_src_self=%s\n' "$(yesno grep -Fqi "media-src 'self'" "$tmpdir/page.headers")"
+
+          echo '=== Runtime predicates ==='
+          printf 'runtime_draw_fallback=%s\n' "$(yesno grep -Fq 'requestAnimationFrame(drawFallback)' "$tmpdir/client.js")"
+          printf 'runtime_video_play=%s\n' "$(yesno grep -Fq 'result = video.play()' "$tmpdir/client.js")"
+          printf 'handoff_user_gesture=%s\n' "$(yesno grep -Fq 'playInsideUserGesture' "$tmpdir/handoff.js")"
+          printf 'handoff_version=%s\n' "$(yesno grep -Fq "$handoff_version" "$tmpdir/handoff.js")"
+          printf 'css_video_state=%s\n' "$(yesno grep -Fq 'data-mobile-background-v30="video"' "$tmpdir/styles.css")"
+
+          echo '=== Live page mobile asset references ==='
+          grep -oE '/(media|mobile-background|mobile-video-handoff|scenes)/[^" <]+' "$tmpdir/page.html" | sort -u || true
+
+          echo '=== Relevant runtime snippets ==='
+          grep -nE 'drawFallback|video\.play|playInsideUserGesture|data-mobile-background-v30|mobile-video-handoff' "$tmpdir/client.js" "$tmpdir/handoff.js" "$tmpdir/styles.css" | head -n 80 || true
