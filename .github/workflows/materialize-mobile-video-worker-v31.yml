@@ -6,6 +6,7 @@ on:
       - fix/mobile-video-worker-assets-v31
     paths:
       - scripts/install-mobile-video-worker-v31.mjs
+      - scripts/finalize-mobile-video-worker-v31-clean-tree.mjs
       - .github/workflows/materialize-mobile-video-worker-v31.yml
   workflow_dispatch:
 
@@ -39,7 +40,11 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Materialize the Worker-served mobile runtime
-        run: node scripts/install-mobile-video-worker-v31.mjs
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/install-mobile-video-worker-v31.mjs
+          node scripts/finalize-mobile-video-worker-v31-clean-tree.mjs
 
       - name: Commit the generated repair locally
         id: commit
