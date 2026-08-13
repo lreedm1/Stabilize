@@ -1,0 +1,263 @@
+name: Verify mobile HEVC v34
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - public/scenes/mobile-forest-stream-video-v34-hevc-720.mp4
+      - public/scenes/mobile-forest-stream-video-v12-720.mp4
+      - public/mobile-video-handoff-v31.js
+      - public/_headers
+      - src/page.js
+      - scripts/mobile-hevc-v34.json
+      - scripts/build-mobile-hevc-v34.sh
+      - scripts/finalize-mobile-hevc-v34.mjs
+      - scripts/verify-mobile-hevc-v34.yml
+      - test/mobile-hevc-v34.test.mjs
+      - .github/workflows/verify-mobile-video.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - public/scenes/mobile-forest-stream-video-v34-hevc-720.mp4
+      - public/scenes/mobile-forest-stream-video-v12-720.mp4
+      - public/mobile-video-handoff-v31.js
+      - public/_headers
+      - src/page.js
+      - scripts/mobile-hevc-v34.json
+      - scripts/build-mobile-hevc-v34.sh
+      - scripts/finalize-mobile-hevc-v34.mjs
+      - scripts/verify-mobile-hevc-v34.yml
+      - test/mobile-hevc-v34.test.mjs
+      - .github/workflows/verify-mobile-video.yml
+  workflow_dispatch:
+
+concurrency:
+  group: verify-mobile-hevc-v34-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  repository:
+    name: Verify repository HEVC release
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install media tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies without generators
+        shell: bash
+        run: npm ci --ignore-scripts
+
+      - name: Verify exact HEVC bytes and decode
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/build-mobile-hevc-v34.sh
+
+      - name: Run canonical tests and Worker build gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+  live:
+    name: Verify live direct static HEVC delivery
+    if: github.event_name != 'pull_request'
+    needs: repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository metadata
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install media tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+
+      - name: Wait for and verify production release
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/mobile-hevc-v34-live"
+          mkdir -p "$evidence"
+
+          readarray -t release < <(
+            python3 - <<'PY'
+          import json
+          metadata = json.load(open("scripts/mobile-hevc-v34.json", encoding="utf-8"))
+          for key in ("version", "hevcAsset", "h264Asset", "videoBytes", "videoSha256"):
+              print(metadata[key])
+          PY
+          )
+          version="${release[0]}"
+          hevc_asset="${release[1]}"
+          h264_asset="${release[2]}"
+          expected_bytes="${release[3]}"
+          expected_sha="${release[4]}"
+
+          header_value() {
+            local file="$1"
+            local name="$2"
+            awk -F': ' -v target="$name" '
+              tolower($1) == tolower(target) {
+                gsub("\r", "", $2)
+                print $2
+              }
+            ' "$file" | tail -n 1
+          }
+
+          ready=false
+          for attempt in {1..36}; do
+            key="${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}-${attempt}"
+            page_status="$(
+              curl --max-time 30 --silent --show-error --compressed \
+                -H 'Cache-Control: no-cache' \
+                -D "$evidence/page.headers" \
+                -o "$evidence/page.html" \
+                -w '%{http_code}' \
+                "https://stabilize.info/?mobile-hevc-v34=${key}" || true
+            )"
+            client_status="$(
+              curl --max-time 30 --silent --show-error --compressed \
+                -H 'Cache-Control: no-cache' \
+                -D "$evidence/client.headers" \
+                -o "$evidence/client.js" \
+                -w '%{http_code}' \
+                "https://stabilize.info/mobile-video-handoff-v31.js?v=${version}&live=${key}" || true
+            )"
+
+            echo "Live HEVC v34 attempt ${attempt}: page=${page_status:-000} client=${client_status:-000}"
+            if [[ "$page_status" == 200 && "$client_status" == 200 ]] \
+              && grep -Fq "$hevc_asset?v=$version" "$evidence/page.html" \
+              && grep -Fq "$h264_asset?v=$version" "$evidence/page.html" \
+              && grep -Fq 'codecs="hvc1"' "$evidence/page.html" \
+              && grep -Fq 'codecs="avc1.42E020"' "$evidence/page.html" \
+              && grep -Fq "const VERSION = \"${version}\"" "$evidence/client.js" \
+              && grep -Fq 'source[data-codec="hevc"]' "$evidence/client.js" \
+              && grep -Fq 'source[data-codec="h264"]' "$evidence/client.js"; then
+              ready=true
+              break
+            fi
+            sleep 10
+          done
+
+          if [[ "$ready" != true ]]; then
+            echo '::error::The live page or handoff client did not reach HEVC v34.'
+            exit 1
+          fi
+
+          key="${GITHUB_SHA}-exact"
+          video_status="$(
+            curl --max-time 120 --silent --show-error \
+              -H 'Cache-Control: no-cache' \
+              -D "$evidence/hevc.headers" \
+              -o "$evidence/hevc.mp4" \
+              -w '%{http_code}' \
+              "https://stabilize.info${hevc_asset}?v=${version}&live=${key}" || true
+          )"
+          range_status="$(
+            curl --max-time 60 --silent --show-error \
+              -H 'Cache-Control: no-cache' \
+              -H 'Range: bytes=0-1023' \
+              -D "$evidence/range.headers" \
+              -o "$evidence/range.bin" \
+              -w '%{http_code}' \
+              "https://stabilize.info${hevc_asset}?v=${version}&range=${key}" || true
+          )"
+          h264_status="$(
+            curl --max-time 60 --silent --show-error \
+              -H 'Range: bytes=0-1023' \
+              -o "$evidence/h264-range.bin" \
+              -w '%{http_code}' \
+              "https://stabilize.info${h264_asset}?v=${version}&fallback=${key}" || true
+          )"
+
+          actual_bytes="$(wc -c < "$evidence/hevc.mp4" | tr -d '[:space:]')"
+          actual_sha="$(sha256sum "$evidence/hevc.mp4" | awk '{print $1}')"
+          codec="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of csv=p=0 "$evidence/hevc.mp4")"
+          tag="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_tag_string -of csv=p=0 "$evidence/hevc.mp4")"
+          profile="$(ffprobe -v error -select_streams v:0 -show_entries stream=profile -of csv=p=0 "$evidence/hevc.mp4")"
+          dimensions="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$evidence/hevc.mp4")"
+          fps="$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of csv=p=0 "$evidence/hevc.mp4")"
+          audio="$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$evidence/hevc.mp4")"
+          cache_control="$(header_value "$evidence/hevc.headers" cache-control | tr '[:upper:]' '[:lower:]')"
+          content_type="$(header_value "$evidence/hevc.headers" content-type | tr '[:upper:]' '[:lower:]')"
+          range_content="$(header_value "$evidence/range.headers" content-range | tr '[:upper:]' '[:lower:]')"
+          range_bytes="$(wc -c < "$evidence/range.bin" | tr -d '[:space:]')"
+
+          ffmpeg -hide_banner -v error -xerror -err_detect explode \
+            -i "$evidence/hevc.mp4" -map 0:v:0 -f null -
+
+          printf '%s\n' \
+            "video_status=${video_status}" \
+            "range_status=${range_status}" \
+            "h264_status=${h264_status}" \
+            "bytes=${actual_bytes}" \
+            "sha256=${actual_sha}" \
+            "codec=${codec}" \
+            "tag=${tag}" \
+            "profile=${profile}" \
+            "dimensions=${dimensions}" \
+            "fps=${fps}" \
+            "cache_control=${cache_control}" \
+            "content_type=${content_type}" \
+            "range_content=${range_content}" \
+            > "$evidence/result.txt"
+          cat "$evidence/result.txt"
+
+          [[ "$video_status" == 200 ]]
+          [[ "$range_status" == 206 ]]
+          [[ "$h264_status" == 206 ]]
+          [[ "$actual_bytes" == "$expected_bytes" ]]
+          [[ "$actual_sha" == "$expected_sha" ]]
+          [[ "$codec" == hevc ]]
+          [[ "$tag" == hvc1 ]]
+          [[ "$profile" == Main ]]
+          [[ "$dimensions" == 720x1280 ]]
+          [[ "$fps" == 60/1 ]]
+          [[ -z "$audio" ]]
+          [[ "$cache_control" == *public* ]]
+          [[ "$cache_control" == *max-age=31536000* ]]
+          [[ "$cache_control" == *immutable* ]]
+          [[ "$content_type" == video/mp4* ]]
+          [[ "$range_bytes" == 1024 ]]
+          [[ "$range_content" == "bytes 0-1023/${expected_bytes}" ]]
+
+      - name: Upload live HEVC evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-hevc-v34-live
+          path: ${{ runner.temp }}/mobile-hevc-v34-live
+          if-no-files-found: warn
+          retention-days: 7
