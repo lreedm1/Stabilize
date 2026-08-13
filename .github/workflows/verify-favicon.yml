@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify browser tab icon
+    name: Verify static browser tab icon
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
@@ -27,59 +27,56 @@ jobs:
     timeout-minutes: 8
 
     steps:
-      - name: Verify new icon links and bytes
+      - name: Verify static icon links, bytes, MIME types, and caching
         shell: bash
         run: |
           set -euo pipefail
 
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+
           for attempt in {1..30}; do
-            root="$(mktemp)"
-            ico_headers="$(mktemp)"
-            ico_body="$(mktemp)"
-            png16_headers="$(mktemp)"
-            png16_body="$(mktemp)"
-            png32_headers="$(mktemp)"
-            png32_body="$(mktemp)"
-            mask_headers="$(mktemp)"
-            mask_body="$(mktemp)"
-            refresh_body="$(mktemp)"
+            root_status="$(curl --max-time 20 --silent --show-error --output "$workdir/root.html" --write-out '%{http_code}' "https://stabilize.info/?favicon-check=${GITHUB_SHA}-${attempt}" || true)"
+            ico_status="$(curl --max-time 20 --silent --show-error --dump-header "$workdir/ico.headers" --output "$workdir/favicon.ico" --write-out '%{http_code}' "https://stabilize.info/favicon.ico?favicon-check=${GITHUB_SHA}-${attempt}" || true)"
+            png_status="$(curl --max-time 20 --silent --show-error --dump-header "$workdir/png.headers" --output "$workdir/favicon.png" --write-out '%{http_code}' "https://stabilize.info/stabilize-tab-20260813-static-32.png?favicon-check=${GITHUB_SHA}-${attempt}" || true)"
+            svg_status="$(curl --max-time 20 --silent --show-error --dump-header "$workdir/svg.headers" --output "$workdir/favicon.svg" --write-out '%{http_code}' "https://stabilize.info/stabilize-tab-20260813.svg?favicon-check=${GITHUB_SHA}-${attempt}" || true)"
+            mask_status="$(curl --max-time 20 --silent --show-error --dump-header "$workdir/mask.headers" --output "$workdir/mask.svg" --write-out '%{http_code}' "https://stabilize.info/safari-pinned-tab.svg?favicon-check=${GITHUB_SHA}-${attempt}" || true)"
+            manifest_status="$(curl --max-time 20 --silent --show-error --dump-header "$workdir/manifest.headers" --output "$workdir/manifest.json" --write-out '%{http_code}' "https://stabilize.info/site.webmanifest?favicon-check=${GITHUB_SHA}-${attempt}" || true)"
 
-            root_status="$(curl --max-time 20 --silent --show-error --output "$root" --write-out "%{http_code}" "https://stabilize.info/?favicon-check=${attempt}" || true)"
-            ico_status="$(curl --max-time 20 --silent --show-error --dump-header "$ico_headers" --output "$ico_body" --write-out "%{http_code}" "https://stabilize.info/stabilize-tab-20260805.ico?favicon-check=${attempt}" || true)"
-            png16_status="$(curl --max-time 20 --silent --show-error --dump-header "$png16_headers" --output "$png16_body" --write-out "%{http_code}" "https://stabilize.info/stabilize-tab-20260805-16.png?favicon-check=${attempt}" || true)"
-            png32_status="$(curl --max-time 20 --silent --show-error --dump-header "$png32_headers" --output "$png32_body" --write-out "%{http_code}" "https://stabilize.info/stabilize-tab-20260805-32.png?favicon-check=${attempt}" || true)"
-            mask_status="$(curl --max-time 20 --silent --show-error --dump-header "$mask_headers" --output "$mask_body" --write-out "%{http_code}" "https://stabilize.info/safari-pinned-tab.svg?favicon-check=${attempt}" || true)"
-            refresh_status="$(curl --max-time 20 --silent --show-error --output "$refresh_body" --write-out "%{http_code}" "https://stabilize.info/favicon-refresh.js?v=20260805-8&favicon-check=${attempt}" || true)"
+            ico_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$workdir/ico.headers" | tail -n 1)"
+            png_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$workdir/png.headers" | tail -n 1)"
+            svg_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$workdir/svg.headers" | tail -n 1)"
+            mask_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$workdir/mask.headers" | tail -n 1)"
+            manifest_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$workdir/manifest.headers" | tail -n 1)"
+            ico_cache="$(awk -F': ' 'tolower($1) == "cache-control" { gsub("\r", "", $2); print tolower($2) }' "$workdir/ico.headers" | tail -n 1)"
+            png_cache="$(awk -F': ' 'tolower($1) == "cache-control" { gsub("\r", "", $2); print tolower($2) }' "$workdir/png.headers" | tail -n 1)"
+            svg_cache="$(awk -F': ' 'tolower($1) == "cache-control" { gsub("\r", "", $2); print tolower($2) }' "$workdir/svg.headers" | tail -n 1)"
+            ico_magic="$(od -An -tx1 -N4 "$workdir/favicon.ico" | tr -d ' \n')"
+            png_magic="$(od -An -tx1 -N8 "$workdir/favicon.png" | tr -d ' \n')"
 
-            ico_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$ico_headers" | tail -n 1)"
-            png16_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$png16_headers" | tail -n 1)"
-            png32_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$png32_headers" | tail -n 1)"
-            mask_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$mask_headers" | tail -n 1)"
-            ico_magic="$(od -An -tx1 -N4 "$ico_body" | tr -d ' \n')"
-            png16_magic="$(od -An -tx1 -N8 "$png16_body" | tr -d ' \n')"
-            png32_magic="$(od -An -tx1 -N8 "$png32_body" | tr -d ' \n')"
-
-            echo "Favicon attempt ${attempt}: root=${root_status}; ico=${ico_status}/${ico_type:-none}/${ico_magic:-none}; png16=${png16_status}/${png16_type:-none}/${png16_magic:-none}; png32=${png32_status}/${png32_type:-none}/${png32_magic:-none}; mask=${mask_status}/${mask_type:-none}; refresh=${refresh_status}"
+            echo "Favicon attempt ${attempt}: root=${root_status}; ico=${ico_status}/${ico_type:-none}/${ico_cache:-none}/${ico_magic:-none}; png=${png_status}/${png_type:-none}/${png_cache:-none}/${png_magic:-none}; svg=${svg_status}/${svg_type:-none}/${svg_cache:-none}; mask=${mask_status}/${mask_type:-none}; manifest=${manifest_status}/${manifest_type:-none}"
 
             if [[ "$root_status" == "200" ]] &&
-              grep -Fq 'href="/stabilize-tab-20260805-16.png"' "$root" &&
-              grep -Fq 'href="/stabilize-tab-20260805-32.png"' "$root" &&
-              grep -Fq 'href="/safari-pinned-tab.svg"' "$root" &&
-              grep -Fq 'src="/favicon-refresh.js?v=20260805-8"' "$root" &&
-              [[ "$ico_status" == "200" && "$ico_type" == image/x-icon* && "$ico_magic" == "00000100" ]] &&
-              [[ "$png16_status" == "200" && "$png16_type" == image/png* && "$png16_magic" == "89504e470d0a1a0a" ]] &&
-              [[ "$png32_status" == "200" && "$png32_type" == image/png* && "$png32_magic" == "89504e470d0a1a0a" ]] &&
+              grep -Fq 'href="/favicon.ico"' "$workdir/root.html" &&
+              grep -Fq 'href="/stabilize-tab-20260813.svg"' "$workdir/root.html" &&
+              grep -Fq 'href="/stabilize-tab-20260813-static-32.png"' "$workdir/root.html" &&
+              ! grep -Fq 'favicon-refresh.js' "$workdir/root.html" &&
+              ! grep -Fq 'data:image/' "$workdir/root.html" &&
+              [[ "$ico_status" == "200" && "$ico_type" == image/x-icon* && "$ico_magic" == "00000100" && "$ico_cache" == *max-age=86400* ]] &&
+              [[ "$png_status" == "200" && "$png_type" == image/png* && "$png_magic" == "89504e470d0a1a0a" && "$png_cache" == *max-age=31536000* && "$png_cache" == *immutable* ]] &&
+              [[ "$svg_status" == "200" && "$svg_type" == image/svg+xml* && "$svg_cache" == *max-age=31536000* && "$svg_cache" == *immutable* ]] &&
+              grep -Fq 'viewBox="0 0 64 64"' "$workdir/favicon.svg" &&
               [[ "$mask_status" == "200" && "$mask_type" == image/svg+xml* ]] &&
-              grep -Fq 'viewBox="0 0 16 16"' "$mask_body" &&
-              [[ "$refresh_status" == "200" ]] &&
-              grep -Fq '/stabilize-tab-20260805-32.png?refresh=20260805-8' "$refresh_body"; then
-              rm -f "$root" "$ico_headers" "$ico_body" "$png16_headers" "$png16_body" "$png32_headers" "$png32_body" "$mask_headers" "$mask_body" "$refresh_body"
+              grep -Fq 'viewBox="0 0 16 16"' "$workdir/mask.svg" &&
+              [[ "$manifest_status" == "200" && "$manifest_type" == application/manifest+json* ]] &&
+              grep -Fq '/stabilize-tab-20260813-static-32.png' "$workdir/manifest.json" &&
+              grep -Fq '/stabilize-tab-20260813.svg' "$workdir/manifest.json"; then
+              echo "Production serves the static favicon contract and does not use runtime favicon mutation."
               exit 0
             fi
 
-            rm -f "$root" "$ico_headers" "$ico_body" "$png16_headers" "$png16_body" "$png32_headers" "$png32_body" "$mask_headers" "$mask_body" "$refresh_body"
             sleep 10
           done
 
-          echo "::error::Production did not serve the hard-reset browser and Safari tab icons."
+          echo "::error::Production did not serve the static favicon contract."
           exit 1
