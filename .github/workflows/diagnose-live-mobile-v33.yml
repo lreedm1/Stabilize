@@ -1,4 +1,4 @@
-name: Diagnose live mobile smooth v33
+name: Verify live mobile v33 WebKit decode
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  diagnose:
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -21,12 +21,12 @@ jobs:
         run: |
           npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
           npx playwright install --with-deps webkit
-      - name: Capture playback state
+      - name: Verify decoded playback state
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/v33-diagnostic"
-          OUTPUT="$RUNNER_TEMP/v33-diagnostic/result.json" node --input-type=module <<'NODE'
+          mkdir -p "$RUNNER_TEMP/v33-webkit"
+          OUTPUT="$RUNNER_TEMP/v33-webkit/result.json" node --input-type=module <<'NODE'
           import { webkit } from "playwright";
           import { writeFile } from "node:fs/promises";
 
@@ -61,21 +61,16 @@ jobs:
                 width: video?.videoWidth ?? 0,
                 height: video?.videoHeight ?? 0,
                 error: video?.error ? { code: video.error.code, message: video.error.message || "" } : null,
-                handoffState: root.dataset.mobileVideoHandoffV31 || "",
-                handoffDetail: root.dataset.mobileVideoHandoffV31Detail || "",
                 backgroundState: root.dataset.mobileBackgroundV30 || "",
                 quality: root.dataset.mobileBackgroundV30Quality || "",
               };
             }, label));
           };
 
-          await page.goto(`https://stabilize.info/?v33-diagnostic=${Date.now()}`, { waitUntil: "domcontentloaded", timeout: 60000 });
+          await page.goto(`https://stabilize.info/?v33-webkit=${Date.now()}`, { waitUntil: "domcontentloaded", timeout: 60000 });
           await page.waitForSelector("#mobile-background-video", { state: "attached", timeout: 60000 });
           await page.waitForTimeout(5000);
-          await snapshot("before-tap");
-          await page.tap("body", { position: { x: 20, y: 20 } });
-          await page.waitForTimeout(5000);
-          await snapshot("after-tap");
+          await snapshot("automatic");
           result.directPlay = await page.evaluate(async () => {
             const video = document.querySelector("#mobile-background-video");
             if (!(video instanceof HTMLVideoElement)) return { outcome: "missing" };
@@ -86,16 +81,29 @@ jobs:
               return { outcome: "rejected", name: error?.name || "", message: error?.message || "" };
             }
           });
-          await page.waitForTimeout(3000);
+          await page.waitForTimeout(1000);
           await snapshot("after-direct-play");
+
+          const final = result.snapshots.at(-1);
+          if (!final.coarseNoHover || !final.portrait) throw new Error("mobile portrait media queries did not match");
+          if (!["maybe", "probably"].includes(final.canPlayBaseline)) throw new Error("WebKit did not report H.264 baseline support");
+          if (final.readyState < 2 || final.error) throw new Error("the live video did not decode");
+          if (final.width < 718 || final.width > 720 || final.height !== 1280) throw new Error(`unexpected decoded dimensions ${final.width}x${final.height}`);
+          if (final.paused) throw new Error("the decoded video is paused");
+          if (final.backgroundState !== "video") throw new Error(`unexpected compositor state ${final.backgroundState}`);
+          if (final.quality !== "native-video-720x1280-60fps") throw new Error(`unexpected quality ${final.quality}`);
+          if (!final.currentSrc.includes("mobile-forest-stream-video-v12-720.mp4")) throw new Error(`unexpected source ${final.currentSrc}`);
+          if (result.directPlay.outcome !== "resolved") throw new Error(`video.play() ${result.directPlay.outcome}`);
+          if (result.errors.length) throw new Error(result.errors.join(" | "));
+
           await context.close();
           await browser.close();
           await writeFile(process.env.OUTPUT, JSON.stringify(result, null, 2) + "\n");
           NODE
-          cat "$RUNNER_TEMP/v33-diagnostic/result.json"
+          cat "$RUNNER_TEMP/v33-webkit/result.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: v33-diagnostic
-          path: ${{ runner.temp }}/v33-diagnostic
+          name: v33-webkit
+          path: ${{ runner.temp }}/v33-webkit
           retention-days: 7
