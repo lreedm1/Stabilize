@@ -1,0 +1,1 @@
+export const STATIC_FAVICON_CONTRACT_VERSION = "20260813-static-1";
