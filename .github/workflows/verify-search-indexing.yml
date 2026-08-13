@@ -81,3 +81,104 @@ jobs:
           echo "--- sitemap.xml ---"
           cat "$workdir/sitemap.xml" 2>/dev/null || true
           exit 1
+
+  verify-uw-madison-site:
+    name: Verify UW–Madison site and handoff
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Verify custom domain, page boundaries, and chat handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base="https://uwmadison.stabilize.info"
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+
+          for attempt in {1..48}; do
+            echo "UW–Madison site attempt ${attempt}"
+
+            root_status="$(
+              curl --max-time 20 --silent --show-error \
+                --dump-header "$workdir/root.headers" \
+                --output "$workdir/root.html" \
+                --write-out '%{http_code}' \
+                "$base/" || true
+            )"
+            robots_status="$(
+              curl --max-time 20 --silent --show-error \
+                --output "$workdir/robots.txt" \
+                --write-out '%{http_code}' \
+                "$base/robots.txt" || true
+            )"
+            sitemap_status="$(
+              curl --max-time 20 --silent --show-error \
+                --output "$workdir/sitemap.xml" \
+                --write-out '%{http_code}' \
+                "$base/sitemap.xml" || true
+            )"
+            chat_status="$(
+              curl --max-time 20 --silent --show-error \
+                --dump-header "$workdir/chat.headers" \
+                --output /dev/null \
+                --write-out '%{http_code}' \
+                "$base/chat" || true
+            )"
+            missing_status="$(
+              curl --max-time 20 --silent --show-error \
+                --output /dev/null \
+                --write-out '%{http_code}' \
+                "$base/this-route-should-not-exist" || true
+            )"
+
+            echo "HTTP root=${root_status:-unavailable} robots=${robots_status:-unavailable} sitemap=${sitemap_status:-unavailable} chat=${chat_status:-unavailable} missing=${missing_status:-unavailable}"
+
+            ready=true
+            [[ "$root_status" == "200" ]] || ready=false
+            [[ "$robots_status" == "200" ]] || ready=false
+            [[ "$sitemap_status" == "200" ]] || ready=false
+            [[ "$chat_status" == "302" ]] || ready=false
+            [[ "$missing_status" == "404" ]] || ready=false
+
+            grep -Fq '<link rel="canonical" href="https://uwmadison.stabilize.info/"' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq 'Stabilize for UW–Madison' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq 'not affiliated with, operated by, or' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq 'Basic Needs Student Support' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq '608-265-5600' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq '10–25 voluntary participants' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq 'No institution access to individual conversations' "$workdir/root.html" 2>/dev/null || ready=false
+
+            grep -Eqi '^strict-transport-security:[[:space:]]*max-age=31536000; includeSubDomains' "$workdir/root.headers" 2>/dev/null || ready=false
+            grep -Eqi "^content-security-policy:.*default-src 'self'" "$workdir/root.headers" 2>/dev/null || ready=false
+            grep -Eqi '^x-frame-options:[[:space:]]*DENY' "$workdir/root.headers" 2>/dev/null || ready=false
+            grep -Eqi '^location:[[:space:]]*https://stabilize\.info/\?source=uwmadison\r?$' "$workdir/chat.headers" 2>/dev/null || ready=false
+
+            grep -Fq 'Sitemap: https://uwmadison.stabilize.info/sitemap.xml' "$workdir/robots.txt" 2>/dev/null || ready=false
+            grep -Fq '<loc>https://uwmadison.stabilize.info/</loc>' "$workdir/sitemap.xml" 2>/dev/null || ready=false
+
+            if [[ "$ready" == true ]] && \
+              curl --fail --max-time 20 --silent --show-error \
+                --output /dev/null \
+                "$base/uwmadison.css?v=20260812-uw-1"; then
+              echo "UW–Madison custom domain, student page, safety boundaries, resource map, and chat handoff are live."
+              exit 0
+            fi
+
+            sleep 10
+          done
+
+          echo "::error::uwmadison.stabilize.info did not become fully available with the expected boundaries."
+          echo "--- root headers ---"
+          sed -n '1,30p' "$workdir/root.headers" 2>/dev/null || true
+          echo "--- root content markers ---"
+          grep -E 'canonical|Stabilize for UW|Basic Needs|not affiliated|608-265-5600' "$workdir/root.html" 2>/dev/null | head -n 30 || true
+          echo "--- chat headers ---"
+          sed -n '1,30p' "$workdir/chat.headers" 2>/dev/null || true
+          echo "--- robots.txt ---"
+          cat "$workdir/robots.txt" 2>/dev/null || true
+          echo "--- sitemap.xml ---"
+          cat "$workdir/sitemap.xml" 2>/dev/null || true
+          exit 1
