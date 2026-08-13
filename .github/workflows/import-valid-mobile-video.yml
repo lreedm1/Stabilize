@@ -1,0 +1,424 @@
+name: Generate validated high-resolution mobile video
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/import-valid-mobile-video.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  statuses: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install video tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y ffmpeg
+          fi
+
+      - name: Generate and strictly validate the replacement MP4
+        id: video
+        shell: bash
+        run: |
+          set -euo pipefail
+          work=/tmp/stabilize-mobile-video-v9
+          mkdir -p "$work"
+
+          git fetch --no-tags --depth=1 origin \
+            agent/mobile-hq-v1:refs/remotes/origin/agent/mobile-hq-v1
+          git show \
+            origin/agent/mobile-hq-v1:public/scenes/mobile-forest-hq-v1-1080.webp \
+            > "$work/still.webp"
+
+          mapfile -t motion_parts < <(
+            find public/scenes -maxdepth 1 -type f \
+              -name 'mobile-forest-stream-loop-v1.part*.b64' | sort
+          )
+          test "${#motion_parts[@]}" -eq 5
+          cat "${motion_parts[@]}" \
+            | tr -d '[:space:]' \
+            | base64 --decode \
+            > "$work/motion.mp4"
+
+          still_dimensions="$(
+            ffprobe -v error -select_streams v:0 \
+              -show_entries stream=width,height \
+              -of csv=s=x:p=0 "$work/still.webp"
+          )"
+          test "$still_dimensions" = 1080x1920
+          ffmpeg -hide_banner -v error -xerror -err_detect explode \
+            -i "$work/motion.mp4" -map 0:v:0 -f null -
+
+          python - <<'PY'
+          from pathlib import Path
+          import math
+
+          width, height = 1080, 1920
+          points = [
+              (690, 920, 35),
+              (790, 915, 55),
+              (900, 900, 85),
+              (1040, 892, 115),
+              (1200, 900, 150),
+              (1380, 925, 190),
+              (1580, 965, 235),
+              (1780, 1000, 280),
+              (1919, 1015, 315),
+          ]
+          feather = 72.0
+          pixels = bytearray(width * height)
+
+          for y in range(height):
+              if y < points[0][0]:
+                  continue
+              upper = points[-1]
+              lower = points[-1]
+              for index in range(len(points) - 1):
+                  if points[index][0] <= y <= points[index + 1][0]:
+                      upper = points[index]
+                      lower = points[index + 1]
+                      break
+              span = max(1, lower[0] - upper[0])
+              t = min(1.0, max(0.0, (y - upper[0]) / span))
+              center = upper[1] + (lower[1] - upper[1]) * t
+              half_width = upper[2] + (lower[2] - upper[2]) * t
+              row = y * width
+              for x in range(width):
+                  distance = abs(x - center)
+                  if distance <= half_width:
+                      alpha = 255
+                  elif distance >= half_width + feather:
+                      alpha = 0
+                  else:
+                      phase = (distance - half_width) / feather
+                      alpha = round(255 * 0.5 * (1 + math.cos(math.pi * phase)))
+                  pixels[row + x] = alpha
+
+          path = Path('/tmp/stabilize-mobile-video-v9/water-mask.pgm')
+          path.write_bytes(f'P5\n{width} {height}\n255\n'.encode() + pixels)
+          PY
+
+          output="$work/mobile-forest-stream-video-v9-1080.mp4"
+          ffmpeg -hide_banner -v error -y \
+            -loop 1 -framerate 30 -i "$work/still.webp" \
+            -stream_loop -1 -i "$work/motion.mp4" \
+            -loop 1 -framerate 30 -i "$work/water-mask.pgm" \
+            -filter_complex "
+              [0:v]scale=1080:1920:flags=lanczos,setsar=1,setpts=PTS-STARTPTS,format=yuv420p[still];
+              [1:v]scale=1080:1920:flags=lanczos,setsar=1,setpts=PTS-STARTPTS,format=yuv420p,split=2[mglobal][mwater];
+              [still][mglobal]blend=all_mode=normal:all_opacity=0.035[base];
+              [2:v]scale=1080:1920:flags=neighbor,setsar=1,setpts=PTS-STARTPTS,format=gray,gblur=sigma=20[mask];
+              [mwater]format=rgb24[mrgb];
+              [mrgb][mask]alphamerge[water];
+              [base][water]overlay=shortest=1:format=auto,format=yuv420p[out]
+            " \
+            -map '[out]' \
+            -t 5.066667 -r 30 -an \
+            -c:v libx264 -profile:v main -level:v 4.0 \
+            -preset slow -crf 19 -maxrate 4M -bufsize 8M \
+            -g 30 -keyint_min 30 -sc_threshold 0 \
+            -pix_fmt yuv420p -movflags +faststart \
+            "$output"
+
+          ffmpeg -hide_banner -v error -xerror -err_detect explode \
+            -i "$output" -map 0:v:0 -f null -
+
+          probe="$work/probe.json"
+          ffprobe -hide_banner -v error \
+            -show_entries \
+              stream=codec_name,profile,pix_fmt,width,height,level,r_frame_rate,nb_frames:format=duration,size \
+            -of json "$output" > "$probe"
+
+          python - "$probe" <<'PY'
+          import json
+          import sys
+
+          data = json.load(open(sys.argv[1]))
+          streams = data.get('streams', [])
+          if len(streams) != 1:
+              raise SystemExit(f'Expected one video stream, found {len(streams)}')
+          stream = streams[0]
+          expected = {
+              'codec_name': 'h264',
+              'profile': 'Main',
+              'pix_fmt': 'yuv420p',
+              'width': 1080,
+              'height': 1920,
+          }
+          for key, value in expected.items():
+              if stream.get(key) != value:
+                  raise SystemExit(f'Unexpected {key}: {stream.get(key)!r}; expected {value!r}')
+          if stream.get('r_frame_rate') != '30/1':
+              raise SystemExit(f"Unexpected frame rate: {stream.get('r_frame_rate')}")
+          if int(stream.get('nb_frames', 0)) < 150:
+              raise SystemExit(f"Too few frames: {stream.get('nb_frames')}")
+          duration = float(data['format']['duration'])
+          if not 5.0 <= duration <= 5.2:
+              raise SystemExit(f'Unexpected duration: {duration}')
+          PY
+
+          audio_streams="$(
+            ffprobe -v error -select_streams a \
+              -show_entries stream=index -of csv=p=0 "$output"
+          )"
+          test -z "$audio_streams"
+
+          ffmpeg -hide_banner -v error -ss 0.5 -i "$output" \
+            -frames:v 1 "$work/frame-early.png"
+          ffmpeg -hide_banner -v error -ss 3.0 -i "$output" \
+            -frames:v 1 "$work/frame-late.png"
+          early_sha="$(sha256sum "$work/frame-early.png" | awk '{print $1}')"
+          late_sha="$(sha256sum "$work/frame-late.png" | awk '{print $1}')"
+          test "$early_sha" != "$late_sha"
+
+          bytes="$(wc -c < "$output" | tr -d '[:space:]')"
+          sha="$(sha256sum "$output" | awk '{print $1}')"
+          test "$bytes" -gt 250000
+          test "$bytes" -lt 8000000
+          test "$(dd if="$output" bs=1 skip=4 count=4 status=none)" = ftyp
+          moov_offset="$(grep -abo -m1 moov "$output" | cut -d: -f1)"
+          mdat_offset="$(grep -abo -m1 mdat "$output" | cut -d: -f1)"
+          test "$moov_offset" -lt "$mdat_offset"
+
+          echo "bytes=$bytes" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "output=$output" >> "$GITHUB_OUTPUT"
+          echo "Generated validated MP4: ${bytes} bytes, sha256=${sha}"
+
+      - name: Materialize the generated release into a feature branch
+        id: release
+        shell: bash
+        env:
+          VIDEO_PATH: ${{ steps.video.outputs.output }}
+          VIDEO_BYTES: ${{ steps.video.outputs.bytes }}
+          VIDEO_SHA: ${{ steps.video.outputs.sha }}
+        run: |
+          set -euo pipefail
+          target_branch='agent/mobile-video-v9-generated'
+          payload_dir='materialize/mobile-forest-stream-video-1080-v9'
+          old_payload_dir='materialize/mobile-forest-stream-video-1080-v4'
+
+          rm -rf "$payload_dir"
+          mkdir -p "$payload_dir"
+          base64 -w0 "$VIDEO_PATH" \
+            | fold -w 50000 \
+            | split -d -a 3 --additional-suffix=.b64 - "$payload_dir/"
+          parts="$(find "$payload_dir" -maxdepth 1 -type f -name '*.b64' | wc -l | tr -d '[:space:]')"
+          test "$parts" -gt 1
+
+          VIDEO_BYTES="$VIDEO_BYTES" VIDEO_SHA="$VIDEO_SHA" VIDEO_PARTS="$parts" \
+            python - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          root = Path('.')
+          old_name = 'mobile-forest-stream-video-v4-1080'
+          new_name = 'mobile-forest-stream-video-v9-1080'
+          old_dir = 'mobile-forest-stream-video-1080-v4'
+          new_dir = 'mobile-forest-stream-video-1080-v9'
+          skip_dirs = {'.git', 'node_modules', '.wrangler'}
+
+          for path in root.rglob('*'):
+              if not path.is_file() or any(part in skip_dirs for part in path.parts):
+                  continue
+              if path.suffix == '.b64':
+                  continue
+              try:
+                  before = path.read_text()
+              except UnicodeDecodeError:
+                  continue
+              after = before.replace(old_name, new_name).replace(old_dir, new_dir)
+              if after != before:
+                  path.write_text(after)
+
+          bytes_value = int(os.environ['VIDEO_BYTES'])
+          sha_value = os.environ['VIDEO_SHA']
+          parts_value = int(os.environ['VIDEO_PARTS'])
+          grouped_bytes = f'{bytes_value:_}'
+
+          materializer = Path('scripts/materialize-mobile-forest-stream.mjs')
+          source = materializer.read_text()
+          source = re.sub(
+              r'const expectedVideoParts = \d+;',
+              f'const expectedVideoParts = {parts_value};',
+              source,
+              count=1,
+          )
+          source = re.sub(
+              r'const expectedVideoParts = \d+;\n(?:const expectedVideoBytes[\s\S]*?;\nconst expectedVideoSha256[\s\S]*?;\n)?',
+              (
+                  f'const expectedVideoParts = {parts_value};\n'
+                  f'const expectedVideoBytes = {grouped_bytes};\n'
+                  f'const expectedVideoSha256 =\n  "{sha_value}";\n'
+              ),
+              source,
+              count=1,
+          )
+          validation_marker = 'const videoInfo = validateVideo(videoPayload.bytes);'
+          validation = f'''if (videoPayload.bytes.byteLength !== expectedVideoBytes) {{
+            throw new Error(
+              `Unexpected mobile forest video size: ${{videoPayload.bytes.byteLength}}; expected ${{expectedVideoBytes}}`,
+            );
+          }}
+          const actualVideoSha256 = createHash("sha256")
+            .update(videoPayload.bytes)
+            .digest("hex");
+          if (actualVideoSha256 !== expectedVideoSha256) {{
+            throw new Error(
+              `Mobile forest video checksum mismatch: ${{actualVideoSha256}}`,
+            );
+          }}
+          {validation_marker}'''
+          existing_validation = re.compile(
+              r'if \(videoPayload\.bytes\.byteLength !== expectedVideoBytes\)[\s\S]*?const videoInfo = validateVideo\(videoPayload\.bytes\);'
+          )
+          if existing_validation.search(source):
+              source = existing_validation.sub(validation, source, count=1)
+          elif validation_marker in source:
+              source = source.replace(validation_marker, validation, 1)
+          else:
+              raise SystemExit('Could not find video validation marker')
+          materializer.write_text(source)
+
+          response_path = Path('src/mobile-video-response.js')
+          response = response_path.read_text()
+          response = re.sub(
+              r'export const MOBILE_VIDEO_BYTES = [\d_]+;',
+              f'export const MOBILE_VIDEO_BYTES = {grouped_bytes};',
+              response,
+              count=1,
+          )
+          response = re.sub(
+              r"export const MOBILE_VIDEO_ETAG =\n  '\"[0-9a-f]+\"';",
+              f"export const MOBILE_VIDEO_ETAG =\n  '\"{sha_value}\"';",
+              response,
+              count=1,
+          )
+          response_path.write_text(response)
+
+          page_path = Path('src/page.js')
+          page = page_path.read_text()
+          page = re.sub(
+              r'/mobile-quality\.js\?v=[A-Za-z0-9._-]+',
+              '/mobile-quality.js?v=20260809-mobile-video-v9-1',
+              page,
+              count=1,
+          )
+          page_path.write_text(page)
+
+          workflow_path = Path('.github/workflows/verify-mobile-video.yml')
+          workflow = workflow_path.read_text()
+          workflow = re.sub(
+              r'test "\$\(wc -c < "\$video"\)" -eq \d+',
+              f'test "$(wc -c < "$video")" -eq {bytes_value}',
+              workflow,
+              count=1,
+          )
+          decode_marker = "          file \"$video\" | grep -Fq 'ISO Media, MP4'\n"
+          strict_block = decode_marker + '''          command -v ffmpeg >/dev/null || {
+            sudo apt-get update -qq
+            sudo apt-get install -y ffmpeg
+          }
+          probe="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,profile,pix_fmt,width,height -of default=nw=1 \"$video\")"
+          grep -Fq 'codec_name=h264' <<<\"$probe\"
+          grep -Fq 'profile=Main' <<<\"$probe\"
+          grep -Fq 'pix_fmt=yuv420p' <<<\"$probe\"
+          grep -Fq 'width=1080' <<<\"$probe\"
+          grep -Fq 'height=1920' <<<\"$probe\"
+          ffmpeg -hide_banner -v error -xerror -err_detect explode \\
+            -i \"$video\" -map 0:v:0 -f null -
+'''
+          if 'err_detect explode' not in workflow:
+              if decode_marker not in workflow:
+                  raise SystemExit('Could not find verification decode marker')
+              workflow = workflow.replace(decode_marker, strict_block, 1)
+          workflow_path.write_text(workflow)
+          PY
+
+          rm -rf "$old_payload_dir"
+          rm -f \
+            .github/workflows/diagnose-mobile-video-temporary.yml \
+            .github/workflows/import-valid-mobile-video.yml
+
+          node scripts/materialize-mobile-forest-stream.mjs
+          generated='public/scenes/mobile-forest-stream-video-v9-1080.mp4'
+          test "$(wc -c < "$generated" | tr -d '[:space:]')" = "$VIDEO_BYTES"
+          test "$(sha256sum "$generated" | awk '{print $1}')" = "$VIDEO_SHA"
+          ffmpeg -hide_banner -v error -xerror -err_detect explode \
+            -i "$generated" -map 0:v:0 -f null -
+          rm -f "$generated"
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C "$target_branch"
+          git add -A
+          git commit -m 'Replace corrupt mobile MP4 with a validated high-resolution video'
+          git push --force origin "HEAD:$target_branch"
+          branch_sha="$(git rev-parse HEAD)"
+          echo "branch=$target_branch" >> "$GITHUB_OUTPUT"
+          echo "sha=$branch_sha" >> "$GITHUB_OUTPUT"
+          echo "parts=$parts" >> "$GITHUB_OUTPUT"
+
+      - name: Upload validated video evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-video-v9-validation
+          path: |
+            /tmp/stabilize-mobile-video-v9/mobile-forest-stream-video-v9-1080.mp4
+            /tmp/stabilize-mobile-video-v9/frame-early.png
+            /tmp/stabilize-mobile-video-v9/frame-late.png
+            /tmp/stabilize-mobile-video-v9/probe.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish generated branch status
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.release.outputs.branch }}
+          BRANCH_SHA: ${{ steps.release.outputs.sha }}
+          VIDEO_BYTES: ${{ steps.video.outputs.bytes }}
+          VIDEO_SHA: ${{ steps.video.outputs.sha }}
+        run: |
+          set -euo pipefail
+          description="Generated ${VIDEO_BYTES}-byte 1080x1920 video on ${BRANCH}"
+          payload="$(python - "$description" <<'PY'
+          import json, os, sys
+          print(json.dumps({
+              'state': 'success',
+              'context': 'diagnostic/mobile-video-generation',
+              'description': sys.argv[1][:140],
+              'target_url': f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/commit/{os.environ['BRANCH_SHA']}",
+          }))
+          PY
+          )"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"

@@ -283,9 +283,10 @@ h2 {
   justify-content: center;
   overflow-y: auto;
   margin: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 22px;
+  background: rgba(247, 251, 247, 0.28);
+  box-shadow: 0 8px 24px rgba(12, 35, 25, 0.08);
   padding: clamp(8px, 2vh, 20px) clamp(2px, 2vw, 20px);
   line-height: 1.6;
   scroll-behavior: smooth;
@@ -645,3 +646,31 @@ textarea:disabled {
     scroll-behavior: auto !important;
   }
 }
+
+
+/* Keep the landscape visible behind the current conversation. */
+.chat-log,
+.assistant-output {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.model-fallback-notice {
+  width: min(760px, 100%);
+  margin: 0 auto 8px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+  background: rgba(255, 252, 242, 0.9);
+  box-shadow: 0 5px 18px rgba(5, 25, 18, 0.16);
+  color: var(--text);
+  padding: 9px 12px;
+  font-size: 0.78rem;
+  font-weight: 620;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.streaming-text{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}

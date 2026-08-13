@@ -1,0 +1,140 @@
+name: Verify Stabilize impact dashboard access
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: stabilize-impact-admin-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  verify-impact-admin:
+    name: Verify impact dashboard login and menu button
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Mark dashboard verification pending
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          payload="$(printf '{"state":"pending","context":"verification/impact-admin","description":"Waiting for impact login and Admin menu button","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+
+      - name: Verify configured login and Admin button in production
+        shell: bash
+        run: |
+          home_body="$(mktemp)"
+          body="$(mktemp)"
+          login_body="$(mktemp)"
+          cleanup() { rm -f "$home_body" "$body" "$login_body"; }
+          trap cleanup EXIT
+
+          for attempt in {1..30}; do
+            : > "$home_body"
+            : > "$body"
+            : > "$login_body"
+
+            home_status="$(
+              curl --max-time 20 --compressed --silent --show-error \
+                --header "Cache-Control: no-cache" \
+                --output "$home_body" \
+                --write-out "%{http_code}" \
+                "https://stabilize.info/?deployment=${GITHUB_SHA}" || true
+            )"
+            status="$(
+              curl --max-time 20 --compressed --silent --show-error \
+                --header "Cache-Control: no-cache" \
+                --output "$body" \
+                --write-out "%{http_code}" \
+                "https://stabilize.info/admin/impact?deployment=${GITHUB_SHA}" || true
+            )"
+            echo "Impact dashboard attempt ${attempt}: home=${home_status}; dashboard=${status}"
+
+            menu_ok="false"
+            if [[ "$home_status" == "200" ]] && \
+              node -e '
+                const fs = require("node:fs");
+                const html = fs.readFileSync(process.argv[1], "utf8");
+                const menu = html.indexOf("class=\"menu-panel\"");
+                const account = html.indexOf("class=\"menu-account\"", menu);
+                const admin = html.indexOf("class=\"menu-admin-link\"", menu);
+                const close = html.indexOf("</div>\n          </details>", admin);
+                const exact = html.includes(
+                  "class=\"menu-admin-link\" href=\"/admin/impact\" aria-label=\"Open admin dashboard\" rel=\"nofollow\">Admin</a>",
+                );
+                process.exit(
+                  menu >= 0 && account > menu && admin > account && close > admin && exact
+                    ? 0
+                    : 1,
+                );
+              ' "$home_body"; then
+              menu_ok="true"
+            fi
+
+            if [[ "$menu_ok" == "true" && "$status" == "401" ]] && \
+              grep -Fq 'action="/admin/impact/login"' "$body" && \
+              grep -Fq 'Enter the private impact-dashboard password.' "$body" && \
+              ! grep -Fq 'Dashboard access is not configured.' "$body"; then
+              login_status="$(
+                curl --max-time 20 --compressed --silent --show-error \
+                  --request POST \
+                  --header "Cache-Control: no-cache" \
+                  --header "Origin: null" \
+                  --header "Sec-Fetch-Site: none" \
+                  --header "Content-Type: application/x-www-form-urlencoded" \
+                  --data 'password=production-opaque-origin-probe-not-the-password' \
+                  --output "$login_body" \
+                  --write-out "%{http_code}" \
+                  "https://stabilize.info/admin/impact/login?deployment=${GITHUB_SHA}" || true
+              )"
+              echo "Opaque-origin login probe ${attempt}: HTTP ${login_status}"
+
+              if [[ "$login_status" == "401" ]] && \
+                grep -Fq 'That dashboard password was not accepted.' "$login_body" && \
+                ! grep -Fq 'Forbidden' "$login_body"; then
+                exit 0
+              fi
+            fi
+            sleep 10
+          done
+
+          echo "::error::Production did not expose the bottom Admin menu button with a safe dashboard login."
+          exit 1
+
+      - name: Publish dashboard verification result
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [[ "$JOB_STATUS" == "success" ]]; then
+            state="success"
+            description="Admin menu button and iOS dashboard login work"
+          else
+            state="failure"
+            description="Admin menu button or dashboard login failed"
+          fi
+          payload="$(printf '{"state":"%s","context":"verification/impact-admin","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"

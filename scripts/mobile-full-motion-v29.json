@@ -1,0 +1,16 @@
+{
+  "version": "20260812-mobile-no-tap-motion-v29-1",
+  "asset": "/scenes/mobile-forest-stream-full-atlas-v29-1080.webp",
+  "bytes": 1579616,
+  "sha256": "7b52607dc293f753c6082e8cce9fef07fcdbb6acc743c3562a8f8af4119b3de0",
+  "width": 4320,
+  "height": 3840,
+  "frameWidth": 1080,
+  "frameHeight": 1920,
+  "columns": 4,
+  "rows": 2,
+  "frameCount": 8,
+  "fps": 8,
+  "source": "public/scenes/mobile-forest-stream-video-v24-native-1080.mp4",
+  "purpose": "full-frame mobile motion without HTMLMediaElement autoplay"
+}

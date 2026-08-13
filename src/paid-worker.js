@@ -1,5 +1,16 @@
-import originalWorker, { SessionMemory } from "./index.js";
-import { readAuthSession } from "./auth.js";
+import originalWorker, {
+  SessionMemory,
+  accountMemoryStub,
+  emptyMemoryContext,
+  preparedChatResponse,
+  readBoundedJson,
+  readMemoryContext,
+} from "./index.js";
+import {
+  createAccountContextToken,
+  readAccountContextToken,
+  readAuthSession,
+} from "./auth.js";
 import { fixedReplyForRoute } from "./safety.js";
 import { BillingAccount } from "./billing-account.js";
 import {
@@ -7,6 +18,8 @@ import {
   BillingRequestError,
   createCheckoutSession,
   createPortalSession,
+  dailyUsagePeriod,
+  freeDailyModelMessageLimit,
   isAllowedModel,
   modelChoices,
   monthlyModelMessageLimit,
@@ -20,6 +33,163 @@ import {
 export { SessionMemory, BillingAccount };
 
 const ACCOUNT_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+const ACCOUNT_CONTEXT_VERSION = 1;
+const ACCOUNT_CONTEXT_TOKEN_SECONDS = 15 * 60;
+const ACCOUNT_CONTEXT_SUMMARY_BYTES = 1_600;
+const ACCOUNT_CONTEXT_MESSAGE_BYTES = 1_600;
+const ACCOUNT_CONTEXT_RECENT_MESSAGES = 4;
+const ACCOUNT_CONTEXT_MERGED_MESSAGES = 8;
+const accountContextEncoder = new TextEncoder();
+
+function truncateAccountContextUtf8(value, maxBytes) {
+  const text = String(value || "").trim();
+  if (!text || accountContextEncoder.encode(text).byteLength <= maxBytes) {
+    return text;
+  }
+
+  const points = Array.from(text);
+  let low = 0;
+  let high = points.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    const candidate = points.slice(0, middle).join("");
+    if (accountContextEncoder.encode(candidate).byteLength <= maxBytes) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return points.slice(0, low).join("").trim();
+}
+
+function normalizeAccountContextMessages(
+  messages,
+  limit = ACCOUNT_CONTEXT_MERGED_MESSAGES,
+) {
+  if (!Array.isArray(messages)) return [];
+  const cleaned = messages
+    .filter(
+      (message) =>
+        message && ["user", "assistant"].includes(message.role),
+    )
+    .map((message) => ({
+      role: message.role,
+      content: truncateAccountContextUtf8(
+        message.content,
+        ACCOUNT_CONTEXT_MESSAGE_BYTES,
+      ),
+    }))
+    .filter((message) => message.content)
+    .slice(-limit);
+
+  const alternating = [];
+  for (const message of cleaned) {
+    const previous = alternating.at(-1);
+    if (previous?.role === message.role) {
+      previous.content = truncateAccountContextUtf8(
+        previous.content + "\n" + message.content,
+        ACCOUNT_CONTEXT_MESSAGE_BYTES,
+      );
+    } else if (
+      previous?.role !== message.role ||
+      previous?.content !== message.content
+    ) {
+      alternating.push({ ...message });
+    }
+  }
+  return alternating.slice(-limit);
+}
+
+function boundedAccountContext(memory) {
+  const generation = Number(memory?.generation);
+  return {
+    v: ACCOUNT_CONTEXT_VERSION,
+    summary: truncateAccountContextUtf8(
+      memory?.summary,
+      ACCOUNT_CONTEXT_SUMMARY_BYTES,
+    ),
+    recent: normalizeAccountContextMessages(
+      memory?.recent,
+      ACCOUNT_CONTEXT_RECENT_MESSAGES,
+    ),
+    awaitingSafetyAnswer: memory?.awaitingSafetyAnswer === true,
+    turnCount: Math.max(0, Number(memory?.turnCount) || 0),
+    updatedAt: Number(memory?.updatedAt) || null,
+    generation:
+      Number.isSafeInteger(generation) && generation >= 0 ? generation : 0,
+  };
+}
+
+function localAccountContextMessages(body) {
+  const messages = normalizeAccountContextMessages(body?.messages);
+  const latest = messages.at(-1);
+  const current = String(body?.message || "").trim();
+  if (latest?.role === "user" && latest.content === current) messages.pop();
+  return messages;
+}
+
+function preparedMemoryFromAccountContext(context, body) {
+  const generation = Number(context?.generation);
+  if (
+    context?.v !== ACCOUNT_CONTEXT_VERSION ||
+    !Number.isSafeInteger(generation) ||
+    generation < 0
+  ) {
+    return null;
+  }
+
+  return {
+    summary: truncateAccountContextUtf8(
+      context.summary,
+      ACCOUNT_CONTEXT_SUMMARY_BYTES,
+    ),
+    recent: normalizeAccountContextMessages(
+      [
+        ...(Array.isArray(context.recent) ? context.recent : []),
+        ...localAccountContextMessages(body),
+      ],
+      ACCOUNT_CONTEXT_MERGED_MESSAGES,
+    ),
+    awaitingSafetyAnswer: context.awaitingSafetyAnswer === true,
+    turnCount: Math.max(0, Number(context.turnCount) || 0),
+    updatedAt: Number(context.updatedAt) || null,
+    generation,
+  };
+}
+
+function boundedBillingPreflight(value) {
+  if (!value || typeof value !== "object") return null;
+  const model = String(value.model || "").trim().slice(0, 128);
+  const tier = value.tier === null ? null : String(value.tier || "").trim();
+  const period = value.period === null ? null : String(value.period || "").trim();
+  const used = Math.max(0, Number(value.used) || 0);
+  const limit = Math.max(0, Number(value.limit) || 0);
+  const suppliedRemaining = Number(value.remaining);
+  const remaining = Number.isFinite(suppliedRemaining)
+    ? Math.max(0, suppliedRemaining)
+    : Math.max(0, limit - used);
+  const subscriptionStatus = String(
+    value.subscriptionStatus || "none",
+  )
+    .trim()
+    .slice(0, 32);
+  if (!model || ![null, "free", "paid"].includes(tier)) return null;
+  return {
+    allowed: value.allowed === true,
+    reason: value.reason === null ? null : String(value.reason || "").slice(0, 32),
+    model,
+    tier,
+    period,
+    used,
+    limit,
+    remaining: tier === null ? null : remaining,
+    fallback: value.fallback === true,
+    paid: value.paid === true,
+    subscriptionStatus,
+    checkedAt: Date.now(),
+  };
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -64,9 +234,35 @@ function redirect(location, status = 303) {
   });
 }
 
+function wantsJson(request) {
+  return (request.headers.get("accept") || "")
+    .toLowerCase()
+    .includes("application/json");
+}
+
+function billingNavigationResponse(request, url) {
+  return wantsJson(request) ? jsonResponse({ url }) : redirect(url, 303);
+}
+
+function signedOutBillingResponse(request) {
+  return wantsJson(request)
+    ? jsonResponse(
+        { error: "Sign in to unlock model choice.", signInUrl: "/auth/google" },
+        401,
+      )
+    : redirect("/auth/google", 303);
+}
+
 function sameOriginOrNonBrowser(request) {
-  const origin = request.headers.get("origin");
-  return !origin || origin === new URL(request.url).origin;
+  const requestOrigin = new URL(request.url).origin;
+  const origin = String(request.headers.get("origin") || "").trim();
+  const fetchSite = String(request.headers.get("sec-fetch-site") || "")
+    .trim()
+    .toLowerCase();
+
+  if (origin && origin !== "null" && origin !== requestOrigin) return false;
+  if (fetchSite && !["same-origin", "none"].includes(fetchSite)) return false;
+  return true;
 }
 
 function billingStub(env, accountKey) {
@@ -84,6 +280,10 @@ function emptyBillingState() {
     selectedModel: null,
     usagePeriod: null,
     usageCount: 0,
+    paidUsagePeriod: null,
+    paidUsageCount: 0,
+    freeUsagePeriod: null,
+    freeUsageCount: 0,
     updatedAt: null,
   };
 }
@@ -118,72 +318,303 @@ function modelEnvironment(env, model) {
   return new Proxy(env, {
     get(target, property, receiver) {
       if (property === "OPENAI_MODEL") return model;
+      if (property === "OPENAI_SERVICE_TIER") {
+        return String(target.OPENAI_SERVICE_TIER || "fast");
+      }
       return Reflect.get(target, property, receiver);
     },
   });
+}
+
+function chatPreparationOptions(env, body = {}) {
+  const choices = modelChoices(env);
+  const defaultModel = String(env.OPENAI_MODEL || "gpt-5.4");
+  const fallbackModel = String(
+    env.FREE_PLAN_FALLBACK_MODEL || defaultModel || "gpt-5.4",
+  );
+  const freeModel = String(
+    env.FREE_PLAN_PRIMARY_MODEL || "gpt-5.6-sol",
+  );
+  const allowedModels = [...new Set([
+    ...choices.map((choice) => choice.id),
+    defaultModel,
+    freeModel,
+    fallbackModel,
+  ])];
+  return {
+    allowedModels,
+    defaultModel,
+    freeModel,
+    fallbackModel,
+    paidPeriod: usagePeriod(),
+    freePeriod: dailyUsagePeriod(),
+    paidLimit: monthlyModelMessageLimit(env),
+    freeLimit: freeDailyModelMessageLimit(env),
+    includeMemoryGeneration: true,
+  };
 }
 
 function billingNotice(url, reconciled) {
   const state = url.searchParams.get("billing");
   if (state === "success") {
     return reconciled
-      ? "Payment confirmed. Model choice is active."
-      : "Payment is being confirmed. Refresh shortly if model choice is not active yet.";
+      ? "Payment confirmed. Your larger model allowance is active."
+      : "Payment is being confirmed. Refresh shortly if the larger allowance is not active yet.";
   }
-  if (state === "cancelled") return "Checkout was cancelled. No subscription was started.";
-  if (state === "error") return "Billing could not complete that request. Try again from the menu.";
-  if (url.searchParams.get("model") === "saved") return "Your AI model choice was saved.";
+  if (state === "cancelled") {
+    return "Checkout was cancelled. Your free GPT-5.6 Fast allowance is unchanged.";
+  }
+  if (state === "error") {
+    return "Billing could not complete that request. Try again from the model menu.";
+  }
+  if (url.searchParams.get("model") === "automatic") {
+    return "Guest and signed-in Fastest responses begin on GPT-5.6 Fast. Signed-in accounts switch to GPT-5.4 after the daily allowance.";
+  }
   if (url.searchParams.get("model") === "limit") {
-    return "That model's monthly message limit has been reached. Choose the default model or manage billing.";
+    return "That subscriber model allowance has been reached. Choose GPT-5.4 or manage billing.";
   }
   return "";
 }
 
-function billingMenuMarkup({ signedIn, configured, state, choices, defaultModel, limit }) {
-  if (!configured) return "";
-  if (!signedIn) {
-    return `<section class="billing-menu" aria-labelledby="billing-heading">
-      <h2 id="billing-heading">AI model</h2>
-      <p>Sign in to unlock paid model choice.</p>
-    </section>`;
-  }
-
-  if (!state.entitled) {
-    return `<section class="billing-menu" aria-labelledby="billing-heading">
-      <h2 id="billing-heading">AI model</h2>
-      <p>Use the standard model free, or subscribe to choose from additional models.</p>
-      <form action="/billing/checkout" method="post">
-        <button class="billing-primary" type="submit">Unlock model choice</button>
-      </form>
-      ${state.customerId ? `<form action="/billing/portal" method="post">
-        <button class="billing-secondary" type="submit">Manage billing</button>
-      </form>` : ""}
-      <p class="billing-fine-print">Stripe shows the price before purchase. Subscription renews until cancelled.</p>
-    </section>`;
-  }
-
-  const selected = isAllowedModel({ MODEL_CHOICES: choices.map((choice) => `${choice.id}|${choice.label}`).join(","), OPENAI_MODEL: defaultModel }, state.selectedModel)
-    ? state.selectedModel
+function modelChoiceState(state, choices, defaultModel) {
+  const choiceEnvironment = {
+    MODEL_CHOICES: choices
+      .map((choice) => choice.id + "|" + choice.label)
+      .join(","),
+    OPENAI_MODEL: defaultModel,
+  };
+  const paid = state.entitled === true;
+  const automaticFreeModel = choices.some(
+    (choice) => choice.id === "gpt-5.6-sol",
+  )
+    ? "gpt-5.6-sol"
     : defaultModel;
-  const options = choices.map((choice) =>
-    `<option value="${escapeHtml(choice.id)}"${choice.id === selected ? " selected" : ""}>${escapeHtml(choice.label)}</option>`,
-  ).join("");
-  const used = state.usagePeriod === usagePeriod()
-    ? Math.max(0, Number(state.usageCount) || 0)
-    : 0;
+  const selected = paid
+    ? isAllowedModel(choiceEnvironment, state.selectedModel)
+      ? state.selectedModel
+      : defaultModel
+    : automaticFreeModel;
+  const selectedChoice = choices.find((choice) => choice.id === selected);
+  const currentLabel = paid
+    ? selectedChoice?.label || "GPT-5.4"
+    : "GPT-5.6 Fast";
+  const currentPeriod = paid ? usagePeriod() : dailyUsagePeriod();
+  const storedPeriod = paid
+    ? state.paidUsagePeriod || state.usagePeriod
+    : state.freeUsagePeriod;
+  const storedCount = paid
+    ? state.paidUsageCount ?? state.usageCount
+    : state.freeUsageCount;
+  const used =
+    storedPeriod === currentPeriod
+      ? Math.max(0, Number(storedCount) || 0)
+      : 0;
+  return { selected, currentLabel, paid, used };
+}
 
-  return `<section class="billing-menu" aria-labelledby="billing-heading">
-    <h2 id="billing-heading">AI model</h2>
-    <form action="/account/model" method="post" class="model-choice-form">
-      <label for="model-choice">Choose model</label>
-      <select id="model-choice" name="model">${options}</select>
-      <button class="billing-primary" type="submit">Save model</button>
-    </form>
-    <p class="billing-usage">${used} of ${limit} paid-model messages used this month. The default model does not count toward this limit.</p>
-    <form action="/billing/portal" method="post">
-      <button class="billing-secondary" type="submit">Manage billing</button>
-    </form>
-  </section>`;
+function modelOptionsMarkup(choices, selected) {
+  return choices
+    .map(
+      (choice) =>
+        '<option value="' +
+        escapeHtml(choice.id) +
+        '"' +
+        (choice.id === selected ? " selected" : "") +
+        ">" +
+        escapeHtml(choice.label) +
+        "</option>",
+    )
+    .join("");
+}
+
+function modelUsageCopy({ paid, used, freeLimit, paidLimit }) {
+  return paid
+    ? used +
+        " of " +
+        paidLimit +
+        " subscriber model messages used this UTC month. GPT-5.4 does not count."
+    : used +
+        " of " +
+        freeLimit +
+        " free GPT-5.6 Fast messages used today. GPT-5.4 takes over after this allowance. The allowance resets at 00:00 UTC.";
+}
+
+function billingMenuMarkup({
+  signedIn,
+  configured,
+  state,
+  choices,
+  defaultModel,
+  freeLimit,
+  paidLimit,
+}) {
+  if (!signedIn) {
+    return '<section class="billing-menu" aria-labelledby="billing-heading">' +
+      '<h2 id="billing-heading">AI model</h2>' +
+      "<p>Sign in for " +
+      freeLimit +
+      " GPT-5.6 Fast messages each UTC day before GPT-5.4 fallback. Guest chats also begin on GPT-5.6 Fast.</p>" +
+      '<a class="billing-primary billing-link" href="/auth/google">Sign in to choose a model</a>' +
+      "</section>";
+  }
+
+  const choice = modelChoiceState(state, choices, defaultModel);
+  const usage = modelUsageCopy({
+    paid: choice.paid,
+    used: choice.used,
+    freeLimit,
+    paidLimit,
+  });
+  const upgrade = !choice.paid && configured
+    ? '<form action="/billing/checkout" method="post" data-billing-redirect="checkout">' +
+        '<button class="billing-secondary" type="submit">Upgrade model allowance</button>' +
+        "</form>"
+    : "";
+  const manage = configured && state.customerId
+    ? '<form action="/billing/portal" method="post" data-billing-redirect="portal">' +
+        '<button class="billing-secondary" type="submit">Manage billing</button>' +
+        "</form>"
+    : "";
+
+  if (!choice.paid) {
+    return '<section class="billing-menu" aria-labelledby="billing-heading">' +
+      '<h2 id="billing-heading">AI model</h2>' +
+      "<p>GPT-5.6 Fast is automatic for the first " +
+      freeLimit +
+      " messages each UTC day. GPT-5.4 takes over afterward.</p>" +
+      '<p class="billing-usage" data-model-usage="true" aria-live="polite">' +
+      escapeHtml(usage) +
+      "</p>" +
+      upgrade +
+      manage +
+      "</section>";
+  }
+
+  const options = modelOptionsMarkup(choices, choice.selected);
+  return '<section class="billing-menu" aria-labelledby="billing-heading">' +
+    '<h2 id="billing-heading">AI model</h2>' +
+    '<form action="/account/model" method="post" class="model-choice-form">' +
+    '<label for="model-choice">Choose model</label>' +
+    '<select id="model-choice" name="model">' +
+    options +
+    "</select>" +
+    '<button class="billing-primary" type="submit">Save model</button>' +
+    "</form>" +
+    '<p class="billing-usage" data-model-usage="true" aria-live="polite">' +
+    escapeHtml(usage) +
+    "</p>" +
+    manage +
+    "</section>";
+}
+
+function compactModelTileLabel(model) {
+  const value = String(model || "").toLowerCase();
+  if (value === "gpt-5-mini") return "5 mini";
+  const match = value.match(/^gpt-(\d+(?:\.\d+)?)/);
+  return match?.[1] || "5.x";
+}
+
+function composerModelPickerMarkup({
+  signedIn,
+  configured,
+  state,
+  choices,
+  defaultModel,
+  freeLimit,
+  paidLimit,
+}) {
+  const choice = modelChoiceState(state, choices, defaultModel);
+  const buttonLabel = compactModelTileLabel(choice.selected);
+  let modelPanel = "";
+
+  if (!signedIn) {
+    modelPanel =
+      "<p>Sign in for " +
+      freeLimit +
+      " GPT-5.6 Fast messages each UTC day before GPT-5.4 fallback. Guest chats also begin on GPT-5.6 Fast.</p>" +
+      '<a class="billing-primary billing-link" href="/auth/google">Sign in to choose a model</a>';
+  } else if (!choice.paid) {
+    const usage = modelUsageCopy({
+      paid: false,
+      used: choice.used,
+      freeLimit,
+      paidLimit,
+    });
+    const upgrade = configured
+      ? '<form action="/billing/checkout" method="post" data-billing-redirect="checkout">' +
+          '<button class="billing-secondary" type="submit">Upgrade allowance</button>' +
+          "</form>"
+      : "";
+    modelPanel =
+      "<p>GPT-5.6 Fast is automatic for the first " +
+      freeLimit +
+      " messages each UTC day. GPT-5.4 takes over afterward.</p>" +
+      '<p class="billing-usage" data-model-usage="true" aria-live="polite">' +
+      escapeHtml(usage) +
+      "</p>" +
+      upgrade;
+  } else {
+    const options = modelOptionsMarkup(choices, choice.selected);
+    const usage = modelUsageCopy({
+      paid: true,
+      used: choice.used,
+      freeLimit,
+      paidLimit,
+    });
+    modelPanel =
+      '<form action="/account/model" method="post" class="model-choice-form composer-model-form">' +
+      '<label for="composer-model-choice">Choose model</label>' +
+      '<select id="composer-model-choice" name="model">' +
+      options +
+      "</select>" +
+      '<button class="billing-primary" type="submit">Use model</button>' +
+      "</form>" +
+      '<p class="billing-usage" data-model-usage="true" aria-live="polite">' +
+      escapeHtml(usage) +
+      "</p>";
+  }
+
+  const newChatNote = signedIn
+    ? "Starts a fresh conversation with your optional Stabilize memory available."
+    : "Starts a fresh guest conversation.";
+  const privateChatNote = signedIn
+    ? "Starts fresh without reading or updating your Stabilize memory."
+    : "Guest chats already do not use Stabilize account memory.";
+
+  return (
+    '<details class="composer-model-picker">' +
+    '<summary class="composer-model-button" aria-label="Open model and chat controls. Current model: ' +
+    escapeHtml(choice.currentLabel) +
+    '">' +
+    '<span class="composer-model-kicker">Model</span>' +
+    '<span class="composer-model-current">' +
+    escapeHtml(buttonLabel) +
+    "</span>" +
+    "</summary>" +
+    '<div class="composer-model-panel composer-quick-panel" role="group" aria-label="Model and chat controls">' +
+    "<h2>Chat controls</h2>" +
+    '<section class="composer-quick-section composer-quick-model" aria-labelledby="composer-quick-model-heading">' +
+    '<h3 id="composer-quick-model-heading">Model</h3>' +
+    modelPanel +
+    "</section>" +
+    '<section class="composer-quick-section" aria-labelledby="composer-quick-new-heading">' +
+    '<h3 id="composer-quick-new-heading">New chat</h3>' +
+    "<p>" +
+    escapeHtml(newChatNote) +
+    "</p>" +
+    '<button class="composer-quick-action" type="button" data-composer-new-chat>New chat</button>' +
+    "</section>" +
+    '<section class="composer-quick-section" aria-labelledby="composer-quick-private-heading">' +
+    '<h3 id="composer-quick-private-heading">New private chat</h3>' +
+    "<p>" +
+    escapeHtml(privateChatNote) +
+    "</p>" +
+    '<button class="composer-quick-action composer-quick-private-action" type="button" data-composer-new-private-chat>New private chat</button>' +
+    "</section>" +
+    '<p class="composer-quick-status" data-composer-quick-status role="status" aria-live="polite" hidden></p>' +
+    "</div>" +
+    "</details>"
+  );
 }
 
 async function injectBillingPage(response, request, env, authSession, state, reconciled) {
@@ -192,29 +623,57 @@ async function injectBillingPage(response, request, env, authSession, state, rec
   if (!contentType.includes("text/html")) return response;
 
   const choices = modelChoices(env);
-  const defaultModel = String(env.OPENAI_MODEL || choices[0]?.id || "gpt-5.6-sol");
-  const markup = billingMenuMarkup({
+  const defaultModel = String(
+    env.OPENAI_MODEL || choices[0]?.id || "gpt-5.4",
+  );
+  const configured = stripeConfigured(env);
+  const freeLimit = freeDailyModelMessageLimit(env);
+  const paidLimit = monthlyModelMessageLimit(env);
+  const markup = "";
+  const composerModelPicker = composerModelPickerMarkup({
     signedIn: Boolean(authSession),
-    configured: stripeConfigured(env),
+    configured,
     state,
     choices,
     defaultModel,
-    limit: monthlyModelMessageLimit(env),
+    freeLimit,
+    paidLimit,
   });
   const url = new URL(request.url);
   const notice = billingNotice(url, reconciled);
   let html = await response.text();
 
-  if (!html.includes('href="/billing.css"')) {
+  if (!html.includes('href="/billing.css')) {
     html = html.replace(
       "</head>",
-      '    <link rel="stylesheet" href="/billing.css" />\n  </head>',
+      '    <link rel="stylesheet" href="/billing.css?v=20260808-gpt56-fast-first-1" />\n  </head>',
+    );
+  } else {
+    html = html.replace(
+      /href="\/billing\.css(?:\?v=[^"]*)?"/,
+      'href="/billing.css?v=20260808-gpt56-fast-first-1"',
     );
   }
   if (markup) {
     html = html.replace(
       /(<div class="menu-account"[\s\S]*?<\/div>)(\s*<\/div>\s*<\/details>)/,
       `$1${markup}$2`,
+    );
+  }
+  if (composerModelPicker) {
+    html = html.replace(
+      /<form id="chat-form" class="chat-form">[\s\S]*?<\/form>/,
+      (chatForm) =>
+        '<div class="composer-entry-row">' +
+        composerModelPicker +
+        chatForm +
+        "</div>",
+    );
+  }
+  if ((markup || composerModelPicker) && !html.includes('src="/billing-client.js')) {
+    html = html.replace(
+      "</body>",
+      '    <script type="module" src="/billing-client.js?v=20260808-account-preflight-1"></script>\n  </body>',
     );
   }
   if (notice) {
@@ -269,17 +728,111 @@ async function rootResponse(request, env, ctx) {
   return injectBillingPage(response, request, env, authSession, state, reconciled);
 }
 
+async function syncBillingMemoryGeneration(stub, value) {
+  const generation = Number(value);
+  if (!Number.isSafeInteger(generation) || generation < 0) return null;
+  if (!stub || typeof stub.setMemoryGeneration !== "function") {
+    return generation;
+  }
+  try {
+    return await stub.setMemoryGeneration(generation);
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: "billing_memory_generation_sync_failed",
+      error: error instanceof Error ? error.name : "UnknownError",
+    }));
+    return null;
+  }
+}
+
+async function accountContextResponse(request, env) {
+  if (request.method !== "GET") {
+    return jsonResponse({ error: "Method not allowed." }, 405);
+  }
+  if (!sameOriginOrNonBrowser(request)) {
+    return jsonResponse({ error: "Cross-origin request rejected." }, 403);
+  }
+  const authSession = await readAuthSession(request, env);
+  if (!authSession) {
+    return jsonResponse({ error: "Sign in to use account memory." }, 401);
+  }
+
+  const accountStub = billingStub(env, authSession.accountKey);
+  const memoryPromise = readMemoryContext(
+    accountMemoryStub(env, authSession.accountKey),
+  );
+  const billingPromise =
+    accountStub && typeof accountStub.previewChat === "function"
+      ? accountStub.previewChat(chatPreparationOptions(env))
+      : Promise.resolve(null);
+  const [memory, billingPreview] = await Promise.all([
+    memoryPromise,
+    billingPromise,
+  ]);
+  await syncBillingMemoryGeneration(accountStub, memory.generation);
+  const token = await createAccountContextToken(
+    authSession.accountKey,
+    boundedAccountContext(memory),
+    env,
+  );
+  const billing = boundedBillingPreflight(billingPreview);
+  return jsonResponse(
+    {
+      token,
+      expiresInSeconds: ACCOUNT_CONTEXT_TOKEN_SECONDS,
+      generation: Math.max(0, Number(memory.generation) || 0),
+      turnCount: Math.max(0, Number(memory.turnCount) || 0),
+      billing,
+    },
+    200,
+    {
+      "X-Stabilize-Memory-Source": "durable-object",
+      "X-Stabilize-Billing-Source": billing ? "prefetched" : "unavailable",
+    },
+  );
+}
+
+async function memoryControlResponse(request, env, ctx) {
+  const authSessionPromise = readAuthSession(request, env);
+  const response = await originalWorker.fetch(request, env, ctx);
+  if (!response.ok) return response;
+
+  const authSession = await authSessionPromise;
+  if (!authSession) return response;
+  let generation = null;
+  try {
+    const result = await response.clone().json();
+    const supplied = Number(result?.generation);
+    if (Number.isSafeInteger(supplied) && supplied >= 0) {
+      generation = supplied;
+    }
+  } catch {
+    // The original control response remains authoritative.
+  }
+  if (generation === null) {
+    const memory = await readMemoryContext(
+      accountMemoryStub(env, authSession.accountKey),
+    );
+    generation = Math.max(0, Number(memory.generation) || 0);
+  }
+  await syncBillingMemoryGeneration(
+    billingStub(env, authSession.accountKey),
+    generation,
+  );
+  return response;
+}
+
 async function checkoutResponse(request, env) {
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405);
   if (!sameOriginOrNonBrowser(request)) return jsonResponse({ error: "Cross-origin request rejected." }, 403);
   const authSession = await readAuthSession(request, env);
-  if (!authSession) return redirect("/auth/google", 303);
+  if (!authSession) return signedOutBillingResponse(request);
   const stub = billingStub(env, authSession.accountKey);
   const state = await readBillingState(stub);
   const url = state.entitled && state.customerId
     ? await createPortalSession(env, state)
     : await createCheckoutSession(env, state, authSession.accountKey);
-  return redirect(url, 303);
+  return billingNavigationResponse(request, url);
 }
 
 async function portalResponse(request, env) {
@@ -288,20 +841,23 @@ async function portalResponse(request, env) {
   const authSession = await readAuthSession(request, env);
   if (!authSession) return redirect("/auth/google", 303);
   const state = await readBillingState(billingStub(env, authSession.accountKey));
-  return redirect(await createPortalSession(env, state), 303);
+  const url = await createPortalSession(env, state);
+  return billingNavigationResponse(request, url);
 }
 
 async function modelChoiceResponse(request, env) {
-  if (request.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405);
-  if (!sameOriginOrNonBrowser(request)) return jsonResponse({ error: "Cross-origin request rejected." }, 403);
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed." }, 405);
+  }
+  if (!sameOriginOrNonBrowser(request)) {
+    return jsonResponse({ error: "Cross-origin request rejected." }, 403);
+  }
   const authSession = await readAuthSession(request, env);
   if (!authSession) return redirect("/auth/google", 303);
   const form = await request.formData();
   const model = String(form.get("model") || "").trim();
   if (!isAllowedModel(env, model)) return redirect("/?billing=error", 303);
   const stub = billingStub(env, authSession.accountKey);
-  const state = await readBillingState(stub);
-  if (!state.entitled) return redirect("/?billing=error", 303);
   await stub.setSelectedModel(model);
   return redirect("/?model=saved", 303);
 }
@@ -316,48 +872,254 @@ async function webhookResponse(request, env) {
   return jsonResponse({ received: true });
 }
 
+async function shouldRefundModelUsage(response) {
+  if (!response.ok) return true;
+  const contentType = (response.headers.get("content-type") || "")
+    .toLowerCase();
+  if (!contentType.includes("application/json")) return false;
+  try {
+    const result = await response.clone().json();
+    return Boolean(fixedReplyForRoute(result?.route));
+  } catch {
+    return false;
+  }
+}
+
 async function paidChatResponse(request, env, ctx) {
   if (request.method !== "POST") return originalWorker.fetch(request, env, ctx);
+  const requestStartedAt = Date.now();
+  const authStartedAt = Date.now();
   const authSession = await readAuthSession(request, env);
-  if (!authSession) return originalWorker.fetch(request, env, ctx);
-  const stub = billingStub(env, authSession.accountKey);
-  const state = await readBillingState(stub);
-  const defaultModel = String(env.OPENAI_MODEL || "gpt-5.6-sol");
-  const selectedModel = state.entitled && isAllowedModel(env, state.selectedModel)
-    ? state.selectedModel
-    : defaultModel;
-  if (selectedModel === defaultModel) {
-    return originalWorker.fetch(request, env, ctx);
-  }
-
-  const period = usagePeriod();
-  const reservation = await stub.reserveUsage(
-    period,
-    monthlyModelMessageLimit(env),
-  );
-  if (!reservation.allowed) {
-    return jsonResponse(
-      { error: "The monthly paid-model message limit has been reached. Choose the default model or manage billing." },
-      429,
+  const authMs = Date.now() - authStartedAt;
+  if (!authSession) {
+    return originalWorker.fetch(
+      request,
+      modelEnvironment(
+        env,
+        String(env.FREE_PLAN_PRIMARY_MODEL || "gpt-5.6-sol"),
+      ),
+      ctx,
     );
   }
 
-  const response = await originalWorker.fetch(
-    request,
-    modelEnvironment(env, selectedModel),
-    ctx,
-  );
-  let refund = !response.ok;
-  if (response.ok) {
-    try {
-      const result = await response.clone().json();
-      refund = Boolean(fixedReplyForRoute(result?.route));
-    } catch {
-      refund = false;
-    }
+  const stub = billingStub(env, authSession.accountKey);
+  if (!stub || typeof stub.prepareChat !== "function") {
+    return originalWorker.fetch(request, env, ctx);
   }
-  if (refund) await stub.refundUsage(period);
-  return response;
+
+  const fallbackRequest = request.clone();
+  let body;
+  try {
+    body = await readBoundedJson(request);
+  } catch {
+    return originalWorker.fetch(fallbackRequest, env, ctx);
+  }
+
+  const memoryStub = body?.privateChat === true
+    ? null
+    : accountMemoryStub(env, authSession.accountKey);
+  const contextStartedAt = Date.now();
+  const contextPreparation = body?.privateChat === true
+    ? Promise.resolve({ value: null, durationMs: 0 })
+    : readAccountContextToken(
+        String(body?.accountContextToken || ""),
+        authSession.accountKey,
+        env,
+      )
+        .then((value) => ({
+          value: preparedMemoryFromAccountContext(value, body),
+          durationMs: Date.now() - contextStartedAt,
+        }))
+        .catch(() => ({
+          value: null,
+          durationMs: Date.now() - contextStartedAt,
+        }));
+  const billingStartedAt = Date.now();
+  const billingPreparation = stub
+    .prepareChat(chatPreparationOptions(env, body))
+    .then((value) => ({
+      value,
+      durationMs: Date.now() - billingStartedAt,
+    }));
+  const memoryStartedAt = Date.now();
+  const memoryPreparation = body?.privateChat === true
+    ? Promise.resolve({
+        value: emptyMemoryContext(),
+        durationMs: 0,
+        source: "private",
+      })
+    : Promise.all([contextPreparation, billingPreparation]).then(
+        async ([prefetched, preparedBilling]) => {
+          const suppliedGeneration = Number(
+            preparedBilling.value?.memoryGeneration,
+          );
+          const currentGeneration =
+            Number.isSafeInteger(suppliedGeneration) && suppliedGeneration >= 0
+              ? suppliedGeneration
+              : 0;
+          if (
+            prefetched.value &&
+            prefetched.value.generation === currentGeneration
+          ) {
+            return {
+              value: prefetched.value,
+              durationMs: prefetched.durationMs,
+              source: "prefetched",
+            };
+          }
+
+          const value = await readMemoryContext(memoryStub);
+          await syncBillingMemoryGeneration(stub, value.generation);
+          return {
+            value,
+            durationMs: Date.now() - memoryStartedAt,
+            source: "durable-object",
+          };
+        },
+      );
+  const [billingResult, memoryResult] = await Promise.all([
+    billingPreparation,
+    memoryPreparation,
+  ]);
+  const preparation = billingResult.value;
+  const memory = memoryResult.value;
+  const memorySource = memoryResult.source || "durable-object";
+  const preparationMs = Date.now() - requestStartedAt;
+  console.info(
+    JSON.stringify({
+      event: "signed_in_chat_prepared",
+      authMs,
+      billingMs: billingResult.durationMs,
+      memoryMs: memoryResult.durationMs,
+      memorySource,
+      preparationMs,
+      model: String(preparation?.model || "").slice(0, 128),
+      paid: preparation?.paid === true,
+      fallback: preparation?.fallback === true,
+      privateChat: body?.privateChat === true,
+    }),
+  );
+
+  if (!preparation?.allowed) {
+    return jsonResponse(
+      {
+        error:
+          preparation?.reason === "inactive"
+            ? "The selected model requires an active subscription."
+            : "The monthly subscriber model-message limit has been reached. Choose GPT-5.4 or manage billing.",
+      },
+      preparation?.reason === "inactive" ? 403 : 429,
+    );
+  }
+
+  const defaultModel = String(env.OPENAI_MODEL || "gpt-5.4");
+  if (preparation.paid !== true && preparation.model === defaultModel) {
+    body.reasoningEffort = "none";
+  }
+  const selectedEnv = modelEnvironment(env, preparation.model);
+  let response = await preparedChatResponse(
+    request,
+    body,
+    selectedEnv,
+    ctx,
+    authSession.accountKey,
+    body?.privateChat === true ? emptyMemoryContext() : memory,
+  );
+  response = responseWithPreparationTiming(response, {
+    authMs,
+    billingMs: billingResult.durationMs,
+    memoryMs: memoryResult.durationMs,
+    memorySource,
+    preparationMs,
+    model: preparation.model,
+  });
+
+  if (
+    preparation.reservationMade &&
+    (await shouldRefundModelUsage(response))
+  ) {
+    await stub.refundUsage(preparation.tier, preparation.period);
+    return response;
+  }
+
+  if (!preparation.tier) return response;
+  return responseWithModelUsage(response, {
+    tier: preparation.tier,
+    used: preparation.used,
+    limit: preparation.limit,
+    period: preparation.period,
+    model: preparation.model,
+    fallback: preparation.fallback,
+  });
+}
+
+function responseWithPreparationTiming(
+  response,
+  {
+    authMs,
+    billingMs,
+    memoryMs,
+    memorySource,
+    preparationMs,
+    model,
+  },
+) {
+  const headers = new Headers(response.headers);
+  const timing = [
+    "stabilize-auth;dur=" + Math.max(0, Number(authMs) || 0),
+    "stabilize-billing;dur=" + Math.max(0, Number(billingMs) || 0),
+    "stabilize-memory;dur=" + Math.max(0, Number(memoryMs) || 0),
+    "stabilize-preparation;dur=" + Math.max(0, Number(preparationMs) || 0),
+  ].join(", ");
+  const existing = String(headers.get("Server-Timing") || "").trim();
+  headers.set("Server-Timing", existing ? existing + ", " + timing : timing);
+  headers.set(
+    "X-Stabilize-Preparation-Ms",
+    String(Math.max(0, Number(preparationMs) || 0)),
+  );
+  headers.set("X-Stabilize-Model-Selected", String(model || ""));
+  headers.set(
+    "X-Stabilize-Memory-Source",
+    String(memorySource || "durable-object"),
+  );
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function responseWithModelUsage(
+  response,
+  { tier, used, limit, period, model, fallback = false },
+) {
+  const headers = new Headers(response.headers);
+  headers.set("X-Stabilize-Model-Usage-Tier", tier);
+  headers.set("X-Stabilize-Model-Usage-Used", String(used));
+  headers.set("X-Stabilize-Model-Usage-Limit", String(limit));
+  headers.set("X-Stabilize-Model-Usage-Period", period);
+  headers.set("X-Stabilize-Model-Selected", model);
+  if (fallback) headers.set("X-Stabilize-Model-Fallback", "daily-limit");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+async function requestWithReasoningEffort(request, effort) {
+  let body;
+  try {
+    body = await request.clone().json();
+  } catch {
+    return request;
+  }
+  const headers = new Headers(request.headers);
+  headers.delete("content-length");
+  return new Request(request, {
+    headers,
+    body: JSON.stringify({ ...body, reasoningEffort: effort }),
+  });
 }
 
 const worker = {
@@ -379,19 +1141,32 @@ const worker = {
       if (url.pathname === "/api/stripe/webhook") {
         return await webhookResponse(request, env);
       }
+      if (
+        url.pathname === "/api/account/memory" ||
+        url.pathname === "/api/conversation/new"
+      ) {
+        return await memoryControlResponse(request, env, ctx);
+      }
+      if (url.pathname === "/api/account/context") {
+        return await accountContextResponse(request, env);
+      }
       if (url.pathname === "/api/chat") {
         return await paidChatResponse(request, env, ctx);
       }
       return await originalWorker.fetch(request, env, ctx);
     } catch (error) {
       if (error instanceof BillingConfigurationError) {
-        return redirect("/?billing=error", 303);
+        return wantsJson(request)
+          ? jsonResponse({ error: "Billing is not configured." }, 503)
+          : redirect("/?billing=error", 303);
       }
       if (error instanceof BillingRequestError) {
         if (url.pathname === "/api/stripe/webhook") {
           return jsonResponse({ error: error.message }, error.status || 400);
         }
-        return redirect("/?billing=error", 303);
+        return wantsJson(request)
+          ? jsonResponse({ error: error.message }, error.status || 502)
+          : redirect("/?billing=error", 303);
       }
       const reference = "BIL-" + crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase();
       console.error(JSON.stringify({
@@ -400,7 +1175,12 @@ const worker = {
         path: url.pathname,
         reference,
       }));
-      return jsonResponse({ error: "Billing could not complete that request.", reference }, 503);
+      return wantsJson(request)
+        ? jsonResponse(
+            { error: "Billing could not complete that request.", reference },
+            503,
+          )
+        : redirect("/?billing=error", 303);
     }
   },
 };

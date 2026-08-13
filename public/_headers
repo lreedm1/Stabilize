@@ -1,10 +1,135 @@
 /*
-  Content-Security-Policy: default-src 'self'; connect-src 'self'; font-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Content-Security-Policy: default-src 'self'; connect-src 'self'; font-src 'self'; img-src 'self' data:; media-src 'self' blob:; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
   Cross-Origin-Opener-Policy: same-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   Referrer-Policy: no-referrer
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
 
+/reasoning-choice.js
+  Cache-Control: no-store, max-age=0
+
+/message-feedback.css
+  Cache-Control: no-store, max-age=0
+
+/mobile-quality.js
+  Cache-Control: no-store, max-age=0
+
+/mobile-creek-gif.js
+  Cache-Control: no-store, max-age=0
+
+/scenes/mobile-forest-stream-video-v4-1080.mp4
+  Cache-Control: no-store, max-age=0
+  CDN-Cache-Control: no-store
+  Cloudflare-CDN-Cache-Control: no-store
+  Content-Type: video/mp4
+
+/scenes/mobile-forest-stream-loop-v1.part*.b64
+  Cache-Control: public, max-age=31536000, immutable
+  Content-Type: text/plain; charset=utf-8
+
+/scenes/mobile-forest-stream-v1-540.webp
+  Cache-Control: public, max-age=31536000, immutable
+
+/scenes/mobile-golden-alpine-v2.webp
+  Cache-Control: public, max-age=31536000, immutable
+
+/scenes/mobile-golden-alpine-v3-*
+  Cache-Control: public, max-age=31536000, immutable
+
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
+
+# smooth-mobile-video-v12-start
+/scenes/mobile-forest-stream-video-v12-720.mp4
+  Content-Type: video/mp4
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+
+/scenes/mobile-forest-stream-v12-720.webp
+  Content-Type: image/webp
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+# smooth-mobile-video-v12-end
+
+# retina-mobile-video-v14-start
+/scenes/mobile-forest-stream-video-v14-retina-2160.mp4
+  Content-Type: video/mp4
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+
+/scenes/mobile-forest-stream-v14-retina-2160.webp
+  Content-Type: image/webp
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+# retina-mobile-video-v14-end
+
+# no-tap-mobile-motion-v17-hq-start
+/scenes/mobile-forest-stream-motion-v17-hq-1440.webp
+  Content-Type: image/webp
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+# no-tap-mobile-motion-v17-hq-end
+
+# mobile-motion-canvas-v18-start
+/mobile-motion-canvas.js
+  Content-Type: text/javascript; charset=utf-8
+  Cache-Control: no-store, max-age=0
+
+/scenes/mobile-forest-stream-water-sprite-v19-hd-1080.webp
+  Content-Type: image/webp
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+# mobile-motion-canvas-v18-end
+
+# ai-enhanced-mobile-4k-v23-start
+/scenes/mobile-forest-stream-video-v23-ai-2160.mp4
+  Content-Type: video/mp4
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+
+/scenes/mobile-forest-stream-v23-ai-2160.webp
+  Content-Type: image/webp
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+# ai-enhanced-mobile-4k-v23-end
+
+# native-selected-mobile-v24-start
+/scenes/mobile-forest-stream-video-v24-native-1080.mp4
+  Content-Type: video/mp4
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+
+/scenes/mobile-forest-stream-v24-native-1080.webp
+  Content-Type: image/webp
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+# native-selected-mobile-v24-end
+
+# mobile-video-handoff-v31-start
+/mobile-video-handoff-v31.js
+  Content-Type: text/javascript; charset=utf-8
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+# mobile-video-handoff-v31-end
+
+# cache-independent-safari-tab-icon-start
+/stabilize-tab-20260813.svg
+  Content-Type: image/svg+xml; charset=utf-8
+  Cache-Control: no-store, max-age=0
+  Content-Disposition: inline
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+# cache-independent-safari-tab-icon-end

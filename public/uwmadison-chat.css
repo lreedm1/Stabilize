@@ -1,0 +1,284 @@
+@font-face {
+  font-family: "Lexend";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("/fonts/lexend-latin-wght-normal.woff2") format("woff2");
+}
+
+:root {
+  --uw-chat-card: rgba(21, 34, 31, 0.86);
+  --uw-chat-border: rgba(255, 255, 255, 0.34);
+  --uw-chat-muted: rgba(255, 255, 255, 0.78);
+  --uw-chat-warm: #f4e4bd;
+  --uw-chat-red: #a83b3b;
+}
+
+/*
+ * The shared chat shell intentionally locks the main Stabilize experience to
+ * one viewport. The UW resource banner adds substantial content before the
+ * chat, so this host must use the document itself as the vertical scroller.
+ * Keeping the chat card as a full-height, non-shrinking section also prevents
+ * the composer from being compressed underneath iOS browser chrome.
+ * WebKit regression coverage verifies actual document movement.
+ */
+html[data-campus-chat="uwmadison"] {
+  height: auto !important;
+  min-height: 100%;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: auto;
+  touch-action: pan-y;
+}
+
+html[data-campus-chat="uwmadison"] body {
+  height: auto !important;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: auto;
+  touch-action: pan-y;
+}
+
+html[data-campus-chat="uwmadison"] .page-shell {
+  width: min(1080px, calc(100% - 28px));
+  height: auto !important;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin-inline: auto;
+  overflow: visible !important;
+  touch-action: pan-y;
+}
+
+html[data-campus-chat="uwmadison"] .site-header,
+html[data-campus-chat="uwmadison"] .uw-chat-banner {
+  flex: 0 0 auto;
+}
+
+html[data-campus-chat="uwmadison"] .chat-card {
+  width: 100%;
+  height: calc(100svh - 32px);
+  min-height: 560px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-color: rgba(255, 255, 255, 0.46);
+  scroll-margin-top: max(12px, env(safe-area-inset-top));
+}
+
+.uw-chat-banner {
+  display: grid;
+  gap: 1rem;
+  width: min(980px, 100%);
+  margin: 0 auto 1rem;
+  border: 1px solid var(--uw-chat-border);
+  border-radius: 1.2rem;
+  background: var(--uw-chat-card);
+  box-shadow: 0 16px 42px rgba(6, 17, 14, 0.28);
+  padding: clamp(1rem, 3vw, 1.55rem);
+  color: #fff;
+  -webkit-backdrop-filter: blur(14px) saturate(0.9);
+  backdrop-filter: blur(14px) saturate(0.9);
+}
+
+.uw-chat-banner-copy {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.uw-chat-kicker {
+  margin: 0;
+  color: var(--uw-chat-warm);
+  font-size: 0.73rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.uw-chat-banner h2 {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(1.25rem, 3vw, 1.75rem);
+  letter-spacing: -0.025em;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.3);
+}
+
+.uw-chat-banner p {
+  max-width: 76ch;
+  margin: 0;
+  color: var(--uw-chat-muted);
+  line-height: 1.55;
+}
+
+.uw-emergency-links {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.uw-emergency-links a {
+  display: grid;
+  gap: 0.12rem;
+  min-height: 3.9rem;
+  align-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 0.85rem;
+  background: rgba(92, 22, 22, 0.58);
+  padding: 0.7rem 0.85rem;
+  color: #fff;
+  text-decoration: none;
+}
+
+.uw-emergency-links a:hover,
+.uw-emergency-links a:focus-visible {
+  background: rgba(118, 27, 27, 0.8);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.uw-emergency-links strong {
+  font-size: 0.96rem;
+}
+
+.uw-emergency-links span {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.76rem;
+}
+
+.uw-resource-disclosure {
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+  padding-top: 0.85rem;
+}
+
+.uw-resource-disclosure > summary {
+  width: fit-content;
+  cursor: pointer;
+  color: #fff;
+  font-weight: 760;
+  text-underline-offset: 0.16em;
+}
+
+.uw-resource-disclosure[open] > summary {
+  margin-bottom: 0.85rem;
+}
+
+.uw-resource-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.uw-resource-card {
+  display: grid;
+  gap: 0.2rem;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 0.78rem;
+  background: rgba(8, 24, 19, 0.48);
+  padding: 0.8rem;
+  color: #fff;
+  text-decoration: none;
+}
+
+.uw-resource-card:hover,
+.uw-resource-card:focus-visible {
+  background: rgba(8, 24, 19, 0.76);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.uw-resource-card span {
+  color: var(--uw-chat-muted);
+  font-size: 0.78rem;
+}
+
+.uw-resource-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.uw-resource-prompts button {
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.48rem 0.72rem;
+  color: #fff;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.uw-resource-prompts button:hover,
+.uw-resource-prompts button:focus-visible {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.uw-resource-update-note {
+  margin-top: 0.7rem !important;
+  font-size: 0.72rem;
+}
+
+html[data-campus-chat="uwmadison"] .product-intro h1 {
+  max-width: 17ch;
+}
+
+html[data-campus-chat="uwmadison"] .privacy-signal::before {
+  content: "UW resources built in · ";
+  color: var(--uw-chat-warm);
+  font-weight: 760;
+}
+
+@media (max-width: 700px) {
+  .uw-emergency-links,
+  .uw-resource-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .uw-chat-banner {
+    border-radius: 1rem;
+  }
+
+  html[data-campus-chat="uwmadison"] .chat-card {
+    height: calc(100svh - 20px);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .uw-chat-banner {
+    background: #23332f;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media print {
+  html[data-campus-chat="uwmadison"],
+  html[data-campus-chat="uwmadison"] body,
+  html[data-campus-chat="uwmadison"] .page-shell,
+  html[data-campus-chat="uwmadison"] .chat-card {
+    height: auto !important;
+    min-height: 0;
+    overflow: visible !important;
+  }
+
+  .uw-chat-banner {
+    border: 1px solid #555;
+    background: #fff;
+    box-shadow: none;
+    color: #111;
+  }
+
+  .uw-chat-banner h2,
+  .uw-chat-banner p,
+  .uw-chat-kicker,
+  .uw-emergency-links a,
+  .uw-resource-card,
+  .uw-resource-prompts button {
+    color: #111;
+    text-shadow: none;
+  }
+}

@@ -1,0 +1,42 @@
+/* Keep the primary content readable over the photographic background. */
+.seo-intro,
+.seo-intro h1,
+.seo-intro p,
+.product-intro .product-promise,
+.product-intro .privacy-signal,
+.seo-intro .landing-meta .info-disclosure summary,
+.seo-intro .landing-meta .info-popover p,
+.assistant-output,
+.assistant-output h3,
+.assistant-output h4,
+.assistant-output h5,
+.assistant-output h6,
+.assistant-output blockquote,
+.assistant-output a,
+.thinking-output,
+.assistant-output .outcome-question,
+.assistant-output .outcome-status {
+  color: #fffef8;
+  text-shadow: 0 2px 8px rgba(3, 20, 14, 0.86);
+}
+
+.assistant-output pre,
+.assistant-output code {
+  background: rgba(5, 25, 18, 0.72);
+  color: #fffef8;
+  text-shadow: none;
+}
+
+.assistant-output pre code {
+  background: transparent;
+}
+
+/* Translucent gray reading surfaces */
+.seo-intro,
+.assistant-output {
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  background: rgba(42, 47, 46, 0.68);
+  box-shadow: 0 10px 30px rgba(4, 13, 10, 0.24);
+  -webkit-backdrop-filter: blur(10px) saturate(0.82);
+  backdrop-filter: blur(10px) saturate(0.82);
+}

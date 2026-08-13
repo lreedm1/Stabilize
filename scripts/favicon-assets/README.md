@@ -1,0 +1,1 @@
+These Base64 payloads are decoded by `scripts/embed-favicon-fallback.mjs` during the generated build pipeline. Keeping the source payloads as text allows the repository automation to produce byte-identical ICO and PNG assets before tests and Cloudflare packaging.

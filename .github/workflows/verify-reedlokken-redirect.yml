@@ -1,0 +1,106 @@
+name: Verify reedlokken.com redirects
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - src/domain-router.js
+      - wrangler.jsonc
+      - .github/workflows/verify-reedlokken-redirect.yml
+  workflow_dispatch:
+
+concurrency:
+  group: verify-reedlokken-redirect-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  verify:
+    name: Verify reedlokken.com redirects
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Mark redirect verification pending
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          payload="$(printf '{"state":"pending","context":"verification/reedlokken-redirect","description":"Waiting for both legacy domains to redirect","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+
+      - name: Verify both public hostnames
+        shell: bash
+        run: |
+          set -euo pipefail
+          path='/cloudflare-redirect-check'
+          query="deployment=${GITHUB_SHA}"
+          expected="https://stabilize.info${path}?${query}"
+
+          for attempt in {1..48}; do
+            all_verified=true
+
+            for host in reedlokken.com www.reedlokken.com; do
+              headers="$(mktemp)"
+              status="$(
+                curl --max-time 20 --silent --show-error \
+                  --header 'Cache-Control: no-cache' \
+                  --dump-header "$headers" \
+                  --output /dev/null \
+                  --write-out '%{http_code}' \
+                  "https://${host}${path}?${query}" || true
+              )"
+              location="$(
+                awk -F': ' 'tolower($1) == "location" { gsub("\r", "", $2); print $2 }' \
+                  "$headers" | tail -n 1
+              )"
+              rm -f "$headers"
+
+              echo "${host} attempt ${attempt}: HTTP ${status:-000}; location=${location:-missing}"
+              if [[ "$status" != '308' || "$location" != "$expected" ]]; then
+                all_verified=false
+              fi
+            done
+
+            if [[ "$all_verified" == true ]]; then
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "::error::reedlokken.com and www.reedlokken.com did not both redirect to ${expected}."
+          exit 1
+
+      - name: Publish redirect verification result
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [[ "$JOB_STATUS" == 'success' ]]; then
+            state='success'
+            description='Both legacy domains redirect to stabilize.info'
+          else
+            state='failure'
+            description='Legacy-domain redirect verification failed'
+          fi
+
+          payload="$(printf '{"state":"%s","context":"verification/reedlokken-redirect","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"

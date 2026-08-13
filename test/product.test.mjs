@@ -53,18 +53,24 @@ test("the homepage gives a short product promise", async () => {
   ]);
 
   assert.match(pageSource, /Get unstuck\./);
-  assert.match(pageSource, /Get one clear next step/);
-  assert.match(pageSource, /Guest chats aren't remembered/);
-  assert.match(pageSource, /data-example-message=/);
-  assert.match(pageSource, /href="\/product\.css"/);
-  assert.match(pageSource, /href="\/photo-tuning\.css"/);
+  assert.match(pageSource, /page\.promise/);
+  assert.match(
+    pageSource,
+    /Guest chats keep the full conversation in this tab/,
+  );
+  assert.doesNotMatch(pageSource, /data-example-message=/);
+  assert.doesNotMatch(pageSource, /example-starts/);
+  assert.match(
+    pageSource,
+    /href="\/product\.css\?v=20260804-compact-outcomes-2"/,
+  );
+  assert.match(pageSource, /href="\/photo-tuning\.css\?v=20260802-8"/);
   assert.doesNotMatch(pageSource, /how-it-works-strip/);
   assert.doesNotMatch(pageSource, /Not a therapist or companion bot/);
   assert.match(
     productStyles,
     /\.product-intro\s*{[\s\S]*max-height:\s*100%;[\s\S]*overflow-y:\s*auto;/,
   );
-  assert.match(productStyles, /\.example-start/);
   assert.match(
     seoStyles,
     /\.seo-intro\s*{[\s\S]*background:\s*rgba\(255,\s*252,\s*242,\s*0\.54\)/,
@@ -87,13 +93,16 @@ test("the responsive background includes a real 8K WebP", async () => {
   assert.deepEqual(webpDimensions(eightK), { width: 7680, height: 4320 });
 });
 
-test("photos preserve screen proportion and use a greener treatment", async () => {
+test("photos preserve screen proportion and use a calm mobile treatment", async () => {
   const [pageSource, tuningStyles, mobilePhoto, desktopPhoto, credit] =
     await Promise.all([
       readFile(new URL("../src/page.js", import.meta.url), "utf8"),
       readFile(new URL("../public/photo-tuning.css", import.meta.url), "utf8"),
       readFile(
-        new URL("../public/scenes/lake-valley-portrait-720.webp", import.meta.url),
+        new URL(
+          "../public/scenes/mobile-sunlit-green-path-v4-1440.webp",
+          import.meta.url,
+        ),
       ),
       readFile(
         new URL("../public/scenes/lake-valley-landscape-1280.webp", import.meta.url),
@@ -109,9 +118,9 @@ test("photos preserve screen proportion and use a greener treatment", async () =
     /media="\(max-width: 980px\) and \(orientation: portrait\)"/,
   );
   assert.match(pageSource, /type="image\/webp"/);
-  assert.deepEqual(webpDimensions(mobilePhoto), { width: 720, height: 1280 });
+  assert.deepEqual(webpDimensions(mobilePhoto), { width: 1440, height: 2560 });
   assert.equal(mobilePhoto.equals(desktopPhoto), false);
-  assert.match(credit, /Royce Fonseca/);
+  assert.match(credit, /Wolfgang Hasselmann/);
   assert.match(credit, /Unsplash License/);
   assert.match(
     tuningStyles,
@@ -123,39 +132,81 @@ test("photos preserve screen proportion and use a greener treatment", async () =
   );
   assert.match(
     tuningStyles,
-    /@media \(max-width: 980px\) and \(orientation: portrait\)[\s\S]*object-position:\s*50% 42%;/,
+    /@media \(max-width: 980px\) and \(orientation: portrait\)[\s\S]*object-position:\s*50% 56%;[\s\S]*filter:\s*none/,
   );
   assert.match(tuningStyles, /rgba\(5, 55, 29, 0\.1\)/);
 });
 
-test("example starts fill the composer without sending for the user", async () => {
-  const clientScript = await readFile(
-    new URL("../public/app.js", import.meta.url),
-    "utf8",
-  );
+test("the homepage has no predefined prompt buttons", async () => {
+  const [pageSource, clientScript] = await Promise.all([
+    readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+  ]);
 
-  assert.match(clientScript, /querySelectorAll\("\[data-example-message\]"\)/);
-  assert.match(clientScript, /input\.value = button\.dataset\.exampleMessage/);
-  assert.doesNotMatch(
-    clientScript,
-    /button\.addEventListener\("click"[\s\S]{0,300}sendMessage\(/,
-  );
+  assert.doesNotMatch(pageSource, /data-example-message=/);
+  assert.doesNotMatch(pageSource, /class="example-start"/);
+  assert.match(pageSource, /id="message-input"/);
+  assert.match(pageSource, /id="send-button"/);
+  assert.match(clientScript, /form\.addEventListener\("submit"/);
 });
 
-test("ordinary replies offer a private next-step check", async () => {
+test("guest conversations preserve the full current-tab transcript", async () => {
+  const [clientScript, privacyPage] = await Promise.all([
+    readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/privacy.html", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(
+    clientScript,
+    /GUEST_THREAD_STORAGE_KEY = "stabilize:guest-thread:v3"/,
+  );
+  assert.match(clientScript, /MAX_GUEST_THREAD_MESSAGE_CHARS = 4_000/);
+  assert.match(clientScript, /MAX_GUEST_SUMMARY_CHARS = 30_000/);
+  assert.match(clientScript, /MAX_CHAT_REQUEST_BYTES = 1_900_000/);
+  assert.match(clientScript, /sessionStorage\.setItem/);
+  assert.match(clientScript, /sessionStorage\.getItem/);
+  assert.match(clientScript, /sessionStorage\.removeItem/);
+  assert.match(clientScript, /return normalizeGuestMessages\(messages\);/);
+  assert.match(clientScript, /restoreGuestConversation\(\)/);
+  assert.match(clientScript, /new TextEncoder\(\)\.encode\(serialized\)\.byteLength/);
+  assert.doesNotMatch(clientScript, /MAX_GUEST_THREAD_MESSAGES = 8/);
+  assert.doesNotMatch(clientScript, /messages\.shift\(\)/);
+  assert.doesNotMatch(clientScript, /applyGuestSummaryResult/);
+  assert.doesNotMatch(clientScript, /localStorage/);
+  assert.match(privacyPage, /full\s+user and assistant transcript/i);
+  assert.match(privacyPage, /current browser tab/i);
+  assert.match(privacyPage, /included with later guest\s+messages/i);
+  assert.match(privacyPage, /does not silently remove older turns/i);
+});
+
+test("ordinary replies offer useful model follow-up actions", async () => {
   const [clientScript, pageSource, productStyles] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
     readFile(new URL("../public/product.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(pageSource, /Do you have a next step\?/);
-  assert.match(clientScript, /function appendOutcomeCheck/);
+  assert.match(pageSource, /What would help next\?/);
+  assert.match(pageSource, /Make it smaller/);
+  assert.match(pageSource, /Another option/);
+  assert.match(pageSource, /Help me start now/);
+  assert.match(clientScript, /function renderOutcomeCheck/);
   assert.match(clientScript, /ROUTES_WITHOUT_OUTCOME_CHECK/);
-  assert.match(clientScript, /result\.awaitingSafetyAnswer !== true/);
-  assert.match(pageSource, /Give me one step I can do in ten minutes/);
-  assert.doesNotMatch(clientScript, /\/api\/feedback|localStorage|sessionStorage/);
+  assert.match(clientScript, /result\.awaitingSafetyAnswer !== true|needsSafetyAnswer/);
+  assert.match(clientScript, /buildOutcomeActionPrompt/);
+  assert.doesNotMatch(clientScript, /\/api\/feedback|localStorage/);
   assert.doesNotMatch(clientScript, /innerHTML\s*=/);
   assert.match(productStyles, /\.outcome-check/);
   assert.match(productStyles, /\.outcome-button/);
+});
+
+
+test("guest model choice includes a working sign-in action", async () => {
+  const [workerSource, billingStyles] = await Promise.all([
+    readFile(new URL("../src/paid-worker.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/billing.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(workerSource, /href="\/auth\/google">Sign in to choose a model/);
+  assert.match(billingStyles, /\.billing-link/);
 });

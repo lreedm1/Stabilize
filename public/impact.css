@@ -1,0 +1,150 @@
+.impact-outcome-card {
+  position: relative;
+  border: 1px solid rgba(31, 111, 84, 0.24);
+  border-radius: 14px;
+  background: rgba(255, 253, 247, 0.86);
+  box-shadow: 0 6px 18px rgba(7, 31, 21, 0.11);
+  padding: 10px 12px;
+  backdrop-filter: blur(10px);
+}
+
+.impact-conversation-card {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: calc(92px + env(safe-area-inset-bottom));
+  z-index: 1200;
+  box-sizing: border-box;
+  width: min(360px, calc(100vw - 32px));
+  border: 1px solid rgba(31, 111, 84, 0.28);
+  border-radius: 16px;
+  background: rgba(255, 253, 247, 0.96);
+  box-shadow: 0 12px 34px rgba(7, 31, 21, 0.2);
+  padding: 14px;
+  backdrop-filter: blur(14px);
+}
+
+.impact-question,
+.impact-thanks,
+.impact-continuation-label,
+.impact-conversation-question {
+  margin: 0 0 8px;
+  color: #203b31;
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.impact-conversation-question {
+  padding-right: 34px;
+  font-size: 0.9rem;
+}
+
+.impact-thanks {
+  margin-bottom: 0;
+}
+
+.impact-continuation-label {
+  margin-top: 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.impact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.impact-choice,
+.impact-skip {
+  appearance: none;
+  min-height: 32px;
+  border: 1px solid rgba(31, 111, 84, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #214f3d;
+  font: inherit;
+  font-size: 0.77rem;
+  font-weight: 620;
+  line-height: 1.2;
+  padding: 7px 11px;
+  cursor: pointer;
+}
+
+.impact-choice:hover,
+.impact-choice:focus-visible {
+  border-color: rgba(31, 111, 84, 0.58);
+  background: rgba(241, 249, 244, 0.96);
+  outline: none;
+}
+
+.impact-choice:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.impact-skip {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  min-height: auto;
+  border: 0;
+  background: transparent;
+  color: rgba(32, 59, 49, 0.68);
+  font-size: 0.68rem;
+  padding: 5px;
+}
+
+.impact-continuation-actions .impact-choice {
+  border-radius: 10px;
+  text-align: left;
+}
+
+.impact-conversation-actions .impact-choice {
+  min-width: 64px;
+  justify-content: center;
+}
+
+.impact-privacy-note {
+  margin: 8px 0 0;
+  color: rgba(32, 59, 49, 0.72);
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+
+.impact-privacy-note a {
+  color: inherit;
+  text-underline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+  .impact-outcome-card {
+    padding: 9px 10px;
+  }
+
+  .impact-conversation-card {
+    right: 10px;
+    bottom: calc(86px + env(safe-area-inset-bottom));
+    width: calc(100vw - 20px);
+  }
+
+  .impact-actions {
+    gap: 6px;
+  }
+
+  .impact-choice {
+    font-size: 0.74rem;
+    padding: 7px 9px;
+  }
+
+  .impact-continuation-actions .impact-choice {
+    flex: 1 1 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .impact-choice,
+  .impact-skip {
+    transition: none;
+  }
+}

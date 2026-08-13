@@ -1,0 +1,187 @@
+name: Temporary mobile video candidate scan
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Reconstruct and strictly decode every existing video candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v ffprobe >/dev/null || { sudo apt-get update -qq; sudo apt-get install -y ffmpeg; }
+          root=/tmp/mobile-video-candidates
+          mkdir -p "$root/branches" "$root/reconstructed" "$root/valid"
+
+          branches=(
+            mobile-creek-video-v2
+            mobile-creek-video
+            fix-mobile-creek-animation
+            agent/mobile-forest-stream-video
+            agent/mobile-forest-video
+            agent/high-res-mobile-video
+            agent/fix-direct-mobile-video
+            agent/high-resolution-mobile-background
+          )
+
+          for branch in "${branches[@]}"; do
+            safe="${branch//\//__}"
+            if git fetch --no-tags --depth=1 origin "$branch:refs/remotes/origin/$branch"; then
+              mkdir -p "$root/branches/$safe"
+              git archive "origin/$branch" | tar -x -C "$root/branches/$safe"
+            else
+              echo "Could not fetch $branch" >&2
+            fi
+          done
+
+          python - <<'PY'
+          import base64
+          import json
+          import re
+          from pathlib import Path
+
+          root = Path('/tmp/mobile-video-candidates')
+          output = root / 'reconstructed'
+          output.mkdir(parents=True, exist_ok=True)
+
+          def natural_key(path):
+              return [int(part) if part.isdigit() else part for part in re.split(r'(\d+)', path.name)]
+
+          def save_candidate(name, data):
+              if len(data) < 12 or data[4:8] != b'ftyp':
+                  return
+              path = output / f'{name}.mp4'
+              path.write_bytes(data)
+              print(f'Reconstructed {path.name}: {len(data)} bytes')
+
+          for branch_dir in sorted((root / 'branches').iterdir()):
+              branch = branch_dir.name
+
+              for mp4 in branch_dir.rglob('*.mp4'):
+                  save_candidate(f'{branch}__tracked__{mp4.stem}', mp4.read_bytes())
+
+              by_directory = {}
+              for chunk in branch_dir.rglob('*.b64'):
+                  by_directory.setdefault(chunk.parent, []).append(chunk)
+              for directory, chunks in by_directory.items():
+                  chunks.sort(key=natural_key)
+                  try:
+                      encoded = ''.join(p.read_text().strip() for p in chunks)
+                      data = base64.b64decode(encoded, validate=True)
+                  except Exception as exc:
+                      print(f'Skip invalid b64 group {directory}: {exc}')
+                      continue
+                  relative = str(directory.relative_to(branch_dir)).replace('/', '__') or 'root'
+                  save_candidate(f'{branch}__b64__{relative}', data)
+
+              js_chunks = sorted(branch_dir.rglob('*video*.js'), key=natural_key)
+              groups = {}
+              for path in js_chunks:
+                  stem = re.sub(r'(?:[-_](?:part)?\d+[a-z]?)$', '', path.stem, flags=re.I)
+                  groups.setdefault((path.parent, stem), []).append(path)
+              for (directory, stem), paths in groups.items():
+                  encoded_parts = []
+                  for path in sorted(paths, key=natural_key):
+                      text = path.read_text(errors='ignore').strip()
+                      match = re.search(r'export\s+default\s+("(?:\\.|[^"\\])*")\s*;?', text, re.S)
+                      if not match:
+                          continue
+                      try:
+                          encoded_parts.append(json.loads(match.group(1)))
+                      except Exception:
+                          pass
+                  if not encoded_parts:
+                      continue
+                  try:
+                      data = base64.b64decode(''.join(encoded_parts), validate=True)
+                  except Exception as exc:
+                      print(f'Skip invalid JS video group {directory}/{stem}: {exc}')
+                      continue
+                  relative = str(directory.relative_to(branch_dir)).replace('/', '__') or 'root'
+                  save_candidate(f'{branch}__js__{relative}__{stem}', data)
+          PY
+
+          : > "$root/summary.tsv"
+          valid_count=0
+          shopt -s nullglob
+          for video in "$root"/reconstructed/*.mp4; do
+            name="$(basename "$video")"
+            size="$(wc -c < "$video" | tr -d '[:space:]')"
+            probe="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,profile,pix_fmt,width,height,level,nb_frames:format=duration -of default=nw=1 "$video" 2>&1 || true)"
+            if ffmpeg -hide_banner -v error -xerror -err_detect explode -i "$video" -map 0:v:0 -f null - >/tmp/decode.out 2>/tmp/decode.err; then
+              status=VALID
+              valid_count=$((valid_count + 1))
+              cp "$video" "$root/valid/$name"
+            else
+              status=INVALID
+            fi
+            dimensions="$(printf '%s\n' "$probe" | awk -F= '/^width=/{w=$2}/^height=/{h=$2}END{if(w&&h)printf "%sx%s",w,h}')"
+            profile="$(printf '%s\n' "$probe" | awk -F= '/^profile=/{print $2; exit}')"
+            duration="$(printf '%s\n' "$probe" | awk -F= '/^duration=/{print $2; exit}')"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$status" "$name" "$size" "${dimensions:-unknown}" "${profile:-unknown}" "${duration:-unknown}" | tee -a "$root/summary.tsv"
+            if [[ "$status" == INVALID ]]; then
+              sed -n '1,8p' /tmp/decode.err | sed "s#^#  $name: #"
+            fi
+          done
+          printf '%s\n' "$valid_count" > "$root/valid-count.txt"
+          cat "$root/summary.tsv"
+
+      - name: Publish candidate summary
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          root=/tmp/mobile-video-candidates
+          count="$(cat "$root/valid-count.txt")"
+          best="$(awk -F '\t' '$1=="VALID"{print $2" "$4" "$3"B"; exit}' "$root/summary.tsv")"
+          description="${count} valid; ${best:-no decodable candidate}"
+          description="${description:0:140}"
+          payload="$(python - "$description" <<'PY'
+          import json, os, sys
+          print(json.dumps({
+              'state': 'success',
+              'context': 'diagnostic/mobile-video-candidates',
+              'description': sys.argv[1],
+              'target_url': f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+          }))
+          PY
+          )"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+
+      - name: Upload reconstructed candidates
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-video-candidate-scan
+          path: |
+            /tmp/mobile-video-candidates/summary.tsv
+            /tmp/mobile-video-candidates/valid
+          if-no-files-found: warn
+          retention-days: 3

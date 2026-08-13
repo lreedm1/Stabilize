@@ -1,0 +1,219 @@
+name: Verify search indexing readiness
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy Stabilize to Cloudflare
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-indexing:
+    name: Verify crawlable production pages
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Verify robots, sitemap, canonicals, and indexability
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base="https://stabilize.info"
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+          googlebot='Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+
+          for attempt in {1..18}; do
+            echo "Indexing-readiness attempt ${attempt}"
+
+            if curl --fail --location --max-time 20 --silent --show-error \
+              --user-agent "$googlebot" \
+              "$base/robots.txt" > "$workdir/robots.txt" && \
+              curl --fail --location --max-time 20 --silent --show-error \
+              --user-agent "$googlebot" \
+              "$base/sitemap.xml" > "$workdir/sitemap.xml" && \
+              curl --fail --location --max-time 20 --silent --show-error \
+              --user-agent "$googlebot" \
+              --dump-header "$workdir/home.headers" \
+              "$base/" > "$workdir/home.html"; then
+
+              mapfile -t urls < <(
+                grep -oE '<loc>[^<]+' "$workdir/sitemap.xml" | sed 's#<loc>##'
+              )
+
+              ready=true
+              grep -Fq 'User-agent: *' "$workdir/robots.txt" || ready=false
+              grep -Fq 'Allow: /' "$workdir/robots.txt" || ready=false
+              grep -Fq 'Sitemap: https://stabilize.info/sitemap.xml' "$workdir/robots.txt" || ready=false
+              if node -e '
+                const fs = require("node:fs");
+                const blocks = fs
+                  .readFileSync(process.argv[1], "utf8")
+                  .split(/\r?\n\s*\r?\n/);
+                const blocksGoogle = blocks.some((block) => {
+                  const lines = block
+                    .split(/\r?\n/)
+                    .map((line) => line.trim());
+                  const agents = lines
+                    .filter((line) => /^user-agent\s*:/i.test(line))
+                    .map((line) =>
+                      line.replace(/^user-agent\s*:/i, "").trim().toLowerCase(),
+                    );
+                  const disallows = lines
+                    .filter((line) => /^disallow\s*:/i.test(line))
+                    .map((line) =>
+                      line.replace(/^disallow\s*:/i, "").trim(),
+                    );
+                  return (
+                    (agents.includes("*") || agents.includes("googlebot")) &&
+                    disallows.includes("/")
+                  );
+                });
+                process.exit(blocksGoogle ? 0 : 1);
+              ' "$workdir/robots.txt"; then
+                ready=false
+              fi
+              [[ ${#urls[@]} -ge 8 ]] || ready=false
+              grep -Fq '<loc>https://stabilize.info/</loc>' "$workdir/sitemap.xml" || ready=false
+              grep -Fq '<loc>https://stabilize.info/support.html</loc>' "$workdir/sitemap.xml" || ready=false
+              grep -Fq '<link rel="canonical" href="https://stabilize.info/"' "$workdir/home.html" || ready=false
+              grep -Fq '<meta name="robots" content="index,follow' "$workdir/home.html" || ready=false
+              grep -Fq '<h1 id="seo-heading">Get unstuck.</h1>' "$workdir/home.html" || ready=false
+              ! grep -Eqi '^x-robots-tag:.*noindex' "$workdir/home.headers" || ready=false
+
+              if [[ "$ready" == true ]]; then
+                for url in "${urls[@]}"; do
+                  curl --fail --location --max-time 20 --silent --show-error \
+                    --user-agent "$googlebot" \
+                    --output /dev/null \
+                    "$url"
+                done
+                echo "Production exposes a crawlable homepage, robots.txt, sitemap, and ${#urls[@]} canonical URLs."
+                exit 0
+              fi
+            fi
+
+            sleep 10
+          done
+
+          echo "::error::Production search-indexing signals are incomplete or unavailable."
+          echo "--- robots.txt ---"
+          cat "$workdir/robots.txt" 2>/dev/null || true
+          echo "--- sitemap.xml ---"
+          cat "$workdir/sitemap.xml" 2>/dev/null || true
+          exit 1
+
+  verify-uw-madison-site:
+    name: Verify UW–Madison site and handoff
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Verify custom domain, page boundaries, and chat handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base="https://uwmadison.stabilize.info"
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+
+          for attempt in {1..48}; do
+            echo "UW–Madison site attempt ${attempt}"
+
+            root_status="$(
+              curl --max-time 20 --silent --show-error \
+                --dump-header "$workdir/root.headers" \
+                --output "$workdir/root.html" \
+                --write-out '%{http_code}' \
+                "$base/" || true
+            )"
+            robots_status="$(
+              curl --max-time 20 --silent --show-error \
+                --output "$workdir/robots.txt" \
+                --write-out '%{http_code}' \
+                "$base/robots.txt" || true
+            )"
+            sitemap_status="$(
+              curl --max-time 20 --silent --show-error \
+                --output "$workdir/sitemap.xml" \
+                --write-out '%{http_code}' \
+                "$base/sitemap.xml" || true
+            )"
+            chat_status="$(
+              curl --max-time 20 --silent --show-error \
+                --dump-header "$workdir/chat.headers" \
+                --output /dev/null \
+                --write-out '%{http_code}' \
+                "$base/chat" || true
+            )"
+            missing_status="$(
+              curl --max-time 20 --silent --show-error \
+                --output /dev/null \
+                --write-out '%{http_code}' \
+                "$base/this-route-should-not-exist" || true
+            )"
+            chat_location="$(
+              awk -F': ' '
+                tolower($1) == "location" {
+                  gsub("\r", "", $2);
+                  print $2;
+                }
+              ' "$workdir/chat.headers" | tail -n 1
+            )"
+
+            echo "HTTP root=${root_status:-unavailable} robots=${robots_status:-unavailable} sitemap=${sitemap_status:-unavailable} chat=${chat_status:-unavailable} chat_location=${chat_location:-none} missing=${missing_status:-unavailable}"
+
+            ready=true
+            [[ "$root_status" == "200" ]] || ready=false
+            [[ "$robots_status" == "200" ]] || ready=false
+            [[ "$sitemap_status" == "200" ]] || ready=false
+            [[ "$chat_status" == "302" ]] || ready=false
+            [[ "$missing_status" == "404" ]] || ready=false
+
+            grep -Fq '<link rel="canonical" href="https://uwmadison.stabilize.info/"' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq 'Stabilize for UW–Madison' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq 'not affiliated with, operated by, or' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq 'Basic Needs Student Support' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq '608-265-5600' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq '10–25 voluntary participants' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq 'No institution access to individual conversations' "$workdir/root.html" 2>/dev/null || ready=false
+
+            grep -Eqi '^strict-transport-security:[[:space:]]*max-age=31536000; includeSubDomains' "$workdir/root.headers" 2>/dev/null || ready=false
+            grep -Eqi "^content-security-policy:.*default-src 'self'" "$workdir/root.headers" 2>/dev/null || ready=false
+            grep -Eqi '^x-frame-options:[[:space:]]*DENY' "$workdir/root.headers" 2>/dev/null || ready=false
+            [[ "$chat_location" == "https://chat.uwmadison.stabilize.info/" ]] || ready=false
+
+            grep -Fq 'Sitemap: https://uwmadison.stabilize.info/sitemap.xml' "$workdir/robots.txt" 2>/dev/null || ready=false
+            grep -Fq '<loc>https://uwmadison.stabilize.info/</loc>' "$workdir/sitemap.xml" 2>/dev/null || ready=false
+
+            if [[ "$ready" == true ]] && \
+              curl --fail --max-time 20 --silent --show-error \
+                --output /dev/null \
+                "$base/uwmadison.css?v=20260812-uw-1"; then
+              echo "UW–Madison custom domain, student page, safety boundaries, resource map, and dedicated chat handoff are live."
+              exit 0
+            fi
+
+            sleep 10
+          done
+
+          echo "::error::uwmadison.stabilize.info did not become fully available with the expected boundaries."
+          echo "--- root headers ---"
+          sed -n '1,30p' "$workdir/root.headers" 2>/dev/null || true
+          echo "--- root content markers ---"
+          grep -E 'canonical|Stabilize for UW|Basic Needs|not affiliated|608-265-5600' "$workdir/root.html" 2>/dev/null | head -n 30 || true
+          echo "--- chat headers ---"
+          sed -n '1,30p' "$workdir/chat.headers" 2>/dev/null || true
+          echo "--- robots.txt ---"
+          cat "$workdir/robots.txt" 2>/dev/null || true
+          echo "--- sitemap.xml ---"
+          cat "$workdir/sitemap.xml" 2>/dev/null || true
+          exit 1

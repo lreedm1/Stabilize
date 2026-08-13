@@ -13,17 +13,19 @@ import {
 } from "./auth.js";
 import { renderPage } from "./page.js";
 import { classifyInput, fixedReplyForRoute } from "./safety.js";
+import { selectReasoningEffort } from "./reasoning-policy.js";
 import { SessionMemory } from "./session-memory.js";
 
 export { SessionMemory };
 
-const MAX_BODY_BYTES = 32_000;
+const MAX_BODY_BYTES = 2_000_000;
 const MAX_MESSAGE_CHARS = 4_000;
 const MAX_MESSAGES = 12;
-const MAX_SUMMARY_CHARS = 1_600;
-// OpenAI counts visible output, hidden reasoning, and formatting tokens here.
-const MAX_MODEL_OUTPUT_TOKENS = 500;
-const MAX_SUMMARY_OUTPUT_TOKENS = 500;
+const MAX_SUMMARY_CHARS = 1_000;
+const MAX_SUMMARY_OUTPUT_TOKENS = 320;
+const MAX_GUEST_SUMMARY_CHARS = 30_000;
+const MAX_GUEST_SUMMARY_MESSAGES = 12;
+const MAX_GUEST_SUMMARY_OUTPUT_TOKENS = 5_000;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const OPENAI_REASONING_EFFORTS = new Set([
   "none",
@@ -31,7 +33,14 @@ const OPENAI_REASONING_EFFORTS = new Set([
   "medium",
   "high",
   "xhigh",
+  "max",
 ]);
+const OPENAI_SERVICE_TIERS = new Set(["default", "priority", "fast"]);
+const PROMPT_CACHE_KEY = "stabilize-floor-first-v1";
+const ORDINARY_OUTPUT_TOKEN_LIMIT = 360;
+const LONG_FORM_OUTPUT_TOKEN_LIMIT = 900;
+const LONG_FORM_REQUEST_PATTERN =
+  /\b(?:draft|write|rewrite|compose|email|letter|memo|report|speech|proposal|brief|document|essay|code|script|full version|detailed|comprehensive)\b/i;
 const OPENAI_ACCOUNT_LIMIT_CODES = new Set([
   "credit_balance_exhausted",
   "insufficient_quota",
@@ -40,6 +49,20 @@ const OPENAI_ACCOUNT_LIMIT_CODES = new Set([
   "project_spend_limit_exceeded",
 ]);
 const PROVIDER_FIELD_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+
+const FAVICON_CONTENT_TYPES = new Map([
+  ["/favicon.ico", "image/x-icon"],
+  ["/favicon.svg", "image/svg+xml; charset=utf-8"],
+  ["/favicon-16x16.png", "image/png"],
+  ["/favicon-32x32.png", "image/png"],
+  ["/apple-touch-icon.png", "image/png"],
+  ["/stabilize-tab-20260805.ico", "image/x-icon"],
+  ["/stabilize-tab-20260805-16.png", "image/png"],
+  ["/stabilize-tab-20260805-32.png", "image/png"],
+  ["/stabilize-app-20260805-180.png", "image/png"],
+  ["/safari-pinned-tab.svg", "image/svg+xml; charset=utf-8"],
+  ["/site.webmanifest", "application/manifest+json; charset=utf-8"],
+]);
 
 const FIXED_ROUTE_MEMORY = {
   MEDICAL_EMERGENCY:
@@ -106,7 +129,7 @@ function pageHeaders(contentType = "text/html; charset=utf-8", extra = {}) {
   const headers = new Headers({
     "Cache-Control": "no-store",
     "Content-Security-Policy":
-      "default-src 'self'; connect-src 'self'; font-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+      "default-src 'self'; connect-src 'self'; font-src 'self'; img-src 'self' data:; media-src 'self' blob:; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
     "Content-Type": contentType,
     "Cross-Origin-Opener-Policy": "same-origin",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
@@ -116,6 +139,29 @@ function pageHeaders(contentType = "text/html; charset=utf-8", extra = {}) {
   });
   for (const [name, value] of Object.entries(extra)) headers.set(name, value);
   return headers;
+}
+
+async function faviconAssetResponse(request, env, contentType) {
+  if (!["GET", "HEAD"].includes(request.method)) {
+    return new Response(COPY.api.methodNotAllowed, {
+      status: 405,
+      headers: pageHeaders("text/plain; charset=utf-8"),
+    });
+  }
+
+  const asset = await env.ASSETS.fetch(request);
+  if (!asset.ok) return asset;
+
+  const headers = new Headers(asset.headers);
+  headers.set("Content-Type", contentType);
+  headers.set("Cache-Control", "no-store, max-age=0");
+  headers.set("Content-Disposition", "inline");
+  headers.set("X-Content-Type-Options", "nosniff");
+  return new Response(request.method === "HEAD" ? null : asset.body, {
+    status: asset.status,
+    statusText: asset.statusText,
+    headers,
+  });
 }
 
 function jsonResponse(body, status = 200, extraHeaders = {}) {
@@ -137,35 +183,45 @@ function readCookie(request, name) {
   return null;
 }
 
-function emptyMemoryContext() {
+export function emptyMemoryContext() {
   return {
     summary: "",
     recent: [],
     awaitingSafetyAnswer: false,
     turnCount: 0,
     updatedAt: null,
+    generation: 0,
   };
 }
 
-function accountMemoryStub(env, accountKey) {
+export function accountMemoryStub(env, accountKey) {
   if (!accountKey) return null;
   if (!env?.SESSIONS || typeof env.SESSIONS.getByName !== "function") return null;
   return env.SESSIONS.getByName("google:" + accountKey);
 }
 
-async function readMemoryContext(stub) {
-  if (!stub || typeof stub.readContext !== "function") {
-    return emptyMemoryContext();
-  }
+export async function readMemoryContext(stub) {
+  if (!stub) return emptyMemoryContext();
+
+  const readMethod =
+    typeof stub.readContextForRequest === "function"
+      ? "readContextForRequest"
+      : typeof stub.readContext === "function"
+        ? "readContext"
+        : null;
+  if (!readMethod) return emptyMemoryContext();
 
   try {
-    const context = await stub.readContext();
+    const context = await stub[readMethod]();
+    const generation = Number(context?.generation);
     return {
       summary: String(context?.summary || "").trim().slice(0, MAX_SUMMARY_CHARS),
       recent: normalizeMessages(context?.recent),
       awaitingSafetyAnswer: context?.awaitingSafetyAnswer === true,
       turnCount: Number(context?.turnCount) || 0,
       updatedAt: Number(context?.updatedAt) || null,
+      generation:
+        Number.isSafeInteger(generation) && generation >= 0 ? generation : 0,
     };
   } catch (error) {
     console.error(
@@ -178,7 +234,7 @@ async function readMemoryContext(stub) {
   }
 }
 
-async function readBoundedJson(request) {
+export async function readBoundedJson(request) {
   const declaredLength = Number(request.headers.get("content-length") || 0);
   if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
     throw new HttpError(413, COPY.api.bodyTooLarge);
@@ -250,15 +306,104 @@ function normalizeMessages(messages) {
   }));
 }
 
+function normalizeGuestConversation(messages) {
+  if (!Array.isArray(messages)) return [];
+  return messages
+    .filter((message) => message && ["user", "assistant"].includes(message.role))
+    .map((message) => ({
+      role: message.role,
+      content: String(message.content || "")
+        .trim()
+        .slice(0, MAX_MESSAGE_CHARS),
+    }))
+    .filter((message) => message.content);
+}
+
 function latestUserText(body) {
   const direct = String(body?.message || "").trim();
-  if (direct) return direct.slice(0, MAX_MESSAGE_CHARS);
+  if (direct) return direct;
 
   const rawMessages = Array.isArray(body?.messages) ? body.messages : [];
   const latestUser = [...rawMessages]
     .reverse()
     .find((message) => message?.role === "user");
-  return String(latestUser?.content || "").trim().slice(0, MAX_MESSAGE_CHARS);
+  return String(latestUser?.content || "").trim();
+}
+
+function privateModelInput(messages, latestText) {
+  const normalized = normalizeMessages(messages);
+  const latest = normalized.at(-1);
+  if (
+    latest?.role === "user" &&
+    latest.content === latestText
+  ) {
+    return normalized;
+  }
+  return normalizeMessages([
+    ...normalized,
+    { role: "user", content: latestText },
+  ]);
+}
+
+function normalizeGuestSummary(value) {
+  return String(value || "").trim().slice(0, MAX_GUEST_SUMMARY_CHARS);
+}
+
+function normalizeGuestSummaryMessages(messages) {
+  return normalizeGuestConversation(messages);
+}
+
+function guestSummaryMessageBlock(messages) {
+  const normalized = normalizeGuestSummaryMessages(messages);
+  if (!normalized.length) return "";
+  return normalized
+    .map(
+      (message) =>
+        (message.role === "assistant" ? "ASSISTANT" : "USER") +
+        ": " +
+        message.content,
+    )
+    .join("\n\n");
+}
+
+function guestConversationInput(messages, latestText) {
+  const normalized = normalizeGuestConversation(messages);
+  const latest = normalized.at(-1);
+  if (latest?.role === "user" && latest.content === latestText) {
+    return normalized;
+  }
+  return [
+    ...normalized,
+    { role: "user", content: latestText },
+  ];
+}
+
+function guestModelInput(body, latestText) {
+  const messages = [];
+  const summary = normalizeGuestSummary(body?.guestSummary);
+  if (summary) {
+    messages.push({
+      role: "user",
+      content:
+        COPY.model.memoryPrefix +
+        "\nLEGACY GUEST SUMMARY (from a tab opened before full-thread memory):\n" +
+        summary,
+    });
+  }
+
+  const olderMessages = guestSummaryMessageBlock(body?.guestSummaryMessages);
+  if (olderMessages) {
+    messages.push({
+      role: "user",
+      content:
+        COPY.model.memoryPrefix +
+        "\nLEGACY GUEST MESSAGES (from a tab opened before full-thread memory):\n" +
+        olderMessages,
+    });
+  }
+
+  messages.push(...guestConversationInput(body?.messages, latestText));
+  return messages;
 }
 
 function modelInput(memory, latestText) {
@@ -305,6 +450,174 @@ function validateModelReply(reply) {
   return text;
 }
 
+function effectiveReasoningEffort(model, requestedEffort) {
+  if (requestedEffort === "max") {
+    if (/^gpt-5\.6(?:-|$)/.test(model)) return "max";
+    if (/^gpt-5\.(?:2|3|4|5)(?:-|$)/.test(model)) return "xhigh";
+    return "high";
+  }
+  if (
+    requestedEffort === "xhigh" &&
+    !/^gpt-5\.(?:2|3|4|5|6)(?:-|$)/.test(model)
+  ) {
+    return "high";
+  }
+  return requestedEffort;
+}
+
+function requestedReasoningEffort(body, model, fallbackEffort) {
+  const effort = String(
+    body?.reasoningEffort || fallbackEffort || "none",
+  )
+    .trim()
+    .toLowerCase();
+  if (!OPENAI_REASONING_EFFORTS.has(effort)) return "none";
+  return effectiveReasoningEffort(String(model || ""), effort);
+}
+
+function reasoningEnvironment(env, effort) {
+  const selected = OPENAI_REASONING_EFFORTS.has(effort) ? effort : "none";
+  return new Proxy(env, {
+    get(target, property, receiver) {
+      if (property === "OPENAI_REASONING_EFFORT") return selected;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}
+
+function supportsExplicitPromptCaching(model) {
+  const match = /^gpt-(\d+)\.(\d+)/.exec(String(model || ""));
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return major > 5 || (major === 5 && minor >= 6);
+}
+
+function interactiveOutputTokenLimit(latestText, reasoningEffort) {
+  if (reasoningEffort !== "none") return null;
+  return LONG_FORM_REQUEST_PATTERN.test(String(latestText || ""))
+    ? LONG_FORM_OUTPUT_TOKEN_LIMIT
+    : ORDINARY_OUTPUT_TOKEN_LIMIT;
+}
+
+function interactivePrompt(model, route, messages) {
+  const stableInstructions = COPY.model.systemPrompt;
+  const variableInstructions =
+    COPY.model.memoryInstruction +
+    "\n\n" +
+    COPY.model.routeInstruction(route);
+
+  if (!supportsExplicitPromptCaching(model)) {
+    return {
+      instructions: stableInstructions + "\n\n" + variableInstructions,
+      input: messages,
+    };
+  }
+
+  return {
+    prompt_cache_key: PROMPT_CACHE_KEY,
+    prompt_cache_options: { mode: "explicit", ttl: "30m" },
+    input: [
+      {
+        type: "message",
+        role: "system",
+        content: [
+          {
+            type: "input_text",
+            text: stableInstructions,
+            prompt_cache_breakpoint: { mode: "explicit" },
+          },
+          {
+            type: "input_text",
+            text: "\n\n" + variableInstructions,
+          },
+        ],
+      },
+      ...messages,
+    ],
+  };
+}
+
+function chatRequestPayload({
+  model,
+  reasoningEffort,
+  serviceTier,
+  route,
+  messages,
+  latestText,
+}) {
+  const outputLimit = interactiveOutputTokenLimit(
+    latestText,
+    reasoningEffort,
+  );
+  return {
+    model,
+    service_tier: serviceTier,
+    reasoning: { effort: reasoningEffort },
+    ...(outputLimit ? { max_output_tokens: outputLimit } : {}),
+    text: { verbosity: "low" },
+    ...interactivePrompt(model, route, messages),
+    store: true,
+  };
+}
+
+function usageNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.round(number) : 0;
+}
+
+function interactiveUsageSnapshot(result, model, requestedServiceTier) {
+  const usage = result?.usage || {};
+  const inputDetails = usage.input_tokens_details || {};
+  const outputDetails = usage.output_tokens_details || {};
+  return {
+    model: safeProviderField(model) || "unknown",
+    requestedServiceTier:
+      safeProviderField(requestedServiceTier) || "default",
+    actualServiceTier: safeProviderField(result?.serviceTier),
+    inputTokens: usageNumber(usage.input_tokens),
+    cachedInputTokens: usageNumber(inputDetails.cached_tokens),
+    cacheWriteTokens: usageNumber(inputDetails.cache_write_tokens),
+    reasoningTokens: usageNumber(outputDetails.reasoning_tokens),
+    outputTokens: usageNumber(usage.output_tokens),
+  };
+}
+
+function zeroUsageSnapshot(model = "none", requestedServiceTier = "none") {
+  return {
+    model: safeProviderField(model) || "none",
+    requestedServiceTier:
+      safeProviderField(requestedServiceTier) || "none",
+    actualServiceTier: null,
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningTokens: 0,
+    outputTokens: 0,
+  };
+}
+
+function logInteractiveUsage(result, model, requestedServiceTier) {
+  const analytics = interactiveUsageSnapshot(
+    result,
+    model,
+    requestedServiceTier,
+  );
+  console.info(
+    JSON.stringify({
+      event: "openai_chat_usage",
+      model: analytics.model,
+      requestedServiceTier: analytics.requestedServiceTier,
+      actualServiceTier: analytics.actualServiceTier,
+      inputTokens: analytics.inputTokens,
+      cachedTokens: analytics.cachedInputTokens,
+      cacheWriteTokens: analytics.cacheWriteTokens,
+      reasoningTokens: analytics.reasoningTokens,
+      outputTokens: analytics.outputTokens,
+    }),
+  );
+}
+
 function openAIConfig(env) {
   const apiKey = String(env.OPENAI_API_KEY || "");
   if (!apiKey) {
@@ -313,18 +626,28 @@ function openAIConfig(env) {
     throw error;
   }
 
-  const model = String(env.OPENAI_MODEL || "gpt-5.6-sol");
-  const reasoningEffort = String(env.OPENAI_REASONING_EFFORT || "medium");
+  const model = String(env.OPENAI_MODEL || "gpt-5.4");
+  const requestedReasoningEffort = String(
+    env.OPENAI_REASONING_EFFORT || "none",
+  );
+  const serviceTier = String(env.OPENAI_SERVICE_TIER || "fast")
+    .trim()
+    .toLowerCase();
   if (
     !/^[A-Za-z0-9._:-]+$/.test(model) ||
-    !OPENAI_REASONING_EFFORTS.has(reasoningEffort)
+    !OPENAI_REASONING_EFFORTS.has(requestedReasoningEffort) ||
+    !OPENAI_SERVICE_TIERS.has(serviceTier)
   ) {
     const error = new Error("OpenAI configuration is invalid");
     error.name = "InvalidOpenAIConfiguration";
     throw error;
   }
 
-  return { apiKey, model, reasoningEffort };
+  const reasoningEffort = effectiveReasoningEffort(
+    model,
+    requestedReasoningEffort,
+  );
+  return { apiKey, model, reasoningEffort, serviceTier };
 }
 
 function responseText(responseBody) {
@@ -407,6 +730,56 @@ function publicOpenAIError(error) {
   return { status: 503, message: COPY.api.temporarilyUnavailable };
 }
 
+function chatErrorResponse(error, path) {
+  if (error instanceof HttpError) {
+    return jsonResponse({ error: error.message }, error.status);
+  }
+
+  if (error instanceof OpenAIRequestError) {
+    const publicError = publicOpenAIError(error);
+    const reference = errorReference(error.clientRequestId);
+    console.error(
+      JSON.stringify({
+        event: "openai_request_failed",
+        error: error.name,
+        failure: error.failure,
+        status: error.status || null,
+        code: error.code,
+        type: error.type,
+        providerRequestId: error.providerRequestId,
+        clientRequestId: error.clientRequestId,
+        retryAfterSeconds: error.retryAfterSeconds,
+        reference,
+        path,
+      }),
+    );
+    const headers = publicError.retryAfterSeconds
+      ? { "Retry-After": String(publicError.retryAfterSeconds) }
+      : {};
+    return jsonResponse(
+      { error: publicError.message, reference },
+      publicError.status,
+      headers,
+    );
+  }
+
+  const clientRequestId = crypto.randomUUID();
+  const reference = errorReference(clientRequestId);
+  console.error(
+    JSON.stringify({
+      event: "request_failed",
+      error: error instanceof Error ? error.name : "UnknownError",
+      clientRequestId,
+      reference,
+      path,
+    }),
+  );
+  return jsonResponse(
+    { error: COPY.api.temporarilyUnavailable, reference },
+    503,
+  );
+}
+
 async function callOpenAI(payload, apiKey, timeoutMs, errorName) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -454,20 +827,496 @@ async function callOpenAI(payload, apiKey, timeoutMs, errorName) {
 
   return {
     text: responseText(responseBody),
+    usage: responseBody?.usage || null,
+    serviceTier: safeProviderField(responseBody?.service_tier),
     providerRequestId,
     clientRequestId,
   };
 }
 
+function isNeutralGreeting(value) {
+  return /^(?:hi|hello|hey|hiya|good morning|good afternoon|good evening)[!.? ]*$/i.test(
+    String(value || "").trim(),
+  );
+}
+
+function isUnsolicitedSafetyCheck(value) {
+  return /(?:hurt yourself|kill yourself|safe right now|immediate danger|next few hours)/i.test(
+    String(value || ""),
+  );
+}
+
+function streamHeaders() {
+  return apiHeaders({
+    "Content-Type": "application/x-ndjson; charset=utf-8",
+    "X-Accel-Buffering": "no",
+  });
+}
+
+function streamEvent(value) {
+  return new TextEncoder().encode(JSON.stringify(value) + "\n");
+}
+
+async function openAIStream(payload, apiKey, timeoutMs, errorName) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const clientRequestId = crypto.randomUUID();
+
+  let response;
+  try {
+    response = await fetch(OPENAI_RESPONSES_URL, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + apiKey,
+        "Content-Type": "application/json",
+        "X-Client-Request-Id": clientRequestId,
+      },
+      body: JSON.stringify({ ...payload, stream: true }),
+      signal: controller.signal,
+    });
+  } catch {
+    clearTimeout(timeout);
+    throw new OpenAIRequestError({
+      name: errorName,
+      failure: controller.signal.aborted ? "timeout" : "connection",
+      clientRequestId,
+    });
+  }
+
+  const providerRequestId = safeProviderField(
+    response.headers.get("x-request-id"),
+  );
+  if (!response.ok) {
+    clearTimeout(timeout);
+    const responseBody = await response.json().catch(() => ({}));
+    const fields = providerErrorFields(responseBody);
+    throw new OpenAIRequestError({
+      name: errorName,
+      failure: "http",
+      status: response.status,
+      code: fields.code,
+      type: fields.type,
+      providerRequestId,
+      clientRequestId,
+      retryAfterSeconds: retryAfterSeconds(response.headers.get("retry-after")),
+    });
+  }
+
+  return { response, controller, timeout, providerRequestId, clientRequestId, usage: null, serviceTier: null };
+}
+
+function streamFailureDiagnostic(error) {
+  if (error instanceof OpenAIRequestError) {
+    return {
+      category: String(error.failure || "request").slice(0, 40),
+      status: Number.isFinite(error.status) ? error.status : null,
+      code: safeProviderField(error.code),
+      type: safeProviderField(error.type),
+      name: String(error.name || "OpenAIRequestError").slice(0, 60),
+    };
+  }
+  return {
+    category: "runtime",
+    status: null,
+    code: null,
+    type: null,
+    name: String(error instanceof Error ? error.name : "UnknownError").slice(0, 60),
+  };
+}
+
+function parseOpenAIStreamEvent(eventBlock, result) {
+  const lines = String(eventBlock || "").split(/\r\n|\n|\r/);
+  const dataLines = lines
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).replace(/^ /, ""));
+  const data = (dataLines.length ? dataLines.join("\n") : eventBlock).trim();
+  if (!data || data === "[DONE]") return null;
+
+  try {
+    return JSON.parse(data);
+  } catch {
+    throw new OpenAIRequestError({
+      name: "OpenAIStreamParseError",
+      failure: "invalid_output",
+      status: 502,
+      code: "invalid_sse_event",
+      providerRequestId: result.providerRequestId,
+      clientRequestId: result.clientRequestId,
+    });
+  }
+}
+
+function streamEventText(event, result) {
+  if (event?.response?.usage) result.usage = event.response.usage;
+  const actualTier = safeProviderField(event?.response?.service_tier);
+  if (actualTier) result.serviceTier = actualTier;
+  if (
+    event?.type === "response.output_text.done" &&
+    typeof event.text === "string"
+  ) {
+    return event.text;
+  }
+  if (
+    ["response.completed", "response.incomplete"].includes(event?.type)
+  ) {
+    return responseText(event.response);
+  }
+  return "";
+}
+
+function throwForFailedStreamEvent(event, result) {
+  if (!["response.failed", "error"].includes(event?.type)) return;
+  const failure = event?.response?.error || event?.error || {};
+  throw new OpenAIRequestError({
+    name: "OpenAIHttpError",
+    failure: "http",
+    status: 502,
+    code: safeProviderField(failure.code),
+    type: safeProviderField(failure.type),
+    providerRequestId: result.providerRequestId,
+    clientRequestId: result.clientRequestId,
+  });
+}
+
+async function* openAITextDeltas(result) {
+  if (!result.response.body) {
+    throw new OpenAIRequestError({
+      name: "OpenAIInvalidReplyError",
+      failure: "invalid_output",
+      status: 502,
+      code: "missing_stream_body",
+      providerRequestId: result.providerRequestId,
+      clientRequestId: result.clientRequestId,
+    });
+  }
+
+  const reader = result.response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let emittedText = "";
+  let finalText = "";
+  let incompleteReason = null;
+
+  const consume = (eventBlock) => {
+    const event = parseOpenAIStreamEvent(eventBlock, result);
+    if (!event) return null;
+    throwForFailedStreamEvent(event, result);
+
+    if (
+      event.type === "response.output_text.delta" &&
+      typeof event.delta === "string"
+    ) {
+      return event.delta;
+    }
+
+    const eventText = streamEventText(event, result);
+    if (eventText) finalText = eventText;
+    if (event.type === "response.incomplete") {
+      incompleteReason = safeProviderField(
+        event.response?.incomplete_details?.reason,
+      ) || "response_incomplete";
+    }
+    return null;
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split(/\r\n\r\n|\n\n|\r\r/);
+      buffer = events.pop() || "";
+
+      for (const eventBlock of events) {
+        const delta = consume(eventBlock);
+        if (!delta) continue;
+        emittedText += delta;
+        yield delta;
+      }
+    }
+
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      const delta = consume(buffer);
+      if (delta) {
+        emittedText += delta;
+        yield delta;
+      }
+    }
+
+    if (!emittedText && finalText) {
+      emittedText = finalText;
+      yield finalText;
+    }
+
+    if (!emittedText) {
+      throw new OpenAIRequestError({
+        name: "OpenAIInvalidReplyError",
+        failure: "invalid_output",
+        status: 502,
+        code: incompleteReason || "empty_stream",
+        providerRequestId: result.providerRequestId,
+        clientRequestId: result.clientRequestId,
+      });
+    }
+  } finally {
+    clearTimeout(result.timeout);
+    try {
+      reader.releaseLock();
+    } catch {
+      // The provider or client may already have closed the stream.
+    }
+  }
+}
+
+function shouldUseNonStreamingFallback(error) {
+  if (!(error instanceof OpenAIRequestError)) return true;
+  if (OPENAI_ACCOUNT_LIMIT_CODES.has(error.code)) return false;
+  if (error.type === "insufficient_quota") return false;
+  if ([401, 403, 404, 429].includes(error.status)) return false;
+  if (error.failure === "timeout") return false;
+  return true;
+}
+
+async function generateFallbackReply(messages, route, env, latestText) {
+  const { apiKey, model, reasoningEffort, serviceTier } = openAIConfig(env);
+  const result = await callOpenAI(
+    chatRequestPayload({
+      model,
+      reasoningEffort,
+      serviceTier,
+      route,
+      messages,
+      latestText,
+    }),
+    apiKey,
+    60_000,
+    "OpenAIFallbackHttpError",
+  );
+  logInteractiveUsage(result, model, serviceTier);
+
+  const reply = validateModelReply(result.text);
+  if (!reply) {
+    throw new OpenAIRequestError({
+      name: "OpenAIInvalidReplyError",
+      failure: "invalid_output",
+      status: 502,
+      code: "empty_fallback",
+      providerRequestId: result.providerRequestId,
+      clientRequestId: result.clientRequestId,
+    });
+  }
+  return {
+    reply,
+    analytics: interactiveUsageSnapshot(result, model, serviceTier),
+  };
+}
+
+async function writeReplyDeltas(writer, text) {
+  const chunks = String(text || "").match(/\S+\s*/g) || [String(text || "")];
+  for (const delta of chunks) {
+    if (!delta) continue;
+    await writer.write(streamEvent({ type: "delta", delta }));
+  }
+}
+
+function streamChatReply(
+  messages,
+  route,
+  env,
+  latestText,
+  stub,
+  memoryGeneration,
+  ctx,
+  guestSummaryPromise = null,
+) {
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+
+  const produce = async () => {
+    let reply = "";
+    let analytics = null;
+    try {
+      await writer.write(
+        streamEvent({
+          type: "meta",
+          route,
+          reasoningEffort: String(
+            env.OPENAI_REASONING_EFFORT || "none",
+          ),
+        }),
+      );
+      const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
+
+      if (demoMode) {
+        const demo = demoReply(route, latestText);
+        reply = demo;
+        analytics = zeroUsageSnapshot("demo", "none");
+        await writeReplyDeltas(writer, demo);
+      } else {
+        try {
+          const { apiKey, model, reasoningEffort, serviceTier } =
+            openAIConfig(env);
+          const turnReasoningEffort = reasoningEffort;
+          const result = await openAIStream(
+            chatRequestPayload({
+              model,
+              reasoningEffort: turnReasoningEffort,
+              serviceTier,
+              route,
+              messages,
+              latestText,
+            }),
+            apiKey,
+            60_000,
+            "OpenAIHttpError",
+          );
+
+          for await (const delta of openAITextDeltas(result)) {
+            reply += delta;
+            await writer.write(streamEvent({ type: "delta", delta }));
+          }
+          logInteractiveUsage(result, model, serviceTier);
+          analytics = interactiveUsageSnapshot(result, model, serviceTier);
+        } catch (streamError) {
+          if (reply || !shouldUseNonStreamingFallback(streamError)) {
+            throw streamError;
+          }
+
+          console.warn(
+            JSON.stringify({
+              event: "openai_stream_fallback_used",
+              route,
+              diagnostic: streamFailureDiagnostic(streamError),
+            }),
+          );
+          const fallback = await generateFallbackReply(
+            messages,
+            route,
+            env,
+            latestText,
+          );
+          reply = fallback.reply;
+          analytics = fallback.analytics;
+          await writeReplyDeltas(writer, reply);
+        }
+      }
+
+      let validated = validateModelReply(reply);
+      if (
+        validated &&
+        route === "ORDINARY" &&
+        typeof isNeutralGreeting === "function" &&
+        typeof isUnsolicitedSafetyCheck === "function" &&
+        isNeutralGreeting(latestText) &&
+        isUnsolicitedSafetyCheck(validated)
+      ) {
+        validated = neutralGreetingReply();
+      }
+      if (!validated) {
+        throw new OpenAIRequestError({
+          name: "OpenAIInvalidReplyError",
+          failure: "invalid_output",
+          status: 502,
+          code: "invalid_validated_reply",
+          clientRequestId: crypto.randomUUID(),
+        });
+      }
+
+      const recordResult = await recordExchange(stub, {
+        user: latestText,
+        assistant: validated,
+        awaitingSafetyAnswer: false,
+        expectedGeneration: memoryGeneration,
+      });
+      if (recordResult?.shouldCompact && stub && ctx) {
+        schedule(ctx, compactSession(stub, env));
+      }
+
+      const guestSummaryResult = guestSummaryPromise
+        ? await guestSummaryPromise
+        : null;
+      await writer.write(
+        streamEvent({
+          type: "done",
+          route,
+          reply: validated,
+          showEmergency: false,
+          awaitingSafetyAnswer: false,
+          analytics: analytics || zeroUsageSnapshot(),
+          ...guestSummaryFields(guestSummaryResult),
+        }),
+      );
+    } catch (error) {
+      const diagnostic = streamFailureDiagnostic(error);
+      const clientRequestId =
+        error instanceof OpenAIRequestError
+          ? error.clientRequestId
+          : crypto.randomUUID();
+      const reference = errorReference(clientRequestId);
+      console.error(
+        JSON.stringify({
+          event: "openai_stream_failed",
+          route,
+          diagnostic,
+          reference,
+        }),
+      );
+
+      const publicError =
+        error instanceof OpenAIRequestError
+          ? publicOpenAIError(error)
+          : { message: COPY.api.temporarilyUnavailable };
+      try {
+        await writer.write(
+          streamEvent({
+            type: "error",
+            error: publicError.message,
+            reference,
+            diagnostic,
+          }),
+        );
+      } catch {
+        // The browser may have left while the provider request was running.
+      }
+    } finally {
+      try {
+        await writer.close();
+      } catch {
+        // Closing an already-aborted browser stream is harmless.
+      }
+    }
+  };
+
+  const task = produce();
+  if (!schedule(ctx, task)) void task;
+  return new Response(readable, { status: 200, headers: streamHeaders() });
+}
+
+function neutralGreetingReply() {
+  return "Hi. What’s happening right now?";
+}
+
 async function generateReply(messages, route, env, latestText) {
   const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
-  if (demoMode) return demoReply(route, latestText);
+  if (demoMode) {
+    return {
+      reply: demoReply(route, latestText),
+      analytics: zeroUsageSnapshot("demo", "none"),
+    };
+  }
 
-  const { apiKey, model, reasoningEffort } = openAIConfig(env);
+  const { apiKey, model, reasoningEffort, serviceTier } = openAIConfig(env);
+  const turnReasoningEffort = reasoningEffort;
   const result = await callOpenAI(
     {
       model,
-      reasoning: { effort: reasoningEffort, context: "current_turn" },
+      service_tier: serviceTier,
+      reasoning: { effort: turnReasoningEffort },
+      ...(turnReasoningEffort === "none"
+        ? { max_output_tokens: 500 }
+        : {}),
+      text: { verbosity: "low" },
       instructions:
         COPY.model.systemPrompt +
         "\n\n" +
@@ -475,15 +1324,15 @@ async function generateReply(messages, route, env, latestText) {
         "\n\n" +
         COPY.model.routeInstruction(route),
       input: messages,
-      max_output_tokens: MAX_MODEL_OUTPUT_TOKENS,
-      store: false,
+      store: true,
     },
     apiKey,
     60_000,
     "OpenAIHttpError",
   );
+  logInteractiveUsage(result, model, serviceTier);
 
-  const reply = validateModelReply(result.text);
+  let reply = validateModelReply(result.text);
   if (!reply) {
     throw new OpenAIRequestError({
       name: "OpenAIInvalidReplyError",
@@ -493,17 +1342,35 @@ async function generateReply(messages, route, env, latestText) {
       clientRequestId: result.clientRequestId,
     });
   }
-  return reply;
+  if (
+    route === "ORDINARY" &&
+    isNeutralGreeting(latestText) &&
+    isUnsolicitedSafetyCheck(reply)
+  ) {
+    reply = neutralGreetingReply();
+  }
+  return {
+    reply,
+    analytics: interactiveUsageSnapshot(result, model, serviceTier),
+  };
 }
 
-function sanitizeSummary(value) {
+function sanitizeSummaryText(value, maxChars) {
   return String(value || "")
     .trim()
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email omitted]")
     .replace(/https?:\/\/\S+/gi, "[link omitted]")
     .replace(/\b(?:\d[\s().-]?){10,}\b/g, "[number omitted]")
-    .slice(0, MAX_SUMMARY_CHARS)
+    .slice(0, maxChars)
     .trim();
+}
+
+function sanitizeSummary(value) {
+  return sanitizeSummaryText(value, MAX_SUMMARY_CHARS);
+}
+
+function sanitizeGuestSummary(value) {
+  return sanitizeSummaryText(value, MAX_GUEST_SUMMARY_CHARS);
 }
 
 async function generateSummary(snapshot, env) {
@@ -518,11 +1385,11 @@ async function generateSummary(snapshot, env) {
   const result = await callOpenAI(
     {
       model,
-      reasoning: { effort: "low", context: "current_turn" },
+      reasoning: { effort: "low" },
       instructions: COPY.model.summaryPrompt,
       input: [{ role: "user", content: input }],
       max_output_tokens: MAX_SUMMARY_OUTPUT_TOKENS,
-      store: false,
+      store: true,
     },
     apiKey,
     25_000,
@@ -530,6 +1397,63 @@ async function generateSummary(snapshot, env) {
   );
 
   return sanitizeSummary(result.text) || null;
+}
+
+async function generateGuestSummary(existingSummary, pendingMessages, env) {
+  const summary = normalizeGuestSummary(existingSummary);
+  const messages = normalizeGuestSummaryMessages(pendingMessages);
+  if (!messages.length) return null;
+
+  const demoMode = String(env.DEMO_MODE || "true").toLowerCase() === "true";
+  if (demoMode || !String(env.OPENAI_API_KEY || "")) {
+    return { summary, updated: false };
+  }
+
+  try {
+    const { apiKey, model } = openAIConfig(env);
+    const result = await callOpenAI(
+      {
+        model,
+        reasoning: { effort: "low" },
+        instructions: COPY.model.guestSummaryPrompt,
+        input: [
+          {
+            role: "user",
+            content: JSON.stringify({
+              existing_summary: summary || null,
+              older_messages: messages,
+            }),
+          },
+        ],
+        max_output_tokens: MAX_GUEST_SUMMARY_OUTPUT_TOKENS,
+        text: { verbosity: "low" },
+        store: true,
+      },
+      apiKey,
+      35_000,
+      "OpenAIGuestSummaryHttpError",
+    );
+    const nextSummary = sanitizeGuestSummary(result.text);
+    return nextSummary
+      ? { summary: nextSummary, updated: true }
+      : { summary, updated: false };
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "guest_summary_failed",
+        error: error instanceof Error ? error.name : "UnknownError",
+      }),
+    );
+    return { summary, updated: false };
+  }
+}
+
+function guestSummaryFields(result) {
+  if (!result) return {};
+  return {
+    guestSummary: result.summary,
+    guestSummaryUpdated: result.updated === true,
+  };
 }
 
 async function compactSession(stub, env) {
@@ -542,6 +1466,7 @@ async function compactSession(stub, env) {
       summary,
       snapshot.summaryVersion,
       snapshot.throughSequence,
+      snapshot.generation,
     );
   } catch (error) {
     console.error(
@@ -580,6 +1505,7 @@ async function recordFixedRoute(
   stub,
   route,
   fixed,
+  expectedGeneration,
 ) {
   await recordExchange(stub, {
     user:
@@ -587,48 +1513,93 @@ async function recordFixedRoute(
       "[A deterministic support route triggered a fixed response.]",
     assistant: fixed.reply,
     awaitingSafetyAnswer: fixed.awaitingSafetyAnswer === true,
+    expectedGeneration,
   });
 }
 
-async function handleChat(request, env, ctx, accountKey) {
+async function handleNewConversation(request, env, accountKey) {
   const body = await readBoundedJson(request);
+  if (body?.privateChat !== true) {
+    const stub = accountMemoryStub(env, accountKey);
+    if (stub && typeof stub.startNewConversation === "function") {
+      await stub.startNewConversation();
+    }
+  }
+  return jsonResponse({ ok: true });
+}
+
+export async function handlePreparedChat(
+  request,
+  env,
+  ctx,
+  accountKey,
+  body,
+  preparedMemory = null,
+) {
+  env = reasoningEnvironment(
+    env,
+    requestedReasoningEffort(
+      body,
+      env.OPENAI_MODEL,
+      env.OPENAI_REASONING_EFFORT,
+    ),
+  );
+  const privateChat = body?.privateChat === true;
   const latestText = latestUserText(body);
   if (!latestText) throw new HttpError(400, COPY.api.messageRequired);
+  if (latestText.length > MAX_MESSAGE_CHARS) {
+    throw new HttpError(400, COPY.api.messageTooLong);
+  }
 
-  const stub = accountMemoryStub(env, accountKey);
+  const stub = privateChat ? null : accountMemoryStub(env, accountKey);
+  const memory = privateChat
+    ? emptyMemoryContext()
+    : preparedMemory || (await readMemoryContext(stub));
   const clientAwaiting = body?.awaitingSafetyAnswer === true;
-  let route = classifyInput(latestText, {
-    awaitingSafetyAnswer: clientAwaiting,
+  const route = classifyInput(latestText, {
+    awaitingSafetyAnswer:
+      clientAwaiting || memory.awaitingSafetyAnswer,
   });
-  let fixed = fixedReplyForRoute(route);
+  const fixed = fixedReplyForRoute(route);
 
   if (fixed) {
-    const task = recordFixedRoute(stub, route, fixed);
+    const task = recordFixedRoute(
+      stub,
+      route,
+      fixed,
+      memory.generation,
+    );
     if (!schedule(ctx, task)) await task;
     return jsonResponse({ route, ...fixed });
   }
 
-  const memory = await readMemoryContext(stub);
-
-  route = classifyInput(latestText, {
-    awaitingSafetyAnswer: clientAwaiting || memory.awaitingSafetyAnswer,
-  });
-  fixed = fixedReplyForRoute(route);
-
-  if (fixed) {
-    const task = recordFixedRoute(stub, route, fixed);
-    if (!schedule(ctx, task)) await task;
-    return jsonResponse({ route, ...fixed });
-  }
-
-  const messages = modelInput(memory, latestText);
+  const messages = privateChat
+    ? privateModelInput(body?.messages, latestText)
+    : modelInput(memory, latestText);
   if (!messages.length) throw new HttpError(400, COPY.api.invalidConversation);
 
-  const reply = await generateReply(messages, route, env, latestText);
+  const acceptsStreaming = (request.headers.get("accept") || "")
+    .toLowerCase()
+    .includes("application/x-ndjson");
+  if (acceptsStreaming) {
+    return streamChatReply(
+      messages,
+      route,
+      env,
+      latestText,
+      stub,
+      memory.generation,
+      ctx,
+    );
+  }
+
+  const generated = await generateReply(messages, route, env, latestText);
+  const reply = generated.reply;
   const result = await recordExchange(stub, {
     user: latestText,
     assistant: reply,
     awaitingSafetyAnswer: false,
+    expectedGeneration: memory.generation,
   });
 
   if (result?.shouldCompact && stub && ctx) {
@@ -640,7 +1611,153 @@ async function handleChat(request, env, ctx, accountKey) {
     reply,
     showEmergency: false,
     awaitingSafetyAnswer: false,
+    analytics: generated.analytics,
   });
+}
+
+async function handleDeleteMemory(env, accountKey) {
+  if (!accountKey) {
+    return jsonResponse({ error: COPY.api.signInRequired }, 401);
+  }
+
+  const stub = accountMemoryStub(env, accountKey);
+  if (!stub || typeof stub.deleteRememberedContext !== "function") {
+    return jsonResponse({ error: COPY.api.memoryUnavailable }, 503);
+  }
+
+  const result = await stub.deleteRememberedContext();
+  return jsonResponse({
+    ok: true,
+    deleted: result?.deleted === true,
+    generation: Number(result?.generation) || 0,
+  });
+}
+
+async function handleChat(request, env, ctx, accountKey) {
+  const body = await readBoundedJson(request);
+  env = reasoningEnvironment(
+    env,
+    requestedReasoningEffort(
+      body,
+      env.OPENAI_MODEL,
+      env.OPENAI_REASONING_EFFORT,
+    ),
+  );
+  const privateChat = body?.privateChat === true;
+  const signedOut = !accountKey;
+  const latestText = latestUserText(body);
+  if (!latestText) throw new HttpError(400, COPY.api.messageRequired);
+  if (latestText.length > MAX_MESSAGE_CHARS) {
+    throw new HttpError(400, COPY.api.messageTooLong);
+  }
+
+  const stub = privateChat ? null : accountMemoryStub(env, accountKey);
+  const memory = await readMemoryContext(stub);
+  const clientAwaiting = body?.awaitingSafetyAnswer === true;
+  let route = classifyInput(latestText, {
+    awaitingSafetyAnswer: clientAwaiting,
+  });
+  let fixed = fixedReplyForRoute(route);
+
+  if (fixed) {
+    const task = recordFixedRoute(
+      stub,
+      route,
+      fixed,
+      memory.generation,
+    );
+    if (!schedule(ctx, task)) await task;
+    return jsonResponse({ route, ...fixed });
+  }
+
+  route = classifyInput(latestText, {
+    awaitingSafetyAnswer: clientAwaiting || memory.awaitingSafetyAnswer,
+  });
+  fixed = fixedReplyForRoute(route);
+
+  if (fixed) {
+    const task = recordFixedRoute(
+      stub,
+      route,
+      fixed,
+      memory.generation,
+    );
+    if (!schedule(ctx, task)) await task;
+    return jsonResponse({ route, ...fixed });
+  }
+
+  // Guest chats now send their complete current-tab transcript. Legacy v2
+  // summary fields are accepted as read-only migration context, not compacted again.
+  const guestSummaryPromise = null;
+  const messages = privateChat
+    ? privateModelInput(body?.messages, latestText)
+    : signedOut
+      ? guestModelInput(body, latestText)
+      : modelInput(memory, latestText);
+  if (!messages.length) throw new HttpError(400, COPY.api.invalidConversation);
+
+  const acceptsStreaming = (request.headers.get("accept") || "")
+    .toLowerCase()
+    .includes("application/x-ndjson");
+  if (acceptsStreaming) {
+    return streamChatReply(
+      messages,
+      route,
+      env,
+      latestText,
+      stub,
+      memory.generation,
+      ctx,
+      guestSummaryPromise,
+    );
+  }
+
+  const [generated, guestSummaryResult] = await Promise.all([
+    generateReply(messages, route, env, latestText),
+    guestSummaryPromise,
+  ]);
+  const reply = generated.reply;
+  const result = await recordExchange(stub, {
+    user: latestText,
+    assistant: reply,
+    awaitingSafetyAnswer: false,
+    expectedGeneration: memory.generation,
+  });
+
+  if (result?.shouldCompact && stub && ctx) {
+    schedule(ctx, compactSession(stub, env));
+  }
+
+  return jsonResponse({
+    route,
+    reply,
+    showEmergency: false,
+    awaitingSafetyAnswer: false,
+    analytics: generated.analytics,
+    ...guestSummaryFields(guestSummaryResult),
+  });
+}
+
+export async function preparedChatResponse(
+  request,
+  body,
+  env,
+  ctx,
+  accountKey,
+  preparedMemory,
+) {
+  try {
+    return await handlePreparedChat(
+      request,
+      env,
+      ctx,
+      accountKey,
+      body,
+      preparedMemory,
+    );
+  } catch (error) {
+    return chatErrorResponse(error, new URL(request.url).pathname);
+  }
 }
 
 function authNotice(code) {
@@ -668,6 +1785,14 @@ const worker = {
     const url = new URL(request.url);
 
     try {
+      if (FAVICON_CONTENT_TYPES.has(url.pathname)) {
+        return faviconAssetResponse(
+          request,
+          env,
+          FAVICON_CONTENT_TYPES.get(url.pathname),
+        );
+      }
+
       if (url.pathname === "/" || url.pathname === "/index.html") {
         if (!["GET", "HEAD"].includes(request.method)) {
           return new Response(COPY.api.methodNotAllowed, {
@@ -761,12 +1886,38 @@ const worker = {
           {
             ok: configured,
             mode: demoMode ? "demo" : "openai",
-            model: demoMode ? null : String(env.OPENAI_MODEL || "gpt-5.6-sol"),
+            model: demoMode ? null : String(env.OPENAI_MODEL || "gpt-5.4"),
+            reasoningEffort: demoMode
+              ? null
+              : String(env.OPENAI_REASONING_EFFORT || "none"),
+            verbosity: demoMode ? null : "low",
             memory: Boolean(env.SESSIONS),
             authentication: googleAuthConfigured(env),
           },
           configured ? 200 : 503,
         );
+      }
+
+      if (url.pathname === "/api/account/memory") {
+        if (request.method !== "DELETE") {
+          return jsonResponse({ error: COPY.api.methodNotAllowed }, 405);
+        }
+        if (!sameOriginOrNonBrowser(request)) {
+          return jsonResponse({ error: COPY.api.crossOriginRequest }, 403);
+        }
+        const authSession = await readAuthSession(request, env);
+        return await handleDeleteMemory(env, authSession?.accountKey);
+      }
+
+      if (url.pathname === "/api/conversation/new") {
+        if (request.method !== "POST") {
+          return jsonResponse({ error: COPY.api.methodNotAllowed }, 405);
+        }
+        if (!sameOriginOrNonBrowser(request)) {
+          return jsonResponse({ error: COPY.api.crossOriginRequest }, 403);
+        }
+        const authSession = await readAuthSession(request, env);
+        return await handleNewConversation(request, env, authSession?.accountKey);
       }
 
       if (url.pathname === "/api/chat") {

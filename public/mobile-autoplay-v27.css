@@ -1,0 +1,54 @@
+/* Mobile autoplay v28.
+   Keep the video render-visible while WebKit decides whether muted inline
+   playback may start. A video hidden with visibility/opacity before play() can
+   remain gesture-gated. The forest poster and transparent water canvas are the
+   visual fallback above the still-loading video, not a reason to hide it. */
+@media (max-width: 980px), (hover: none) and (pointer: coarse) {
+  .page-shell {
+    z-index: 10 !important;
+  }
+
+  #photo-backdrop.photo-backdrop {
+    z-index: 0 !important;
+  }
+
+  #mobile-background-video.mobile-background-video,
+  #mobile-background-video.mobile-background-video.is-playing,
+  #mobile-background-video.mobile-background-video.is-autoplay-blocked,
+  #mobile-background-video.mobile-background-video.is-failed,
+  html[data-mobile-autoplay-v28]
+    #mobile-background-video.mobile-background-video {
+    position: fixed !important;
+    z-index: 1 !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: 50% 50% !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: none !important;
+    user-select: none !important;
+  }
+
+  #mobile-motion-canvas.mobile-motion-canvas.is-ready,
+  html[data-mobile-autoplay-v28]:not([data-mobile-autoplay-v28="playing"])
+    #mobile-motion-canvas.mobile-motion-canvas.is-ready {
+    position: fixed !important;
+    z-index: 2 !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: none !important;
+  }
+
+  html[data-mobile-autoplay-v28="playing"]
+    #mobile-motion-canvas.mobile-motion-canvas {
+    visibility: hidden !important;
+    opacity: 0 !important;
+  }
+}

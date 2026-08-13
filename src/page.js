@@ -14,12 +14,22 @@ export function renderPage(options = {}) {
   const copyData = escapeHtml(JSON.stringify(client));
   const productCopyData = escapeHtml(
     JSON.stringify({
-      outcomeQuestion: "Do you have a next step?",
-      outcomeYes: "Yes",
-      outcomeNo: "Not yet",
-      outcomeYesMessage: "Good. Do that first.",
-      outcomeNoMessage: "A smaller prompt is ready below.",
-      outcomeFollowUp: "Give me one step I can do in ten minutes.",
+      outcomeQuestion: "What would help next?",
+      outcomeActions: [
+        {
+          label: "Make it smaller",
+          prompt: "Make the practical next step smaller and easier to start.",
+        },
+        {
+          label: "Another option",
+          prompt: "Give me a different practical next step.",
+        },
+        {
+          label: "Help me start now",
+          prompt:
+            "Help me begin the next step right now with one concrete first move.",
+        },
+      ],
     }),
   );
   const signedIn = options.signedIn === true;
@@ -29,9 +39,8 @@ export function renderPage(options = {}) {
     ? "Not emergency care."
     : page.chat.supportNote;
   const canonicalUrl = "https://stabilize.info/";
-  const seoTitle = "Stabilize — Get One Clear Next Step";
-  const seoDescription =
-    "Free, floor-first AI support for overloaded moments. Describe what is happening and get one clear next step.";
+  const seoTitle = "Stabilize — One Safe, Practical Next Step";
+  const seoDescription = page.promise;
   const structuredData = JSON.stringify({
     "@context": "https://schema.org",
     "@type": "WebApplication",
@@ -41,16 +50,27 @@ export function renderPage(options = {}) {
     operatingSystem: "Any",
     isAccessibleForFree: true,
     description: seoDescription,
-    creator: {
-      "@type": "Person",
-      name: "Reed Lokken",
-    },
   }).replaceAll("<", "\\u003c");
   const authControl = signedIn
-    ? `<form class="auth-session" action="/auth/logout" method="post">
-          <span class="auth-state">${escapeHtml(page.auth.signedIn)}</span>
-          <button class="auth-link" type="submit">${escapeHtml(page.auth.signOut)}</button>
-        </form>`
+    ? `<div class="auth-account-controls">
+          <form class="auth-session" action="/auth/logout" method="post">
+            <span class="auth-state">${escapeHtml(page.auth.signedIn)}</span>
+            <button class="auth-link" type="submit">${escapeHtml(page.auth.signOut)}</button>
+          </form>
+          <button
+            id="delete-memory-button"
+            class="auth-link memory-delete-button"
+            type="button"
+            aria-describedby="memory-delete-status"
+          >${escapeHtml(client.deleteMemoryButton)}</button>
+          <p
+            id="memory-delete-status"
+            class="memory-delete-status"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></p>
+        </div>`
     : googleSignInAvailable
       ? `<a class="google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>`
       : `<span class="menu-account-note">Chat without an account.</span>`;
@@ -59,39 +79,45 @@ export function renderPage(options = {}) {
     : googleSignInAvailable
       ? `<a class="google-sign-in header-google-sign-in" href="/auth/google">${escapeHtml(page.auth.signIn)}</a>`
       : "";
-
-  const exampleStarts = [
-    {
-      label: "Everything feels urgent",
-      message: "Everything feels urgent and I cannot tell what to do first.",
-    },
-    {
-      label: "I haven't eaten",
-      message: "I have not eaten and everything feels impossible right now.",
-    },
-    {
-      label: "I'm stuck on a message",
-      message:
-        "I need to send a difficult message, but I keep spiraling instead.",
-    },
-  ]
-    .map(
-      ({ label, message }) => `<button
-        class="example-start"
-        type="button"
-        data-example-message="${escapeHtml(message)}"
-      >${escapeHtml(label)}</button>`,
-    )
-    .join("");
+  const privateChatControl = signedIn
+    ? `<div class="private-chat-control">
+          <button
+            id="private-chat-button"
+            class="private-chat-button"
+            type="button"
+            aria-pressed="false"
+          >${escapeHtml(client.privateChatButton)}</button>
+          <p class="private-chat-menu-note">${escapeHtml(client.privateChatMenuNote)}</p>
+        </div>`
+    : "";
+  const privateChatStatus = signedIn
+    ? `<p id="private-chat-status" class="private-chat-status" role="status" hidden>
+          ${escapeHtml(client.privateChatStatus)}
+        </p>`
+    : "";
+  const landingPrivacySignal = signedIn
+    ? "Signed-in chats use bounded 30-day memory. Delete it anytime."
+    : "Guest chats keep the full conversation in this tab.";
 
   return `<!doctype html>
-<html lang="${escapeHtml(page.language)}">
+<html lang="${escapeHtml(page.language)}" data-signed-in="${signedIn}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="${escapeHtml(seoDescription)}" />
     <meta name="robots" content="index,follow,max-image-preview:large" />
     <meta name="theme-color" content="#173f31" />
+    <link rel="icon" href="/stabilize-tab-20260805-16.png" type="image/png" sizes="16x16" />
+    <link rel="icon" href="/stabilize-tab-20260805-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/stabilize-tab-20260813.svg" type="image/svg+xml" sizes="any" />
+    <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACXklEQVR42mNgGGDAiEtC3N7wPzUtennwPCNRDqC2xYQcwkRPy7HZwURPy7HZxUJLi85W6sHZxu2XsKphopXvkS3HxofZyTTQ2XD4OgA9znGlAZISYaCjM0OUpxeDjrIKAy83N8P3nz8ZPn35wvDk1UuGO48fMSzYtJHh8p3bBC0lywH9xWUMkR6eKGK8XFwMvFxcDNJiYgzmOroM565fR3EAMYAoB9gYGMIt//ztG0N2eyvD8UsXGP79/88gKy7BoKeqyuBn78jw6/dvkqOKKAc4m1vA2ftPn2LYdeIYnH/jwX2GGw/uM6zavYt2iZCPmxvONtPRZdBVUaVaYiUqBB48ewZnSwgLM+yePovh3tMnDMcvXWQ4efkSw8GzZxlevntLfnVMqCSUFhNjODJvEQMnOztW+X///zNs2L+PoXLyRIaPXz6TVDMSFQVPX71iSG9pYnjz4QP2eGRkZAhycmaYUl5JmxCAAU52dgYvG1sGBxNTBjsjYwZxIWEMNaYxkQyPX74gOgRIKoi+//zJsHbvHoa1e/cwMDAwMGgpKTFUJ6cxOJuZw9UoSEkR7QCKi+Jr9+4x9CxegCL28csX6ueCvMhoBlMtbYY9J08wnL95g+HF2zcM7z99YpASFWXICg2Hq3v9/j3DtXt3qe8ALg4OBlcLSwZXC0ucav7++8dQPrGf4c/fv9R3wOrdOxk+ff3KYKypxaAmJ8cgyMfPwM/Dw/Dv3z+GZ29eM5y6cplh9rq1DFfu3qFtLqBFC3lwNEhwdRro0T8YPE0yeoYCsl1MxPTfaNk1G/DO6YADAJI04i4LCcRWAAAAAElFTkSuQmCC" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/stabilize-app-20260805-180.png" sizes="180x180" />
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#173f31" />
+    <link rel="manifest" href="/site.webmanifest?v=20260813-safari-inline-1" />
+    <meta name="application-name" content="STABILIZE" />
+    <meta name="apple-mobile-web-app-title" content="STABILIZE" />
+    <script src="/favicon-refresh.js?v=20260813-safari-inline-1" defer></script>
+
     <link rel="canonical" href="${canonicalUrl}" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Stabilize" />
@@ -110,10 +136,37 @@ export function renderPage(options = {}) {
       type="font/woff2"
       crossorigin
     />
-    <link rel="stylesheet" href="/styles.css" />
-    <link rel="stylesheet" href="/seo.css" />
-    <link rel="stylesheet" href="/product.css" />
-    <link rel="stylesheet" href="/photo-tuning.css" />
+    <link rel="stylesheet" href="/styles.css?v=20260807-priority-latency-1" />
+    <link rel="stylesheet" href="/seo.css?v=20260808-memory-controls-1" />
+    <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
+    <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
+    <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
+    <!-- mobile-background-v30-head-start -->
+    <!-- Keep this preload in the historical responsive shape. Older media
+         generators run before this finalizer and need an idempotent target on
+         subsequent builds; v30 still replaces their runtime output below. -->
+    <link
+      rel="preload"
+      as="image"
+      href="/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260813-mobile-background-v31-1"
+      imagesrcset="
+        /scenes/mobile-forest-stream-v24-native-1080.webp?v=20260813-mobile-background-v31-1 2160w
+      "
+      imagesizes="100vw"
+      media="(max-width: 980px) and (orientation: portrait)"
+      type="image/webp"
+      fetchpriority="high"
+    />
+    <link
+      rel="preload"
+      as="image"
+      href="/scenes/mobile-forest-stream-full-atlas-v29-1080.webp?v=20260813-mobile-background-v31-1"
+      media="(max-width: 980px) and (orientation: portrait)"
+      type="image/webp"
+      fetchpriority="high"
+    />
+    <link rel="stylesheet" href="/mobile-background/styles?v=20260813-mobile-background-v31-1" />
+    <!-- mobile-background-v30-head-end -->
   </head>
   <body>
     <canvas
@@ -126,15 +179,12 @@ export function renderPage(options = {}) {
       class="photo-backdrop"
       aria-hidden="true"
     >
+      <!-- Retired responsive references: lake-valley-portrait-720.webp 720w; lake-valley-portrait-2160.webp 2160w -->
       <source
         media="(max-width: 980px) and (orientation: portrait)"
         type="image/webp"
         sizes="100vw"
-        srcset="
-          /scenes/lake-valley-portrait-720.webp 720w,
-          /scenes/lake-valley-portrait-1440.webp 1440w,
-          /scenes/lake-valley-portrait-2160.webp 2160w
-        "
+        srcset="\n          /scenes/mobile-forest-stream-v24-native-1080.webp 2160w\n        "
       />
       <img
         id="photo-backdrop-image"
@@ -156,11 +206,37 @@ export function renderPage(options = {}) {
       class="terrain-background photo-background"
       aria-hidden="true"
     ></canvas>
+    <!-- mobile-background-v30-media-start -->
+    <video
+      id="mobile-background-video"
+      class="mobile-background-video"
+      autoplay
+      muted
+      loop
+      playsinline
+      preload="auto"
+      poster="/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260813-mobile-background-v31-1"
+      aria-hidden="true"
+      tabindex="-1"
+      disablepictureinpicture
+      disableremoteplayback
+      x-webkit-airplay="deny"
+    >
+      <source
+        src="/media/mobile-forest-stream-video-v12-720.mp4?v=20260813-mobile-smooth-v33-1"
+        type="video/mp4"
+      />
+    </video>
+    <canvas
+      id="mobile-background-v30"
+      class="mobile-background-v30"
+      aria-hidden="true"
+    ></canvas>
+    <script src="/mobile-video-handoff-v31.js?v=20260813-mobile-smooth-v33-1"></script>
+    <!-- mobile-background-v30-media-end -->
     <div class="page-shell">
       <header class="site-header">
-        <a class="site-name" href="/" aria-label="Stabilize home">${escapeHtml(page.header.name)}</a>
-        <div class="header-actions">
-          ${headerAuthControl ? `<nav class="auth-actions header-auth-actions" aria-label="${escapeHtml(page.auth.label)}">${headerAuthControl}</nav>` : ""}
+        <nav class="header-navigation" aria-label="Primary navigation">
           <details class="site-menu">
             <summary class="menu-toggle" aria-label="Open site menu">
               <span class="sr-only">Menu</span>
@@ -172,18 +248,38 @@ export function renderPage(options = {}) {
             </summary>
             <div class="menu-panel">
               <nav class="menu-links" aria-label="Site pages">
+                <a href="/">Home</a>
+                <a href="/about.html">About</a>
+                <a href="/sustainability.html">Sustainability</a>
                 <a href="/how-it-works.html">How it works</a>
                 <a href="/floor-first.html">Floor-first approach</a>
                 <a href="/safety.html">Safety and limits</a>
                 <a href="/privacy.html">Privacy</a>
               </nav>
+              <details class="menu-info-disclosure">
+                <summary>${escapeHtml(page.chat.infoLabel)}</summary>
+                <p>${escapeHtml(page.chat.infoDetails)}</p>
+              </details>
               <div class="menu-account" aria-label="${escapeHtml(page.auth.label)}">
                 ${authControl}
               </div>
+              <a class="menu-admin-link" href="/admin/impact" aria-label="Open admin dashboard" rel="nofollow">Admin</a>
             </div>
           </details>
+        </nav>
+        <div class="header-actions">
+          ${headerAuthControl ? `<nav class="auth-actions header-auth-actions" aria-label="${escapeHtml(page.auth.label)}">${headerAuthControl}</nav>` : ""}
         </div>
       </header>
+
+      <div class="chat-action-proxies" hidden aria-hidden="true">
+        <button
+          id="new-conversation-button"
+          class="new-conversation-button"
+          type="button"
+        >${escapeHtml(page.chat.newConversationButton)}</button>
+        ${privateChatControl}
+      </div>
 
       ${notice ? `<p class="auth-notice" role="status">${escapeHtml(notice)}</p>` : ""}
 
@@ -201,28 +297,24 @@ export function renderPage(options = {}) {
 
           <section id="seo-intro" class="seo-intro product-intro" aria-labelledby="seo-heading">
             <h1 id="seo-heading">Get unstuck.</h1>
-            <p class="product-promise">Tell Stabilize what is happening. Get one clear next step.</p>
-
-            <div class="example-starts" aria-labelledby="example-starts-label">
-              <p id="example-starts-label">Start here</p>
-              <div class="example-start-grid">${exampleStarts}</div>
-            </div>
+            <p class="product-promise">${escapeHtml(page.promise)}</p>
 
             <div
               class="landing-meta"
               data-support-note="${escapeHtml(page.chat.supportNote)}"
             >
-              <p class="privacy-signal">Guest chats aren't remembered. ${escapeHtml(emergencyBoundary)}</p>
-              <details class="info-disclosure">
-                <summary>${escapeHtml(page.chat.infoLabel)}</summary>
-                <div class="info-popover">
-                  <p>${escapeHtml(page.chat.infoDetails)}</p>
-                </div>
-              </details>
+              <p class="privacy-signal">${escapeHtml(landingPrivacySignal)} ${escapeHtml(emergencyBoundary)}</p>
             </div>
           </section>
 
           <div class="composer-dock">
+            ${privateChatStatus}
+            <section
+              id="outcome-tray"
+              class="outcome-tray"
+              aria-live="polite"
+              hidden
+            ></section>
             <form id="chat-form" class="chat-form">
               <label class="sr-only" for="message-input">${escapeHtml(page.chat.inputLabel)}</label>
               <textarea
@@ -242,7 +334,9 @@ export function renderPage(options = {}) {
 
     <template id="client-copy">${copyData}</template>
     <template id="product-copy">${productCopyData}</template>
-    <script type="module" src="/app.js"></script>
+    <!-- Legacy generator marker: 20260808-guest-summary-1 -->
+    <script type="module" src="/app.js?v=20260808-full-guest-thread-1"></script>
+    <script type="module" src="/reasoning-choice.js?v=20260807-instant-thinking-2-fastest-1"></script>
   </body>
 </html>`;
 }

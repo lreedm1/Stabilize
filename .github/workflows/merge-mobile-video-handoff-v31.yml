@@ -1,0 +1,63 @@
+name: Validate and merge mobile video handoff v31
+
+on:
+  push:
+    branches:
+      - fix/mobile-v31-video-handoff
+    paths:
+      - .github/workflows/merge-mobile-video-handoff-v31.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  validate-and-merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@v7
+        with:
+          ref: fix/mobile-v31-video-handoff
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install without generation
+        run: npm ci --ignore-scripts
+
+      - name: Verify canonical generated output is committed
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run apply:prompt-policy
+          git diff --exit-code
+
+      - name: Run full validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run test:node
+          npm run test:worker
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+      - name: Merge the validated pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr="$(gh pr list --head fix/mobile-v31-video-handoff --base main --state open --json number --jq '.[0].number')"
+          test -n "$pr"
+          gh pr merge "$pr" --merge --delete-branch \
+            --subject 'Restore native mobile video playback after the no-tap fallback' \
+            --body 'Parser-load the 2160x3840 MP4 and preserve transient iOS user activation with a synchronous first-touch play path.'

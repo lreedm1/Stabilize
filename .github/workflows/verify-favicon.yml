@@ -1,0 +1,85 @@
+name: Verify production favicon
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy Stabilize to Cloudflare
+    branches:
+      - main
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stabilize-production-favicon-post-deploy
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify browser tab icon
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Verify new icon links and bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for attempt in {1..30}; do
+            root="$(mktemp)"
+            ico_headers="$(mktemp)"
+            ico_body="$(mktemp)"
+            png16_headers="$(mktemp)"
+            png16_body="$(mktemp)"
+            png32_headers="$(mktemp)"
+            png32_body="$(mktemp)"
+            mask_headers="$(mktemp)"
+            mask_body="$(mktemp)"
+            refresh_body="$(mktemp)"
+
+            root_status="$(curl --max-time 20 --silent --show-error --output "$root" --write-out "%{http_code}" "https://stabilize.info/?favicon-check=${attempt}" || true)"
+            ico_status="$(curl --max-time 20 --silent --show-error --dump-header "$ico_headers" --output "$ico_body" --write-out "%{http_code}" "https://stabilize.info/stabilize-tab-20260805.ico?favicon-check=${attempt}" || true)"
+            png16_status="$(curl --max-time 20 --silent --show-error --dump-header "$png16_headers" --output "$png16_body" --write-out "%{http_code}" "https://stabilize.info/stabilize-tab-20260805-16.png?favicon-check=${attempt}" || true)"
+            png32_status="$(curl --max-time 20 --silent --show-error --dump-header "$png32_headers" --output "$png32_body" --write-out "%{http_code}" "https://stabilize.info/stabilize-tab-20260805-32.png?favicon-check=${attempt}" || true)"
+            mask_status="$(curl --max-time 20 --silent --show-error --dump-header "$mask_headers" --output "$mask_body" --write-out "%{http_code}" "https://stabilize.info/safari-pinned-tab.svg?favicon-check=${attempt}" || true)"
+            refresh_status="$(curl --max-time 20 --silent --show-error --output "$refresh_body" --write-out "%{http_code}" "https://stabilize.info/favicon-refresh.js?v=20260805-8&favicon-check=${attempt}" || true)"
+
+            ico_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$ico_headers" | tail -n 1)"
+            png16_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$png16_headers" | tail -n 1)"
+            png32_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$png32_headers" | tail -n 1)"
+            mask_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$mask_headers" | tail -n 1)"
+            ico_magic="$(od -An -tx1 -N4 "$ico_body" | tr -d ' \n')"
+            png16_magic="$(od -An -tx1 -N8 "$png16_body" | tr -d ' \n')"
+            png32_magic="$(od -An -tx1 -N8 "$png32_body" | tr -d ' \n')"
+
+            echo "Favicon attempt ${attempt}: root=${root_status}; ico=${ico_status}/${ico_type:-none}/${ico_magic:-none}; png16=${png16_status}/${png16_type:-none}/${png16_magic:-none}; png32=${png32_status}/${png32_type:-none}/${png32_magic:-none}; mask=${mask_status}/${mask_type:-none}; refresh=${refresh_status}"
+
+            if [[ "$root_status" == "200" ]] &&
+              grep -Fq 'href="/stabilize-tab-20260805-16.png"' "$root" &&
+              grep -Fq 'href="/stabilize-tab-20260805-32.png"' "$root" &&
+              grep -Fq 'href="/safari-pinned-tab.svg"' "$root" &&
+              grep -Fq 'src="/favicon-refresh.js?v=20260805-8"' "$root" &&
+              [[ "$ico_status" == "200" && "$ico_type" == image/x-icon* && "$ico_magic" == "00000100" ]] &&
+              [[ "$png16_status" == "200" && "$png16_type" == image/png* && "$png16_magic" == "89504e470d0a1a0a" ]] &&
+              [[ "$png32_status" == "200" && "$png32_type" == image/png* && "$png32_magic" == "89504e470d0a1a0a" ]] &&
+              [[ "$mask_status" == "200" && "$mask_type" == image/svg+xml* ]] &&
+              grep -Fq 'viewBox="0 0 16 16"' "$mask_body" &&
+              [[ "$refresh_status" == "200" ]] &&
+              grep -Fq '/stabilize-tab-20260805-32.png?refresh=20260805-8' "$refresh_body"; then
+              rm -f "$root" "$ico_headers" "$ico_body" "$png16_headers" "$png16_body" "$png32_headers" "$png32_body" "$mask_headers" "$mask_body" "$refresh_body"
+              exit 0
+            fi
+
+            rm -f "$root" "$ico_headers" "$ico_body" "$png16_headers" "$png16_body" "$png32_headers" "$png32_body" "$mask_headers" "$mask_body" "$refresh_body"
+            sleep 10
+          done
+
+          echo "::error::Production did not serve the hard-reset browser and Safari tab icons."
+          exit 1

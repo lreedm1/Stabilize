@@ -15,16 +15,19 @@ concurrency:
 
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   test-and-deploy:
     name: Test and deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -32,20 +35,66 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Mark Cloudflare deployment pending
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          payload="$(printf '{"state":"pending","context":"deployment/cloudflare","description":"Waiting for Cloudflare deployment, billing, and live chat checks","target_url":"%s/%s/actions/runs/%s"}' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
-        run: npm test
+      - name: Run Node and Worker tests in parallel
+        shell: bash
+        run: |
+          set +e
+          npm run test:node &
+          node_pid=$!
+          npm run test:worker &
+          worker_pid=$!
 
-      - name: Validate Worker and required production secrets
-        run: npm run check
+          wait "$node_pid"
+          node_status=$?
+          wait "$worker_pid"
+          worker_status=$?
+
+          if [[ "$node_status" -ne 0 || "$worker_status" -ne 0 ]]; then
+            echo "::error::Parallel test suites failed (node=${node_status}, worker=${worker_status})."
+            exit 1
+          fi
+
+      - name: Validate Worker build
+        run: npm run types && npx wrangler deploy --dry-run
+
+      - name: Verify repository stays clean
+        run: npm run verify:clean
+
+      - name: Detect GitHub-held Cloudflare credentials
+        id: cloudflare
+        if: github.event_name != 'pull_request'
+        shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "GitHub Cloudflare credentials are absent; Cloudflare's native Git integration will deploy this commit."
+          fi
 
-      - name: Deploy current main commit
-        if: github.event_name != 'pull_request'
+      - name: Deploy current main commit with Wrangler
+        if: github.event_name != 'pull_request' && steps.cloudflare.outputs.configured == 'true'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -57,8 +106,8 @@ jobs:
         if: github.event_name != 'pull_request'
         shell: bash
         run: |
-          for attempt in {1..12}; do
-            response="$(curl --fail --silent --show-error https://stabilize.info/api/auth || true)"
+          for attempt in {1..30}; do
+            response="$(curl --fail --max-time 15 --silent --show-error https://stabilize.info/api/auth || true)"
             echo "Auth check attempt ${attempt}: ${response}"
             if node -e '
               try {
@@ -68,13 +117,173 @@ jobs:
                 process.exit(1);
               }
             ' "$response"; then
-              redirect="$(curl --silent --show-error --output /dev/null --write-out "%{http_code} %{redirect_url}" https://reedlokken.com/ || true)"
-              echo "Legacy-domain redirect: ${redirect}"
-              case "$redirect" in
-                "308 https://stabilize.info/"*) exit 0 ;;
-              esac
+              exit 0
             fi
-            sleep 5
+            sleep 10
           done
-          echo "::error::Canonical domain or legacy-domain redirect did not verify after deployment."
+          echo "::error::stabilize.info did not serve the Stabilize Worker."
           exit 1
+
+      - name: Verify production billing navigation
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          for attempt in {1..12}; do
+            headers="$(mktemp)"
+            body="$(mktemp)"
+            status="$(
+              curl --max-time 20 --silent --show-error \
+                --request POST \
+                --header "Accept: application/json" \
+                --header "Origin: null" \
+                --header "Sec-Fetch-Site: same-origin" \
+                --header "Cache-Control: no-cache" \
+                --dump-header "$headers" \
+                --output "$body" \
+                --write-out "%{http_code}" \
+                "https://stabilize.info/billing/checkout?deployment=${GITHUB_SHA}" || true
+            )"
+            content_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$headers" | tail -n 1)"
+            echo "Billing route attempt ${attempt}: HTTP ${status}; ${content_type:-no-content-type}"
+
+            if [[ "$status" == "401" && "$content_type" == application/json* ]] && \
+              node -e '
+                const fs = require("node:fs");
+                try {
+                  const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+                  process.exit(
+                    value.error === "Sign in to unlock model choice." &&
+                    value.signInUrl === "/auth/google"
+                      ? 0
+                      : 1,
+                  );
+                } catch {
+                  process.exit(1);
+                }
+              ' "$body"; then
+              rm -f "$headers" "$body"
+              exit 0
+            fi
+
+            node -e '
+              const fs = require("node:fs");
+              try {
+                const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+                console.log(
+                  "Safe billing diagnostic:",
+                  JSON.stringify({
+                    error: typeof value.error === "string" ? value.error : null,
+                    signInUrl:
+                      typeof value.signInUrl === "string" ? value.signInUrl : null,
+                  }),
+                );
+              } catch {
+                console.log("Safe billing diagnostic: unparseable response");
+              }
+            ' "$body" || true
+
+            rm -f "$headers" "$body"
+            sleep 10
+          done
+          echo "::error::stabilize.info did not expose the repaired opaque-origin billing route."
+          exit 1
+
+      - name: Verify production chat streaming
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          for attempt in {1..8}; do
+            headers="$(mktemp)"
+            body="$(mktemp)"
+            status="$(
+              curl --max-time 75 --silent --show-error \
+                --request POST \
+                --header "Content-Type: application/json" \
+                --header "Accept: application/x-ndjson, application/json" \
+                --header "Cache-Control: no-cache" \
+                --data '{"message":"Hi"}' \
+                --dump-header "$headers" \
+                --output "$body" \
+                --write-out "%{http_code}" \
+                "https://stabilize.info/api/chat?deployment=${GITHUB_SHA}" || true
+            )"
+            content_type="$(awk -F': ' 'tolower($1) == "content-type" { gsub("\r", "", $2); print tolower($2) }' "$headers" | tail -n 1)"
+            echo "Chat stream attempt ${attempt}: HTTP ${status}; ${content_type:-no-content-type}"
+
+            if [[ "$status" == "200" && "$content_type" == application/x-ndjson* ]] && \
+              node -e '
+                const fs = require("node:fs");
+                const lines = fs.readFileSync(process.argv[1], "utf8")
+                  .split(/\r?\n/)
+                  .filter(Boolean);
+                let streamedText = "";
+                let completed = null;
+                for (const line of lines) {
+                  const event = JSON.parse(line);
+                  if (event.type === "error") process.exit(1);
+                  if (event.type === "delta" && typeof event.delta === "string") {
+                    streamedText += event.delta;
+                  }
+                  if (event.type === "done") completed = event;
+                }
+                process.exit(
+                  streamedText.trim() &&
+                  completed &&
+                  typeof completed.reply === "string" &&
+                  completed.reply.trim()
+                    ? 0
+                    : 1,
+                );
+              ' "$body"; then
+              rm -f "$headers" "$body"
+              exit 0
+            fi
+
+            node -e '
+              const fs = require("node:fs");
+              const raw = fs.readFileSync(process.argv[1], "utf8");
+              const events = [];
+              for (const line of raw.split(/\r?\n/).filter(Boolean)) {
+                try {
+                  const event = JSON.parse(line);
+                  events.push({
+                    type: typeof event.type === "string" ? event.type : null,
+                    route: typeof event.route === "string" ? event.route : null,
+                    error: typeof event.error === "string" ? event.error : null,
+                    reference: typeof event.reference === "string" ? event.reference : null,
+                  });
+                } catch {
+                  events.push({ type: "unparseable", bytes: Buffer.byteLength(line) });
+                }
+              }
+              console.log("Safe chat stream diagnostic:", JSON.stringify(events));
+            ' "$body" || true
+
+            rm -f "$headers" "$body"
+            sleep 10
+          done
+          echo "::error::stabilize.info did not produce a complete streamed assistant reply."
+          exit 1
+
+      - name: Publish Cloudflare deployment result
+        if: always() && github.event_name != 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [[ "$JOB_STATUS" == "success" ]]; then
+            state="success"
+            description="Cloudflare deployment, billing, and live chat checks passed"
+          else
+            state="failure"
+            description="Cloudflare deployment, billing, or live chat checks failed"
+          fi
+          payload="$(printf '{"state":"%s","context":"deployment/cloudflare","description":"%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"

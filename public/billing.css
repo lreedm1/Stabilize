@@ -38,6 +38,12 @@
   font-weight: 760;
 }
 
+.billing-menu form[aria-busy="true"] button,
+.billing-menu button:disabled {
+  cursor: progress;
+  opacity: 0.68;
+}
+
 .billing-primary {
   border: 1px solid var(--accent);
   background: var(--accent);
@@ -80,6 +86,19 @@
   font-size: 0.68rem;
 }
 
+.billing-menu .billing-action-status {
+  margin-top: 8px;
+  margin-bottom: 0;
+  color: var(--accent-dark);
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-align: center;
+}
+
+.billing-menu .billing-action-status[hidden] {
+  display: none;
+}
+
 .billing-notice {
   width: fit-content;
   max-width: min(620px, 100%);
@@ -95,4 +114,444 @@
   font-size: 0.76rem;
   line-height: 1.4;
   text-align: center;
+}
+
+.billing-link {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  font-weight: 760;
+  text-align: center;
+  text-decoration: none;
+}
+
+.composer-entry-row {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: 10px;
+}
+
+.composer-entry-row .chat-form,
+.composer-entry-row textarea {
+  min-width: 0;
+}
+
+.composer-model-picker {
+  position: relative;
+  z-index: 5;
+  min-width: 0;
+  align-self: end;
+}
+
+.composer-model-button {
+  display: flex;
+  width: 92px;
+  min-height: 64px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  border: 1px solid rgba(148, 168, 155, 0.95);
+  border-radius: 14px;
+  background: rgba(255, 255, 252, 0.76);
+  box-shadow: 0 6px 18px rgba(10, 33, 23, 0.2);
+  color: var(--accent-dark);
+  cursor: pointer;
+  list-style: none;
+  padding: 8px 10px;
+  text-align: center;
+  user-select: none;
+}
+
+.composer-model-button::-webkit-details-marker {
+  display: none;
+}
+
+.composer-model-button::after {
+  width: 7px;
+  height: 7px;
+  margin-top: 4px;
+  border-top: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  content: "";
+  transform: rotate(-45deg);
+  transition: transform 140ms ease;
+}
+
+.composer-model-picker[open] .composer-model-button {
+  border-color: var(--accent);
+  background: rgba(255, 255, 252, 0.96);
+}
+
+.composer-model-picker[open] .composer-model-button::after {
+  transform: rotate(135deg);
+}
+
+.composer-model-button:focus-visible {
+  outline: 3px solid rgba(46, 101, 80, 0.35);
+  outline-offset: 3px;
+}
+
+.composer-model-kicker {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 680;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.composer-model-current {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  font-weight: 780;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-model-panel {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  bottom: calc(100% + 10px);
+  width: min(330px, calc(100vw - 36px));
+  max-height: min(70vh, 430px);
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 14px;
+  background: rgba(255, 252, 242, 0.98);
+  box-shadow: 0 12px 34px rgba(8, 31, 21, 0.28);
+  color: var(--text);
+  padding: 14px;
+  text-align: left;
+}
+
+.composer-model-panel h2 {
+  margin: 0 0 9px;
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 790;
+  letter-spacing: -0.01em;
+}
+
+.composer-model-panel p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.composer-model-panel strong {
+  color: var(--text);
+}
+
+.composer-model-panel form {
+  margin: 0;
+}
+
+.composer-model-panel button,
+.composer-model-panel select {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 10px;
+  font: inherit;
+}
+
+.composer-model-panel button {
+  cursor: pointer;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  font-weight: 760;
+}
+
+.composer-model-panel form[aria-busy="true"] button,
+.composer-model-panel button:disabled {
+  cursor: progress;
+  opacity: 0.68;
+}
+
+.composer-model-panel .billing-usage {
+  margin-top: 9px;
+  margin-bottom: 0;
+  font-size: 0.68rem;
+}
+
+.composer-model-panel .billing-action-status {
+  margin-top: 8px;
+  margin-bottom: 0;
+  color: var(--accent-dark);
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-align: center;
+}
+
+.composer-model-panel .billing-action-status[hidden] {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .composer-entry-row {
+    gap: 7px;
+  }
+
+  .composer-model-button {
+    width: 64px;
+    padding-inline: 6px;
+  }
+
+  .composer-model-current {
+    font-size: 0.68rem;
+  }
+
+  .composer-model-panel {
+    width: min(320px, calc(100vw - 20px));
+  }
+}
+
+@media (max-width: 380px) {
+  .composer-entry-row {
+    gap: 6px;
+  }
+
+  .composer-model-button {
+    width: 56px;
+    padding-inline: 4px;
+  }
+
+  .composer-model-kicker {
+    font-size: 0.56rem;
+  }
+
+  .composer-model-current {
+    font-size: 0.63rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-model-button::after {
+    transition: none;
+  }
+}
+
+/* Exact 5.x model tile */
+.composer-model-button {
+  width: 66px;
+  min-width: 66px;
+  height: 64px;
+  min-height: 64px;
+  padding: 6px 5px;
+}
+
+.composer-model-current {
+  margin-top: 3px;
+  overflow: visible;
+  font-size: clamp(0.9rem, 0.85rem + 0.25vw, 1rem);
+  font-weight: 820;
+  letter-spacing: -0.035em;
+  text-overflow: clip;
+}
+
+@media (max-width: 600px) {
+  .composer-model-button {
+    width: 64px;
+    min-width: 64px;
+  }
+
+  .composer-model-current {
+    font-size: 0.95rem;
+  }
+}
+
+/* Balanced 42px composer bar */
+.composer-model-button,
+.composer-dock textarea,
+.composer-dock #send-button {
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
+}
+
+.composer-model-button {
+  border-radius: 10px;
+  padding: 2px 5px;
+}
+
+.composer-model-kicker {
+  display: none;
+}
+
+.composer-model-current {
+  margin-top: 0;
+  line-height: 1;
+}
+
+.composer-model-button::after {
+  display: none;
+  content: none;
+}
+
+.composer-dock textarea {
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 1rem;
+  line-height: 20px;
+}
+
+.composer-dock textarea::placeholder {
+  line-height: 20px;
+}
+
+.composer-dock #send-button {
+  border-radius: 10px;
+  padding-inline: 14px;
+}
+
+/* Composer chat sections */
+.composer-quick-panel {
+  width: min(350px, calc(100vw - 24px));
+  padding: 12px 14px;
+}
+
+.composer-quick-panel > h2 {
+  margin-bottom: 2px;
+}
+
+.composer-quick-section {
+  border-top: 1px solid var(--line);
+  padding: 11px 0;
+}
+
+.composer-quick-section:first-of-type {
+  border-top: 0;
+  padding-top: 8px;
+}
+
+.composer-quick-section:last-of-type {
+  padding-bottom: 2px;
+}
+
+.composer-quick-section h3 {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 790;
+  letter-spacing: -0.01em;
+}
+
+.composer-quick-section p {
+  margin-bottom: 8px;
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.composer-quick-model .billing-usage {
+  margin-top: 8px;
+}
+
+.composer-quick-action {
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+  color: var(--accent-dark);
+}
+
+.composer-quick-action:hover,
+.composer-quick-action:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.composer-quick-private-action {
+  border-color: var(--accent);
+}
+
+.composer-quick-status {
+  margin: 9px 0 0;
+  color: var(--accent-dark);
+  font-size: 0.7rem;
+  font-weight: 680;
+  text-align: center;
+}
+
+.composer-quick-status[hidden] {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .composer-quick-panel {
+    width: min(330px, calc(100vw - 18px));
+    max-height: min(68dvh, 470px);
+  }
+}
+
+/* Horizontally centered composer placeholder */
+.composer-dock textarea {
+  text-align: left;
+}
+
+.composer-dock textarea::placeholder {
+  text-align: center;
+}
+
+/* Free thinking-level selector */
+.thinking-choice {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 11px;
+}
+
+.thinking-choice-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.thinking-choice label {
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 760;
+}
+
+.thinking-choice-free {
+  color: var(--accent-dark);
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.thinking-choice select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.thinking-choice-description,
+.billing-menu .thinking-choice-description,
+.composer-model-panel .thinking-choice-description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+
+.composer-model-current {
+  white-space: normal;
 }

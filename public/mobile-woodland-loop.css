@@ -1,0 +1,154 @@
+@media (max-width: 980px) and (orientation: portrait) {
+  .photo-backdrop {
+    overflow: hidden;
+    background: #173f31;
+    filter: none;
+    transform: none;
+    animation: none;
+    will-change: auto;
+  }
+
+  .photo-backdrop img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 50%;
+    opacity: 1;
+    filter: none;
+    transform: none !important;
+    animation: none !important;
+    will-change: auto;
+  }
+
+  .photo-backdrop::before,
+  .photo-backdrop::after {
+    display: none !important;
+    content: none !important;
+    animation: none !important;
+  }
+
+  .photo-background {
+    display: none;
+  }
+}
+
+
+/* mobile-motion-canvas-v18-start */
+/* Keep the full 2160px poster sharp. Only transparent stream pixels are drawn
+   over it, so motion does not depend on video.play() or animated-image policy. */
+.mobile-background-video {
+  display: none;
+}
+
+.mobile-motion-canvas {
+  display: none;
+}
+
+@media (max-width: 980px) and (orientation: portrait) {
+  .photo-backdrop img {
+    object-fit: cover;
+    object-position: 50% 50%;
+    image-rendering: auto;
+  }
+
+  .mobile-motion-canvas {
+    position: fixed;
+    z-index: 0;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    pointer-events: none;
+    user-select: none;
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    contain: strict;
+    transition: opacity 120ms ease;
+  }
+
+  .mobile-motion-canvas.is-ready {
+    opacity: 1;
+  }
+}
+/* mobile-motion-canvas-v18-end */
+
+/* mobile-motion-canvas-v18-visibility-fix-start */
+@media (max-width: 980px) and (orientation: portrait) {
+  /* The canvas is transparent until its first water frame is painted, so it is
+     safe to keep the layer visible from first layout. Important declarations
+     also defeat stale or higher-specificity opacity rules on restored tabs. */
+  html[data-mobile-motion="canvas-playing"] .mobile-motion-canvas.is-ready,
+  .mobile-motion-canvas.is-ready {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    transition: none !important;
+  }
+}
+/* mobile-motion-canvas-v18-visibility-fix-end */
+
+/* selected-mobile-4k-video-v22-start */
+.mobile-background-video {
+  display: none !important;
+}
+
+@media (max-width: 980px) and (orientation: portrait) {
+  .mobile-background-video {
+    position: fixed;
+    z-index: 0;
+    inset: 0;
+    display: block !important;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 50%;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    user-select: none;
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    contain: strict;
+    will-change: opacity;
+  }
+
+  html[data-mobile-background="video-playing"]
+    .mobile-background-video.is-playing,
+  .mobile-background-video.is-playing {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  .mobile-background-video.is-autoplay-blocked,
+  .mobile-background-video.is-failed {
+    visibility: hidden !important;
+    opacity: 0 !important;
+  }
+}
+/* selected-mobile-4k-video-v22-end */
+
+/* mobile-static-poster-fallback-v25-start */
+@media (max-width: 980px) and (orientation: portrait) {
+  /* Cloudflare can serve an older HTML/static bundle while the Worker is
+     current. Pin the visual fallback to the already-deployed forest poster so
+     a missing newer poster cannot reveal the unrelated desktop lake image. */
+  .photo-backdrop {
+    background-image: url("/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260811-coherent-mobile-4k-v25-1") !important;
+    background-size: cover !important;
+    background-position: 50% 50% !important;
+    background-repeat: no-repeat !important;
+  }
+
+  .photo-backdrop img {
+    opacity: 0 !important;
+  }
+}
+/* mobile-static-poster-fallback-v25-end */

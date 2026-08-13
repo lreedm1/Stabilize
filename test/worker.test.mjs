@@ -69,6 +69,13 @@ function createSessionNamespace() {
             turnCount: state.turnCount,
           };
         },
+        async startNewConversation() {
+          const state = states.get(name) || freshState();
+          state.recent = [];
+          state.awaitingSafetyAnswer = false;
+          states.set(name, state);
+          return { started: true };
+        },
         async getCompactionSnapshot() {
           const state = states.get(name) || freshState();
           if (state.recent.length < 2) return null;
@@ -106,7 +113,7 @@ function createEnv(overrides = {}) {
     SESSIONS: createSessionNamespace(),
     DEMO_MODE: "true",
     OPENAI_MODEL: "gpt-5.6-sol",
-    OPENAI_REASONING_EFFORT: "medium",
+    OPENAI_REASONING_EFFORT: "max",
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: "test-google-client-secret",
     AUTH_SECRET,
@@ -168,6 +175,8 @@ test("health endpoint reports demo mode and session memory", async () => {
     model: null,
     memory: true,
     authentication: true,
+    reasoningEffort: null,
+    verbosity: null,
   });
 });
 
@@ -184,6 +193,8 @@ test("health endpoint reports whether OpenAI is configured", async () => {
     model: "gpt-5.6-sol",
     memory: true,
     authentication: true,
+    reasoningEffort: "max",
+    verbosity: "low",
   });
 
   const missingKeyResponse = await worker.fetch(
@@ -198,7 +209,209 @@ test("health endpoint reports whether OpenAI is configured", async () => {
     model: "gpt-5.6-sol",
     memory: true,
     authentication: true,
+    reasoningEffort: "max",
+    verbosity: "low",
   });
+});
+
+test("new conversation clears the active thread without deleting account memory", async () => {
+  const memory = createSessionNamespace();
+  const env = createEnv({ SESSIONS: memory });
+  const identity = await authenticatedIdentity(env, "new-conversation-user");
+  const stub = memory.getByName(identity.objectName);
+
+  await stub.recordExchange({
+    user: "I prefer concise plans.",
+    assistant: "I will keep the next step short.",
+    awaitingSafetyAnswer: false,
+  });
+  const snapshot = await stub.getCompactionSnapshot();
+  await stub.applySummary(
+    "The user prefers concise plans.",
+    snapshot.summaryVersion,
+    snapshot.throughSequence,
+  );
+  await stub.recordExchange({
+    user: "This belongs to the current thread.",
+    assistant: "Current-thread response.",
+    awaitingSafetyAnswer: true,
+  });
+
+  const response = await worker.fetch(
+    new Request("https://stabilize.test/api/conversation/new", {
+      method: "POST",
+      headers: {
+        Origin: "https://stabilize.test",
+        Cookie: identity.cookie,
+      },
+    }),
+    env,
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+  const context = await stub.readContext();
+  assert.equal(context.summary, "The user prefers concise plans.");
+  assert.deepEqual(context.recent, []);
+  assert.equal(context.awaitingSafetyAnswer, false);
+  assert.equal(context.turnCount, 2);
+});
+
+test("guest new conversation creates no server-side memory", async () => {
+  const memory = createSessionNamespace();
+  const response = await worker.fetch(
+    new Request("https://stabilize.test/api/conversation/new", {
+      method: "POST",
+      headers: { Origin: "https://stabilize.test" },
+    }),
+    createEnv({ SESSIONS: memory }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+  assert.equal(memory.states.size, 0);
+});
+
+test("cross-origin new conversation requests are rejected", async () => {
+  const response = await worker.fetch(
+    new Request("https://stabilize.test/api/conversation/new", {
+      method: "POST",
+      headers: { Origin: "https://untrusted.example" },
+    }),
+    createEnv(),
+  );
+
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error, COPY.api.crossOriginRequest);
+});
+
+test("private chat neither reads nor writes signed-in memory", async () => {
+  const originalFetch = globalThis.fetch;
+  const memory = createSessionNamespace();
+  const env = createEnv({
+    SESSIONS: memory,
+    DEMO_MODE: "false",
+    OPENAI_API_KEY: "test-openai-key",
+  });
+  const identity = await authenticatedIdentity(env, "private-chat-user");
+  const stub = memory.getByName(identity.objectName);
+
+  await stub.recordExchange({
+    user: "I prefer remembered concise plans.",
+    assistant: "I will remember that preference.",
+    awaitingSafetyAnswer: false,
+  });
+  const snapshot = await stub.getCompactionSnapshot();
+  await stub.applySummary(
+    "The user prefers remembered concise plans.",
+    snapshot.summaryVersion,
+    snapshot.throughSequence,
+  );
+  await stub.recordExchange({
+    user: "Remember this active thread.",
+    assistant: "This is remembered recent context.",
+    awaitingSafetyAnswer: false,
+  });
+  const before = JSON.parse(JSON.stringify(memory.states.get(identity.objectName)));
+
+  let providerBody;
+  globalThis.fetch = async (_input, init) => {
+    providerBody = JSON.parse(init.body);
+    return responseWithText("Private reply without account context.");
+  };
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://stabilize.test",
+          Cookie: identity.cookie,
+        },
+        body: JSON.stringify({
+          message: "Answer this without using or updating memory.",
+          privateChat: true,
+        }),
+      }),
+      env,
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).reply, "Private reply without account context.");
+    assert.equal(providerBody.input.length, 1);
+    assert.equal(
+      providerBody.input[0].content,
+      "Answer this without using or updating memory.",
+    );
+    assert.doesNotMatch(JSON.stringify(providerBody.input), /remembered/i);
+    assert.deepEqual(memory.states.get(identity.objectName), before);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("private fixed routes do not enter signed-in memory", async () => {
+  const memory = createSessionNamespace();
+  const env = createEnv({ SESSIONS: memory });
+  const identity = await authenticatedIdentity(env, "private-fixed-route-user");
+  const stub = memory.getByName(identity.objectName);
+  await stub.recordExchange({
+    user: "Existing account context.",
+    assistant: "Existing remembered response.",
+    awaitingSafetyAnswer: false,
+  });
+  const before = JSON.parse(JSON.stringify(memory.states.get(identity.objectName)));
+
+  const response = await worker.fetch(
+    new Request("https://stabilize.test/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://stabilize.test",
+        Cookie: identity.cookie,
+      },
+      body: JSON.stringify({
+        message: "I am going to kill myself tonight",
+        privateChat: true,
+      }),
+    }),
+    env,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).route, "IMMEDIATE_DANGER");
+  assert.deepEqual(memory.states.get(identity.objectName), before);
+});
+
+test("starting a new private thread does not alter account memory", async () => {
+  const memory = createSessionNamespace();
+  const env = createEnv({ SESSIONS: memory });
+  const identity = await authenticatedIdentity(env, "private-reset-user");
+  const stub = memory.getByName(identity.objectName);
+  await stub.recordExchange({
+    user: "Keep this remembered thread intact.",
+    assistant: "This remains in account memory.",
+    awaitingSafetyAnswer: true,
+  });
+  const before = JSON.parse(JSON.stringify(memory.states.get(identity.objectName)));
+
+  const response = await worker.fetch(
+    new Request("https://stabilize.test/api/conversation/new", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://stabilize.test",
+        Cookie: identity.cookie,
+      },
+      body: JSON.stringify({ privateChat: true }),
+    }),
+    env,
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+  assert.deepEqual(memory.states.get(identity.objectName), before);
 });
 
 test("chat endpoint applies deterministic emergency routing", async () => {
@@ -239,7 +452,7 @@ test("chat endpoint answers a Floor breach in demo mode", async () => {
   assert.match(body.reply, /eat/i);
 });
 
-test("chat endpoint calls OpenAI with store disabled", async () => {
+test("chat endpoint calls OpenAI with store enabled", async () => {
   const originalFetch = globalThis.fetch;
   const originalLog = console.log;
   const logs = [];
@@ -283,18 +496,19 @@ test("chat endpoint calls OpenAI with store disabled", async () => {
 
     const providerBody = JSON.parse(providerRequest.init.body);
     assert.equal(providerBody.model, "gpt-5.6-sol");
-    assert.deepEqual(providerBody.reasoning, {
-      effort: "medium",
-      context: "current_turn",
-    });
-    assert.equal(providerBody.store, false);
-    assert.equal(providerBody.max_output_tokens, 500);
+    assert.deepEqual(providerBody.reasoning, { effort: "max" });
+    assert.deepEqual(providerBody.text, { verbosity: "low" });
+    assert.equal(providerBody.store, true);
+    assert.equal("max_output_tokens" in providerBody, false);
     assert.equal(providerBody.input[0].role, "user");
     assert.equal(providerBody.input[0].content, "Help me plan one next step.");
     assert.match(providerBody.instructions, /route ORDINARY/i);
     assert.match(providerBody.instructions, /Floor supports; answer leads/i);
     assert.match(providerBody.instructions, /current evidence wins/i);
     assert.match(providerBody.instructions, /Systems > willpower/i);
+    assert.ok(COPY.model.systemPrompt.length < 3_200);
+    assert.match(providerBody.instructions, /220 words or fewer/i);
+    assert.match(providerBody.instructions, /document-ready content/i);
     assert.match(providerBody.instructions, /PRIOR CONTEXT MEMORY/i);
 
     const logged = logs.join("\n");
@@ -306,6 +520,125 @@ test("chat endpoint calls OpenAI with store disabled", async () => {
   } finally {
     globalThis.fetch = originalFetch;
     console.log = originalLog;
+  }
+});
+
+test("chat rejects messages over 4,000 characters", async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalled = false;
+  globalThis.fetch = async () => {
+    providerCalled = true;
+    return responseWithText("This should not be called.");
+  };
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "a".repeat(4001) }),
+      }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+    );
+
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error, COPY.api.messageTooLong);
+    assert.equal(providerCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("max effort safely falls back for older model choices", async () => {
+  const originalFetch = globalThis.fetch;
+  let providerBody;
+  globalThis.fetch = async (_input, init) => {
+    providerBody = JSON.parse(init.body);
+    return responseWithText("Use the smallest useful step.");
+  };
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message:
+            "I am deciding whether to accept a job in Madison or Milwaukee. Compare pay, housing costs, commute, career growth, and stability.",
+        }),
+      }),
+      createEnv({
+        DEMO_MODE: "false",
+        OPENAI_API_KEY: "test-openai-key",
+        OPENAI_MODEL: "gpt-5.1",
+        OPENAI_REASONING_EFFORT: "max",
+      }),
+    );
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(providerBody.reasoning, { effort: "high" });
+    assert.deepEqual(providerBody.text, { verbosity: "low" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("legacy internal model alias maps to the supported API model", async () => {
+  const originalFetch = globalThis.fetch;
+  let providerBody;
+  globalThis.fetch = async (_input, init) => {
+    providerBody = JSON.parse(init.body);
+    return responseWithText("Hi. What’s happening right now?");
+  };
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Hi" }),
+      }),
+      createEnv({
+        DEMO_MODE: "false",
+        OPENAI_API_KEY: "test-openai-key",
+        OPENAI_MODEL: ["gpt-5.6", "sol"].join("-"),
+      }),
+    );
+
+    assert.equal(response.status, 200);
+    await response.json();
+    assert.equal(providerBody.model, "gpt-5.6-sol");
+    assert.deepEqual(providerBody.reasoning, { effort: "max" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("complex decisions use the strongest supported reasoning", async () => {
+  const originalFetch = globalThis.fetch;
+  let providerBody;
+  globalThis.fetch = async (_input, init) => {
+    providerBody = JSON.parse(init.body);
+    return responseWithText("Compare the options against the factors that matter most.");
+  };
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message:
+            "I am deciding whether to accept a job in Madison or Milwaukee. Compare pay, housing costs, commute, career growth, and stability.",
+        }),
+      }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+    );
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(providerBody.reasoning, { effort: "max" });
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });
 
@@ -544,7 +877,7 @@ test("remembered summary is supplied as untrusted context", async () => {
   }
 });
 
-test("recent turns compact in the background without OpenAI storage", async () => {
+test("recent turns compact in the background with OpenAI storage enabled", async () => {
   const originalFetch = globalThis.fetch;
   const providerBodies = [];
   const tasks = [];
@@ -594,7 +927,7 @@ test("recent turns compact in the background without OpenAI storage", async () =
     );
     assert.deepEqual(context.recent, []);
     assert.equal(providerBodies.length, 2);
-    assert.ok(providerBodies.every((body) => body.store === false));
+    assert.ok(providerBodies.every((body) => body.store === true));
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -628,7 +961,7 @@ test("chat endpoint rejects oversized declared bodies", async () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Content-Length": "32001",
+        "Content-Length": "2000001",
       },
       body: "{}",
     }),
@@ -694,6 +1027,33 @@ test("the public API does not expose account-memory deletion", async () => {
   );
 });
 
+test("favicon endpoints return browser-compatible content types", async () => {
+  const cases = [
+    ["/favicon.ico", "image/x-icon"],
+    ["/favicon.svg", "image/svg+xml; charset=utf-8"],
+    ["/favicon-16x16.png", "image/png"],
+    ["/favicon-32x32.png", "image/png"],
+    ["/apple-touch-icon.png", "image/png"],
+    ["/stabilize-tab-20260805.ico", "image/x-icon"],
+    ["/stabilize-tab-20260805-16.png", "image/png"],
+    ["/stabilize-tab-20260805-32.png", "image/png"],
+    ["/stabilize-app-20260805-180.png", "image/png"],
+    ["/safari-pinned-tab.svg", "image/svg+xml; charset=utf-8"],
+    ["/site.webmanifest", "application/manifest+json; charset=utf-8"],
+  ];
+
+  for (const [path, contentType] of cases) {
+    const response = await worker.fetch(
+      new Request("https://stabilize.test" + path),
+      createEnv(),
+    );
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), contentType);
+    assert.match(response.headers.get("cache-control") || "", /no-store/);
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  }
+});
+
 test("root page renders the simplified chat without audio or a danger shortcut", async () => {
   const response = await worker.fetch(
     new Request("https://stabilize.test/"),
@@ -729,7 +1089,7 @@ test("root page renders the simplified chat without audio or a danger shortcut",
   );
   assert.doesNotMatch(html, /sound-toggle|sound-volume|sound-controls/);
   assert.doesNotMatch(html, /danger-button|emergency-panel|emergency-actions/);
-  assert.doesNotMatch(html, /<audio|autoplay|nature-sounds\.js/);
+  assert.doesNotMatch(html, /<audio|nature-sounds\.js/);
   assert.ok(html.includes('placeholder="' + COPY.page.chat.inputPlaceholder + '"'));
   assert.match(html, /id="conversation-surface"[\s\S]*data-view="compose"/);
   assert.ok(html.includes(COPY.page.chat.responseLabel));
@@ -739,12 +1099,15 @@ test("root page renders the simplified chat without audio or a danger shortcut",
   assert.doesNotMatch(html, /id="status-line"/);
   assert.doesNotMatch(html, /quick-actions|data-prompt/);
 
+  const menuIndex = html.indexOf('class="menu-panel"');
+  const infoIndex = html.indexOf(COPY.page.chat.infoDetails, menuIndex);
   const outputIndex = html.indexOf('id="chat-log"');
   const noteIndex = html.indexOf(COPY.page.chat.supportNote);
-  const infoIndex = html.indexOf(COPY.page.chat.infoDetails);
   const composerIndex = html.indexOf('id="chat-form"');
+  assert.ok(menuIndex >= 0 && menuIndex < infoIndex);
+  assert.ok(infoIndex < outputIndex);
   assert.ok(outputIndex >= 0 && outputIndex < noteIndex);
-  assert.ok(noteIndex < infoIndex && infoIndex < composerIndex);
+  assert.ok(noteIndex < composerIndex);
   assert.match(html.slice(outputIndex, noteIndex), /\shidden(?:\s|>)/);
   assert.doesNotMatch(html.slice(outputIndex, noteIndex), /assistant-output/);
 

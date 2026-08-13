@@ -42,9 +42,16 @@ test("thinking is replaced with the latest Markdown reply", async () => {
 
   assert.match(clientScript, /import \{ renderMarkdown \} from "\.\/markdown\.js"/);
   assert.match(clientScript, /function showOutput[\s\S]*chatLog\.replaceChildren\(\)/);
-  assert.match(clientScript, /showOutput\(copy\.thinking, "thinking-output", "thinking"\)/);
+  assert.match(
+    clientScript,
+    /showOutput\(pendingReplyCopy\(\), "thinking-output", "thinking"\)/,
+  );
+  assert.match(clientScript, /copy\.responding \|\| "Responding…"/);
   assert.match(clientScript, /article\.appendChild\(renderMarkdown\(content\)\)/);
-  assert.match(clientScript, /JSON\.stringify\(\{ message: clean, awaitingSafetyAnswer \}\)/);
+  assert.match(
+    clientScript,
+    /awaitingSafetyAnswer: currentAwaitingSafetyAnswer\(\)/,
+  );
   assert.match(clientScript, /function requestErrorMessage/);
   assert.match(clientScript, /input\.value = clean/);
   assert.match(clientScript, /result\.reference/);
@@ -54,16 +61,21 @@ test("thinking is replaced with the latest Markdown reply", async () => {
   assert.doesNotMatch(clientScript, /innerHTML\s*=/);
 });
 
-test("the site does not expose a remembered-context deletion control", async () => {
-  const [clientScript, styles, pageSource] = await Promise.all([
+test("signed-in users can delete remembered context", async () => {
+  const [clientScript, pageSource, workerSource] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/index.js", import.meta.url), "utf8"),
   ]);
 
-  assert.doesNotMatch(clientScript, /forgetMemory|\/api\/session/);
-  assert.doesNotMatch(styles, /forget-memory/);
-  assert.doesNotMatch(pageSource, /forget-memory|forgetMemory/);
+  assert.match(pageSource, /id="delete-memory-button"/);
+  assert.match(pageSource, /id="memory-delete-status"/);
+  assert.match(clientScript, /fetch\("\/api\/account\/memory"/);
+  assert.match(clientScript, /method: "DELETE"/);
+  assert.match(clientScript, /deleteMemoryConfirm/);
+  assert.match(workerSource, /url\.pathname === "\/api\/account\/memory"/);
+  assert.match(workerSource, /sameOriginOrNonBrowser\(request\)/);
+  assert.match(workerSource, /deleteRememberedContext/);
 });
 
 test("the terrain background is token-modulated and motion-aware", async () => {
@@ -76,7 +88,10 @@ test("the terrain background is token-modulated and motion-aware", async () => {
       readFile(new URL("../src/page.js", import.meta.url), "utf8"),
     ]);
 
-  assert.match(clientScript, /import \{ modulateTerrain \} from "\.\/terrain\.js"/);
+  assert.match(
+    clientScript,
+    /import \{ modulateTerrain \} from "\.\/background-loader\.js\?v=20260807-priority-latency-1"/,
+  );
   assert.match(clientScript, /modulateTerrain\(clean\)/);
   assert.match(clientScript, /modulateTerrain\(reply\)/);
   assert.match(terrainScript, /continentalness/);
@@ -200,20 +215,30 @@ test("layout fills the dynamic viewport without a fixed-width shell", async () =
   assert.match(styles, /\.chat-card\s*{[\s\S]*?flex:\s*1 1 auto;/);
   assert.match(styles, /\.chat-card\s*{[\s\S]*?overflow:\s*hidden;/);
   assert.match(styles, /\.chat-card\s*{[\s\S]*?padding:\s*0;/);
-  assert.match(styles, /\.chat-log\s*{[\s\S]*?background:\s*transparent;[\s\S]*?box-shadow:\s*none;/);
+  assert.match(styles, /\.chat-log\s*{[\s\S]*?border-radius:\s*22px;[\s\S]*?background:\s*rgba\(247,\s*251,\s*247,\s*0\.28\);/);
   const pageShellRule = styles.match(/\.page-shell\s*{([\s\S]*?)}\s*/)?.[1] || "";
   assert.doesNotMatch(pageShellRule, /width:\s*min\(/);
 });
 
-test("privacy detail stays behind a compact Info disclosure", async () => {
-  const [styles, pageSource, copySource] = await Promise.all([
-    readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
+test("privacy detail lives in the hamburger menu rather than the landing card", async () => {
+  const [seoStyles, pageSource, copySource] = await Promise.all([
+    readFile(new URL("../public/seo.css", import.meta.url), "utf8"),
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
     readFile(new URL("../src/copy.js", import.meta.url), "utf8"),
   ]);
 
-  assert.match(pageSource, /<details class="info-disclosure">/);
-  assert.match(pageSource, /<summary>\$\{escapeHtml\(page\.chat\.infoLabel\)}<\/summary>/);
+  const menuIndex = pageSource.indexOf('class="menu-panel"');
+  const infoIndex = pageSource.indexOf('class="menu-info-disclosure"', menuIndex);
+  const accountIndex = pageSource.indexOf('class="menu-account"', menuIndex);
+
+  assert.ok(menuIndex >= 0);
+  assert.ok(infoIndex > menuIndex);
+  assert.ok(accountIndex > infoIndex);
+  assert.doesNotMatch(pageSource, /<details class="info-disclosure">/);
+  assert.match(
+    pageSource,
+    /<details class="menu-info-disclosure">[\s\S]*?<summary>\$\{escapeHtml\(page\.chat\.infoLabel\)\}<\/summary>/,
+  );
   assert.match(pageSource, /page\.chat\.supportNote/);
   assert.match(pageSource, /page\.chat\.infoDetails/);
   assert.match(copySource, /supportNote:[\s\S]*not emergency care/i);
@@ -222,7 +247,11 @@ test("privacy detail stays behind a compact Info disclosure", async () => {
     copySource,
     /infoDetails:[\s\S]*does not use IP addresses for memory or application logs/i,
   );
-  assert.match(styles, /\.info-popover\s*{[\s\S]*position:\s*absolute;/);
+  assert.match(
+    seoStyles,
+    /\.menu-panel\s*{[\s\S]*max-height:[\s\S]*overflow-y:\s*auto/,
+  );
+  assert.match(seoStyles, /\.menu-info-disclosure\s*{/);
 });
 
 test("Google account controls stay compact and guest chat remains visible", async () => {

@@ -1,0 +1,40 @@
+/* Fresh, cache-independent guard against desktop background fallback on phones. */
+@media (max-width: 980px), (hover: none) and (pointer: coarse) {
+  body,
+  .photo-backdrop {
+    background-image: url("/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260811-mobile-orientation-v26-1") !important;
+    background-size: cover !important;
+    background-position: 50% 50% !important;
+    background-repeat: no-repeat !important;
+  }
+
+  .photo-backdrop > img,
+  #photo-backdrop-image,
+  #terrain-background,
+  #photo-background,
+  .mobile-motion-canvas,
+  .mobile-motion-canvas.is-ready {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+  }
+
+  #mobile-background-video,
+  .mobile-background-video,
+  .mobile-background-video.is-playing,
+  .mobile-background-video.is-autoplay-blocked,
+  .mobile-background-video.is-failed,
+  html[data-mobile-background] .mobile-background-video {
+    position: fixed !important;
+    z-index: 0 !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: 50% 50% !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: none !important;
+  }
+}

@@ -1,0 +1,52 @@
+/* Full-frame mobile motion that does not depend on HTML video autoplay. */
+@media (max-width: 980px), (hover: none) and (pointer: coarse) {
+  .page-shell {
+    position: relative !important;
+    z-index: 10 !important;
+  }
+
+  #photo-backdrop.photo-backdrop {
+    z-index: 0 !important;
+    background-image: url("/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260812-mobile-no-tap-motion-v29-1") !important;
+    background-size: cover !important;
+    background-position: 50% 50% !important;
+    background-repeat: no-repeat !important;
+  }
+
+  #photo-backdrop-image,
+  #terrain-background,
+  #photo-background,
+  #mobile-background-video,
+  #mobile-background-video-4k,
+  #mobile-motion-canvas {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+  }
+
+  #mobile-full-motion-v29.mobile-full-motion-v29 {
+    position: fixed !important;
+    z-index: 4 !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    visibility: visible !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    user-select: none !important;
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    contain: strict;
+    transition: none !important;
+  }
+
+  html[data-mobile-no-tap-motion="playing"]
+    #mobile-full-motion-v29.mobile-full-motion-v29,
+  #mobile-full-motion-v29.mobile-full-motion-v29.is-ready {
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+}

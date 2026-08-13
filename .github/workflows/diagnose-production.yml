@@ -1,0 +1,62 @@
+name: Diagnose Stabilize production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read and publish live health state
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          health="$(curl --max-time 20 --silent --show-error \
+            "https://stabilize.info/api/health?diagnostic=${GITHUB_SHA}" || true)"
+          echo "Production health: ${health}"
+
+          diagnostic="$(node -e '
+            let value = {};
+            try { value = JSON.parse(process.argv[1]); } catch {}
+            const parts = [
+              `ok=${value.ok === true}`,
+              `mode=${String(value.mode || "unknown")}`,
+              `model=${String(value.model || "none")}`,
+              `reasoning=${String(value.reasoningEffort || "none")}`,
+            ];
+            process.stdout.write(parts.join(" ").slice(0, 130));
+          ' "$health")"
+
+          state="failure"
+          if node -e '
+            try { process.exit(JSON.parse(process.argv[1]).ok === true ? 0 : 1); }
+            catch { process.exit(1); }
+          ' "$health"; then
+            state="success"
+          fi
+
+          payload="$(node -e '
+            process.stdout.write(JSON.stringify({
+              state: process.argv[1],
+              context: "diagnostic/production-health",
+              description: process.argv[2],
+              target_url: `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`,
+            }));
+          ' "$state" "$diagnostic")"
+
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"

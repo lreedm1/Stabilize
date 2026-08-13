@@ -1,0 +1,109 @@
+name: Build gesture-free mobile motion v29
+
+on:
+  push:
+    branches:
+      - fix/mobile-no-tap-motion-v29
+    paths:
+      - .github/workflows/build-mobile-no-tap-motion-v29.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-atlas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v6
+        with:
+          ref: fix/mobile-no-tap-motion-v29
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Install FFmpeg when needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y ffmpeg
+          fi
+
+      - name: Build eight-frame full-scene WebP atlas
+        shell: bash
+        run: |
+          set -euo pipefail
+          input='public/scenes/mobile-forest-stream-video-v24-native-1080.mp4'
+          output='public/scenes/mobile-forest-stream-full-atlas-v29-1080.webp'
+          metadata='scripts/mobile-full-motion-v29.json'
+
+          test -s "$input"
+          mkdir -p "$(dirname "$output")" "$(dirname "$metadata")"
+
+          ffmpeg -y -hide_banner -loglevel error \
+            -i "$input" \
+            -vf 'fps=8,scale=1080:1920:flags=lanczos,tile=4x2:nb_frames=8:padding=0:margin=0' \
+            -frames:v 1 \
+            -an \
+            -c:v libwebp \
+            -lossless 0 \
+            -compression_level 6 \
+            -q:v 78 \
+            -preset picture \
+            "$output"
+
+          dimensions="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$output")"
+          test "$dimensions" = '4320x3840'
+
+          bytes="$(stat -c '%s' "$output")"
+          test "$bytes" -gt 100000
+          test "$bytes" -lt 50000000
+          sha256="$(sha256sum "$output" | awk '{print $1}')"
+
+          python - "$metadata" "$bytes" "$sha256" <<'PY'
+          import json
+          import sys
+
+          path, size, digest = sys.argv[1:]
+          payload = {
+              "version": "20260812-mobile-no-tap-motion-v29-1",
+              "asset": "/scenes/mobile-forest-stream-full-atlas-v29-1080.webp",
+              "bytes": int(size),
+              "sha256": digest,
+              "width": 4320,
+              "height": 3840,
+              "frameWidth": 1080,
+              "frameHeight": 1920,
+              "columns": 4,
+              "rows": 2,
+              "frameCount": 8,
+              "fps": 8,
+              "source": "public/scenes/mobile-forest-stream-video-v24-native-1080.mp4",
+              "purpose": "full-frame mobile motion without HTMLMediaElement autoplay",
+          }
+          with open(path, "w", encoding="utf-8") as handle:
+              json.dump(payload, handle, indent=2)
+              handle.write("\n")
+          PY
+
+          echo "Built $output: $dimensions, $bytes bytes, sha256=$sha256"
+
+      - name: Commit generated atlas to release branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            public/scenes/mobile-forest-stream-full-atlas-v29-1080.webp \
+            scripts/mobile-full-motion-v29.json
+          if git diff --cached --quiet; then
+            echo 'Atlas already materialized.'
+            exit 0
+          fi
+          git commit -m 'Generate gesture-free full-frame mobile motion atlas'
+          git push origin HEAD:fix/mobile-no-tap-motion-v29

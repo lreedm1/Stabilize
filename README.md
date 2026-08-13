@@ -6,44 +6,65 @@ This is an early public prototype, not a clinical product. It does not diagnose,
 
 ## What is included
 
-- a Cloudflare Worker API
+- a layered Cloudflare Worker application served at `stabilize.info`
 - Worker-rendered HTML with static CSS and browser JavaScript
 - deterministic routes for immediate danger, possible overdose, unsafe shelter, and medication-change requests
 - OpenAI's Responses API for ordinary AI replies
 - safe, local Markdown rendering for assistant replies
-- a fixed bottom text composer beneath one panel for the intro, thinking, and latest reply
-- a continuous, token-modulated forested lake valley at dawn generated locally from layered terrain noise
+- a fixed bottom composer with streamed responses, recovery controls, and contextual follow-up actions
+- a continuous forested lake landscape with a lower-load static mobile path
 - a self-hosted Lexend variable font
 - demo mode that works without an API key
-- optional Google sign-in for cross-device memory; guest chats are not stored
-- no full transcript database; account memory uses a rolling summary with a bounded recent-message buffer
-- safety and route tests
+- optional Google sign-in for cross-device memory; guest chats keep their full conversation in the current tab without entering Stabilize's server-side account memory
+<!-- Legacy generator marker: 5,000-output-token rolling summary -->
+- no server-side full transcript database; signed-in account memory uses a rolling summary with a bounded recent-message buffer
+- guest and signed-in fast replies begin on GPT-5.6 Fast; signed-in free accounts receive 50 GPT-5.6 messages per UTC day before GPT-5.4 fallback
+- an optional subscription for a larger monthly non-default-model allowance and subscriber model choice
+- privacy-bounded response, outcome, reliability, and usage measurement without prompt or reply text in impact analytics
+- safety, privacy, billing, UI, Worker, and release tests
 - public-safe protocol background documents
+- a native, guest-only SwiftUI iPhone client with explicit OpenAI sharing permission
 
-The language model is not the only safety layer. Urgent phrases are routed to fixed responses before model generation, and ordinary model calls use a 500-token generation budget plus a small final validation check. OpenAI counts hidden reasoning and formatting tokens inside that budget. Assistant Markdown is rendered locally with DOM nodes; raw HTML remains text and executable link schemes are rejected. These defenses are intentionally conservative, but they are not comprehensive and require independent review before a high-stakes public launch.
+The language model is not the only safety layer. Selected urgent phrases are routed to fixed responses before model generation, ordinary model output is bounded and validated, and raw HTML or executable link schemes are rejected by the local Markdown renderer. These defenses are intentionally conservative, but they are not comprehensive and require independent review before a high-stakes public launch.
+
+## Current model and allowance behavior
+
+The checked-in runtime configuration is intended to describe the deployed policy directly:
+
+- **Guest:** ordinary chats begin on GPT-5.6 Fast. The complete user/assistant transcript stays in the current browser tab for up to 24 hours and is sent with each follow-up. Stabilize does not silently discard or summarize older guest turns, and guest chats do not use server-side account memory or an account-based allowance. An exceptionally large thread is rejected explicitly rather than truncated.
+- **Signed-in free account:** the first **50** completed ordinary messages per UTC day use GPT-5.6 Fast (`gpt-5.6-sol`), including Fastest response. The selected thinking level changes reasoning effort, not the initial model. After the allowance, requests continue on GPT-5.4. The allowance resets at `00:00 UTC`.
+- **Subscriber:** the account may choose GPT-5.4 or **Current** (`gpt-5.6-sol`). Up to **200** non-default-model messages are available per UTC month; GPT-5.4 does not consume that monthly allowance.
+- **Thinking level:** the user may choose supported reasoning levels independently of the model allowance. The Worker validates the requested level for the selected model; the maximum level is available only for Current.
+- **Urgent fixed routes and failed provider requests:** these do not consume the free or subscriber model allowance.
+
+The public labels intentionally use **GPT-5.6 Fast**, **GPT-5.4**, **Current**, and thinking-level names. Internal API model IDs remain in configuration and code.
 
 ## Project map
 
 | Path | Purpose |
 | --- | --- |
-| `src/copy.js` | Single source of truth for site text, replies, errors, and model instructions |
-| `src/page.js` | HTML layout rendered from `src/copy.js` |
+| `src/domain-router.js` | Canonical-host enforcement, HTTPS redirects, and HSTS for the deployed Worker |
+| `src/copy.js` | Core site text, fixed replies, public errors, memory prompt, and model instructions |
+| `src/page.js` | Core HTML layout rendered from `src/copy.js` |
 | `src/safety.js` | Deterministic input routing |
-| `src/index.js` | Cloudflare Worker routes, OpenAI call, and account-memory routing |
+| `src/index.js` | Core chat endpoint, OpenAI reply path, and account-memory routing |
+| `src/paid-worker.js` | Model allowance, subscription, model-selection, and fallback behavior |
+| `src/impact-worker.js` | Privacy-bounded feedback, outcome, reliability, and impact measurement |
 | `src/auth.js` | Google OpenID Connect flow and signed account session |
 | `src/session-memory.js` | Per-account Durable Object memory, expiry, and compaction state |
 | `public/` | Static CSS, browser JavaScript, terrain renderer, safe Markdown renderer, Lexend font, and asset security headers |
-| `test/` | Deterministic router and Worker endpoint tests |
-| `docs/` | Public-safe background material for the protocol |
-| `wrangler.jsonc` | Cloudflare configuration and non-secret model settings |
+| `test/` | Deterministic router, UI, billing, memory, analytics, and Worker endpoint tests |
+| `docs/` | Public-safe background material and operating documentation |
+| `ios/` | Native SwiftUI app, unit tests, App Store metadata, and release tooling |
+| `wrangler.jsonc` | Cloudflare bindings and non-secret production policy values |
 
 ## Edit site text
 
-All editable product language is in `src/copy.js`: the intro blurb, labels, buttons, emergency and medication replies, demo responses, public errors, and the backend model prompt. The other runtime files reference that module, so text changes do not need to be repeated across HTML, browser JavaScript, or routing logic.
+Core product language is in `src/copy.js`: the intro blurb, labels, fixed emergency and medication replies, demo responses, public errors, and backend model prompt. Billing, model-allowance, feedback, and impact copy also lives beside those feature layers and their generation scripts, so any public-copy change should be covered by the corresponding regression test.
 
 ## Run locally
 
-Requirements: Node.js 20 or newer.
+Requirements: Node.js 22 or newer.
 
 ```bash
 npm install
@@ -51,17 +72,31 @@ npm test
 npm run dev
 ```
 
-Copy `.dev.vars.example` to `.dev.vars`, place an OpenAI API key in the local file, and open the URL Wrangler prints. `.dev.vars` is ignored by Git. To run only the interface and deterministic routes without an API call, temporarily set `DEMO_MODE` to `true` in your local configuration.
+Copy `.dev.vars.example` to `.dev.vars`, place an OpenAI API key in the local file, and open the URL Wrangler prints. `.dev.vars` is ignored by Git. To run only the interface and deterministic routes without an API call, temporarily set `DEMO_MODE` to `true` in local configuration.
+
+The current repository materializes the production policy through the standard npm commands. Run those commands rather than invoking individual scripts in isolation; the clean-tree guard verifies that generation is repeatable.
 
 ## Enable OpenAI
 
-The default model is `gpt-5.6-sol` through OpenAI's Responses API, with medium reasoning effort, current-turn reasoning context, and `store: false`.
+The deployment uses OpenAI's Responses API. The committed model-policy values are:
 
-The same deployed OpenAI key also powers low-reasoning memory compaction for signed-in users. Guest requests do not enter the memory or compaction path.
+```text
+OPENAI_MODEL=gpt-5.4
+OPENAI_REASONING_EFFORT=none
+MODEL_CHOICES=gpt-5.4|GPT-5.4,gpt-5.6-sol|Current
+FREE_DAILY_MODEL_MESSAGE_LIMIT=50
+FREE_PLAN_PRIMARY_MODEL=gpt-5.6-sol
+FREE_PLAN_FALLBACK_MODEL=gpt-5.4
+PAID_MONTHLY_MESSAGE_LIMIT=200
+```
 
-1. Use a project-scoped OpenAI API key with appropriate usage limits.
+`OPENAI_MODEL` remains the GPT-5.4 fallback and subscriber base model. `FREE_PLAN_PRIMARY_MODEL` supplies the GPT-5.6 Fast initial route for guests and the first 50 signed-in free messages; `FREE_PLAN_FALLBACK_MODEL` handles the signed-in daily-limit fallback. `MODEL_CHOICES` defines the subscriber-facing model catalog. The browser may request a supported thinking level; `OPENAI_REASONING_EFFORT` is the safe server fallback when that preference is missing or invalid.
+
+The same deployed OpenAI key also powers low-reasoning memory compaction for signed-in users. Guest and private chats do not enter the Stabilize account-memory or Durable Object compaction path. Guest web chats send the full current-tab transcript with each follow-up and do not make a separate guest-summary request.
+
+1. Use a project-scoped OpenAI API key with appropriate usage and spend limits.
 2. For local development, copy `.dev.vars.example` to `.dev.vars` and place the key there.
-3. For a Cloudflare deployment, store the same key as a Worker runtime secret:
+3. For a Cloudflare deployment, store the key as a Worker runtime secret:
 
 ```bash
 npx wrangler secret put OPENAI_API_KEY
@@ -76,11 +111,11 @@ npm run deploy
 
 Never place the key in browser code, GitHub, `wrangler.jsonc`, or a Cloudflare plain-text variable. The browser calls the Worker, and only the Worker reads the secret at runtime. Rotate a key immediately if it is exposed, and set project-level spend limits before public use.
 
-To change the model without editing application code, update `OPENAI_MODEL` in `wrangler.jsonc`, rerun the tests, and validate the new model's behavior. `OPENAI_REASONING_EFFORT` accepts `none`, `low`, `medium`, `high`, or `xhigh` when the selected model supports that setting.
+Ordinary reply requests and signed-in account-summary requests currently use `store: true`, so OpenAI stores the resulting Responses API objects for at least 30 days unless organization or project data controls override the request. Keep `README.md`, `PRIVACY.md`, the public privacy page, native disclosures, and the actual request payload aligned whenever that behavior changes.
 
 ## Enable Google sign-in
 
-Google sign-in is optional for chatting and required only for remembered context. Guests receive the same current-turn chat and deterministic safety routing without a server-side session.
+Google sign-in is optional for chatting and required only for cross-device remembered context and account-based allowances. Guests receive deterministic safety routing and full-conversation continuity inside the current browser tab without a server-side Stabilize memory record.
 
 1. In Google Cloud, configure the OAuth consent screen and create an OAuth client with application type **Web application**.
 2. Add each exact production callback as an authorized redirect URI, for example:
@@ -115,31 +150,35 @@ The server uses authorization code, anti-forgery state, nonce, and PKCE. It requ
 
 In Cloudflare Workers & Pages, import this GitHub repository as a Worker project. Use `npx wrangler deploy` as the deploy command. Keep secrets in Cloudflare, not in repository settings or source files.
 
-The Worker renders `/` and `/index.html` from the centralized copy file, handles `/api/*`, and serves CSS and browser JavaScript from `public/`. Worker responses receive security headers in `src/index.js`; static asset headers live in `public/_headers`.
+The Worker handles HTML, APIs, authentication, billing, feedback, admin, and redirects. Eligible static CSS, JavaScript, fonts, and images are served through Cloudflare Static Assets. Worker responses receive security headers in the Worker layers; static asset headers live in `public/_headers`.
 
 ## Safety and launch limits
 
 Before a broad public launch, add or verify:
 
-- independent clinical, crisis-response, privacy, and security review
-- Cloudflare rate limiting or WAF rules for `/api/chat`
+- independent clinical, crisis-response, lived-experience, privacy, security, and accessibility review
+- Cloudflare rate limiting or WAF rules for `/api/chat` and other abuse-sensitive routes
 - a much larger adversarial and multilingual test set
-- monitoring that never records prompt bodies
+- monitoring that never records prompt or reply bodies
 - a production privacy policy and terms matching the real deployment
 - verified crisis and basic-needs resources for every supported location
-- OAuth consent-screen, redirect-URI, cookie, and account-recovery review
-- a credential rotation plan and cost controls
+- OAuth consent-screen, redirect-URI, cookie, billing, and account-recovery review
+- a credential-rotation plan, spend controls, and graceful model fallback
 - a clear incident-response and rollback process
 
 See `SECURITY.md`, `PRIVACY.md`, and `RESPONSIBLE_USE.md`.
 
 ## Privacy behavior
 
-Guest chats create no server-side memory. After Google sign-in, the Worker derives a one-way alias from Google's stable account identifier and uses that alias to address one Durable Object. The signed `HttpOnly` cookie contains the alias and expiry—not an email, Google token, raw Google identifier, network address, or conversation. The object retains a rolling summary plus at most eight newest messages awaiting compaction and deletes the record 30 days after the last stored exchange.
+Guest chats create no server-side Stabilize account memory. The web client keeps the complete guest transcript in the current tab's session storage for up to 24 hours, sends it with follow-ups, and clears it on New conversation, sign-in or sign-out transitions, expiry, or tab closure. Earlier turns are not silently dropped or replaced by a summary. If the transcript becomes too large for one bounded request, the site stops with an explicit message instead of trimming the conversation. After Google sign-in, the Worker derives a one-way alias from Google's stable account identifier and uses that alias to address one Durable Object. The signed HttpOnly cookie contains the alias and expiry—not an email, Google token, raw Google identifier, network address, or conversation. The object retains a rolling summary plus at most eight newest messages awaiting compaction and deletes the record 30 days after the last stored exchange. Signed-in users can delete that remembered context immediately from the account menu; a generation token prevents an older in-flight response from recreating it. Billing and model-allowance records remain separate.
 
-The landscape animation tokenizes submitted prompts and displayed replies locally, immediately reduces them to numeric climate and motion signals, and does not add message text to animation storage, requests, or logs. Reduced-motion preferences receive a static landscape.
+Signed-in users can start a private chat that bypasses Stabilize account-memory reads and writes for that tab. Private chat does not disable Cloudflare or OpenAI processing and does not change the provider-retention behavior described above.
 
-The application never reads `CF-Connecting-IP`, derives network aliases, or includes account/network identifiers in successful-chat logs. Both reply and summary requests use OpenAI with `store: false`. Google, Cloudflare, OpenAI, and network infrastructure may still process request data and metadata under their applicable terms. See `PRIVACY.md` for the complete implementation-level description and limitations.
+To reduce signed-in response delay, the web page prefetches a bounded, short-lived signed account-context snapshot while the user is reading or typing. The opaque snapshot is bound to the signed-in account, held only in active page memory, checked against the current memory generation returned by the existing quota lookup, and refreshed after completed replies. It is not written to localStorage or sessionStorage. Invalid, expired, cross-account, or superseded snapshots fall back to the account-memory Durable Object.
+
+The landscape animation tokenizes submitted prompts and displayed replies locally, immediately reduces them to numeric climate and motion signals, and does not add message text to animation storage, requests, or logs. Reduced-motion and lower-capacity mobile clients receive a static landscape path.
+
+The application does not use `CF-Connecting-IP` for memory, derive network aliases, or include account or network identifiers in successful-chat logs. Impact analytics uses one-way hashes of random browser, tab, and conversation identifiers and does not store prompt or assistant-response text. Google, Cloudflare, OpenAI, Stripe when used, and network infrastructure may process request data and metadata under their applicable terms. See `PRIVACY.md` for the implementation-level description and limitations.
 
 ## License
 

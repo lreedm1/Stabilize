@@ -9,9 +9,13 @@ if (!globalThis.crypto) {
 const {
   MANAGED_PAYMENTS_STRIPE_VERSION,
   createCheckoutSession,
+  dailyUsagePeriod,
+  freeDailyModelMessageLimit,
   modelChoices,
+  monthlyModelMessageLimit,
   stateFromStripeEvent,
   subscriptionHasAccess,
+  usagePeriod,
   verifyStripeSignature,
 } = await import("../src/billing.js");
 
@@ -27,14 +31,30 @@ test("model choices are bounded, deduplicated, and include the default", () => {
   ]);
 });
 
-test("only active and trialing subscriptions grant model choice", () => {
+test("free accounts get 50 GPT-5.6 messages per UTC day while subscribers remain monthly", () => {
+  const instant = new Date("2026-08-05T23:59:59.000Z");
+  assert.equal(freeDailyModelMessageLimit({}), 50);
+  assert.equal(
+    freeDailyModelMessageLimit({ FREE_DAILY_MODEL_MESSAGE_LIMIT: "35" }),
+    35,
+  );
+  assert.equal(
+    freeDailyModelMessageLimit({ FREE_DAILY_MODEL_MESSAGE_LIMIT: "invalid" }),
+    50,
+  );
+  assert.equal(monthlyModelMessageLimit({}), 200);
+  assert.equal(dailyUsagePeriod(instant), "2026-08-05");
+  assert.equal(usagePeriod(instant), "2026-08");
+});
+
+test("only active and trialing subscriptions grant the larger subscriber allowance", () => {
   assert.equal(subscriptionHasAccess("active"), true);
   assert.equal(subscriptionHasAccess("trialing"), true);
   assert.equal(subscriptionHasAccess("past_due"), false);
   assert.equal(subscriptionHasAccess("canceled"), false);
 });
 
-test("managed payments Checkout uses the blueprint version and parameters", async () => {
+test("model subscription uses standard Stripe Checkout parameters", async () => {
   const originalFetch = globalThis.fetch;
   let request;
   globalThis.fetch = async (input, init) => {
@@ -52,7 +72,7 @@ test("managed payments Checkout uses the blueprint version and parameters", asyn
         STRIPE_SECRET_KEY: "sk_test_1234567890abcdefghijklmnop",
         STRIPE_WEBHOOK_SECRET: "whsec_1234567890abcdefghijklmnop",
         STRIPE_MODEL_CHOICE_PRICE_ID: "price_12345678",
-        PUBLIC_ORIGIN: "https://reedlokken.com",
+        PUBLIC_ORIGIN: "https://stabilize.info",
       },
       {},
       accountAlias,
@@ -64,14 +84,11 @@ test("managed payments Checkout uses the blueprint version and parameters", asyn
     );
     assert.equal(request.input, "https://api.stripe.com/v1/checkout/sessions");
     assert.equal(request.init.method, "POST");
-    assert.equal(
-      request.init.headers["Stripe-Version"],
-      MANAGED_PAYMENTS_STRIPE_VERSION,
-    );
+    assert.equal(request.init.headers["Stripe-Version"], undefined);
 
     const params = new URLSearchParams(request.init.body);
     assert.equal(params.get("mode"), "subscription");
-    assert.equal(params.get("managed_payments[enabled]"), "true");
+    assert.equal(params.has("managed_payments[enabled]"), false);
     assert.equal(params.get("line_items[0][price]"), "price_12345678");
     assert.equal(params.get("line_items[0][quantity]"), "1");
     assert.equal(params.get("client_reference_id"), accountAlias);
@@ -82,11 +99,11 @@ test("managed payments Checkout uses the blueprint version and parameters", asyn
     );
     assert.equal(
       params.get("success_url"),
-      "https://reedlokken.com/?billing=success&session_id={CHECKOUT_SESSION_ID}",
+      "https://stabilize.info/?billing=success&session_id={CHECKOUT_SESSION_ID}",
     );
     assert.equal(
       params.get("cancel_url"),
-      "https://reedlokken.com/?billing=cancelled",
+      "https://stabilize.info/?billing=cancelled",
     );
   } finally {
     globalThis.fetch = originalFetch;

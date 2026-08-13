@@ -3,43 +3,129 @@
   "name": "stabilize",
   "main": "src/domain-router.js",
   "compatibility_date": "2026-08-01",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "keep_vars": true,
   "workers_dev": true,
   "preview_urls": true,
   "routes": [
     {
-      "pattern": "stabilize.info",
+      "pattern": "stabilize.info/*",
+      "zone_name": "stabilize.info"
+    },
+    {
+      "pattern": "uwmadison.stabilize.info",
+      "custom_domain": true
+    },
+    {
+      "pattern": "chat.uwmadison.stabilize.info",
       "custom_domain": true
     },
     {
       "pattern": "reedlokken.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.reedlokken.com",
       "custom_domain": true
     }
   ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": true
+    "run_worker_first": [
+      "/*",
+      "!/*.css",
+      "!/*.js",
+      "!/*.mjs",
+      "!/*.map",
+      "!/*.ico",
+      "!/*.png",
+      "!/*.jpg",
+      "!/*.jpeg",
+      "!/*.gif",
+      "!/*.webp",
+      "!/*.avif",
+      "!/*.svg",
+      "!/*.woff",
+      "!/*.woff2",
+      "!/site.webmanifest",
+      "!/fonts/*",
+      "!/scenes/*"
+    ]
   },
   "durable_objects": {
     "bindings": [
-      { "name": "SESSIONS", "class_name": "SessionMemory" },
-      { "name": "BILLING", "class_name": "BillingAccount" }
+      {
+        "name": "SESSIONS",
+        "class_name": "SessionMemory"
+      },
+      {
+        "name": "BILLING",
+        "class_name": "BillingAccount"
+      },
+      {
+        "name": "FEEDBACK_LIMITS",
+        "class_name": "FeedbackGate"
+      },
+      {
+        "name": "FEEDBACK_INBOX",
+        "class_name": "FeedbackInbox"
+      },
+      {
+        "name": "IMPACT",
+        "class_name": "ImpactAnalytics"
+      }
     ]
   },
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["SessionMemory"] },
-    { "tag": "v2", "new_sqlite_classes": ["BillingAccount"] }
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "SessionMemory"
+      ]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": [
+        "BillingAccount"
+      ]
+    },
+    {
+      "tag": "v3",
+      "new_sqlite_classes": [
+        "FeedbackGate",
+        "FeedbackInbox"
+      ]
+    },
+    {
+      "tag": "v4",
+      "new_sqlite_classes": [
+        "ImpactAnalytics"
+      ]
+    }
   ],
   "vars": {
     "DEMO_MODE": "false",
-    "OPENAI_MODEL": "gpt-5.6-sol",
-    "OPENAI_REASONING_EFFORT": "medium",
+    "OPENAI_MODEL": "gpt-5.4",
+    "OPENAI_REASONING_EFFORT": "none",
     "PUBLIC_ORIGIN": "https://stabilize.info",
-    "MODEL_CHOICES": "gpt-5.6-sol|Stabilize default,gpt-5.1|GPT-5.1,gpt-5-mini|GPT-5 mini",
+    "MODEL_CHOICES": "gpt-5.4|GPT-5.4,gpt-5.6-sol|Current",
     "PAID_MONTHLY_MESSAGE_LIMIT": "200",
-    "STRIPE_MODEL_CHOICE_PRICE_ID": "price_1U01Jp96tfbPOBGIbQNXDlPx"
+    "FREE_DAILY_MODEL_MESSAGE_LIMIT": "50",
+    "STRIPE_MODEL_CHOICE_PRICE_ID": "price_1U01Jp96tfbPOBGIbQNXDlPx",
+    "FEEDBACK_REPOSITORY": "lreedm1/Stabilize",
+    "FEEDBACK_BRANCH": "feedback-inbox",
+    "FEEDBACK_PATH": "feedback",
+    "IMPACT_ADMIN_PASSWORD_SHA256": "c1926162:cf30c39d:cab9b52f:41993fa9:81623d41:20619aed:82b56cb5:2e19de60",
+    "IMPACT_RETENTION_DAYS": "180",
+    "IMPACT_ESTIMATED_CHAT_COST_MICROS": "0",
+    "IMPACT_MONTHLY_RECURRING_REVENUE_CENTS": "0",
+    "IMPACT_MONTHLY_RECURRING_COST_CENTS": "0",
+    "FREE_PLAN_PRIMARY_MODEL": "gpt-5.6-sol",
+    "FREE_PLAN_FALLBACK_MODEL": "gpt-5.4",
+    "OPENAI_SERVICE_TIER": "fast"
   },
   "secrets": {
     "required": [

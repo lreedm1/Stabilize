@@ -1,0 +1,28 @@
+name: Engagement feedback branch validation
+
+on:
+  push:
+    branches:
+      - feature/engagement-feedback
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test
+      - name: Validate Cloudflare bundle
+        run: npm run check

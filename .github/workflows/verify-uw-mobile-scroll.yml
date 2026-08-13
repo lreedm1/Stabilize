@@ -1,0 +1,219 @@
+name: Verify UW mobile scrolling
+
+on:
+  push:
+    branches:
+      - main
+      - fix/**
+    paths:
+      - public/uwmadison-chat.css
+      - src/uw-madison-chat.js
+      - .github/workflows/verify-uw-mobile-scroll.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - public/uwmadison-chat.css
+      - src/uw-madison-chat.js
+      - .github/workflows/verify-uw-mobile-scroll.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uw-mobile-scroll-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-webkit:
+    name: Verify iPhone-sized document scrolling
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      EXPECTED_STYLESHEET_VERSION: 20260813-document-scroll-1
+      LIVE_MODE: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Playwright WebKit
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps webkit
+
+      - name: Verify the page can scroll from the resource banner to the composer
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          import { webkit } from "playwright";
+
+          const baseUrl = "https://chat.uwmadison.stabilize.info/";
+          const expectedVersion = process.env.EXPECTED_STYLESHEET_VERSION;
+          const liveMode = process.env.LIVE_MODE === "true";
+          const proposedCss = await readFile("public/uwmadison-chat.css", "utf8");
+
+          const browser = await webkit.launch({ headless: true });
+          const context = await browser.newContext({
+            bypassCSP: !liveMode,
+            viewport: { width: 390, height: 844 },
+            screen: { width: 390, height: 844 },
+            deviceScaleFactor: 3,
+            isMobile: true,
+            hasTouch: true,
+            userAgent:
+              "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) " +
+              "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 " +
+              "Mobile/15E148 Safari/604.1",
+          });
+          const page = await context.newPage();
+
+          try {
+            if (liveMode) {
+              let deployed = false;
+              for (let attempt = 1; attempt <= 36; attempt += 1) {
+                await page.goto(`${baseUrl}?scroll-gate=${Date.now()}`, {
+                  waitUntil: "domcontentloaded",
+                  timeout: 60_000,
+                });
+                const html = await page.content();
+                deployed = html.includes(
+                  `/uwmadison-chat.css?v=${expectedVersion}`,
+                );
+                console.log(
+                  `Production stylesheet attempt ${attempt}: ${
+                    deployed ? "current" : "waiting"
+                  }`,
+                );
+                if (deployed) break;
+                await page.waitForTimeout(10_000);
+              }
+              if (!deployed) {
+                throw new Error(
+                  `Production did not serve stylesheet version ${expectedVersion}.`,
+                );
+              }
+            } else {
+              await page.goto(`${baseUrl}?scroll-proposal=${Date.now()}`, {
+                waitUntil: "domcontentloaded",
+                timeout: 60_000,
+              });
+              // Exercise the proposed stylesheet against the real production DOM
+              // before merge; this catches flex and viewport interactions that a
+              // string-only CSS test cannot see.
+              await page.addStyleTag({ content: proposedCss });
+            }
+
+            await page.waitForSelector(".uw-chat-banner", { timeout: 30_000 });
+            await page.waitForSelector(".composer-dock", { timeout: 30_000 });
+            await page.waitForTimeout(500);
+
+            const before = await page.evaluate(() => {
+              const scrolling = document.scrollingElement;
+              const shell = document.querySelector(".page-shell");
+              const chat = document.querySelector(".chat-card");
+              const composer = document.querySelector(".composer-dock");
+              if (
+                !(scrolling instanceof HTMLElement) ||
+                !(shell instanceof HTMLElement) ||
+                !(chat instanceof HTMLElement) ||
+                !(composer instanceof HTMLElement)
+              ) {
+                throw new Error("Required UW chat layout elements are missing.");
+              }
+              const shellStyle = getComputedStyle(shell);
+              const chatStyle = getComputedStyle(chat);
+              return {
+                viewportHeight: window.visualViewport?.height || window.innerHeight,
+                documentClientHeight: scrolling.clientHeight,
+                documentScrollHeight: scrolling.scrollHeight,
+                scrollY: window.scrollY,
+                bodyOverflowY: getComputedStyle(document.body).overflowY,
+                rootOverflowY: getComputedStyle(document.documentElement).overflowY,
+                shellHeight: shell.getBoundingClientRect().height,
+                shellOverflowY: shellStyle.overflowY,
+                chatHeight: chat.getBoundingClientRect().height,
+                chatFlex: chatStyle.flex,
+                composer: composer.getBoundingClientRect().toJSON(),
+              };
+            });
+
+            console.log("Before scroll:", JSON.stringify(before, null, 2));
+
+            if (
+              before.documentScrollHeight <=
+              before.documentClientHeight + 250
+            ) {
+              throw new Error(
+                `The document still has no useful vertical overflow: ${before.documentScrollHeight}px for a ${before.documentClientHeight}px viewport.`,
+              );
+            }
+            if (before.chatHeight < 560) {
+              throw new Error(
+                `The chat was compressed to ${before.chatHeight}px instead of remaining usable.`,
+              );
+            }
+            if (before.shellOverflowY !== "visible") {
+              throw new Error(
+                `The page shell is still acting as a nested scroller (${before.shellOverflowY}).`,
+              );
+            }
+
+            await page.evaluate(() => {
+              const scrolling = document.scrollingElement;
+              window.scrollTo({
+                top: scrolling?.scrollHeight || document.body.scrollHeight,
+                behavior: "instant",
+              });
+            });
+            await page.waitForTimeout(500);
+
+            const after = await page.evaluate(() => {
+              const composer = document.querySelector(".composer-dock");
+              if (!(composer instanceof HTMLElement)) {
+                throw new Error("Composer is missing after scroll.");
+              }
+              const viewportHeight =
+                window.visualViewport?.height || window.innerHeight;
+              const rect = composer.getBoundingClientRect();
+              return {
+                viewportHeight,
+                scrollY: window.scrollY,
+                composerTop: rect.top,
+                composerBottom: rect.bottom,
+                composerHeight: rect.height,
+              };
+            });
+
+            console.log("After scroll:", JSON.stringify(after, null, 2));
+
+            if (after.scrollY < 100) {
+              throw new Error(
+                `The document did not move after scrolling (scrollY=${after.scrollY}).`,
+              );
+            }
+            if (
+              after.composerTop < -2 ||
+              after.composerBottom > after.viewportHeight + 2
+            ) {
+              throw new Error(
+                `The composer is not fully reachable after scrolling: top=${after.composerTop}, bottom=${after.composerBottom}, viewport=${after.viewportHeight}.`,
+              );
+            }
+
+            console.log(
+              liveMode
+                ? "The deployed UW chat scrolls from the resource banner to a full-height chat composer in WebKit."
+                : "The proposed UW stylesheet creates real document scrolling and keeps the composer reachable in WebKit.",
+            );
+          } finally {
+            await browser.close();
+          }
+          NODE

@@ -1,0 +1,62 @@
+name: Materialize mobile video CSP fix
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/materialize-mobile-video-csp.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: materialize-mobile-video-csp
+  cancel-in-progress: true
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the CSP fix branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/fix-mobile-video-csp
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install and regenerate canonical output
+        run: npm ci
+
+      - name: Verify runtime page policies permit blob video
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "media-src 'self' blob:" src/index.js
+          grep -Fq "media-src 'self' blob:" src/impact-shards.js
+          grep -Fq "media-src 'self' blob:" public/_headers
+          grep -Fq 'allowMobileVideoCsp' scripts/finalize-decision-grade-impact.mjs
+
+      - name: Commit generated CSP output to the feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/index.js src/impact-shards.js public/_headers package.json test scripts
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No generated CSP changes were produced.'
+            exit 1
+          fi
+          git commit -m 'Allow the mobile background video in page CSP'
+          npm run verify:clean
+          git push origin HEAD:agent/fix-mobile-video-csp

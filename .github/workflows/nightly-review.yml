@@ -1,0 +1,302 @@
+name: Nightly Stabilize review
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/nightly-review.yml"
+      - "ops/nightly/**"
+      - "test/nightly-cloud-*.test.mjs"
+      - "test/nightly-review.test.mjs"
+      - "package.json"
+  schedule:
+    - cron: "17 2 * * *"
+      timezone: "America/Chicago"
+  workflow_dispatch:
+    inputs:
+      acknowledge_pending:
+        description: "Advance a protected or closed-PR checkpoint only after human review"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: nightly-stabilize-review-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'state' }}
+  queue: max
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sandbox-smoke:
+    name: Validate the macOS verification boundary
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: macos-15
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out the immutable pull request commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Probe write confinement and symbolic-link escape denial
+        shell: bash
+        run: ops/nightly/test-verification-sandbox.zsh
+
+  prepare:
+    name: Analyze and edit without write credentials
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || !inputs.acknowledge_pending) }}
+    runs-on: macos-15
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Check out the immutable orchestrator commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Require the repository OpenAI API key
+        shell: bash
+        env:
+          OPENAI_API_KEY_CONFIGURED: ${{ secrets.OPENAI_API_KEY != '' }}
+        run: |
+          set -euo pipefail
+          if [[ "$OPENAI_API_KEY_CONFIGURED" != "true" ]]; then
+            echo "::error title=Missing repository Actions secret::OPENAI_API_KEY is not configured under Settings > Secrets and variables > Actions. Add or re-save it, then rerun this workflow."
+            exit 1
+          fi
+
+      - name: Check out bounded durable state without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: automation/nightly-state
+          path: .cloud-nightly-state
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Validate the verification sandbox before using the API key
+        shell: bash
+        run: ops/nightly/test-verification-sandbox.zsh
+
+      - name: Restore bounded review state
+        id: paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          state_dir="$RUNNER_TEMP/stabilize-nightly-state"
+          codex_home="$RUNNER_TEMP/stabilize-codex-home"
+          bundle_dir="$RUNNER_TEMP/stabilize-nightly-bundle"
+          mkdir -p "$state_dir" "$codex_home"
+          chmod 700 "$state_dir" "$codex_home"
+          node ops/nightly/cloud-state.mjs restore \
+            --state-dir "$state_dir" \
+            --storage-repo "$GITHUB_WORKSPACE/.cloud-nightly-state"
+          state_head="$(git -C "$GITHUB_WORKSPACE/.cloud-nightly-state" rev-parse HEAD)"
+          echo "state_dir=$state_dir" >> "$GITHUB_OUTPUT"
+          echo "codex_home=$codex_home" >> "$GITHUB_OUTPUT"
+          echo "bundle_dir=$bundle_dir" >> "$GITHUB_OUTPUT"
+          echo "state_head=$state_head" >> "$GITHUB_OUTPUT"
+
+      - name: Start the protected Codex API proxy
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-home: ${{ steps.paths.outputs.codex_home }}
+          codex-version: "0.146.0"
+          safety-strategy: drop-sudo
+
+      - name: Prepare one bounded proposal or state transition
+        shell: bash
+        env:
+          CODEX_HOME: ${{ steps.paths.outputs.codex_home }}
+          GH_TOKEN: ${{ github.token }}
+          STABILIZE_NIGHTLY_BUNDLE_DIR: ${{ steps.paths.outputs.bundle_dir }}
+          STABILIZE_NIGHTLY_CODEX_PROXY: "1"
+          STABILIZE_NIGHTLY_STATE_HEAD: ${{ steps.paths.outputs.state_head }}
+          STATE_DIR: ${{ steps.paths.outputs.state_dir }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          ops/nightly/run.zsh --state-dir "$STATE_DIR"
+
+      - name: Upload the bounded handoff
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nightly-review-candidate
+          path: ${{ steps.paths.outputs.bundle_dir }}
+          if-no-files-found: error
+          retention-days: 1
+
+  verify:
+    name: Test on a fresh runner without OpenAI or write access
+    needs: prepare
+    if: ${{ needs.prepare.result == 'success' }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Check out the immutable orchestrator commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Download the bounded candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nightly-review-candidate
+          path: ${{ runner.temp }}/stabilize-nightly-candidate
+
+      - name: Verify the candidate in isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          verifier_home="$RUNNER_TEMP/stabilize-nightly-verifier-home"
+          mkdir -p "$verifier_home"
+          chmod 700 "$verifier_home"
+          env -i \
+            HOME="$verifier_home" \
+            PATH="$PATH" \
+            LANG="${LANG:-en_US.UTF-8}" \
+            LC_ALL="${LC_ALL:-en_US.UTF-8}" \
+            RUNNER_TEMP="$RUNNER_TEMP" \
+            node ops/nightly/verify-cloud-review.mjs \
+            --candidate-dir "$RUNNER_TEMP/stabilize-nightly-candidate" \
+            --verified-dir "$RUNNER_TEMP/stabilize-nightly-verified" \
+            --work-dir "$RUNNER_TEMP/stabilize-nightly-verification"
+
+      - name: Upload the verified handoff
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nightly-review-verified
+          path: ${{ runner.temp }}/stabilize-nightly-verified
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Revalidate and publish on a fresh write-only runner
+    needs: verify
+    if: ${{ needs.verify.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Check out the immutable orchestrator commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Check out bounded durable state without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: automation/nightly-state
+          path: .cloud-nightly-state
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Download the verified handoff
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nightly-review-verified
+          path: ${{ runner.temp }}/stabilize-nightly-verified
+
+      - name: Publish state or a draft pull request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          node ops/nightly/publish-cloud-review.mjs \
+            --bundle-dir "$RUNNER_TEMP/stabilize-nightly-verified" \
+            --state-repo "$GITHUB_WORKSPACE/.cloud-nightly-state" \
+            --work-dir "$RUNNER_TEMP/stabilize-nightly-publish"
+
+  acknowledge:
+    name: Acknowledge a human-reviewed pending item without OpenAI access
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.acknowledge_pending }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Check out the immutable orchestrator commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Check out bounded durable state without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: automation/nightly-state
+          path: .cloud-nightly-state
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Restore bounded review state
+        shell: bash
+        run: |
+          set -euo pipefail
+          state_dir="$RUNNER_TEMP/stabilize-nightly-state"
+          mkdir -p "$state_dir"
+          chmod 700 "$state_dir"
+          node ops/nightly/cloud-state.mjs restore \
+            --state-dir "$state_dir" \
+            --storage-repo "$GITHUB_WORKSPACE/.cloud-nightly-state"
+
+      - name: Advance the reviewed checkpoint
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STABILIZE_NIGHTLY_SKIP_CODEX: "1"
+          STABILIZE_NIGHTLY_STATE_REPO: ${{ github.workspace }}/.cloud-nightly-state
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          node ops/nightly/run-nightly.mjs \
+            --acknowledge-pending \
+            --state-dir "$RUNNER_TEMP/stabilize-nightly-state"
