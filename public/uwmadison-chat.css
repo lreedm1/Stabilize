@@ -16,6 +16,11 @@
 
 html[data-campus-chat="uwmadison"] .page-shell {
   width: min(1080px, calc(100% - 28px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
 }
 
 .uw-chat-banner {
