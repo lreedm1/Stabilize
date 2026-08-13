@@ -41,8 +41,12 @@ jobs:
       - name: Install dependencies without generation
         run: npm ci --ignore-scripts
 
-      - name: Materialize canonical v32 output
-        run: npm run apply:prompt-policy
+      - name: Bootstrap and materialize canonical v32 output
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run apply:prompt-policy
+          node scripts/finalize-mobile-smooth-v32.mjs
 
       - name: Verify the intended repair before commit
         shell: bash
