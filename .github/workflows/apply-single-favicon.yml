@@ -1,0 +1,34 @@
+name: Apply single favicon contract
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/apply-single-favicon.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate canonical favicon output
+        run: |
+          node scripts/embed-favicon-fallback.mjs
+          git diff --check
+      - name: Commit generated output
+        run: |
+          rm -f .github/workflows/apply-single-favicon.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Apply single canonical favicon"
+          git pull --rebase origin main
+          git push origin HEAD:main
