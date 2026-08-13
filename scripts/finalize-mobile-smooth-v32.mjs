@@ -17,6 +17,8 @@ const HANDOFF_CLIENT = metadata.handoffClient;
 const BACKGROUND_STYLE = metadata.backgroundStyle;
 
 const FINALIZER = "node scripts/finalize-mobile-smooth-v32.mjs";
+const STATIC_FAVICON_FINALIZER =
+  "node scripts/embed-favicon-fallback.mjs";
 const TEST_PATH = "test/mobile-smooth-v32.test.mjs";
 const RETIRED_TESTS = new Set([
   "test/mobile-background-v30.test.mjs",
@@ -185,8 +187,11 @@ await update("package.json", (source) => {
   if (!policy) throw new Error("package.json is missing apply:prompt-policy.");
   const commands = policy
     .split(" && ")
-    .filter((command) => command !== FINALIZER);
-  commands.push(FINALIZER);
+    .filter(
+      (command) =>
+        command !== FINALIZER && command !== STATIC_FAVICON_FINALIZER,
+    );
+  commands.push(FINALIZER, STATIC_FAVICON_FINALIZER);
   canonicalPolicy = commands.join(" && ");
   data.scripts["apply:prompt-policy"] = canonicalPolicy;
 
@@ -201,10 +206,12 @@ await update("package.json", (source) => {
 });
 
 const commandLiteralPattern =
-  /"node scripts\/prepare-signed-in-latency-v2\.mjs[^"\n]*node scripts\/finalize-(?:native-selected-mobile-v24-regressions|mobile-video-handoff-v31|mobile-smooth-v32)\.mjs"/g;
+  /"node scripts\/prepare-signed-in-latency-v2\.mjs[^"\n]*node scripts\/finalize-(?:native-selected-mobile-v24-regressions|mobile-video-handoff-v31|mobile-smooth-v32)\.mjs(?: && node scripts\/embed-favicon-fallback\.mjs)?"/g;
 const previousTail = "finalize-mobile-video-handoff-v31\\.mjs$/";
-const canonicalTail =
+const mobileTail =
   "finalize-mobile-video-handoff-v31\\.mjs && node scripts\\/finalize-mobile-smooth-v32\\.mjs$/";
+const canonicalTail =
+  "finalize-mobile-video-handoff-v31\\.mjs && node scripts\\/finalize-mobile-smooth-v32\\.mjs && node scripts\\/embed-favicon-fallback\\.mjs$/";
 const testNames = (await readdir("test"))
   .filter((name) => name.endsWith(".mjs"))
   .sort();
@@ -213,7 +220,8 @@ for (const name of testNames) {
   await update(`test/${name}`, (source) =>
     source
       .replace(commandLiteralPattern, JSON.stringify(canonicalPolicy))
-      .replaceAll(previousTail, canonicalTail),
+      .replaceAll(previousTail, canonicalTail)
+      .replaceAll(mobileTail, canonicalTail),
   );
 }
 
