@@ -19,6 +19,7 @@ import {
 } from "../src/mobile-background-response.js";
 
 const VERSION = "20260813-mobile-background-v31-1";
+const HANDOFF_VERSION = "20260813-mobile-video-handoff-v31-1";
 const POSTER = "mobile-forest-stream-v24-native-1080.webp";
 const ATLAS = "mobile-forest-stream-full-atlas-v29-1080.webp";
 const VIDEO = "mobile-forest-stream-video-v24-native-1080.mp4";
@@ -129,9 +130,9 @@ test("mobile v31 is Worker-served, starts video from HTML, and keeps a no-tap ca
   assert.match(page, new RegExp(MOBILE_BACKGROUND_CLIENT_ROUTE + "\\?v=" + VERSION));
   assert.match(page, new RegExp("/scenes/" + POSTER + "\\?v=" + VERSION));
   assert.match(page, new RegExp("/scenes/" + ATLAS + "\\?v=" + VERSION));
-  assert.match(page, new RegExp("/media/" + VIDEO + "\\?v=" + VERSION));
+  assert.match(page, new RegExp("/media/" + VIDEO + "\\?v=" + HANDOFF_VERSION));
   assert.match(page, /<video[\s\S]*autoplay[\s\S]*muted[\s\S]*playsinline[\s\S]*preload="auto"/);
-  assert.match(page, new RegExp('src="/media/' + VIDEO + "\\?v=" + VERSION + '"'));
+  assert.match(page, new RegExp('src="/media/' + VIDEO + "\\?v=" + HANDOFF_VERSION + '"'));
   assert.doesNotMatch(page, /data-src="\/media\/mobile-forest-stream-video/);
   assert.ok(
     page.indexOf(MOBILE_BACKGROUND_CLIENT_ROUTE + "?v=" + VERSION) <

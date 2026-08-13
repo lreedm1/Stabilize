@@ -74,7 +74,7 @@ test("signed-in memory prefetch stays outside the guest chat application", async
   const packageJson = JSON.parse(packageSource);
   assert.match(
     packageJson.scripts["apply:prompt-policy"],
-    /finalize-decision-grade-impact\.mjs && node scripts\/finalize-native-selected-mobile-v24\.mjs && node scripts\/finalize-native-selected-mobile-v24-regressions\.mjs$/,
+    /finalize-decision-grade-impact\.mjs && node scripts\/finalize-native-selected-mobile-v24\.mjs && node scripts\/finalize-native-selected-mobile-v24-regressions\.mjs && node scripts\/finalize-mobile-video-handoff-v31\.mjs$/,
   );
   assert.match(
     packageJson.scripts["test:node"],

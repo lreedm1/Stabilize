@@ -1,7 +1,9 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 
 const VERSION = "20260813-mobile-video-handoff-v31-1";
+const BACKGROUND_VERSION = "20260813-mobile-background-v31-1";
 const VIDEO_ASSET = "/media/mobile-forest-stream-video-v24-native-1080.mp4";
+const MOBILE_BACKGROUND_CONTROLLER = "/mobile-background/runtime";
 const CLIENT_ASSET = "/mobile-video-handoff-v31.js";
 const FINALIZER = "node scripts/finalize-mobile-video-handoff-v31.mjs";
 const TEST_PATH = "test/mobile-video-handoff-v31.test.mjs";
@@ -16,7 +18,7 @@ await update("src/page.js", (source) => {
   let next = source;
 
   next = next.replace(
-    /^\s*<script[^>]*mobile-video-handoff-v31\.js[^>]*><\/script>\s*\n?/gm,
+    /^[ \t]*<script[^>]*mobile-video-handoff-v31\.js[^>]*><\/script>[ \t]*\n?/gm,
     "",
   );
 
@@ -50,14 +52,13 @@ await update("src/page.js", (source) => {
     </video>`;
   next = next.replace(videoPattern, replacement);
 
-  const controller = "/mobile-background-v30.js?v=";
-  const controllerIndex = next.indexOf(controller);
-  if (controllerIndex < 0) {
-    throw new Error("Could not find the v30 controller before the handoff patch.");
+  const controllerPattern =
+    /<script\b[^>]*\bsrc="\/mobile-background\/runtime\?v=[^"]+"[^>]*><\/script>/;
+  const controllerMatch = next.match(controllerPattern);
+  if (!controllerMatch || controllerMatch.index === undefined) {
+    throw new Error("Could not find the Worker-served v30 controller before the handoff patch.");
   }
-  const controllerTagEnd = next.indexOf("</script>", controllerIndex);
-  if (controllerTagEnd < 0) throw new Error("The v30 controller tag is incomplete.");
-  const insertion = controllerTagEnd + "</script>".length;
+  const insertion = controllerMatch.index + controllerMatch[0].length;
   next =
     next.slice(0, insertion) +
     `\n    <script src="${CLIENT_ASSET}?v=${VERSION}"></script>` +
@@ -76,9 +77,16 @@ await update("src/page.js", (source) => {
     throw new Error("The mobile video source is not parser-visible.");
   }
 
+  const controllerIndex = next.indexOf(`${MOBILE_BACKGROUND_CONTROLLER}?v=`);
+  const handoffIndex = next.indexOf(`${CLIENT_ASSET}?v=${VERSION}`);
+  if (controllerIndex < 0 || handoffIndex <= controllerIndex) {
+    throw new Error("The v31 handoff must load immediately after the Worker-served v30 controller.");
+  }
+
   return next;
 });
 
+let canonicalPolicy = "";
 await update("package.json", (source) => {
   const data = JSON.parse(source);
   const policy = String(data.scripts?.["apply:prompt-policy"] || "");
@@ -87,13 +95,60 @@ await update("package.json", (source) => {
     .split(" && ")
     .filter((command) => command !== FINALIZER);
   commands.push(FINALIZER);
-  data.scripts["apply:prompt-policy"] = commands.join(" && ");
+  canonicalPolicy = commands.join(" && ");
+  data.scripts["apply:prompt-policy"] = canonicalPolicy;
 
   const nodeTests = String(data.scripts?.["test:node"] || "");
   const tokens = nodeTests.split(/\s+/).filter(Boolean);
   if (!tokens.includes(TEST_PATH)) tokens.push(TEST_PATH);
   data.scripts["test:node"] = tokens.join(" ");
   return `${JSON.stringify(data, null, 2)}\n`;
+});
+
+const commandLiteralPattern =
+  /"node scripts\/prepare-signed-in-latency-v2\.mjs[^"\n]*node scripts\/finalize-(?:native-selected-mobile-v24-regressions|mobile-video-handoff-v31)\.mjs"/g;
+const previousTail =
+  "finalize-native-selected-mobile-v24-regressions\\.mjs$/";
+const canonicalTail =
+  "finalize-native-selected-mobile-v24-regressions\\.mjs && node scripts\\/finalize-mobile-video-handoff-v31\\.mjs$/";
+const testNames = (await readdir("test"))
+  .filter((name) => name.endsWith(".mjs"))
+  .sort();
+
+for (const name of testNames) {
+  await update(`test/${name}`, (source) =>
+    source
+      .replace(commandLiteralPattern, JSON.stringify(canonicalPolicy))
+      .replaceAll(previousTail, canonicalTail),
+  );
+}
+
+await update("test/mobile-background-v30.test.mjs", (source) => {
+  const backgroundDeclaration = `const VERSION = "${BACKGROUND_VERSION}";`;
+  const handoffDeclaration = `const HANDOFF_VERSION = "${VERSION}";`;
+  let next = source;
+  if (!next.includes(handoffDeclaration)) {
+    if (!next.includes(backgroundDeclaration)) {
+      throw new Error("Could not find the v30 test version declaration.");
+    }
+    next = next.replace(
+      backgroundDeclaration,
+      `${backgroundDeclaration}\n${handoffDeclaration}`,
+    );
+  }
+  next = next
+    .replaceAll(
+      'new RegExp("/media/" + VIDEO + "\\\\?v=" + VERSION)',
+      'new RegExp("/media/" + VIDEO + "\\\\?v=" + HANDOFF_VERSION)',
+    )
+    .replaceAll(
+      `new RegExp('src="/media/' + VIDEO + "\\\\?v=" + VERSION + '"')`,
+      `new RegExp('src="/media/' + VIDEO + "\\\\?v=" + HANDOFF_VERSION + '"')`,
+    );
+  if (!next.includes("+ HANDOFF_VERSION")) {
+    throw new Error("Could not align the v30 page assertions with the v31 media version.");
+  }
+  return next;
 });
 
 await update("public/_headers", (source) => {

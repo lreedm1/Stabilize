@@ -216,19 +216,24 @@ export function renderPage(options = {}) {
       playsinline
       preload="auto"
       poster="/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260813-mobile-background-v31-1"
-      src="/media/mobile-forest-stream-video-v24-native-1080.mp4?v=20260813-mobile-background-v31-1"
       aria-hidden="true"
       tabindex="-1"
       disablepictureinpicture
       disableremoteplayback
       x-webkit-airplay="deny"
-    ></video>
+    >
+      <source
+        src="/media/mobile-forest-stream-video-v24-native-1080.mp4?v=20260813-mobile-video-handoff-v31-1"
+        type="video/mp4"
+      />
+    </video>
     <canvas
       id="mobile-background-v30"
       class="mobile-background-v30"
       aria-hidden="true"
     ></canvas>
     <script src="/mobile-background/runtime?v=20260813-mobile-background-v31-1"></script>
+    <script src="/mobile-video-handoff-v31.js?v=20260813-mobile-video-handoff-v31-1"></script>
     <!-- mobile-background-v30-media-end -->
     <div class="page-shell">
       <header class="site-header">

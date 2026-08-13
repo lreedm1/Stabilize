@@ -93,7 +93,7 @@
     canvas.style.setProperty("visibility", "hidden", "important");
 
     root.dataset.mobileBackgroundV30 = "video";
-    root.dataset.mobileBackgroundV30Quality = "native-2160x3840-24fps";
+    root.dataset.mobileBackgroundV30Quality = "native-video-2160x3840-24fps";
     setState("video", `${video.videoWidth}x${video.videoHeight}`);
 
     if (playbackRetry !== null) {
