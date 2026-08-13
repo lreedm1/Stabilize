@@ -1,4 +1,4 @@
-name: Verify native selected mobile video
+name: Verify mobile background v30 video
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: verify-native-selected-mobile-video-${{ github.ref }}
+  group: verify-mobile-background-v30-video-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -40,51 +40,66 @@ jobs:
           sudo apt-get install -y ffmpeg
           npm ci --ignore-scripts
 
-      - name: Verify canonical native selected-scene output
+      - name: Verify canonical v30 media and controller output
         shell: bash
         run: |
           set -euo pipefail
           npm run apply:prompt-policy
           git diff --exit-code
 
+          version='20260813-mobile-background-v30-1'
           video='public/scenes/mobile-forest-stream-video-v24-native-1080.mp4'
           poster='public/scenes/mobile-forest-stream-v24-native-1080.webp'
+          atlas='public/scenes/mobile-forest-stream-full-atlas-v29-1080.webp'
           route='/media/mobile-forest-stream-video-v24-native-1080.mp4'
-          version='20260811-coherent-mobile-4k-v25-1'
 
           test -s "$video"
           test -s "$poster"
+          test -s "$atlas"
           test "$(wc -c < "$video" | tr -d '[:space:]')" -eq 5766867
+          test "$(wc -c < "$poster" | tr -d '[:space:]')" -eq 701820
+          test "$(wc -c < "$atlas" | tr -d '[:space:]')" -eq 1579616
           test "$(sha256sum "$video" | awk '{print $1}')" = \
             '160e341439d5f962c7c0cacb81da37fec741db3fca4d52df71be7f47732f6a35'
           test "$(sha256sum "$poster" | awk '{print $1}')" = \
             'a7287cbe78cd6912522ae1cf9295bc449fc53ca8cdd30bea402bc13581e152e0'
+          test "$(sha256sum "$atlas" | awk '{print $1}')" = \
+            '7b52607dc293f753c6082e8cce9fef07fcdbb6acc743c3562a8f8af4119b3de0'
           test "$(dd if="$video" bs=1 skip=4 count=4 status=none)" = 'ftyp'
           grep -aFq 'moov' "$video"
           grep -aFq 'mdat' "$video"
           grep -aFq 'avc1' "$video"
           test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video")" = 2160x3840
           test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$poster")" = 2160x3840
+          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$atlas")" = 4320x3840
           test "$(ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of default=nw=1:nk=1 "$video")" -gt 1500000
 
-          grep -Fq 'id="mobile-background-video"' src/page.js
-          grep -Fq "$route" src/page.js
-          grep -Fq '/scenes/mobile-forest-stream-v24-native-1080.webp' src/page.js
-          grep -Fq "mobile-quality.js?v=${version}" src/page.js
-          grep -Fq "mobile-woodland-loop.css?v=${version}" src/page.js
-          grep -Fq "$route" public/mobile-quality.js
-          grep -Fq 'coherent-source-2160x3840' public/mobile-quality.js
-          grep -Fq 'video.autoplay = true' public/mobile-quality.js
-          grep -Fq 'video.muted = true' public/mobile-quality.js
-          grep -Fq 'video.defaultMuted = true' public/mobile-quality.js
-          grep -Fq 'video.playsInline = true' public/mobile-quality.js
-          grep -Fq 'video.play()' public/mobile-quality.js
+          test "$(grep -o 'id="mobile-background-video"' src/page.js | wc -l | tr -d '[:space:]')" -eq 1
+          test "$(grep -o 'id="mobile-background-v30"' src/page.js | wc -l | tr -d '[:space:]')" -eq 1
+          grep -Fq "$route?v=${version}" src/page.js
+          grep -Fq "/mobile-background-v30.js?v=${version}" src/page.js
+          grep -Fq "/mobile-background-v30.css?v=${version}" src/page.js
+          grep -Fq "/scenes/mobile-forest-stream-v24-native-1080.webp?v=${version}" src/page.js
+          grep -Fq "/scenes/mobile-forest-stream-full-atlas-v29-1080.webp?v=${version}" src/page.js
+          ! grep -Fq '/mobile-quality.js' src/page.js
+          ! grep -Fq '/mobile-motion-canvas.js' src/page.js
+          ! grep -Fq '/mobile-full-motion-v29.js' src/page.js
+          ! grep -Fq '/mobile-autoplay-v27.js' src/page.js
+
+          grep -Fq 'motionDelta = interpolatedFrame - referenceFrame' public/mobile-background-v30.js
+          grep -Fq 'sharpPoster + motionDelta * uMotionGain' public/mobile-background-v30.js
+          grep -Fq 'requestAnimationFrame(drawFallback)' public/mobile-background-v30.js
+          grep -Fq 'requestVideoFrameCallback' public/mobile-background-v30.js
+          grep -Fq 'const result = video.play();' public/mobile-background-v30.js
+          grep -Fq 'native-video-2160x3840-24fps' public/mobile-background-v30.js
+          grep -Fq 'opacity: 0.001 !important' public/mobile-background-v30.css
+          grep -Fq -- '--mobile-background-v30-fade: 260ms' public/mobile-background-v30.css
+
           grep -Fq 'MOBILE_VIDEO_BYTES = 5_766_867' src/mobile-video-response.js
           grep -Fq "$route" src/mobile-video-response.js
           grep -Fq 'const assetByteCache = new WeakMap();' src/mobile-video-response.js
           grep -Fq 'Accept-Ranges' src/mobile-video-response.js
           grep -Fq 'Content-Range' src/mobile-video-response.js
-          ! grep -Fq 'mobile-forest-stream-v20-true-hd-1440' src/page.js
 
   verify-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -105,22 +120,26 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
 
-      - name: Wait for and verify the exact native release
+      - name: Wait for and verify the exact v30 production release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          version='20260813-mobile-background-v30-1'
           route='/media/mobile-forest-stream-video-v24-native-1080.mp4'
           poster_route='/scenes/mobile-forest-stream-v24-native-1080.webp'
+          atlas_route='/scenes/mobile-forest-stream-full-atlas-v29-1080.webp'
           expected_video='public/scenes/mobile-forest-stream-video-v24-native-1080.mp4'
           expected_poster='public/scenes/mobile-forest-stream-v24-native-1080.webp'
+          expected_atlas='public/scenes/mobile-forest-stream-full-atlas-v29-1080.webp'
           expected_video_bytes="$(wc -c < "$expected_video" | tr -d '[:space:]')"
           expected_video_sha="$(sha256sum "$expected_video" | awk '{print $1}')"
           expected_video_etag="\"${expected_video_sha}\""
           expected_poster_bytes="$(wc -c < "$expected_poster" | tr -d '[:space:]')"
           expected_poster_sha="$(sha256sum "$expected_poster" | awk '{print $1}')"
-          version='20260811-coherent-mobile-4k-v25-1'
+          expected_atlas_bytes="$(wc -c < "$expected_atlas" | tr -d '[:space:]')"
+          expected_atlas_sha="$(sha256sum "$expected_atlas" | awk '{print $1}')"
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
 
@@ -150,49 +169,41 @@ jobs:
             ' "$file" | tail -n 1
           }
 
-          publish_status pending 'Waiting for the native selected forest native video'
+          publish_status pending 'Waiting for mobile background v30'
 
           ready=false
           for attempt in {1..36}; do
             key="${GITHUB_SHA}-${attempt}"
-            page_status="$(
-              curl --max-time 25 --silent --show-error --compressed \
-                --header 'Cache-Control: no-cache' \
-                --dump-header "$tmpdir/page.headers" \
-                --output "$tmpdir/page.html" \
-                --write-out '%{http_code}' \
-                "https://stabilize.info/?native-selected-mobile=${key}" || true
-            )"
-            script_status="$(
-              curl --max-time 25 --silent --show-error --compressed \
-                --header 'Cache-Control: no-cache' \
-                --output "$tmpdir/mobile-quality.js" \
-                --write-out '%{http_code}' \
-                "https://stabilize.info/mobile-quality.js?native-selected-mobile=${key}" || true
-            )"
-            poster_status="$(
-              curl --max-time 40 --silent --show-error \
-                --header 'Cache-Control: no-cache' \
-                --dump-header "$tmpdir/poster.headers" \
-                --output "$tmpdir/poster.webp" \
-                --write-out '%{http_code}' \
-                "https://stabilize.info${poster_route}?release=${key}" || true
-            )"
+            page_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/page.headers" -o "$tmpdir/page.html" -w '%{http_code}' "https://stabilize.info/?mobile-v30=${key}" || true)"
+            client_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -o "$tmpdir/client.js" -w '%{http_code}' "https://stabilize.info/mobile-background-v30.js?v=${version}&release=${key}" || true)"
+            style_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -o "$tmpdir/styles.css" -w '%{http_code}' "https://stabilize.info/mobile-background-v30.css?v=${version}&release=${key}" || true)"
+            poster_status="$(curl --max-time 40 --silent --show-error -H 'Cache-Control: no-cache' -o "$tmpdir/poster.webp" -w '%{http_code}' "https://stabilize.info${poster_route}?v=${version}&release=${key}" || true)"
+            atlas_status="$(curl --max-time 40 --silent --show-error -H 'Cache-Control: no-cache' -o "$tmpdir/atlas.webp" -w '%{http_code}' "https://stabilize.info${atlas_route}?v=${version}&release=${key}" || true)"
+
             poster_bytes="$(wc -c < "$tmpdir/poster.webp" | tr -d '[:space:]')"
             poster_sha="$(sha256sum "$tmpdir/poster.webp" | awk '{print $1}')"
+            atlas_bytes="$(wc -c < "$tmpdir/atlas.webp" | tr -d '[:space:]')"
+            atlas_sha="$(sha256sum "$tmpdir/atlas.webp" | awk '{print $1}')"
 
-            echo "Enhanced release attempt ${attempt}: page=${page_status:-000} script=${script_status:-000} poster=${poster_status:-000}; poster=${poster_bytes}/${expected_poster_bytes}."
+            echo "v30 attempt ${attempt}: page=${page_status:-000} client=${client_status:-000} style=${style_status:-000} poster=${poster_status:-000} atlas=${atlas_status:-000}"
 
             if [[ "$page_status" == 200 \
-              && "$script_status" == 200 \
+              && "$client_status" == 200 \
+              && "$style_status" == 200 \
               && "$poster_status" == 200 \
+              && "$atlas_status" == 200 \
               && "$poster_bytes" == "$expected_poster_bytes" \
-              && "$poster_sha" == "$expected_poster_sha" ]] \
-              && grep -Fq "$route" "$tmpdir/page.html" \
-              && grep -Fq "$poster_route" "$tmpdir/page.html" \
-              && grep -Fq "mobile-quality.js?v=${version}" "$tmpdir/page.html" \
-              && grep -Fq "$route" "$tmpdir/mobile-quality.js" \
-              && grep -Fq 'coherent-source-2160x3840' "$tmpdir/mobile-quality.js" \
+              && "$poster_sha" == "$expected_poster_sha" \
+              && "$atlas_bytes" == "$expected_atlas_bytes" \
+              && "$atlas_sha" == "$expected_atlas_sha" ]] \
+              && grep -Fq "$route?v=${version}" "$tmpdir/page.html" \
+              && grep -Fq "/mobile-background-v30.js?v=${version}" "$tmpdir/page.html" \
+              && grep -Fq "/mobile-background-v30.css?v=${version}" "$tmpdir/page.html" \
+              && ! grep -Fq '/mobile-quality.js' "$tmpdir/page.html" \
+              && ! grep -Fq '/mobile-motion-canvas.js' "$tmpdir/page.html" \
+              && grep -Fq 'motionDelta = interpolatedFrame - referenceFrame' "$tmpdir/client.js" \
+              && grep -Fq 'requestVideoFrameCallback' "$tmpdir/client.js" \
+              && grep -Fq 'data-mobile-background-v30="video"' "$tmpdir/styles.css" \
               && grep -Fqi "media-src 'self'" "$tmpdir/page.headers"; then
               ready=true
               break
@@ -201,29 +212,14 @@ jobs:
           done
 
           if [[ "$ready" != true ]]; then
-            publish_status failure 'Enhanced selected forest release is not live'
-            echo '::error::Production did not expose the enhanced page and poster.'
+            publish_status failure 'Mobile background v30 is not live'
+            echo '::error::Production did not expose the exact v30 page and fallback assets.'
             exit 1
           fi
 
           key="${GITHUB_SHA}-exact"
-          video_status="$(
-            curl --max-time 120 --silent --show-error \
-              --header 'Cache-Control: no-cache' \
-              --dump-header "$tmpdir/video.headers" \
-              --output "$tmpdir/video.mp4" \
-              --write-out '%{http_code}' \
-              "https://stabilize.info${route}?release=${key}" || true
-          )"
-          range_status="$(
-            curl --max-time 60 --silent --show-error \
-              --header 'Cache-Control: no-cache' \
-              --header 'Range: bytes=0-1023' \
-              --dump-header "$tmpdir/range.headers" \
-              --output "$tmpdir/range.bin" \
-              --write-out '%{http_code}' \
-              "https://stabilize.info${route}?range=${key}" || true
-          )"
+          video_status="$(curl --max-time 120 --silent --show-error -H 'Cache-Control: no-cache' -D "$tmpdir/video.headers" -o "$tmpdir/video.mp4" -w '%{http_code}' "https://stabilize.info${route}?v=${version}&release=${key}" || true)"
+          range_status="$(curl --max-time 60 --silent --show-error -H 'Cache-Control: no-cache' -H 'Range: bytes=0-1023' -D "$tmpdir/range.headers" -o "$tmpdir/range.bin" -w '%{http_code}' "https://stabilize.info${route}?v=${version}&range=${key}" || true)"
 
           video_bytes="$(wc -c < "$tmpdir/video.mp4" | tr -d '[:space:]')"
           video_sha="$(sha256sum "$tmpdir/video.mp4" | awk '{print $1}')"
@@ -250,13 +246,13 @@ jobs:
             || "$range_content" != "bytes 0-1023/${expected_video_bytes}" \
             || "$dimensions" != 2160x3840 \
             || "$bitrate" -le 1500000 ]]; then
-            publish_status failure 'Exact native video delivery failed verification'
+            publish_status failure 'Exact v30 native video delivery failed'
             echo "::error::video=${video_status}, range=${range_status}, bytes=${video_bytes}, sha=${video_sha}, dimensions=${dimensions}, bitrate=${bitrate}"
             exit 1
           fi
 
-          publish_status success 'Exact coherent 2160x3840 forest video is live'
-          echo 'Production serves the exact native selected forest release.'
+          publish_status success 'Exact v30 2160x3840 video and fallback are live'
+          echo 'Production serves the exact v30 hybrid mobile release.'
 
   verify-mobile-webkit:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -272,11 +268,11 @@ jobs:
           npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
           npx playwright install --with-deps webkit
 
-      - name: Verify visible enhanced playback on an iPhone viewport
+      - name: Verify the fallback hands off to the native video
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/native-selected-mobile-v24
+          mkdir -p /tmp/mobile-background-v30
           node --input-type=module <<'NODE'
           import { webkit } from "playwright";
           import { writeFile } from "node:fs/promises";
@@ -304,7 +300,7 @@ jobs:
             );
 
             await page.goto(
-              `https://stabilize.info/?ai-enhanced-webkit=${Date.now()}`,
+              `https://stabilize.info/?mobile-background-v30-webkit=${Date.now()}`,
               { waitUntil: "domcontentloaded", timeout: 60_000 },
             );
             await page.waitForSelector("#mobile-background-video", {
@@ -312,7 +308,7 @@ jobs:
               timeout: 60_000,
             });
 
-            const isPlaying = () =>
+            const isNativeVideoVisible = () =>
               page.evaluate(() => {
                 const video = document.querySelector("#mobile-background-video");
                 return (
@@ -321,16 +317,15 @@ jobs:
                   video.videoHeight === 3840 &&
                   video.readyState >= 2 &&
                   !video.paused &&
-                  document.documentElement.dataset.mobileBackground ===
-                    "video-playing"
+                  document.documentElement.dataset.mobileBackgroundV30 === "video"
                 );
               });
 
             const deadline = Date.now() + 20_000;
-            while (Date.now() < deadline && !(await isPlaying())) {
+            while (Date.now() < deadline && !(await isNativeVideoVisible())) {
               await page.waitForTimeout(500);
             }
-            if (!(await isPlaying())) {
+            if (!(await isNativeVideoVisible())) {
               evidence.requiredTap = true;
               await page.tap("body", { position: { x: 20, y: 20 } });
             }
@@ -344,8 +339,7 @@ jobs:
                   video.videoHeight === 3840 &&
                   video.readyState >= 2 &&
                   !video.paused &&
-                  document.documentElement.dataset.mobileBackground ===
-                    "video-playing"
+                  document.documentElement.dataset.mobileBackgroundV30 === "video"
                 );
               },
               undefined,
@@ -355,25 +349,25 @@ jobs:
             const sample = () =>
               page.evaluate(() => {
                 const video = document.querySelector("#mobile-background-video");
-                if (!(video instanceof HTMLVideoElement)) {
-                  throw new Error("The enhanced selected video is missing.");
-                }
-                const style = getComputedStyle(video);
+                const canvas = document.querySelector("#mobile-background-v30");
+                if (!(video instanceof HTMLVideoElement)) throw new Error("v30 video missing");
+                if (!(canvas instanceof HTMLCanvasElement)) throw new Error("v30 canvas missing");
+                const videoStyle = getComputedStyle(video);
+                const canvasStyle = getComputedStyle(canvas);
                 return {
                   width: video.videoWidth,
                   height: video.videoHeight,
                   currentTime: video.currentTime,
-                  duration: video.duration,
                   readyState: video.readyState,
                   paused: video.paused,
-                  opacity: style.opacity,
-                  display: style.display,
-                  visibility: style.visibility,
-                  state:
-                    document.documentElement.dataset.mobileBackground || "",
-                  quality:
-                    document.documentElement.dataset.mobileVideoQuality || "",
+                  videoOpacity: videoStyle.opacity,
+                  videoDisplay: videoStyle.display,
+                  videoVisibility: videoStyle.visibility,
+                  canvasOpacity: canvasStyle.opacity,
+                  state: document.documentElement.dataset.mobileBackgroundV30 || "",
+                  quality: document.documentElement.dataset.mobileBackgroundV30Quality || "",
                   source: video.currentSrc,
+                  inputPresent: Boolean(document.querySelector("#message-input")),
                 };
               });
 
@@ -385,11 +379,14 @@ jobs:
             if (first.width !== 2160 || first.height !== 3840) {
               throw new Error("WebKit did not decode the 2160x3840 source.");
             }
-            if (first.opacity !== "1" || second.opacity !== "1") {
-              throw new Error("The native video is not visibly opaque.");
+            if (first.videoOpacity !== "1" || second.videoOpacity !== "1") {
+              throw new Error("The native video did not complete its crossfade.");
             }
-            if (first.display === "none" || first.visibility === "hidden") {
+            if (first.videoDisplay === "none" || first.videoVisibility === "hidden") {
               throw new Error("The native video is hidden.");
+            }
+            if (first.canvasOpacity !== "0" || second.canvasOpacity !== "0") {
+              throw new Error("The fallback canvas remained above the native video.");
             }
             if (first.paused || second.paused) {
               throw new Error("The native video is paused.");
@@ -397,20 +394,26 @@ jobs:
             if (second.currentTime - first.currentTime < 0.4) {
               throw new Error("The native video timeline did not advance.");
             }
-            if (second.quality !== "coherent-source-2160x3840") {
-              throw new Error("The page did not report enhanced 2160x3840 quality.");
+            if (second.quality !== "native-video-2160x3840-24fps") {
+              throw new Error(`Unexpected quality state: ${second.quality}`);
             }
             if (!second.source.includes("mobile-forest-stream-video-v24-native-1080.mp4")) {
               throw new Error("WebKit decoded the wrong mobile source.");
             }
+            if (!second.inputPresent) {
+              throw new Error("The application UI disappeared during the handoff.");
+            }
+            if (evidence.errors.length) {
+              throw new Error(`Page errors: ${JSON.stringify(evidence.errors)}`);
+            }
 
             await page.screenshot({
-              path: "/tmp/native-selected-mobile-v24/production.png",
+              path: "/tmp/mobile-background-v30/production.png",
               fullPage: false,
             });
           } finally {
             await writeFile(
-              "/tmp/native-selected-mobile-v24/evidence.json",
+              "/tmp/mobile-background-v30/evidence.json",
               JSON.stringify(evidence, null, 2),
             );
             await browser.close();
@@ -421,7 +424,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: native-selected-mobile-v24-v23-webkit-evidence
-          path: /tmp/native-selected-mobile-v24
+          name: mobile-background-v30-webkit-evidence
+          path: /tmp/mobile-background-v30
           if-no-files-found: warn
           retention-days: 7
