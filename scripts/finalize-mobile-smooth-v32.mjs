@@ -96,7 +96,7 @@ await update("public/mobile-video-handoff-v31.js", (source) => {
   );
   next = requireMatch(
     next,
-    /\s+video\.videoWidth < \d+ \|\|\n\s+video\.videoHeight < \d+/,
+    /\s+(?:video\.currentTime <= 0 \|\|\n\s+)?video\.videoWidth < \d+ \|\|\n\s+video\.videoHeight < \d+/,
     `\n      video.currentTime <= 0 ||\n      video.videoWidth < ${VIDEO_WIDTH - 20} ||\n      video.videoHeight < ${VIDEO_HEIGHT - 40}`,
     "the decoded-frame reveal guard",
   );
