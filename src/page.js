@@ -176,6 +176,16 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/mobile-static-fallback-fix-20260811.css?v=20260811-coherent-mobile-4k-v25-1" />
     <link rel="stylesheet" href="/mobile-orientation-v26.css?v=20260811-mobile-orientation-v26-1" />
     <link rel="stylesheet" href="/mobile-autoplay-v27.css?v=20260812-mobile-autoplay-v28-1" />
+    <!-- mobile-full-motion-v29-head-start -->
+    <link
+      rel="preload"
+      as="image"
+      href="/scenes/mobile-forest-stream-full-atlas-v29-1080.webp?v=20260812-mobile-no-tap-motion-v29-1"
+      type="image/webp"
+      fetchpriority="high"
+    />
+    <link rel="stylesheet" href="/mobile-full-motion-v29.css?v=20260812-mobile-no-tap-motion-v29-1" />
+    <!-- mobile-full-motion-v29-head-end -->
   </head>
   <body>
     <canvas
@@ -234,6 +244,13 @@ export function renderPage(options = {}) {
     </video>
     <!-- selected-mobile-4k-video-v22-end -->
     <script src="/mobile-autoplay-v27.js?v=20260812-mobile-autoplay-v28-1"></script>
+    <!-- mobile-full-motion-v29-canvas-start -->
+    <canvas
+      id="mobile-full-motion-v29"
+      class="mobile-full-motion-v29"
+      aria-hidden="true"
+    ></canvas>
+    <!-- mobile-full-motion-v29-canvas-end -->
     <canvas
       id="photo-background"
       class="terrain-background photo-background"
@@ -348,6 +365,9 @@ export function renderPage(options = {}) {
     <!-- selected-mobile-4k-video-v22-script-start -->
     <script type="module" src="/mobile-quality.js?v=20260811-coherent-mobile-4k-v25-1"></script>
     <!-- selected-mobile-4k-video-v22-script-end -->
+    <!-- mobile-full-motion-v29-script-start -->
+    <script src="/mobile-full-motion-v29.js?v=20260812-mobile-no-tap-motion-v29-1" defer></script>
+    <!-- mobile-full-motion-v29-script-end -->
   </body>
 </html>`;
 }

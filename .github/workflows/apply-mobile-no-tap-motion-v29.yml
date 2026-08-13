@@ -1,0 +1,76 @@
+name: Apply gesture-free mobile motion v29
+
+on:
+  push:
+    branches:
+      - fix/mobile-no-tap-motion-v29
+    paths:
+      - .github/workflows/apply-mobile-no-tap-motion-v29.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-test-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v6
+        with:
+          ref: fix/mobile-no-tap-motion-v29
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install finalizer hook and dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/install-mobile-full-motion-v29.py
+          npm ci --ignore-scripts
+
+      - name: Materialize canonical page wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run apply:prompt-policy
+          node scripts/finalize-mobile-full-motion-v29.mjs
+
+      - name: Commit canonical release output locally
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          else
+            git commit -m 'Use gesture-free full-frame motion on mobile'
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run full regression and Worker checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+      - name: Publish verified release commit
+        if: steps.commit.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:fix/mobile-no-tap-motion-v29
