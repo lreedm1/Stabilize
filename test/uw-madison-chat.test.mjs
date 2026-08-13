@@ -68,7 +68,7 @@ test("the campus chat homepage is branded, independent, and resource-forward", a
   assert.match(html, /Urgent help/);
   assert.match(html, /Do not wait on this chat during an emergency/);
   assert.match(html, /Call 911/);
-  assert.match(html, /UHS option 9/);
+  assert.match(html, /Call UHS\s*·\s*option 9/);
   assert.match(html, /Call or text 988/);
   assert.match(
     html,
@@ -108,7 +108,7 @@ test("immediate-danger routing uses UW crisis contacts without calling OpenAI", 
         Origin: CHAT_UW_MADISON_ORIGIN,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ message: "I am going to kill myself now" }),
+      body: JSON.stringify({ message: "I cannot stay safe" }),
     }),
     testEnvironment({ OPENAI_API_KEY: "" }),
     {},
