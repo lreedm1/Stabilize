@@ -6,6 +6,7 @@ on:
       - fix/mobile-smooth-v32
     paths:
       - .github/workflows/materialize-mobile-smooth-v32.yml
+      - scripts/finalize-full-guest-conversation.mjs
       - scripts/finalize-mobile-smooth-v32.mjs
       - scripts/mobile-smooth-v32.json
       - scripts/verify-mobile-smooth-v32.yml
