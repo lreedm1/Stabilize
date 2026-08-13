@@ -53,12 +53,12 @@ jobs:
 
           test_path = Path('test/mobile-video-handoff-v31.test.mjs')
           test = test_path.read_text(encoding='utf-8')
-          assertion = f'  assert.match(page, /{marker}/);\n'
-          anchor = '  assert.doesNotMatch(\n    page,\n    /id="mobile-background-video"[\\s\\S]{{0,500}}data-src=/,\n  );\n'
+          assertion = f'  assert.match(page, /{marker}/);\n\n'
+          anchor = '  assert.match(client, /function playInsideUserGesture'
           if assertion not in test:
               if test.count(anchor) != 1:
-                  raise SystemExit(f'Expected one video data-src assertion anchor, found {test.count(anchor)}')
-              test = test.replace(anchor, anchor + assertion)
+                  raise SystemExit(f'Expected one handoff client assertion anchor, found {test.count(anchor)}')
+              test = test.replace(anchor, assertion + anchor)
               test_path.write_text(test, encoding='utf-8')
           PY
 
