@@ -14,14 +14,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: materialize-mobile-smooth-v32
   cancel-in-progress: true
 
 jobs:
-  materialize-validate-package:
+  materialize-validate-publish:
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -31,7 +31,7 @@ jobs:
         with:
           ref: fix/mobile-smooth-v32
           fetch-depth: 1
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -83,37 +83,5 @@ jobs:
           npm run verify:clean
           git diff --exit-code
 
-      - name: Package the validated commit delta
-        shell: bash
-        run: |
-          set -euo pipefail
-          release_dir='/tmp/mobile-smooth-v32-release'
-          rm -rf "$release_dir"
-          mkdir -p "$release_dir/files"
-          git rev-parse HEAD^ > "$release_dir/parent-commit.txt"
-          git rev-parse HEAD > "$release_dir/release-commit.txt"
-          git diff-tree --no-commit-id --name-status -r HEAD^ HEAD > "$release_dir/manifest.tsv"
-
-          while IFS=$'\t' read -r status first second; do
-            [[ -n "$status" ]] || continue
-            path="$first"
-            if [[ "$status" == R* || "$status" == C* ]]; then
-              path="$second"
-            fi
-            if [[ "$status" == D* ]]; then
-              continue
-            fi
-            mkdir -p "$release_dir/files/$(dirname "$path")"
-            git show "HEAD:$path" > "$release_dir/files/$path"
-          done < "$release_dir/manifest.tsv"
-
-          tar -C /tmp -czf /tmp/mobile-smooth-v32-validated-tree.tar.gz mobile-smooth-v32-release
-          test -s /tmp/mobile-smooth-v32-validated-tree.tar.gz
-
-      - name: Upload the exact validated tree
-        uses: actions/upload-artifact@v4
-        with:
-          name: mobile-smooth-v32-validated-tree
-          path: /tmp/mobile-smooth-v32-validated-tree.tar.gz
-          if-no-files-found: error
-          retention-days: 1
+      - name: Publish the exact validated commit
+        run: git push origin HEAD:fix/mobile-smooth-v32
