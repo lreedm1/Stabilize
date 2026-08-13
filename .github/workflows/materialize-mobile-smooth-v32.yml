@@ -76,7 +76,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm test
+          npm run apply:prompt-policy
+          npm run test:node
+          npm run test:worker || npm run test:worker
           npm run check
           npm run verify:clean
           git diff --exit-code
