@@ -9,6 +9,7 @@ on:
       - scripts/build-mobile-hd-v35.sh
       - scripts/finalize-full-guest-conversation.mjs
       - scripts/finalize-mobile-hd-v35.mjs
+      - scripts/normalize-mobile-hd-v35-repeat.mjs
       - scripts/verify-mobile-hd-v35.yml
       - test/mobile-hd-v35.test.mjs
   workflow_dispatch:
@@ -55,7 +56,20 @@ jobs:
 
       - name: Finalize static sources and no-reset autoplay
         shell: bash
-        run: node scripts/finalize-mobile-hd-v35.mjs
+        run: |
+          set -euo pipefail
+          node scripts/finalize-mobile-hd-v35.mjs
+          node scripts/normalize-mobile-hd-v35-repeat.mjs
+
+      - name: Diagnose generated mobile policy state
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          grep -nE 'apply:prompt-policy|finalize-mobile-(hevc|hd)|finalize-full-guest' \
+            package.json \
+            test/account-preflight.test.mjs \
+            test/signed-in-prefetch-latency.test.mjs
 
       - name: Run full tests and Worker build gate
         shell: bash
@@ -65,6 +79,7 @@ jobs:
           npm run check
 
       - name: Package validated release outputs
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
@@ -88,6 +103,7 @@ jobs:
           sha256sum public/scenes/mobile-forest-stream-video-v35-*-1080.mp4 > "$bundle/checksums.txt"
 
       - name: Upload validated release bundle
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mobile-hd-v35-release
