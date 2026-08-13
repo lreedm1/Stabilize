@@ -53,11 +53,18 @@ function removeAssetTags(source, assetNames) {
 }
 
 const headBlock = `    ${HEAD_START}
+    <!-- Keep this preload in the historical responsive shape. Older media
+         generators run before this finalizer and need an idempotent target on
+         subsequent builds; v30 still replaces their runtime output below. -->
     <link
       rel="preload"
       as="image"
       href="${POSTER_ASSET}?v=${VERSION}"
-      media="(hover: none) and (pointer: coarse)"
+      imagesrcset="
+        ${POSTER_ASSET}?v=${VERSION} 2160w
+      "
+      imagesizes="100vw"
+      media="(max-width: 980px) and (orientation: portrait)"
       type="image/webp"
       fetchpriority="high"
     />
