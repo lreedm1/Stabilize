@@ -92,22 +92,44 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/finalize-mobile-hevc-v34.mjs
+          cp .github/workflows/verify-mobile-video.yml \
+            "$RUNNER_TEMP/verify-mobile-video-hevc-v34.yml"
 
-      - name: Commit and publish generated branch state
+      - name: Publish media and application changes
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          # GitHub's Actions token may update repository content but may not
+          # create or modify workflow files. Publish every generated release
+          # change except the active verification workflow; that text-only
+          # update is applied through the GitHub connector after this run.
+          git restore --source=HEAD -- .github/workflows/verify-mobile-video.yml
           git add -A
           if git diff --cached --quiet; then
-            echo 'The HEVC release is already materialized.'
+            echo 'The HEVC media and application release are already materialized.'
           else
             git commit -m 'Materialize HEVC mobile background v34 [skip ci]'
           fi
           git push origin HEAD:agent/hevc-mobile-background-v34
 
-      - name: Run the complete test and Worker build gates
+      - name: Create local workflow commit for clean-tree validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/verify-mobile-video-hevc-v34.yml" \
+            .github/workflows/verify-mobile-video.yml
+          git add .github/workflows/verify-mobile-video.yml
+          if git diff --cached --quiet; then
+            echo 'The active verification workflow already matches v34.'
+          else
+            git commit -m 'Verify mobile HEVC v34'
+          fi
+          git status --short
+
+      - name: Run complete test and Worker build gates
         shell: bash
         run: |
           set -uo pipefail
@@ -126,8 +148,16 @@ jobs:
           npm run verify:clean
           git diff --exit-code
 
-      - name: Confirm verified branch publication
+      - name: Confirm media branch publication
         shell: bash
         run: |
           set -euo pipefail
-          git push origin HEAD:agent/hevc-mobile-background-v34
+          remote_head="$(
+            git ls-remote origin refs/heads/agent/hevc-mobile-background-v34 \
+              | awk '{print $1}'
+          )"
+          parent="$(git rev-parse HEAD^)"
+          test -n "$remote_head"
+          test "$remote_head" = "$parent"
+          echo "Verified media branch commit: $remote_head"
+          echo "Verified local workflow commit: $(git rev-parse HEAD)"
