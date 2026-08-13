@@ -1,0 +1,178 @@
+name: Fix mobile v31 verifier cache keys
+
+on:
+  push:
+    branches:
+      - fix/wire-mobile-v31-pipeline
+    paths:
+      - .github/workflows/fix-mobile-v31-verifier-cache-keys.yml
+  workflow_dispatch:
+
+concurrency:
+  group: fix-mobile-v31-verifier-cache-keys
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v6
+        with:
+          ref: fix/wire-mobile-v31-pipeline
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Correct background and handoff cache-key verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/verify-mobile-video.yml')
+          text = path.read_text(encoding='utf-8')
+
+          def replace_exact(source: str, old: str, new: str, expected: int = 1) -> str:
+              actual = source.count(old)
+              if actual != expected:
+                  raise SystemExit(
+                      f'Expected {expected} occurrence(s), found {actual}: {old!r}'
+                  )
+              return source.replace(old, new)
+
+          text = replace_exact(
+              text,
+              "          version='20260813-mobile-background-v31-1'\n",
+              "          background_version='20260813-mobile-background-v31-1'\n"
+              "          handoff_version='20260813-mobile-video-handoff-v31-1'\n",
+              expected=2,
+          )
+          text = replace_exact(
+              text,
+              "          style_route='/mobile-background/styles'\n",
+              "          style_route='/mobile-background/styles'\n"
+              "          handoff_route='/mobile-video-handoff-v31.js'\n",
+              expected=2,
+          )
+
+          text = replace_exact(
+              text,
+              '''          grep -Fq "$video_route?v=${version}" src/page.js
+          grep -Fq "$client_route?v=${version}" src/page.js
+          grep -Fq "$style_route?v=${version}" src/page.js
+          grep -Fq 'autoplay' src/page.js
+          grep -Fq 'preload="auto"' src/page.js
+          grep -Fq "src=\\"${video_route}?v=${version}\\"" src/page.js
+''',
+              '''          grep -Fq "$video_route?v=${handoff_version}" src/page.js
+          grep -Fq "$client_route?v=${background_version}" src/page.js
+          grep -Fq "$style_route?v=${background_version}" src/page.js
+          grep -Fq "$handoff_route?v=${handoff_version}" src/page.js
+          grep -Fq 'autoplay' src/page.js
+          grep -Fq 'preload="auto"' src/page.js
+          grep -Fq "src=\\"${video_route}?v=${handoff_version}\\"" src/page.js
+''',
+          )
+
+          text = replace_exact(
+              text,
+              "          grep -Fq -- '--mobile-background-v30-fade: 180ms' public/mobile-background-v30.css\n\n",
+              "          grep -Fq -- '--mobile-background-v30-fade: 180ms' public/mobile-background-v30.css\n"
+              "          grep -Fq 'const VERSION = \\\"20260813-mobile-video-handoff-v31-1\\\"' public/mobile-video-handoff-v31.js\n"
+              "          grep -Fq 'const result = video.play();' public/mobile-video-handoff-v31.js\n"
+              "          grep -Fq 'playInsideUserGesture' public/mobile-video-handoff-v31.js\n\n",
+          )
+
+          text = replace_exact(
+              text,
+              '''            client_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/client.headers" -o "$tmpdir/client.js" -w '%{http_code}' "https://stabilize.info${client_route}?v=${version}&release=${key}" || true)"
+            style_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/style.headers" -o "$tmpdir/styles.css" -w '%{http_code}' "https://stabilize.info${style_route}?v=${version}&release=${key}" || true)"
+            poster_status="$(curl --max-time 40 --silent --show-error -H 'Cache-Control: no-cache' -o "$tmpdir/poster.webp" -w '%{http_code}' "https://stabilize.info${poster_route}?v=${version}&release=${key}" || true)"
+            atlas_status="$(curl --max-time 40 --silent --show-error -H 'Cache-Control: no-cache' -o "$tmpdir/atlas.webp" -w '%{http_code}' "https://stabilize.info${atlas_route}?v=${version}&release=${key}" || true)"
+''',
+              '''            client_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/client.headers" -o "$tmpdir/client.js" -w '%{http_code}' "https://stabilize.info${client_route}?v=${background_version}&release=${key}" || true)"
+            style_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/style.headers" -o "$tmpdir/styles.css" -w '%{http_code}' "https://stabilize.info${style_route}?v=${background_version}&release=${key}" || true)"
+            handoff_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/handoff.headers" -o "$tmpdir/handoff.js" -w '%{http_code}' "https://stabilize.info${handoff_route}?v=${handoff_version}&release=${key}" || true)"
+            poster_status="$(curl --max-time 40 --silent --show-error -H 'Cache-Control: no-cache' -o "$tmpdir/poster.webp" -w '%{http_code}' "https://stabilize.info${poster_route}?v=${background_version}&release=${key}" || true)"
+            atlas_status="$(curl --max-time 40 --silent --show-error -H 'Cache-Control: no-cache' -o "$tmpdir/atlas.webp" -w '%{http_code}' "https://stabilize.info${atlas_route}?v=${background_version}&release=${key}" || true)"
+''',
+          )
+
+          text = replace_exact(
+              text,
+              "            style_type=\"$(header_value \"$tmpdir/style.headers\" content-type | tr '[:upper:]' '[:lower:]')\"\n",
+              "            style_type=\"$(header_value \"$tmpdir/style.headers\" content-type | tr '[:upper:]' '[:lower:]')\"\n"
+              "            handoff_type=\"$(header_value \"$tmpdir/handoff.headers\" content-type | tr '[:upper:]' '[:lower:]')\"\n",
+          )
+          text = replace_exact(
+              text,
+              '            echo "v31 attempt ${attempt}: page=${page_status:-000} client=${client_status:-000} style=${style_status:-000} poster=${poster_status:-000} atlas=${atlas_status:-000}"\n',
+              '            echo "v31 attempt ${attempt}: page=${page_status:-000} client=${client_status:-000} style=${style_status:-000} handoff=${handoff_status:-000} poster=${poster_status:-000} atlas=${atlas_status:-000}"\n',
+          )
+          text = replace_exact(
+              text,
+              '              && "$style_status" == 200 \\\n',
+              '              && "$style_status" == 200 \\\n              && "$handoff_status" == 200 \\\n',
+          )
+          text = replace_exact(
+              text,
+              '              && "$style_type" == text/css* \\\n',
+              '              && "$style_type" == text/css* \\\n              && "$handoff_type" == text/javascript* \\\n',
+          )
+          text = replace_exact(
+              text,
+              '''              && grep -Fq "$video_route?v=${version}" "$tmpdir/page.html" \\
+              && grep -Fq "$client_route?v=${version}" "$tmpdir/page.html" \\
+              && grep -Fq "$style_route?v=${version}" "$tmpdir/page.html" \\
+''',
+              '''              && grep -Fq "$video_route?v=${handoff_version}" "$tmpdir/page.html" \\
+              && grep -Fq "$client_route?v=${background_version}" "$tmpdir/page.html" \\
+              && grep -Fq "$style_route?v=${background_version}" "$tmpdir/page.html" \\
+              && grep -Fq "$handoff_route?v=${handoff_version}" "$tmpdir/page.html" \\
+''',
+          )
+          text = replace_exact(
+              text,
+              "              && grep -Fq 'result = video.play()' \"$tmpdir/client.js\" \\\n",
+              "              && grep -Fq 'result = video.play()' \"$tmpdir/client.js\" \\\n"
+              "              && grep -Fq 'playInsideUserGesture' \"$tmpdir/handoff.js\" \\\n"
+              "              && grep -Fq '20260813-mobile-video-handoff-v31-1' \"$tmpdir/handoff.js\" \\\n",
+          )
+          text = replace_exact(
+              text,
+              '"https://stabilize.info${video_route}?v=${version}&release=${key}"',
+              '"https://stabilize.info${video_route}?v=${handoff_version}&release=${key}"',
+          )
+          text = replace_exact(
+              text,
+              '"https://stabilize.info${video_route}?v=${version}&range=${key}"',
+              '"https://stabilize.info${video_route}?v=${handoff_version}&range=${key}"',
+          )
+
+          if '${version}' in text:
+              raise SystemExit('A stale generic ${version} reference remains in the verifier.')
+          if text.count("handoff_version='20260813-mobile-video-handoff-v31-1'") != 2:
+              raise SystemExit('Expected handoff_version in payload and production jobs.')
+          if text.count("handoff_route='/mobile-video-handoff-v31.js'") != 2:
+              raise SystemExit('Expected handoff_route in payload and production jobs.')
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit corrected verifier and remove this one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm -- .github/workflows/fix-mobile-v31-verifier-cache-keys.yml
+          git add .github/workflows/verify-mobile-video.yml
+          git diff --cached --check
+          git commit -m 'Correct mobile v31 verifier cache keys'
+          git push origin HEAD:fix/wire-mobile-v31-pipeline
