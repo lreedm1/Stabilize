@@ -93,7 +93,7 @@ jobs:
           set -euo pipefail
           node scripts/finalize-mobile-hevc-v34.mjs
 
-      - name: Commit generated release output locally
+      - name: Commit and publish generated branch state
         shell: bash
         run: |
           set -euo pipefail
@@ -103,19 +103,30 @@ jobs:
           if git diff --cached --quiet; then
             echo 'The HEVC release is already materialized.'
           else
-            git commit -m 'Materialize HEVC mobile background v34'
+            git commit -m 'Materialize HEVC mobile background v34 [skip ci]'
           fi
+          git push origin HEAD:agent/hevc-mobile-background-v34
 
       - name: Run the complete test and Worker build gates
         shell: bash
         run: |
-          set -euo pipefail
-          npm test
+          set -uo pipefail
+          diagnostic="$RUNNER_TEMP/hevc-v34-test.log"
+          if ! npm test >"$diagnostic" 2>&1; then
+            echo '::group::Concise failing-test diagnostics'
+            grep -nE '(^|[^a-z])(not ok|failureType|AssertionError|ERR_[A-Z_]+|error:|actual:|expected:|operator:|location:)' "$diagnostic" || true
+            echo '::endgroup::'
+            echo '::group::Last 320 test-log lines'
+            tail -n 320 "$diagnostic"
+            echo '::endgroup::'
+            exit 1
+          fi
+          cat "$diagnostic"
           npm run check
           npm run verify:clean
           git diff --exit-code
 
-      - name: Publish the verified HEVC release branch
+      - name: Confirm verified branch publication
         shell: bash
         run: |
           set -euo pipefail
