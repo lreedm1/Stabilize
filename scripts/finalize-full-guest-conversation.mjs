@@ -101,8 +101,15 @@ for (const path of [
 ]) {
   const fullGuestExpectation =
     "/finalize-full-guest-conversation\\.mjs$/";
+  const handoffExpectation =
+    "/finalize-decision-grade-impact\\.mjs && node scripts\\/finalize-native-selected-mobile-v24\\.mjs && node scripts\\/finalize-native-selected-mobile-v24-regressions\\.mjs && node scripts\\/finalize-mobile-video-handoff-v31\\.mjs$/";
   const nativeExpectation =
     "/finalize-decision-grade-impact\\.mjs && node scripts\\/finalize-native-selected-mobile-v24\\.mjs && node scripts\\/finalize-native-selected-mobile-v24-regressions\\.mjs$/";
+  const changedFromHandoff = replaceAll(
+    path,
+    handoffExpectation,
+    fullGuestExpectation,
+  );
   const changedFromNative = replaceAll(
     path,
     nativeExpectation,
@@ -119,6 +126,7 @@ for (const path of [
     fullGuestExpectation,
   );
   if (
+    !changedFromHandoff &&
     !changedFromNative &&
     !changedFromImpact &&
     !changedFromAccount &&
