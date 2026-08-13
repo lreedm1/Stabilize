@@ -1,0 +1,321 @@
+name: Verify live mobile smooth v33
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/verify-live-mobile-v33.yml
+  workflow_dispatch:
+
+concurrency:
+  group: verify-live-mobile-smooth-v33-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  live-media:
+    name: Verify exact live media
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install media tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+
+      - name: Verify live page, controls, styling, and media bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version='20260813-mobile-smooth-v33-1'
+          expected_bytes='1447385'
+          expected_sha='be9d679e5e7b2e9240419225f8bb53c4a8fb3510aafed2babc5d1e27f4d12b3f'
+          video_route='/media/mobile-forest-stream-video-v12-720.mp4'
+          handoff_route='/mobile-video-handoff-v31.js'
+          style_route='/mobile-background/styles'
+          evidence="$RUNNER_TEMP/live-mobile-v33"
+          mkdir -p "$evidence"
+
+          header_value() {
+            local file="$1"
+            local name="$2"
+            awk -F': ' -v target="$name" '
+              tolower($1) == tolower(target) {
+                gsub("\r", "", $2)
+                print $2
+              }
+            ' "$file" | tail -n 1
+          }
+
+          ready=false
+          for attempt in {1..18}; do
+            key="${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}-${attempt}"
+            page_status="$(curl --max-time 30 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$evidence/page.headers" -o "$evidence/page.html" -w '%{http_code}' "https://stabilize.info/?live-v33=${key}" || true)"
+            handoff_status="$(curl --max-time 30 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$evidence/handoff.headers" -o "$evidence/handoff.js" -w '%{http_code}' "https://stabilize.info${handoff_route}?v=${version}&live=${key}" || true)"
+            style_status="$(curl --max-time 30 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$evidence/style.headers" -o "$evidence/mobile.css" -w '%{http_code}' "https://stabilize.info${style_route}?v=${version}&live=${key}" || true)"
+
+            echo "Live v33 attempt ${attempt}: page=${page_status:-000} handoff=${handoff_status:-000} style=${style_status:-000}"
+            if [[ "$page_status" == 200 && "$handoff_status" == 200 && "$style_status" == 200 ]] \
+              && grep -Fq "$video_route?v=${version}" "$evidence/page.html" \
+              && grep -Fq "$handoff_route?v=${version}" "$evidence/page.html" \
+              && grep -Fq "const VERSION = \"${version}\"" "$evidence/handoff.js" \
+              && grep -Fq 'native-video-720x1280-60fps' "$evidence/handoff.js" \
+              && grep -Fq 'mobile-video-smooth-v33-start' "$evidence/mobile.css" \
+              && grep -Fq -- '-webkit-backdrop-filter: none' "$evidence/mobile.css" \
+              && grep -Fq 'backdrop-filter: none' "$evidence/mobile.css"; then
+              ready=true
+              break
+            fi
+            sleep 10
+          done
+
+          if [[ "$ready" != true ]]; then
+            echo '::error::The live page, handoff client, or mobile no-blur stylesheet is not v33.'
+            exit 1
+          fi
+
+          key="${GITHUB_SHA}-exact"
+          video_status="$(curl --max-time 120 --silent --show-error -H 'Cache-Control: no-cache' -D "$evidence/video.headers" -o "$evidence/video.mp4" -w '%{http_code}' "https://stabilize.info${video_route}?v=${version}&live=${key}" || true)"
+          range_status="$(curl --max-time 60 --silent --show-error -H 'Cache-Control: no-cache' -H 'Range: bytes=0-1023' -D "$evidence/range.headers" -o "$evidence/range.bin" -w '%{http_code}' "https://stabilize.info${video_route}?v=${version}&range=${key}" || true)"
+
+          actual_bytes="$(wc -c < "$evidence/video.mp4" | tr -d '[:space:]')"
+          actual_sha="$(sha256sum "$evidence/video.mp4" | awk '{print $1}')"
+          dimensions="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$evidence/video.mp4")"
+          fps="$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of csv=p=0 "$evidence/video.mp4")"
+          profile="$(ffprobe -v error -select_streams v:0 -show_entries stream=profile -of csv=p=0 "$evidence/video.mp4")"
+          audio="$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$evidence/video.mp4")"
+          content_type="$(header_value "$evidence/video.headers" content-type | tr '[:upper:]' '[:lower:]')"
+          cache_control="$(header_value "$evidence/video.headers" cache-control | tr '[:upper:]' '[:lower:]')"
+          etag="$(header_value "$evidence/video.headers" etag)"
+          accept_ranges="$(header_value "$evidence/video.headers" accept-ranges | tr '[:upper:]' '[:lower:]')"
+          range_bytes="$(wc -c < "$evidence/range.bin" | tr -d '[:space:]')"
+          range_content="$(header_value "$evidence/range.headers" content-range | tr '[:upper:]' '[:lower:]')"
+
+          printf '%s\n' \
+            "video_status=${video_status}" \
+            "range_status=${range_status}" \
+            "bytes=${actual_bytes}" \
+            "sha256=${actual_sha}" \
+            "dimensions=${dimensions}" \
+            "fps=${fps}" \
+            "profile=${profile}" \
+            "cache_control=${cache_control}" \
+            "etag=${etag}" \
+            "accept_ranges=${accept_ranges}" \
+            "range_content=${range_content}" \
+            > "$evidence/result.txt"
+          cat "$evidence/result.txt"
+
+          [[ "$video_status" == 200 ]]
+          [[ "$range_status" == 206 ]]
+          [[ "$actual_bytes" == "$expected_bytes" ]]
+          [[ "$actual_sha" == "$expected_sha" ]]
+          [[ "$dimensions" == 720x1280 ]]
+          [[ "$fps" == 60/1 ]]
+          [[ "$profile" == 'Constrained Baseline' ]]
+          [[ -z "$audio" ]]
+          [[ "$content_type" == video/mp4* ]]
+          [[ "$cache_control" == *public* ]]
+          [[ "$cache_control" == *max-age=31536000* ]]
+          [[ "$cache_control" == *immutable* ]]
+          [[ "$etag" == "\"${expected_sha}\"" ]]
+          [[ "$accept_ranges" == bytes ]]
+          [[ "$range_bytes" == 1024 ]]
+          [[ "$range_content" == "bytes 0-1023/${expected_bytes}" ]]
+
+      - name: Upload live media evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-mobile-v33-media
+          path: ${{ runner.temp }}/live-mobile-v33
+          if-no-files-found: warn
+          retention-days: 7
+
+  live-webkit:
+    name: Verify live iPhone WebKit playback
+    needs: live-media
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install mobile WebKit
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps webkit
+
+      - name: Verify visible advancing native playback and no mobile blur
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/live-mobile-v33-webkit"
+          mkdir -p "$evidence"
+          EVIDENCE="$evidence" node --input-type=module <<'NODE'
+          import { webkit } from "playwright";
+          import { writeFile } from "node:fs/promises";
+
+          const evidenceDir = process.env.EVIDENCE;
+          const browser = await webkit.launch({ headless: true });
+          const evidence = { requiredTap: false, errors: [] };
+
+          try {
+            const context = await browser.newContext({
+              viewport: { width: 390, height: 844 },
+              screen: { width: 390, height: 844 },
+              deviceScaleFactor: 3,
+              isMobile: true,
+              hasTouch: true,
+              userAgent:
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) " +
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 " +
+                "Mobile/15E148 Safari/604.1",
+            });
+            const page = await context.newPage();
+            page.on("pageerror", (error) => evidence.errors.push(error.message));
+            page.on("requestfailed", (request) =>
+              evidence.errors.push(`${request.url()}: ${request.failure()?.errorText || "failed"}`),
+            );
+
+            await page.goto(
+              `https://stabilize.info/?live-mobile-v33-webkit=${Date.now()}`,
+              { waitUntil: "domcontentloaded", timeout: 60_000 },
+            );
+            await page.waitForSelector("#mobile-background-video", {
+              state: "attached",
+              timeout: 60_000,
+            });
+
+            const waitForPlayback = () =>
+              page.waitForFunction(
+                () => {
+                  const video = document.querySelector("#mobile-background-video");
+                  return (
+                    video instanceof HTMLVideoElement &&
+                    video.videoWidth === 720 &&
+                    video.videoHeight === 1280 &&
+                    video.readyState >= 2 &&
+                    !video.paused &&
+                    video.currentTime > 0.05 &&
+                    document.documentElement.dataset.mobileBackgroundV30 === "video"
+                  );
+                },
+                undefined,
+                { timeout: 20_000 },
+              );
+
+            try {
+              await waitForPlayback();
+            } catch {
+              evidence.requiredTap = true;
+              await page.tap("body", { position: { x: 20, y: 20 } });
+              await waitForPlayback();
+            }
+
+            const sample = () =>
+              page.evaluate(() => {
+                const video = document.querySelector("#mobile-background-video");
+                const canvas = document.querySelector("#mobile-background-v30");
+                const surface = document.querySelector(".seo-intro, .assistant-output");
+                if (!(video instanceof HTMLVideoElement)) throw new Error("v33 video missing");
+                if (!(canvas instanceof HTMLCanvasElement)) throw new Error("v33 canvas missing");
+                const videoStyle = getComputedStyle(video);
+                const canvasStyle = getComputedStyle(canvas);
+                const surfaceStyle = surface ? getComputedStyle(surface) : null;
+                return {
+                  width: video.videoWidth,
+                  height: video.videoHeight,
+                  currentTime: video.currentTime,
+                  readyState: video.readyState,
+                  paused: video.paused,
+                  videoOpacity: videoStyle.opacity,
+                  videoVisibility: videoStyle.visibility,
+                  canvasOpacity: canvasStyle.opacity,
+                  canvasVisibility: canvasStyle.visibility,
+                  state: document.documentElement.dataset.mobileBackgroundV30 || "",
+                  quality: document.documentElement.dataset.mobileBackgroundV30Quality || "",
+                  source: video.currentSrc,
+                  backdropFilter: surfaceStyle?.backdropFilter || "",
+                  webkitBackdropFilter: surfaceStyle?.webkitBackdropFilter || "",
+                };
+              });
+
+            evidence.first = await sample();
+            await page.waitForTimeout(900);
+            evidence.second = await sample();
+            const { first, second } = evidence;
+            const advanced =
+              second.currentTime > first.currentTime + 0.15 ||
+              (first.currentTime > 4 && second.currentTime < 2);
+
+            if (!advanced) throw new Error("native video time did not advance");
+            if (second.width !== 720 || second.height !== 1280) {
+              throw new Error(`unexpected decoded dimensions ${second.width}x${second.height}`);
+            }
+            if (second.paused || second.readyState < 2) throw new Error("native video is not playing");
+            if (second.state !== "video") throw new Error(`unexpected mobile state ${second.state}`);
+            if (second.quality !== "native-video-720x1280-60fps") {
+              throw new Error(`unexpected mobile quality ${second.quality}`);
+            }
+            if (!second.source.includes("mobile-forest-stream-video-v12-720.mp4")) {
+              throw new Error(`unexpected video source ${second.source}`);
+            }
+            if (second.videoOpacity !== "1" || second.videoVisibility !== "visible") {
+              throw new Error("native video is not visibly composited");
+            }
+            if (second.canvasOpacity !== "0" || second.canvasVisibility !== "hidden") {
+              throw new Error("fallback canvas remains visible over native video");
+            }
+            if (
+              !["", "none"].includes(second.backdropFilter) ||
+              !["", "none"].includes(second.webkitBackdropFilter)
+            ) {
+              throw new Error(
+                `mobile reading surface still blurs video: ${second.backdropFilter}/${second.webkitBackdropFilter}`,
+              );
+            }
+            if (evidence.errors.length) {
+              throw new Error(`page errors: ${evidence.errors.join(" | ")}`);
+            }
+
+            await page.screenshot({
+              path: `${evidenceDir}/live-mobile-v33.png`,
+              fullPage: true,
+            });
+            await context.close();
+          } finally {
+            await browser.close();
+            await writeFile(
+              `${evidenceDir}/result.json`,
+              JSON.stringify(evidence, null, 2) + "\n",
+            );
+          }
+          NODE
+          cat "$evidence/result.json"
+
+      - name: Upload live WebKit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-mobile-v33-webkit
+          path: ${{ runner.temp }}/live-mobile-v33-webkit
+          if-no-files-found: warn
+          retention-days: 7
