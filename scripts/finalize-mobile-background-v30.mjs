@@ -294,21 +294,6 @@ async function writeMobileBackgroundRouteModule() {
 
 await writeMobileBackgroundRouteModule();
 
-await update(".github/workflows/verify-mobile-video.yml", (source) =>
-  source
-    .replaceAll("20260813-mobile-background-v30-1", VERSION)
-    .replaceAll("/mobile-background-v30.js", CLIENT_ASSET)
-    .replaceAll("/mobile-background-v30.css", STYLE_ASSET)
-    .replaceAll(
-      "motionDelta = interpolatedFrame - referenceFrame",
-      "requestAnimationFrame(drawFallback)",
-    )
-    .replaceAll(
-      "sharpPoster + motionDelta * uMotionGain",
-      'const MOBILE_QUERY = "(max-width: 980px) and (orientation: portrait)"',
-    ),
-);
-
 console.log(
   `Finalized the single-controller mobile background ${VERSION}: sharp poster, display-refresh interpolation, and native 4K handoff.`,
 );
