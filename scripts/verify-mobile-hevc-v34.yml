@@ -163,8 +163,8 @@ jobs:
               && grep -Fq 'codecs="hvc1"' "$evidence/page.html" \
               && grep -Fq 'codecs="avc1.42E020"' "$evidence/page.html" \
               && grep -Fq "const VERSION = \"${version}\"" "$evidence/client.js" \
-              && grep -Fq 'source[data-codec="hevc"]' "$evidence/client.js" \
-              && grep -Fq 'source[data-codec="h264"]' "$evidence/client.js"; then
+              && grep -Fq 'ensureSource("hevc"' "$evidence/client.js" \
+              && grep -Fq 'ensureSource("h264"' "$evidence/client.js"; then
               ready=true
               break
             fi
