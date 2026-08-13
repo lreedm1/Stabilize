@@ -258,7 +258,7 @@ if "mobile-video-smooth-v33-start" not in node_test:
         style_assertions + "  const env = {\n",
         "mobile no-blur assertions",
     )
-node_test = node_test.replace(/Verify mobile smooth v32/.pattern if False else "Verify mobile smooth v32", "Verify mobile smooth v33")
+node_test = node_test.replace("Verify mobile smooth v32", "Verify mobile smooth v33")
 write_text(node_test_path, node_test)
 
 workflow_paths = [
