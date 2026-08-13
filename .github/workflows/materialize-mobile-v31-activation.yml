@@ -1,0 +1,92 @@
+name: Materialize mobile v31 activation
+
+on:
+  push:
+    branches:
+      - fix/activate-mobile-v31-production
+    paths:
+      - .github/workflows/materialize-mobile-v31-activation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize-validate-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out activation branch
+        uses: actions/checkout@v6
+        with:
+          ref: fix/activate-mobile-v31-production
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies without generation
+        run: npm ci --ignore-scripts
+
+      - name: Add a unique Worker release marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          python <<'PY'
+          from pathlib import Path
+
+          marker = 'mobile-v31-worker-activation-20260813-1'
+          page_path = Path('src/page.js')
+          page = page_path.read_text(encoding='utf-8')
+          meta = f'    <meta name="stabilize-release" content="{marker}" />\n'
+          anchor = '    <meta name="theme-color" content="#173f31" />\n'
+          if meta not in page:
+              if page.count(anchor) != 1:
+                  raise SystemExit(f'Expected one theme-color anchor, found {page.count(anchor)}')
+              page = page.replace(anchor, anchor + meta)
+              page_path.write_text(page, encoding='utf-8')
+
+          test_path = Path('test/mobile-video-handoff-v31.test.mjs')
+          test = test_path.read_text(encoding='utf-8')
+          assertion = f'  assert.match(page, /{marker}/);\n'
+          anchor = '  assert.doesNotMatch(\n    page,\n    /id="mobile-background-video"[\\s\\S]{{0,500}}data-src=/,\n  );\n'
+          if assertion not in test:
+              if test.count(anchor) != 1:
+                  raise SystemExit(f'Expected one video data-src assertion anchor, found {test.count(anchor)}')
+              test = test.replace(anchor, anchor + assertion)
+              test_path.write_text(test, encoding='utf-8')
+          PY
+
+      - name: Materialize canonical generated output
+        run: npm run apply:prompt-policy
+
+      - name: Commit activation output locally
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/page.js test/mobile-video-handoff-v31.test.mjs
+          git diff --cached --check
+          git commit -m 'Activate the mobile v31 Worker release'
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "LOCAL_COMMIT=$(git rev-parse HEAD)"
+
+      - name: Validate the committed release
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+      - name: Publish the validated activation commit
+        shell: bash
+        run: git push origin HEAD:fix/activate-mobile-v31-production
