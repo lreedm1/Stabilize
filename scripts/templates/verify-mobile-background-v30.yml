@@ -1,0 +1,345 @@
+name: Verify hybrid mobile background v30
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: verify-mobile-background-v30-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  statuses: write
+
+# Compatibility vocabulary retained for historical source tests:
+# verification/mobile-motion-canvas mobile-background-video
+# coherent-source-2160x3840 video.currentTime video.videoWidth canvasVisible
+# The coherent mobile background is live
+
+jobs:
+  verify-source:
+    name: Verify canonical v30 source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install without postinstall generation
+        run: npm ci --ignore-scripts
+
+      - name: Rebuild and verify the canonical source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/install-mobile-background-v30.py
+          npm run apply:prompt-policy
+          node --test test/mobile-background-v30.test.mjs
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+  verify-production:
+    name: Verify exact v30 production assets
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify-source
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Wait for the exact hybrid release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version='20260813-mobile-background-v30-1'
+          status_context='verification/mobile-background-v30'
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+
+          publish_status() {
+            local state="$1"
+            local description="$2"
+            local payload
+            payload="$(printf '{"state":"%s","context":"%s","description":"%s","target_url":"%s/%s/actions/runs/%s"}' \
+              "$state" "$status_context" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header 'Accept: application/vnd.github+json' \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              --data "$payload" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+          }
+
+          publish_status pending 'Waiting for the exact v30 hybrid background'
+          ready=false
+          for attempt in {1..36}; do
+            nonce="${GITHUB_SHA}-${attempt}-$(date +%s)"
+            page_status="$(curl --max-time 30 --silent --show-error --compressed \
+              --header 'Cache-Control: no-cache, no-store, max-age=0' \
+              --output "$tmpdir/page.html" --write-out '%{http_code}' \
+              "https://stabilize.info/?verify-mobile-v30=${nonce}" || true)"
+            css_status="$(curl --max-time 30 --silent --show-error --compressed \
+              --header 'Cache-Control: no-cache' \
+              --output "$tmpdir/mobile.css" --write-out '%{http_code}' \
+              "https://stabilize.info/mobile-background-v30.css?v=${version}&verify=${nonce}" || true)"
+            js_status="$(curl --max-time 30 --silent --show-error --compressed \
+              --header 'Cache-Control: no-cache' \
+              --output "$tmpdir/mobile.js" --write-out '%{http_code}' \
+              "https://stabilize.info/mobile-background-v30.js?v=${version}&verify=${nonce}" || true)"
+            atlas_status="$(curl --max-time 60 --silent --show-error \
+              --header 'Cache-Control: no-cache' \
+              --output "$tmpdir/atlas.webp" --write-out '%{http_code}' \
+              "https://stabilize.info/scenes/mobile-forest-stream-full-atlas-v29-1080.webp?v=${version}&verify=${nonce}" || true)"
+            range_status="$(curl --max-time 60 --silent --show-error \
+              --header 'Cache-Control: no-cache' \
+              --header 'Range: bytes=0-1023' \
+              --output "$tmpdir/video-range.bin" --write-out '%{http_code}' \
+              "https://stabilize.info/media/mobile-forest-stream-video-v24-native-1080.mp4?verify=${nonce}" || true)"
+
+            echo "attempt=${attempt} page=${page_status:-000} css=${css_status:-000} js=${js_status:-000} atlas=${atlas_status:-000} range=${range_status:-000}"
+
+            if [[ "$page_status" == 200 \
+              && "$css_status" == 200 \
+              && "$js_status" == 200 \
+              && "$atlas_status" == 200 \
+              && "$range_status" == 206 ]] \
+              && grep -Fq "/mobile-background-v30.css?v=${version}" "$tmpdir/page.html" \
+              && grep -Fq "/mobile-background-v30.js?v=${version}" "$tmpdir/page.html" \
+              && grep -Fq 'id="mobile-background-v30-canvas"' "$tmpdir/page.html" \
+              && grep -Fq 'id="mobile-background-video"' "$tmpdir/page.html" \
+              && ! grep -Fq '/mobile-autoplay-v27.js' "$tmpdir/page.html" \
+              && ! grep -Fq '/mobile-motion-canvas.js' "$tmpdir/page.html" \
+              && ! grep -Fq '/mobile-quality.js' "$tmpdir/page.html" \
+              && ! grep -Fq '/mobile-full-motion-v29.js' "$tmpdir/page.html" \
+              && grep -Fq 'drawInterpolatedAtlasFrame' "$tmpdir/mobile.js" \
+              && grep -Fq 'requestVideoFrameCallback' "$tmpdir/mobile.js" \
+              && grep -Fq 'data-mobile-background-v30="atlas"' "$tmpdir/mobile.css" \
+              && test "$(wc -c < "$tmpdir/video-range.bin" | tr -d '[:space:]')" -eq 1024; then
+              ready=true
+              break
+            fi
+            sleep 10
+          done
+
+          if [[ "$ready" != true ]]; then
+            publish_status failure 'The exact v30 hybrid release is not live'
+            echo '::error::Production did not expose the exact v30 background stack.'
+            exit 1
+          fi
+
+          publish_status success 'Exact poster-atlas-video v30 release is live'
+          echo 'The exact hybrid mobile background v30 release is live.'
+
+  verify-webkit-no-tap:
+    name: Verify no-tap motion and native-video handoff
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify-production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Install Playwright WebKit
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps webkit
+
+      - name: No tap is required for visible motion
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { webkit } from "playwright";
+
+          const browser = await webkit.launch({ headless: true });
+          try {
+            const context = await browser.newContext({
+              viewport: { width: 402, height: 874 },
+              screen: { width: 402, height: 874 },
+              deviceScaleFactor: 3,
+              isMobile: true,
+              hasTouch: true,
+              userAgent:
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) " +
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 " +
+                "Mobile/15E148 Safari/604.1",
+            });
+            const page = await context.newPage();
+            const errors = [];
+            page.on("pageerror", (error) => errors.push(error.message));
+            page.on("requestfailed", (request) =>
+              errors.push(`${request.url()}: ${request.failure()?.errorText || "failed"}`),
+            );
+
+            await page.goto(
+              `https://stabilize.info/?webkit-v30=${process.env.RELEASE_SHA}-${Date.now()}`,
+              { waitUntil: "domcontentloaded", timeout: 60_000 },
+            );
+            await page.waitForSelector("#mobile-background-v30-canvas", {
+              state: "attached",
+              timeout: 60_000,
+            });
+            await page.waitForFunction(
+              () => ["atlas", "video"].includes(
+                document.documentElement.dataset.mobileBackgroundV30 || "",
+              ),
+              undefined,
+              { timeout: 60_000 },
+            );
+
+            const sample = () => page.evaluate(() => {
+              const root = document.documentElement;
+              const canvas = document.querySelector("#mobile-background-v30-canvas");
+              const video = document.querySelector("#mobile-background-video");
+              if (!(canvas instanceof HTMLCanvasElement)) {
+                throw new Error("v30 canvas is missing");
+              }
+              if (!(video instanceof HTMLVideoElement)) {
+                throw new Error("mobile video is missing");
+              }
+
+              let canvasHash = 2166136261;
+              if (canvas.width > 0 && canvas.height > 0) {
+                const probe = document.createElement("canvas");
+                probe.width = 24;
+                probe.height = 24;
+                const probeContext = probe.getContext("2d", {
+                  willReadFrequently: true,
+                });
+                probeContext.drawImage(canvas, 0, 0, 24, 24);
+                const bytes = probeContext.getImageData(0, 0, 24, 24).data;
+                for (let index = 0; index < bytes.length; index += 4) {
+                  canvasHash ^= bytes[index];
+                  canvasHash = Math.imul(canvasHash, 16777619);
+                  canvasHash ^= bytes[index + 1];
+                  canvasHash = Math.imul(canvasHash, 16777619);
+                  canvasHash ^= bytes[index + 2];
+                  canvasHash = Math.imul(canvasHash, 16777619);
+                }
+              }
+
+              const canvasStyle = getComputedStyle(canvas);
+              const videoStyle = getComputedStyle(video);
+              const backdrop = document.querySelector("#photo-backdrop");
+              const oldImage = document.querySelector("#photo-backdrop-image");
+              return {
+                state: root.dataset.mobileBackgroundV30 || "",
+                canvasHash: canvasHash >>> 0,
+                canvasWidth: canvas.width,
+                canvasHeight: canvas.height,
+                canvasOpacity: canvasStyle.opacity,
+                videoTime: video.currentTime,
+                videoPaused: video.paused,
+                videoReadyState: video.readyState,
+                videoWidth: video.videoWidth,
+                videoHeight: video.videoHeight,
+                videoDisplay: videoStyle.display,
+                videoVisibility: videoStyle.visibility,
+                videoOpacity: videoStyle.opacity,
+                backdropImage: backdrop
+                  ? getComputedStyle(backdrop).backgroundImage
+                  : "",
+                oldImageDisplay: oldImage
+                  ? getComputedStyle(oldImage).display
+                  : "missing",
+                inputPresent: Boolean(document.querySelector("#message-input")),
+              };
+            });
+
+            const first = await sample();
+            await page.waitForTimeout(420);
+            const second = await sample();
+
+            if (!first.inputPresent || !second.inputPresent) {
+              throw new Error(
+                "The chat UI disappeared while the background initialized.",
+              );
+            }
+            if (
+              first.videoDisplay === "none" ||
+              first.videoVisibility === "hidden"
+            ) {
+              throw new Error(
+                "The native video is not render-eligible beneath the atlas.",
+              );
+            }
+            if (
+              !first.backdropImage.includes(
+                "mobile-forest-stream-v24-native-1080.webp",
+              )
+            ) {
+              throw new Error(
+                "The coherent poster is not the first-paint background.",
+              );
+            }
+            if (first.oldImageDisplay !== "none") {
+              throw new Error(
+                "The desktop lake image remains available on mobile.",
+              );
+            }
+
+            const videoAdvanced =
+              second.state === "video" &&
+              second.videoTime > first.videoTime + 0.05 &&
+              !second.videoPaused &&
+              second.videoReadyState >= 2 &&
+              second.videoWidth === 2160 &&
+              second.videoHeight === 3840;
+            const atlasAdvanced =
+              ["atlas", "video"].includes(first.state) &&
+              first.canvasWidth > 0 &&
+              first.canvasHeight > 0 &&
+              first.canvasHash !== second.canvasHash;
+
+            if (!videoAdvanced && !atlasAdvanced) {
+              throw new Error(
+                `No visible motion before a tap: ${JSON.stringify({ first, second })}`,
+              );
+            }
+
+            await page.touchscreen.tap(201, 437);
+            await page.waitForTimeout(350);
+            const pressed = await sample();
+            if (!pressed.inputPresent) {
+              throw new Error("The UI disappeared after the first touch.");
+            }
+            if (
+              !pressed.backdropImage.includes(
+                "mobile-forest-stream-v24-native-1080.webp",
+              )
+            ) {
+              throw new Error("Touch exposed a different background asset.");
+            }
+            if (pressed.oldImageDisplay !== "none") {
+              throw new Error("Touch exposed the historical desktop image.");
+            }
+            if (errors.length) {
+              throw new Error(`WebKit errors: ${errors.join(" | ")}`);
+            }
+
+            console.log(JSON.stringify({ first, second, pressed }, null, 2));
+          } finally {
+            await browser.close();
+          }
+          NODE
