@@ -57,8 +57,8 @@ if [[ ! -s "$OUTPUT" || ! -s "$METADATA" ]]; then
     -i "$SOURCE" \
     -t 5.0 -an \
     -vf "scale=720:1280:force_original_aspect_ratio=increase:flags=lanczos,crop=720:1280,setsar=1,minterpolate=fps=60:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1,format=yuv420p" \
-    -c:v libx265 -profile:v main -preset slow -crf 22 \
-    -maxrate 5000k -bufsize 10000k \
+    -c:v libx265 -profile:v main -preset slow -crf 18 \
+    -maxrate 6000k -bufsize 12000k \
     -x265-params "log-level=error:numa-pools=0:keyint=60:min-keyint=60:scenecut=0:open-gop=0:repeat-headers=1:aq-mode=3" \
     -tag:v hvc1 -pix_fmt yuv420p -fps_mode cfr \
     -map_metadata -1 -metadata creation_time=1970-01-01T00:00:00Z \
