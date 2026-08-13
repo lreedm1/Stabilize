@@ -1,0 +1,44 @@
+name: Reconcile UW chat source
+
+on:
+  push:
+    branches:
+      - fix/uw-document-scroll
+    paths:
+      - .github/workflows/reconcile-uw-source.yml
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the fix branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Restore the main implementation and keep only the cache-key change
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git show origin/main:src/uw-madison-chat.js > src/uw-madison-chat.js
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("src/uw-madison-chat.js")
+          text = path.read_text()
+          old = '/uwmadison-chat.css?v=20260813-2'
+          new = '/uwmadison-chat.css?v=20260813-document-scroll-1'
+          if text.count(old) != 1:
+              raise SystemExit(f"Expected exactly one {old!r}, found {text.count(old)}")
+          path.write_text(text.replace(old, new))
+          PY
+          git rm .github/workflows/reconcile-uw-source.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/uw-madison-chat.js
+          git commit -m "Limit the UW source change to the stylesheet cache key"
+          git push origin HEAD:fix/uw-document-scroll
