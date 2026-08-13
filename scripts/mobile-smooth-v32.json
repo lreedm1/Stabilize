@@ -1,0 +1,15 @@
+{
+  "version": "20260813-mobile-smooth-v32-1",
+  "videoRoute": "/media/mobile-forest-stream-video-v12-720.mp4",
+  "videoAsset": "/scenes/mobile-forest-stream-video-v12-720.mp4",
+  "videoBytes": 1314209,
+  "videoSha256": "78b6c1f1928d369e2d2a5b15d3b0de44b0458e1f5a940034080c0d8861e14bc3",
+  "width": 720,
+  "height": 1280,
+  "fps": 24,
+  "uniqueSampleFrames": 24,
+  "quality": "native-video-720x1280-24fps",
+  "poster": "/scenes/mobile-forest-stream-v24-native-1080.webp",
+  "handoffClient": "/mobile-video-handoff-v31.js",
+  "backgroundStyle": "/mobile-background/styles"
+}
