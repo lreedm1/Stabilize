@@ -136,22 +136,21 @@ export function renderPage(options = {}) {
       type="font/woff2"
       crossorigin
     />
-    <!-- selected-mobile-4k-video-v22-preload-start -->
-    <link
-      rel="preload"
-      as="video"
-      href="/media/mobile-forest-stream-video-v24-native-1080.mp4"
-      media="(max-width: 980px) and (orientation: portrait)"
-      type="video/mp4"
-    />
-    <!-- selected-mobile-4k-video-v22-preload-end -->
-    <!-- mobile-motion-canvas-v18-preloads-start -->
+    <link rel="stylesheet" href="/styles.css?v=20260807-priority-latency-1" />
+    <link rel="stylesheet" href="/seo.css?v=20260808-memory-controls-1" />
+    <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
+    <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
+    <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
+    <!-- mobile-background-v30-head-start -->
+    <!-- Keep this preload in the historical responsive shape. Older media
+         generators run before this finalizer and need an idempotent target on
+         subsequent builds; v30 still replaces their runtime output below. -->
     <link
       rel="preload"
       as="image"
-      href="/scenes/mobile-forest-stream-v24-native-1080.webp"
+      href="/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260813-mobile-background-v30-1"
       imagesrcset="
-        /scenes/mobile-forest-stream-v24-native-1080.webp 2160w
+        /scenes/mobile-forest-stream-v24-native-1080.webp?v=20260813-mobile-background-v30-1 2160w
       "
       imagesizes="100vw"
       media="(max-width: 980px) and (orientation: portrait)"
@@ -161,31 +160,13 @@ export function renderPage(options = {}) {
     <link
       rel="preload"
       as="image"
-      href="/scenes/mobile-forest-stream-water-sprite-v19-hd-1080.webp"
-      media="(max-width: 980px) and (orientation: portrait)"
+      href="/scenes/mobile-forest-stream-full-atlas-v29-1080.webp?v=20260813-mobile-background-v30-1"
+      media="(hover: none) and (pointer: coarse)"
       type="image/webp"
       fetchpriority="high"
     />
-    <!-- mobile-motion-canvas-v18-preloads-end -->
-    <link rel="stylesheet" href="/styles.css?v=20260807-priority-latency-1" />
-    <link rel="stylesheet" href="/seo.css?v=20260808-memory-controls-1" />
-    <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
-    <link rel="stylesheet" href="/main-box-white.css?v=20260805-2" />
-    <link rel="stylesheet" href="/photo-tuning.css?v=20260802-8" />
-    <link rel="stylesheet" href="/mobile-woodland-loop.css?v=20260811-coherent-mobile-4k-v25-1" />
-    <link rel="stylesheet" href="/mobile-static-fallback-fix-20260811.css?v=20260811-coherent-mobile-4k-v25-1" />
-    <link rel="stylesheet" href="/mobile-orientation-v26.css?v=20260811-mobile-orientation-v26-1" />
-    <link rel="stylesheet" href="/mobile-autoplay-v27.css?v=20260812-mobile-autoplay-v28-1" />
-    <!-- mobile-full-motion-v29-head-start -->
-    <link
-      rel="preload"
-      as="image"
-      href="/scenes/mobile-forest-stream-full-atlas-v29-1080.webp?v=20260812-mobile-no-tap-motion-v29-1"
-      type="image/webp"
-      fetchpriority="high"
-    />
-    <link rel="stylesheet" href="/mobile-full-motion-v29.css?v=20260812-mobile-no-tap-motion-v29-1" />
-    <!-- mobile-full-motion-v29-head-end -->
+    <link rel="stylesheet" href="/mobile-background-v30.css?v=20260813-mobile-background-v30-1" />
+    <!-- mobile-background-v30-head-end -->
   </head>
   <body>
     <canvas
@@ -220,42 +201,34 @@ export function renderPage(options = {}) {
         fetchpriority="high"
       />
     </picture>
-    <!-- mobile-motion-canvas-v18-start -->
-    <canvas
-      id="mobile-motion-canvas"
-      class="mobile-motion-canvas"
-      aria-hidden="true"
-    ></canvas>
-    <!-- mobile-motion-canvas-v18-end -->
-    <!-- selected-mobile-4k-video-v22-start -->
-    <video
-      id="mobile-background-video"
-      class="mobile-background-video"
-      autoplay
-      muted
-      loop
-      playsinline
-      preload="auto"
-      poster="/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260811-coherent-mobile-4k-v25-1"
-      aria-hidden="true"
-      tabindex="-1"
-    >
-      <source src="/media/mobile-forest-stream-video-v24-native-1080.mp4" type="video/mp4" />
-    </video>
-    <!-- selected-mobile-4k-video-v22-end -->
-    <script src="/mobile-autoplay-v27.js?v=20260812-mobile-autoplay-v28-1"></script>
-    <!-- mobile-full-motion-v29-canvas-start -->
-    <canvas
-      id="mobile-full-motion-v29"
-      class="mobile-full-motion-v29"
-      aria-hidden="true"
-    ></canvas>
-    <!-- mobile-full-motion-v29-canvas-end -->
     <canvas
       id="photo-background"
       class="terrain-background photo-background"
       aria-hidden="true"
     ></canvas>
+    <!-- mobile-background-v30-media-start -->
+    <video
+      id="mobile-background-video"
+      class="mobile-background-video"
+      muted
+      loop
+      playsinline
+      preload="none"
+      poster="/scenes/mobile-forest-stream-v24-native-1080.webp?v=20260813-mobile-background-v30-1"
+      data-src="/media/mobile-forest-stream-video-v24-native-1080.mp4?v=20260813-mobile-background-v30-1"
+      aria-hidden="true"
+      tabindex="-1"
+      disablepictureinpicture
+      disableremoteplayback
+      x-webkit-airplay="deny"
+    ></video>
+    <canvas
+      id="mobile-background-v30"
+      class="mobile-background-v30"
+      aria-hidden="true"
+    ></canvas>
+    <script src="/mobile-background-v30.js?v=20260813-mobile-background-v30-1"></script>
+    <!-- mobile-background-v30-media-end -->
     <div class="page-shell">
       <header class="site-header">
         <nav class="header-navigation" aria-label="Primary navigation">
@@ -359,15 +332,6 @@ export function renderPage(options = {}) {
     <!-- Legacy generator marker: 20260808-guest-summary-1 -->
     <script type="module" src="/app.js?v=20260808-full-guest-thread-1"></script>
     <script type="module" src="/reasoning-choice.js?v=20260807-instant-thinking-2-fastest-1"></script>
-    <!-- mobile-motion-canvas-v18-script-start -->
-    <script src="/mobile-motion-canvas.js?v=20260809-mobile-motion-canvas-v19-hd-2" defer></script>
-    <!-- mobile-motion-canvas-v18-script-end -->
-    <!-- selected-mobile-4k-video-v22-script-start -->
-    <script type="module" src="/mobile-quality.js?v=20260811-coherent-mobile-4k-v25-1"></script>
-    <!-- selected-mobile-4k-video-v22-script-end -->
-    <!-- mobile-full-motion-v29-script-start -->
-    <script src="/mobile-full-motion-v29.js?v=20260812-mobile-no-tap-motion-v29-1" defer></script>
-    <!-- mobile-full-motion-v29-script-end -->
   </body>
 </html>`;
 }

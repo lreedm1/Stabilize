@@ -178,6 +178,6 @@ console.log(
 await import("./finalize-coherent-mobile-v25.mjs");
 // coherent-mobile-v25-finalizer-hook-end
 
-// mobile-full-motion-v29-finalizer-hook-start
-await import("./finalize-mobile-full-motion-v29.mjs");
-// mobile-full-motion-v29-finalizer-hook-end
+// mobile-background-v30-finalizer-hook-start
+await import("./finalize-mobile-background-v30.mjs");
+// mobile-background-v30-finalizer-hook-end
