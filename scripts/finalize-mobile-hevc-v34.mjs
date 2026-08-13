@@ -68,7 +68,8 @@ await update("src/page.js", (source) => {
   const videoPattern = /<video\n\s+id="mobile-background-video"[\s\S]*?<\/video>/;
   const match = next.match(videoPattern);
   if (!match) throw new Error("Could not find the mobile background video.");
-  const poster = match[0].match(/poster="([^"]+)"/)?.[1] ||
+  const poster =
+    match[0].match(/poster="([^"]+)"/)?.[1] ||
     "/scenes/mobile-forest-stream-v24-native-1080.webp";
 
   const video = `<video
@@ -221,8 +222,9 @@ await update("public/mobile-video-handoff-v31.js", (source) => {
   );
 
   const qualityPattern =
-    /root\.dataset\.mobileBackgroundV30 = "video";\n\s+root\.dataset\.mobileBackgroundV30Quality = "[^"]+";\n\s+setState\("video", `\$\{video\.videoWidth\}x\$\{video\.videoHeight\}`\);/;
-  const qualityBlock = `root.dataset.mobileBackgroundV30 = "video";
+    /(?:\/\* mobile-hevc-v34-quality-start \*\/[\s\S]*?\/\* mobile-hevc-v34-quality-end \*\/|root\.dataset\.mobileBackgroundV30 = "video";\n\s+root\.dataset\.mobileBackgroundV30Quality = "[^"]+";\n\s+setState\("video", `\$\{video\.videoWidth\}x\$\{video\.videoHeight\}`\);)/;
+  const qualityBlock = `/* mobile-hevc-v34-quality-start */
+    root.dataset.mobileBackgroundV30 = "video";
     const selectedCodec = video.currentSrc.includes(
       "mobile-forest-stream-video-v34-hevc-720.mp4",
     )
@@ -234,7 +236,8 @@ await update("public/mobile-video-handoff-v31.js", (source) => {
     setState(
       "video",
       \`\${selectedCodec}:\${video.videoWidth}x\${video.videoHeight}\`,
-    );`;
+    );
+    /* mobile-hevc-v34-quality-end */`;
   next = requireReplace(
     next,
     qualityPattern,
@@ -250,14 +253,16 @@ await update("public/mobile-video-handoff-v31.js", (source) => {
     'source[data-codec="h264"]',
     QUALITY,
     "LEGACY_QUALITY",
+    "mobile-hevc-v34-quality-start",
   ]) {
     if (!next.includes(expected)) {
       throw new Error(`The HEVC handoff client is missing ${expected}.`);
     }
   }
-  const configureFunction = next.match(
-    /function configureVideo\(\) \{[\s\S]*?\n  \}/,
-  )?.[0] || "";
+  const configureFunction =
+    next.match(
+      /function configureVideo\(\) \{[\s\S]*?\n  \}\n\n  function keepFallbackVisible/,
+    )?.[0] || "";
   if (configureFunction.includes("VIDEO_ASSET")) {
     throw new Error("The live configuration still uses the Worker compatibility route.");
   }
