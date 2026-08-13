@@ -1,6 +1,11 @@
 name: Diagnose UW chat scrolling
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/diagnose-uw-scroll.yml
   workflow_dispatch:
 
 permissions:
