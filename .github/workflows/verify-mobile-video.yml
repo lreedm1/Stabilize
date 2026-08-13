@@ -1,101 +1,50 @@
-name: Verify mobile smooth v33
+name: Verify mobile HEVC v34
 
 on:
-  pull_request:
   push:
     branches:
       - main
+    paths:
+      - public/scenes/mobile-forest-stream-video-v34-hevc-720.mp4
+      - public/scenes/mobile-forest-stream-video-v12-720.mp4
+      - public/mobile-video-handoff-v31.js
+      - public/_headers
+      - src/page.js
+      - scripts/mobile-hevc-v34.json
+      - scripts/build-mobile-hevc-v34.sh
+      - scripts/finalize-mobile-hevc-v34.mjs
+      - scripts/verify-mobile-hevc-v34.yml
+      - test/mobile-hevc-v34.test.mjs
+      - .github/workflows/verify-mobile-video.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - public/scenes/mobile-forest-stream-video-v34-hevc-720.mp4
+      - public/scenes/mobile-forest-stream-video-v12-720.mp4
+      - public/mobile-video-handoff-v31.js
+      - public/_headers
+      - src/page.js
+      - scripts/mobile-hevc-v34.json
+      - scripts/build-mobile-hevc-v34.sh
+      - scripts/finalize-mobile-hevc-v34.mjs
+      - scripts/verify-mobile-hevc-v34.yml
+      - test/mobile-hevc-v34.test.mjs
+      - .github/workflows/verify-mobile-video.yml
   workflow_dispatch:
 
 concurrency:
-  group: verify-mobile-smooth-v33-${{ github.ref }}
+  group: verify-mobile-hevc-v34-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
-  statuses: write
 
 jobs:
-  verify-payload:
+  repository:
+    name: Verify repository HEVC release
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies and media tools
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg
-          npm ci --ignore-scripts
-
-      - name: Verify the lightweight mobile release
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm run apply:prompt-policy
-          git diff --exit-code
-
-          version='20260813-mobile-smooth-v33-1'
-          video='public/scenes/mobile-forest-stream-video-v12-720.mp4'
-          video_route='/media/mobile-forest-stream-video-v12-720.mp4'
-          handoff_route='/mobile-video-handoff-v31.js'
-
-          test -s "$video"
-          test "$(wc -c < "$video" | tr -d '[:space:]')" -eq 1447385
-          test "$(sha256sum "$video" | awk '{print $1}')" = \
-            'be9d679e5e7b2e9240419225f8bb53c4a8fb3510aafed2babc5d1e27f4d12b3f'
-          test "$(dd if="$video" bs=1 skip=4 count=4 status=none)" = 'ftyp'
-          grep -aFq 'moov' "$video"
-          grep -aFq 'mdat' "$video"
-          grep -aFq 'avc1' "$video"
-          ! grep -aFq 'mp4a' "$video"
-          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video")" = 720x1280
-          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of csv=p=0 "$video")" = 60/1
-          test "$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$video")" = ''
-
-          test "$(grep -o 'id="mobile-background-video"' src/page.js | wc -l | tr -d '[:space:]')" -eq 1
-          test "$(grep -o 'id="mobile-background-v30"' src/page.js | wc -l | tr -d '[:space:]')" -eq 1
-          grep -Fq "$video_route?v=${version}" src/page.js
-          grep -Fq "$handoff_route?v=${version}" src/page.js
-          grep -Fq 'preload="auto"' src/page.js
-          ! grep -Fq '/mobile-background/runtime?v=' src/page.js
-          ! grep -Fq 'data-src="/media/mobile-forest-stream-video' src/page.js
-
-          grep -Fq "const VERSION = \"${version}\"" public/mobile-video-handoff-v31.js
-          grep -Fq "$video_route?v=\${VERSION}" public/mobile-video-handoff-v31.js
-          grep -Fq 'native-video-720x1280-60fps' public/mobile-video-handoff-v31.js
-          grep -Fq 'video.currentTime <= 0' public/mobile-video-handoff-v31.js
-          grep -Fq 'video.videoWidth < 700' public/mobile-video-handoff-v31.js
-          grep -Fq 'video.videoHeight < 1240' public/mobile-video-handoff-v31.js
-          grep -Fq 'video.style.setProperty("visibility", "visible", "important")' public/mobile-video-handoff-v31.js
-          grep -Fq 'video.style.setProperty("opacity", "0.001", "important")' public/mobile-video-handoff-v31.js
-          grep -Fq 'const result = video.play();' public/mobile-video-handoff-v31.js
-
-          grep -Fq 'MOBILE_VIDEO_BYTES = 1_447_385' src/mobile-video-response.js
-          grep -Fq "$video_route" src/mobile-video-response.js
-          grep -Fq 'Accept-Ranges' src/mobile-video-response.js
-          grep -Fq 'Content-Range' src/mobile-video-response.js
-          grep -Fq 'Cache-Control": "public, max-age=31536000, immutable' src/mobile-video-response.js
-          grep -Fq 'mobile-video-smooth-v33-start' public/mobile-background-v30.css
-          grep -Fq -- '-webkit-backdrop-filter: none' public/mobile-background-v30.css
-
-  verify-production:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: verify-payload
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
 
     steps:
       - name: Check out repository
@@ -110,36 +59,71 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
 
-      - name: Verify the exact production payload
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies without generators
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
+        run: npm ci --ignore-scripts
+
+      - name: Verify exact HEVC bytes and decode
+        shell: bash
         run: |
           set -euo pipefail
-          version='20260813-mobile-smooth-v33-1'
-          video_route='/media/mobile-forest-stream-video-v12-720.mp4'
-          handoff_route='/mobile-video-handoff-v31.js'
-          expected_video='public/scenes/mobile-forest-stream-video-v12-720.mp4'
-          expected_bytes="$(wc -c < "$expected_video" | tr -d '[:space:]')"
-          expected_sha="$(sha256sum "$expected_video" | awk '{print $1}')"
-          expected_etag="\"${expected_sha}\""
-          tmpdir="$(mktemp -d)"
-          trap 'rm -rf "$tmpdir"' EXIT
+          bash scripts/build-mobile-hevc-v34.sh
 
-          publish_status() {
-            local state="$1"
-            local description="$2"
-            local payload
-            payload="$(printf '{"state":"%s","context":"verification/mobile-smooth-v33","description":"%s","target_url":"%s/%s/actions/runs/%s"}' \
-              "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
-            curl --fail-with-body --silent --show-error \
-              --request POST \
-              --header 'Accept: application/vnd.github+json' \
-              --header "Authorization: Bearer ${GH_TOKEN}" \
-              --header 'X-GitHub-Api-Version: 2022-11-28' \
-              --data "$payload" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
-          }
+      - name: Run canonical tests and Worker build gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+  live:
+    name: Verify live direct static HEVC delivery
+    if: github.event_name != 'pull_request'
+    needs: repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository metadata
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install media tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+
+      - name: Wait for and verify production release
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/mobile-hevc-v34-live"
+          mkdir -p "$evidence"
+
+          readarray -t release < <(
+            python3 - <<'PY'
+          import json
+          metadata = json.load(open("scripts/mobile-hevc-v34.json", encoding="utf-8"))
+          for key in ("version", "hevcAsset", "h264Asset", "videoBytes", "videoSha256"):
+              print(metadata[key])
+          PY
+          )
+          version="${release[0]}"
+          hevc_asset="${release[1]}"
+          h264_asset="${release[2]}"
+          expected_bytes="${release[3]}"
+          expected_sha="${release[4]}"
 
           header_value() {
             local file="$1"
@@ -152,22 +136,35 @@ jobs:
             ' "$file" | tail -n 1
           }
 
-          publish_status pending 'Waiting for mobile smooth v33'
           ready=false
           for attempt in {1..36}; do
-            key="${GITHUB_SHA}-${attempt}"
-            page_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/page.headers" -o "$tmpdir/page.html" -w '%{http_code}' "https://stabilize.info/?mobile-v33=${key}" || true)"
-            handoff_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/handoff.headers" -o "$tmpdir/handoff.js" -w '%{http_code}' "https://stabilize.info${handoff_route}?v=${version}&release=${key}" || true)"
+            key="${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}-${attempt}"
+            page_status="$(
+              curl --max-time 30 --silent --show-error --compressed \
+                -H 'Cache-Control: no-cache' \
+                -D "$evidence/page.headers" \
+                -o "$evidence/page.html" \
+                -w '%{http_code}' \
+                "https://stabilize.info/?mobile-hevc-v34=${key}" || true
+            )"
+            client_status="$(
+              curl --max-time 30 --silent --show-error --compressed \
+                -H 'Cache-Control: no-cache' \
+                -D "$evidence/client.headers" \
+                -o "$evidence/client.js" \
+                -w '%{http_code}' \
+                "https://stabilize.info/mobile-video-handoff-v31.js?v=${version}&live=${key}" || true
+            )"
 
-            echo "v33 attempt ${attempt}: page=${page_status:-000} handoff=${handoff_status:-000}"
-            if [[ "$page_status" == 200 && "$handoff_status" == 200 ]] \
-              && grep -Fq "$video_route?v=${version}" "$tmpdir/page.html" \
-              && grep -Fq "$handoff_route?v=${version}" "$tmpdir/page.html" \
-              && ! grep -Fq '/mobile-background/runtime?v=' "$tmpdir/page.html" \
-              && grep -Fq "const VERSION = \"${version}\"" "$tmpdir/handoff.js" \
-              && grep -Fq 'native-video-720x1280-60fps' "$tmpdir/handoff.js" \
-              && grep -Fq 'video.style.setProperty("opacity", "0.001", "important")' "$tmpdir/handoff.js" \
-              && grep -Fqi "media-src 'self'" "$tmpdir/page.headers"; then
+            echo "Live HEVC v34 attempt ${attempt}: page=${page_status:-000} client=${client_status:-000}"
+            if [[ "$page_status" == 200 && "$client_status" == 200 ]] \
+              && grep -Fq "$hevc_asset?v=$version" "$evidence/page.html" \
+              && grep -Fq "$h264_asset?v=$version" "$evidence/page.html" \
+              && grep -Fq 'codecs="hvc1"' "$evidence/page.html" \
+              && grep -Fq 'codecs="avc1.42E020"' "$evidence/page.html" \
+              && grep -Fq "const VERSION = \"${version}\"" "$evidence/client.js" \
+              && grep -Fq 'ensureSource("hevc"' "$evidence/client.js" \
+              && grep -Fq 'ensureSource("h264"' "$evidence/client.js"; then
               ready=true
               break
             fi
@@ -175,279 +172,92 @@ jobs:
           done
 
           if [[ "$ready" != true ]]; then
-            publish_status failure 'Mobile smooth v33 is not live'
-            echo '::error::Production did not expose the exact v33 page and handoff client.'
+            echo '::error::The live page or handoff client did not reach HEVC v34.'
             exit 1
           fi
 
           key="${GITHUB_SHA}-exact"
-          video_status="$(curl --max-time 90 --silent --show-error -H 'Cache-Control: no-cache' -D "$tmpdir/video.headers" -o "$tmpdir/video.mp4" -w '%{http_code}' "https://stabilize.info${video_route}?v=${version}&release=${key}" || true)"
-          range_status="$(curl --max-time 60 --silent --show-error -H 'Cache-Control: no-cache' -H 'Range: bytes=0-1023' -D "$tmpdir/range.headers" -o "$tmpdir/range.bin" -w '%{http_code}' "https://stabilize.info${video_route}?v=${version}&range=${key}" || true)"
+          video_status="$(
+            curl --max-time 120 --silent --show-error \
+              -H 'Cache-Control: no-cache' \
+              -D "$evidence/hevc.headers" \
+              -o "$evidence/hevc.mp4" \
+              -w '%{http_code}' \
+              "https://stabilize.info${hevc_asset}?v=${version}&live=${key}" || true
+          )"
+          range_status="$(
+            curl --max-time 60 --silent --show-error \
+              -H 'Cache-Control: no-cache' \
+              -H 'Range: bytes=0-1023' \
+              -D "$evidence/range.headers" \
+              -o "$evidence/range.bin" \
+              -w '%{http_code}' \
+              "https://stabilize.info${hevc_asset}?v=${version}&range=${key}" || true
+          )"
+          h264_status="$(
+            curl --max-time 60 --silent --show-error \
+              -H 'Range: bytes=0-1023' \
+              -o "$evidence/h264-range.bin" \
+              -w '%{http_code}' \
+              "https://stabilize.info${h264_asset}?v=${version}&fallback=${key}" || true
+          )"
 
-          video_bytes="$(wc -c < "$tmpdir/video.mp4" | tr -d '[:space:]')"
-          video_sha="$(sha256sum "$tmpdir/video.mp4" | awk '{print $1}')"
-          video_type="$(header_value "$tmpdir/video.headers" content-type | tr '[:upper:]' '[:lower:]')"
-          video_etag="$(header_value "$tmpdir/video.headers" etag)"
-          accept_ranges="$(header_value "$tmpdir/video.headers" accept-ranges | tr '[:upper:]' '[:lower:]')"
-          range_bytes="$(wc -c < "$tmpdir/range.bin" | tr -d '[:space:]')"
-          range_content="$(header_value "$tmpdir/range.headers" content-range | tr '[:upper:]' '[:lower:]')"
-          dimensions="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$tmpdir/video.mp4" 2>/dev/null || true)"
+          actual_bytes="$(wc -c < "$evidence/hevc.mp4" | tr -d '[:space:]')"
+          actual_sha="$(sha256sum "$evidence/hevc.mp4" | awk '{print $1}')"
+          codec="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of csv=p=0 "$evidence/hevc.mp4")"
+          tag="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_tag_string -of csv=p=0 "$evidence/hevc.mp4")"
+          profile="$(ffprobe -v error -select_streams v:0 -show_entries stream=profile -of csv=p=0 "$evidence/hevc.mp4")"
+          dimensions="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$evidence/hevc.mp4")"
+          fps="$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of csv=p=0 "$evidence/hevc.mp4")"
+          audio="$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$evidence/hevc.mp4")"
+          cache_control="$(header_value "$evidence/hevc.headers" cache-control | tr '[:upper:]' '[:lower:]')"
+          content_type="$(header_value "$evidence/hevc.headers" content-type | tr '[:upper:]' '[:lower:]')"
+          range_content="$(header_value "$evidence/range.headers" content-range | tr '[:upper:]' '[:lower:]')"
+          range_bytes="$(wc -c < "$evidence/range.bin" | tr -d '[:space:]')"
 
-          if [[ "$video_status" != 200 \
-            || "$range_status" != 206 \
-            || "$video_bytes" != "$expected_bytes" \
-            || "$video_sha" != "$expected_sha" \
-            || "$video_type" != video/mp4* \
-            || "$video_etag" != "$expected_etag" \
-            || "$accept_ranges" != bytes \
-            || "$range_bytes" != 1024 \
-            || "$range_content" != "bytes 0-1023/${expected_bytes}" \
-            || "$dimensions" != 720x1280 ]]; then
-            publish_status failure 'Exact v33 video delivery failed'
-            echo "::error::video=${video_status}, range=${range_status}, bytes=${video_bytes}, sha=${video_sha}, dimensions=${dimensions}"
-            exit 1
-          fi
+          ffmpeg -hide_banner -v error -xerror -err_detect explode \
+            -i "$evidence/hevc.mp4" -map 0:v:0 -f null -
 
-          publish_status success 'Mobile smooth v33 is live'
+          printf '%s\n' \
+            "video_status=${video_status}" \
+            "range_status=${range_status}" \
+            "h264_status=${h264_status}" \
+            "bytes=${actual_bytes}" \
+            "sha256=${actual_sha}" \
+            "codec=${codec}" \
+            "tag=${tag}" \
+            "profile=${profile}" \
+            "dimensions=${dimensions}" \
+            "fps=${fps}" \
+            "cache_control=${cache_control}" \
+            "content_type=${content_type}" \
+            "range_content=${range_content}" \
+            > "$evidence/result.txt"
+          cat "$evidence/result.txt"
 
-  verify-mobile-webkit:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: verify-production
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+          [[ "$video_status" == 200 ]]
+          [[ "$range_status" == 206 ]]
+          [[ "$h264_status" == 206 ]]
+          [[ "$actual_bytes" == "$expected_bytes" ]]
+          [[ "$actual_sha" == "$expected_sha" ]]
+          [[ "$codec" == hevc ]]
+          [[ "$tag" == hvc1 ]]
+          [[ "$profile" == Main ]]
+          [[ "$dimensions" == 720x1280 ]]
+          [[ "$fps" == 60/1 ]]
+          [[ -z "$audio" ]]
+          [[ "$cache_control" == *public* ]]
+          [[ "$cache_control" == *max-age=31536000* ]]
+          [[ "$cache_control" == *immutable* ]]
+          [[ "$content_type" == video/mp4* ]]
+          [[ "$range_bytes" == 1024 ]]
+          [[ "$range_content" == "bytes 0-1023/${expected_bytes}" ]]
 
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Install mobile WebKit
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
-          npx playwright install --with-deps webkit
-
-      - name: Verify smooth native playback and static poster fallback
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/mobile-smooth-v33
-          node --input-type=module <<'NODE'
-          import { webkit } from "playwright";
-          import { createHash } from "node:crypto";
-          import { writeFile } from "node:fs/promises";
-
-          const browser = await webkit.launch({ headless: true });
-          const evidence = { requiredTap: false, errors: [] };
-          const options = {
-            viewport: { width: 390, height: 844 },
-            screen: { width: 390, height: 844 },
-            deviceScaleFactor: 3,
-            isMobile: true,
-            hasTouch: true,
-            userAgent:
-              "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) " +
-              "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 " +
-              "Mobile/15E148 Safari/604.1",
-          };
-          const hash = (value) => createHash("sha256").update(value).digest("hex");
-
-          try {
-            const context = await browser.newContext(options);
-            const page = await context.newPage();
-            page.on("pageerror", (error) => evidence.errors.push(error.message));
-            page.on("requestfailed", (request) =>
-              evidence.errors.push(`${request.url()}: ${request.failure()?.errorText || "failed"}`),
-            );
-
-            await page.goto(
-              `https://stabilize.info/?mobile-smooth-v33-webkit=${Date.now()}`,
-              { waitUntil: "domcontentloaded", timeout: 60_000 },
-            );
-            await page.waitForSelector("#mobile-background-video", {
-              state: "attached",
-              timeout: 60_000,
-            });
-
-            const ready = () =>
-              page.waitForFunction(
-                () => {
-                  const video = document.querySelector("#mobile-background-video");
-                  return (
-                    video instanceof HTMLVideoElement &&
-                    video.videoWidth === 720 &&
-                    video.videoHeight === 1280 &&
-                    video.readyState >= 2 &&
-                    !video.paused &&
-                    video.currentTime > 0.05 &&
-                    document.documentElement.dataset.mobileBackgroundV30 === "video"
-                  );
-                },
-                undefined,
-                { timeout: 20_000 },
-              );
-
-            try {
-              await ready();
-            } catch {
-              evidence.requiredTap = true;
-              await page.tap("body", { position: { x: 20, y: 20 } });
-              await ready();
-            }
-
-            const sample = () =>
-              page.evaluate(() => {
-                const video = document.querySelector("#mobile-background-video");
-                const canvas = document.querySelector("#mobile-background-v30");
-                if (!(video instanceof HTMLVideoElement)) throw new Error("v33 video missing");
-                if (!(canvas instanceof HTMLCanvasElement)) throw new Error("v33 canvas missing");
-                return {
-                  width: video.videoWidth,
-                  height: video.videoHeight,
-                  currentTime: video.currentTime,
-                  readyState: video.readyState,
-                  paused: video.paused,
-                  videoOpacity: getComputedStyle(video).opacity,
-                  videoVisibility: getComputedStyle(video).visibility,
-                  canvasOpacity: getComputedStyle(canvas).opacity,
-                  state: document.documentElement.dataset.mobileBackgroundV30 || "",
-                  quality: document.documentElement.dataset.mobileBackgroundV30Quality || "",
-                  source: video.currentSrc,
-                  runtimeLoaded: Boolean(
-                    document.querySelector('script[src^="/mobile-background/runtime"]'),
-                  ),
-                  inputPresent: Boolean(document.querySelector("#message-input")),
-                };
-              });
-
-            evidence.first = await sample();
-            await page.waitForTimeout(1_400);
-            evidence.second = await sample();
-            const { first, second } = evidence;
-
-            if (first.width !== 720 || first.height !== 1280) {
-              throw new Error("WebKit decoded the wrong dimensions.");
-            }
-            if (first.videoOpacity !== "1" || second.videoOpacity !== "1") {
-              throw new Error("The native video is not visibly opaque.");
-            }
-            if (first.videoVisibility === "hidden") {
-              throw new Error("The native video is hidden.");
-            }
-            if (first.canvasOpacity !== "0" || second.canvasOpacity !== "0") {
-              throw new Error("The transparent fallback canvas remained above the video.");
-            }
-            if (first.paused || second.paused) {
-              throw new Error("The native video is paused.");
-            }
-            if (second.currentTime - first.currentTime < 0.6) {
-              throw new Error("The native video timeline did not advance smoothly.");
-            }
-            if (second.quality !== "native-video-720x1280-60fps") {
-              throw new Error(`Unexpected quality state: ${second.quality}`);
-            }
-            if (!second.source.includes("mobile-forest-stream-video-v12-720.mp4")) {
-              throw new Error("WebKit decoded the wrong source.");
-            }
-            if (second.runtimeLoaded) {
-              throw new Error("The expensive animated fallback controller was loaded.");
-            }
-            if (!second.inputPresent) {
-              throw new Error("The application UI disappeared during playback.");
-            }
-            if (evidence.errors.length) {
-              throw new Error(`Page errors: ${JSON.stringify(evidence.errors)}`);
-            }
-
-            await page.screenshot({
-              path: "/tmp/mobile-smooth-v33/native-video.png",
-              fullPage: false,
-            });
-            await context.close();
-
-            const blockedContext = await browser.newContext(options);
-            await blockedContext.route(
-              "**/media/mobile-forest-stream-video-v12-720.mp4**",
-              (route) => route.abort("blockedbyclient"),
-            );
-            const blockedPage = await blockedContext.newPage();
-            await blockedPage.goto(
-              `https://stabilize.info/?mobile-smooth-v32-blocked=${Date.now()}`,
-              { waitUntil: "domcontentloaded", timeout: 60_000 },
-            );
-            await blockedPage.waitForFunction(
-              () => {
-                const image = document.querySelector("#photo-backdrop-image");
-                return (
-                  document.documentElement.dataset.mobileVideoHandoffV31 === "fallback" &&
-                  image instanceof HTMLImageElement &&
-                  image.complete &&
-                  image.naturalWidth > 0
-                );
-              },
-              undefined,
-              { timeout: 30_000 },
-            );
-
-            const backdrop = blockedPage.locator("#photo-backdrop");
-            const blockedFirst = await backdrop.screenshot();
-            await blockedPage.waitForTimeout(500);
-            const blockedSecond = await backdrop.screenshot();
-            evidence.blockedFallback = {
-              first: hash(blockedFirst),
-              second: hash(blockedSecond),
-            };
-            if (evidence.blockedFallback.first !== evidence.blockedFallback.second) {
-              throw new Error("The static poster fallback moved or flickered.");
-            }
-
-            evidence.blockedState = await blockedPage.evaluate(() => {
-              const canvas = document.querySelector("#mobile-background-v30");
-              return {
-                state: document.documentElement.dataset.mobileVideoHandoffV31 || "",
-                quality: document.documentElement.dataset.mobileBackgroundV30Quality || "",
-                canvasOpacity:
-                  canvas instanceof HTMLCanvasElement ? getComputedStyle(canvas).opacity : "missing",
-                runtimeLoaded: Boolean(
-                  document.querySelector('script[src^="/mobile-background/runtime"]'),
-                ),
-                inputPresent: Boolean(document.querySelector("#message-input")),
-              };
-            });
-            if (evidence.blockedState.state !== "fallback") {
-              throw new Error("Blocked video did not preserve the poster fallback.");
-            }
-            if (evidence.blockedState.quality === "interpolated-atlas-canvas2d") {
-              throw new Error("The expensive animated fallback was reactivated.");
-            }
-            if (evidence.blockedState.runtimeLoaded) {
-              throw new Error("The animated fallback runtime was loaded.");
-            }
-            if (!evidence.blockedState.inputPresent) {
-              throw new Error("Blocked playback removed the application UI.");
-            }
-
-            await blockedPage.screenshot({
-              path: "/tmp/mobile-smooth-v33/static-poster-fallback.png",
-              fullPage: false,
-            });
-            await blockedContext.close();
-          } finally {
-            await writeFile(
-              "/tmp/mobile-smooth-v33/evidence.json",
-              JSON.stringify(evidence, null, 2),
-            );
-            await browser.close();
-          }
-          NODE
-
-      - name: Upload WebKit evidence
+      - name: Upload live HEVC evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-smooth-v33-webkit-evidence
-          path: /tmp/mobile-smooth-v33
+          name: mobile-hevc-v34-live
+          path: ${{ runner.temp }}/mobile-hevc-v34-live
           if-no-files-found: warn
           retention-days: 7
