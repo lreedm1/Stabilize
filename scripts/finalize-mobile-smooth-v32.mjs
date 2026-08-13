@@ -68,7 +68,7 @@ await update("src/mobile-video-response.js", (source) => {
 
   for (const expected of [VIDEO_ROUTE, VIDEO_ASSET, VIDEO_SHA256]) {
     if (!next.includes(expected)) {
-      throw new Error(`The v32 video responder is missing ${expected}.`);
+      throw new Error(`The v33 video responder is missing ${expected}.`);
     }
   }
   return next;
@@ -100,7 +100,7 @@ await update("public/mobile-video-handoff-v31.js", (source) => {
     `\n      video.currentTime <= 0 ||\n      video.videoWidth < ${VIDEO_WIDTH - 20} ||\n      video.videoHeight < ${VIDEO_HEIGHT - 40}`,
     "the decoded-frame reveal guard",
   );
-  next = next.replace(/native-video-\d+x\d+-24fps/g, QUALITY);
+  next = next.replace(/native-video-\d+x\d+-\d+fps/g, QUALITY);
 
   for (const expected of [
     VERSION,
@@ -110,7 +110,7 @@ await update("public/mobile-video-handoff-v31.js", (source) => {
     "video.currentTime <= 0",
   ]) {
     if (!next.includes(expected)) {
-      throw new Error(`The v32 handoff client is missing ${expected}.`);
+      throw new Error(`The v33 handoff client is missing ${expected}.`);
     }
   }
   return next;
@@ -221,5 +221,5 @@ const verifyTemplate = await readFile(VERIFY_TEMPLATE_PATH, "utf8");
 await writeFile(VERIFY_WORKFLOW_PATH, verifyTemplate, "utf8");
 
 console.log(
-  `Finalized ${VERSION}: static sharp poster, ${VIDEO_WIDTH}x${VIDEO_HEIGHT} baseline H.264, and no animated canvas on first load.`,
+  `Finalized ${VERSION}: static sharp poster, ${VIDEO_WIDTH}x${VIDEO_HEIGHT} 60 fps baseline H.264, and no animated canvas on first load.`,
 );

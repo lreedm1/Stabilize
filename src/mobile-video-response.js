@@ -2,23 +2,22 @@ export const MOBILE_VIDEO_ROUTE =
   "/media/mobile-forest-stream-video-v12-720.mp4";
 export const MOBILE_VIDEO_ASSET_PATH =
   "/scenes/mobile-forest-stream-video-v12-720.mp4";
-export const MOBILE_VIDEO_BYTES = 1_314_209;
+export const MOBILE_VIDEO_BYTES = 1_447_385;
 export const MOBILE_VIDEO_ETAG =
-  '"78b6c1f1928d369e2d2a5b15d3b0de44b0458e1f5a940034080c0d8861e14bc3"';
+  '"be9d679e5e7b2e9240419225f8bb53c4a8fb3510aafed2babc5d1e27f4d12b3f"';
 
 const assetByteCache = new WeakMap();
 
 function videoHeaders() {
   return new Headers({
     "Accept-Ranges": "bytes",
-    "Cache-Control": "private, no-store, max-age=0, must-revalidate",
-    "CDN-Cache-Control": "no-store",
-    "Cloudflare-CDN-Cache-Control": "no-store",
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "CDN-Cache-Control": "public, max-age=31536000, immutable",
+    "Cloudflare-CDN-Cache-Control": "public, max-age=31536000, immutable",
     "Content-Disposition": "inline",
     "Content-Type": "video/mp4",
     "Cross-Origin-Resource-Policy": "same-origin",
     ETag: MOBILE_VIDEO_ETAG,
-    Pragma: "no-cache",
     "X-Content-Type-Options": "nosniff",
   });
 }

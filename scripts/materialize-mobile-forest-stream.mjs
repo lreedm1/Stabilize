@@ -184,8 +184,8 @@ console.log(
 
 // smooth-mobile-video-v12-validation-start
 const smoothVideoPath = "public/scenes/mobile-forest-stream-video-v12-720.mp4";
-const smoothVideoExpectedBytes = 1_314_209;
-const smoothVideoExpectedSha256 = "78b6c1f1928d369e2d2a5b15d3b0de44b0458e1f5a940034080c0d8861e14bc3";
+const smoothVideoExpectedBytes = 1_447_385;
+const smoothVideoExpectedSha256 = "be9d679e5e7b2e9240419225f8bb53c4a8fb3510aafed2babc5d1e27f4d12b3f";
 const smoothPosterPath = "public/scenes/mobile-forest-stream-v12-720.webp";
 const smoothPosterExpectedBytes = 167_224;
 const smoothPosterExpectedSha256 = "819e6210c77ae3de7752be689a33fb979a44fc31a8f5d52ef222a77245e33618";
