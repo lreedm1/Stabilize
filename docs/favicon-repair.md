@@ -16,3 +16,5 @@ without changing its conventional URL.
 metadata, manifest, and headers idempotently. It runs last in the normal
 policy-preparation chain so older generators cannot restore the retired
 runtime favicon approach.
+
+The committed output and focused favicon tests passed before this production deployment trigger.
