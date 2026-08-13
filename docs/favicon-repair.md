@@ -1,7 +1,18 @@
 # Favicon compatibility repair
 
-Stabilize now supplies Safari with a newly named SVG icon plus a PNG data URL embedded directly in every page. The inline PNG removes Cloudflare routing, response MIME, and external-asset caching from Safari's final fallback path.
+Stabilize uses a static favicon contract:
 
-A freshly versioned same-origin script removes older icon links and reinstalls the new SVG followed by the inline PNG whenever the page is shown or becomes visible. The existing PNG, Apple touch, Safari mask, and web-app manifest fallbacks remain available.
+- `/favicon.ico` is the legacy fallback.
+- `/stabilize-tab-20260813.svg` is the scalable icon.
+- `/stabilize-tab-20260813-static-32.png` is the final raster tab-icon candidate.
+- The initial HTML contains those links directly.
+- No JavaScript removes, replaces, or reinstalls favicon links.
 
-The cache-independent icon identity was released on August 13, 2026.
+The uniquely named PNG and SVG use one-year immutable caching. The stable
+`/favicon.ico` fallback uses a one-day cache so it can still be replaced
+without changing its conventional URL.
+
+`scripts/embed-favicon-fallback.mjs` regenerates the binary assets, page
+metadata, manifest, and headers idempotently. It runs last in the normal
+policy-preparation chain so older generators cannot restore the retired
+runtime favicon approach.
