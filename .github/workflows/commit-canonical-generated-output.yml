@@ -22,6 +22,7 @@ jobs:
           cache: npm
       - name: Generate canonical output
         run: |
+          node scripts/patch-static-favicon-pipeline.mjs
           npm ci
           git add -A
           npm run apply:prompt-policy
@@ -31,6 +32,7 @@ jobs:
       - name: Commit output
         run: |
           rm -f .github/workflows/commit-canonical-generated-output.yml
+          rm -f scripts/patch-static-favicon-pipeline.mjs
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
