@@ -1,0 +1,131 @@
+name: Verify UW–Madison resource chat
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy Stabilize to Cloudflare
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-campus-chat:
+    name: Verify resource-aware campus chat
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Verify hostname, resource layer, safety routes, and assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base="https://chat.uwmadison.stabilize.info"
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+
+          for attempt in {1..60}; do
+            echo "UW–Madison resource-chat attempt ${attempt}"
+
+            root_status="$(
+              curl --max-time 20 --silent --show-error \
+                --dump-header "$workdir/root.headers" \
+                --output "$workdir/root.html" \
+                --write-out '%{http_code}' \
+                "$base/" || true
+            )"
+            health_status="$(
+              curl --max-time 20 --silent --show-error \
+                --output "$workdir/health.json" \
+                --write-out '%{http_code}' \
+                "$base/api/health" || true
+            )"
+            robots_status="$(
+              curl --max-time 20 --silent --show-error \
+                --output "$workdir/robots.txt" \
+                --write-out '%{http_code}' \
+                "$base/robots.txt" || true
+            )"
+            sitemap_status="$(
+              curl --max-time 20 --silent --show-error \
+                --output "$workdir/sitemap.xml" \
+                --write-out '%{http_code}' \
+                "$base/sitemap.xml" || true
+            )"
+            css_status="$(
+              curl --max-time 20 --silent --show-error \
+                --output /dev/null \
+                --write-out '%{http_code}' \
+                "$base/uwmadison-chat.css?v=20260813-1" || true
+            )"
+            safety_status="$(
+              curl --max-time 20 --silent --show-error \
+                --header 'Content-Type: application/json' \
+                --header 'Origin: https://chat.uwmadison.stabilize.info' \
+                --data '{"message":"Should I increase my medication dose?"}' \
+                --output "$workdir/safety.json" \
+                --write-out '%{http_code}' \
+                "$base/api/chat" || true
+            )"
+            missing_status="$(
+              curl --max-time 20 --silent --show-error \
+                --output /dev/null \
+                --write-out '%{http_code}' \
+                "$base/api/this-route-should-not-exist" || true
+            )"
+
+            echo "HTTP root=${root_status:-unavailable} health=${health_status:-unavailable} robots=${robots_status:-unavailable} sitemap=${sitemap_status:-unavailable} css=${css_status:-unavailable} safety=${safety_status:-unavailable} missing=${missing_status:-unavailable}"
+
+            ready=true
+            [[ "$root_status" == "200" ]] || ready=false
+            [[ "$health_status" == "200" ]] || ready=false
+            [[ "$robots_status" == "200" ]] || ready=false
+            [[ "$sitemap_status" == "200" ]] || ready=false
+            [[ "$css_status" == "200" ]] || ready=false
+            [[ "$safety_status" == "200" ]] || ready=false
+            [[ "$missing_status" == "404" ]] || ready=false
+
+            grep -Fq 'data-campus-chat="uwmadison"' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq 'UW–Madison support, one step at a time.' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq 'Campus help is built into the conversation.' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq 'not affiliated with, operated by, or endorsed by UW–Madison' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq 'Basic Needs' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq 'UHS option 9' "$workdir/root.html" 2>/dev/null || ready=false
+            grep -Fq 'https://chat.uwmadison.stabilize.info/' "$workdir/root.html" 2>/dev/null || ready=false
+
+            grep -Eqi '^strict-transport-security:[[:space:]]*max-age=31536000; includeSubDomains' "$workdir/root.headers" 2>/dev/null || ready=false
+            grep -Eqi "^content-security-policy:.*default-src 'self'" "$workdir/root.headers" 2>/dev/null || ready=false
+            grep -Eqi '^x-frame-options:[[:space:]]*DENY' "$workdir/root.headers" 2>/dev/null || ready=false
+
+            jq -e '.ok == true and .experience == "uwmadison-resource-aware-chat" and .resourceDirectory == "hardcoded-server-side" and .resourceCount >= 10' "$workdir/health.json" >/dev/null 2>&1 || ready=false
+            jq -e '.route == "MEDICATION_CHANGE" and (.reply | contains("608-265-5600")) and (.reply | ascii_downcase | contains("option 1"))' "$workdir/safety.json" >/dev/null 2>&1 || ready=false
+
+            grep -Fq 'Sitemap: https://chat.uwmadison.stabilize.info/sitemap.xml' "$workdir/robots.txt" 2>/dev/null || ready=false
+            grep -Fq '<loc>https://chat.uwmadison.stabilize.info/</loc>' "$workdir/sitemap.xml" 2>/dev/null || ready=false
+
+            if [[ "$ready" == true ]]; then
+              echo "The UW–Madison resource-aware chat, hardcoded directory, safety routes, and static assets are live."
+              exit 0
+            fi
+
+            sleep 10
+          done
+
+          echo "::error::chat.uwmadison.stabilize.info did not become fully available."
+          echo "--- root headers ---"
+          sed -n '1,35p' "$workdir/root.headers" 2>/dev/null || true
+          echo "--- root markers ---"
+          grep -E 'canonical|UW–Madison support|Campus help|Basic Needs|UHS option' "$workdir/root.html" 2>/dev/null | head -n 40 || true
+          echo "--- health ---"
+          cat "$workdir/health.json" 2>/dev/null || true
+          echo "--- safety route ---"
+          cat "$workdir/safety.json" 2>/dev/null || true
+          echo "--- robots ---"
+          cat "$workdir/robots.txt" 2>/dev/null || true
+          echo "--- sitemap ---"
+          cat "$workdir/sitemap.xml" 2>/dev/null || true
+          exit 1

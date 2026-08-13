@@ -14,6 +14,10 @@ import {
   isMobileBackgroundAssetRoute,
   serveMobileBackgroundAsset,
 } from "./mobile-background-response.js";
+import {
+  CHAT_UW_MADISON_HOST,
+  uwMadisonChatResponse,
+} from "./uw-madison-chat.js";
 
 export {
   BillingAccount,
@@ -26,7 +30,7 @@ export {
 const CANONICAL_ORIGIN = "https://stabilize.info";
 const CANONICAL_HOST = "stabilize.info";
 const UW_MADISON_HOST = "uwmadison.stabilize.info";
-const UW_MADISON_CHAT_URL = `${CANONICAL_ORIGIN}/?source=uwmadison`;
+const UW_MADISON_CHAT_URL = `https://${CHAT_UW_MADISON_HOST}/`;
 const HSTS_VALUE = "max-age=31536000; includeSubDomains";
 const REDIRECT_HOSTS = new Set([
   "www.stabilize.info",
@@ -182,9 +186,29 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const hostname = url.hostname.toLowerCase();
+    const canonicalEnv = canonicalEnvironment(env);
 
     if (hostname === UW_MADISON_HOST) {
       return uwMadisonResponse(request, env);
+    }
+
+    if (hostname === CHAT_UW_MADISON_HOST) {
+      if (url.protocol !== "https:") {
+        return redirectToHttps(request);
+      }
+      if (url.pathname === MOBILE_VIDEO_ROUTE) {
+        return withStrictTransportSecurity(
+          await serveMobileVideo(request, canonicalEnv),
+        );
+      }
+      if (isMobileBackgroundAssetRoute(url.pathname)) {
+        return withStrictTransportSecurity(
+          serveMobileBackgroundAsset(request),
+        );
+      }
+      return withStrictTransportSecurity(
+        await uwMadisonChatResponse(request, canonicalEnv, ctx),
+      );
     }
 
     if (hostname !== CANONICAL_HOST && !REDIRECT_HOSTS.has(hostname)) {
@@ -194,7 +218,6 @@ export default {
       return redirectToCanonical(request);
     }
 
-    const canonicalEnv = canonicalEnvironment(env);
     // Keep MP4 delivery inside the Worker so Safari receives a strong ETag,
     // an uncached response, and exact single-range handling rather than a
     // potentially transformed CDN cache response.
