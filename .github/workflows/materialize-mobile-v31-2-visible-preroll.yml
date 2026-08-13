@@ -1,0 +1,266 @@
+name: Materialize mobile v31-2 visible preroll
+
+on:
+  push:
+    branches:
+      - fix/mobile-v31-2-visible-preroll
+    paths:
+      - .github/workflows/materialize-mobile-v31-2-visible-preroll.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: materialize-mobile-v31-2-visible-preroll
+  cancel-in-progress: true
+
+jobs:
+  materialize-validate-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Check out repair branch
+        uses: actions/checkout@v6
+        with:
+          ref: fix/mobile-v31-2-visible-preroll
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies without generation
+        run: npm ci --ignore-scripts
+
+      - name: Prepare the uniquely versioned WebKit repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python <<'PY'
+          from pathlib import Path
+
+          old_background = "20260813-mobile-background-v31-1"
+          new_background = "20260813-mobile-background-v31-2"
+          old_handoff = "20260813-mobile-video-handoff-v31-1"
+          new_handoff = "20260813-mobile-video-handoff-v31-2"
+          text_suffixes = {".js", ".mjs", ".cjs", ".css", ".json", ".yml", ".yaml", ".md", ".txt"}
+
+          for root_name in ["scripts", "test", ".github/workflows", "src", "public"]:
+              root = Path(root_name)
+              for path in root.rglob("*"):
+                  if not path.is_file() or path.suffix.lower() not in text_suffixes:
+                      continue
+                  try:
+                      before = path.read_text(encoding="utf-8")
+                  except UnicodeDecodeError:
+                      continue
+                  after = before.replace(old_background, new_background).replace(old_handoff, new_handoff)
+                  if after != before:
+                      path.write_text(after, encoding="utf-8")
+
+          finalizer_path = Path("scripts/finalize-mobile-video-handoff-v31.mjs")
+          finalizer = finalizer_path.read_text(encoding="utf-8")
+
+          old_instance_guard = """      !(parserSource instanceof HTMLSourceElement)
+"""
+          new_presence_guard = """      !parserSource
+"""
+          if finalizer.count(old_instance_guard) != 1:
+              raise SystemExit(
+                  f"Expected one constructor-based parser guard, found {finalizer.count(old_instance_guard)}"
+              )
+          finalizer = finalizer.replace(old_instance_guard, new_presence_guard)
+
+          helper_anchor = "async function writeMobileBackgroundRouteModule() {\n"
+          helper = r'''function requireTimelineAdvanceBeforeLegacyReveal(source) {
+  const marker = "mobile-v31-legacy-reveal-needs-progress";
+  if (source.includes(marker)) return source;
+
+  const previous = `      video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+      !motionEligible()`;
+  if (!source.includes(previous)) {
+    throw new Error(
+      "Could not find the v30 reveal guard before requiring timeline progress.",
+    );
+  }
+
+  const replacement = `      video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+      // ${marker}
+      video.currentTime <= 0 ||
+      !motionEligible()`;
+  return source.replace(previous, replacement);
+}
+
+'''
+          if "function requireTimelineAdvanceBeforeLegacyReveal" not in finalizer:
+              if finalizer.count(helper_anchor) != 1:
+                  raise SystemExit(
+                      f"Expected one route-module helper anchor, found {finalizer.count(helper_anchor)}"
+                  )
+              finalizer = finalizer.replace(helper_anchor, helper + helper_anchor)
+
+          old_update = "await update(BACKGROUND_CLIENT_PATH, preserveParserLoadedSource);\n"
+          new_update = """await update(BACKGROUND_CLIENT_PATH, (source) =>
+  requireTimelineAdvanceBeforeLegacyReveal(preserveParserLoadedSource(source)),
+);
+"""
+          if old_update in finalizer:
+              finalizer = finalizer.replace(old_update, new_update)
+          elif new_update not in finalizer:
+              raise SystemExit("Could not wire the legacy reveal progress guard.")
+
+          finalizer_path.write_text(finalizer, encoding="utf-8")
+
+          handoff_path = Path("public/mobile-video-handoff-v31.js")
+          handoff = handoff_path.read_text(encoding="utf-8")
+          hidden_line = '    video.style.setProperty("visibility", "hidden", "important");\n'
+          visible_line = '    video.style.setProperty("visibility", "visible", "important");\n'
+          opacity_zero = '    video.style.setProperty("opacity", "0", "important");\n'
+          opacity_preroll = '    video.style.setProperty("opacity", "0.001", "important");\n'
+          if handoff.count(hidden_line) != 1:
+              raise SystemExit(f"Expected one hidden preroll line, found {handoff.count(hidden_line)}")
+          if handoff.count(opacity_zero) != 1:
+              raise SystemExit(f"Expected one zero-opacity preroll line, found {handoff.count(opacity_zero)}")
+          handoff = handoff.replace(hidden_line, visible_line, 1)
+          handoff = handoff.replace(opacity_zero, opacity_preroll, 1)
+          handoff_path.write_text(handoff, encoding="utf-8")
+
+          test_path = Path("test/mobile-video-handoff-v31.test.mjs")
+          test = test_path.read_text(encoding="utf-8")
+          old_assertion = r'''  assert.match(
+    backgroundClient,
+    /!\(parserSource instanceof HTMLSourceElement\)/,
+  );
+'''
+          new_assertion = r'''  assert.match(backgroundClient, /!parserSource/);
+  assert.match(
+    backgroundClient,
+    /mobile-v31-legacy-reveal-needs-progress/,
+  );
+'''
+          if old_assertion not in test:
+              raise SystemExit("Could not find the constructor-based regression assertion.")
+          test = test.replace(old_assertion, new_assertion)
+
+          touch_assertion = '  assert.match(client, /touchstart/);\n'
+          preroll_assertions = r'''  const fallbackFunction = client.match(
+    /function keepFallbackVisible\(detail = "fallback"\) \{[\s\S]*?\n  \}/,
+  )?.[0];
+  assert.ok(fallbackFunction);
+  assert.match(
+    fallbackFunction,
+    /video\.style\.setProperty\("visibility", "visible", "important"\)/,
+  );
+  assert.match(
+    fallbackFunction,
+    /video\.style\.setProperty\("opacity", "0\.001", "important"\)/,
+  );
+'''
+          if preroll_assertions not in test:
+              if test.count(touch_assertion) != 1:
+                  raise SystemExit(f"Expected one touch assertion anchor, found {test.count(touch_assertion)}")
+              test = test.replace(touch_assertion, touch_assertion + preroll_assertions)
+
+          finalizer_assertion = '  assert.match(finalizer, /mobile-v31-parser-source-guard/);\n'
+          progress_assertion = '  assert.match(finalizer, /mobile-v31-legacy-reveal-needs-progress/);\n'
+          if progress_assertion not in test:
+              if test.count(finalizer_assertion) != 1:
+                  raise SystemExit(
+                      f"Expected one finalizer assertion anchor, found {test.count(finalizer_assertion)}"
+                  )
+              test = test.replace(finalizer_assertion, finalizer_assertion + progress_assertion)
+          test_path.write_text(test, encoding="utf-8")
+
+          workflow_path = Path(".github/workflows/verify-mobile-video.yml")
+          workflow = workflow_path.read_text(encoding="utf-8")
+
+          payload_anchor = "          grep -Fq 'native-video-2160x3840-24fps' public/mobile-background-v30.js\n"
+          payload_checks = """          grep -Fq 'mobile-v31-parser-source-guard' public/mobile-background-v30.js
+          grep -Fq 'mobile-v31-legacy-reveal-needs-progress' public/mobile-background-v30.js
+"""
+          if payload_checks not in workflow:
+              if workflow.count(payload_anchor) != 1:
+                  raise SystemExit(f"Expected one payload anchor, found {workflow.count(payload_anchor)}")
+              workflow = workflow.replace(payload_anchor, payload_anchor + payload_checks)
+
+          handoff_anchor = "          grep -Fq 'playInsideUserGesture' public/mobile-video-handoff-v31.js\n"
+          handoff_checks = """          grep -Fq 'video.style.setProperty(\"visibility\", \"visible\", \"important\")' public/mobile-video-handoff-v31.js
+          grep -Fq 'video.style.setProperty(\"opacity\", \"0.001\", \"important\")' public/mobile-video-handoff-v31.js
+"""
+          if handoff_checks not in workflow:
+              if workflow.count(handoff_anchor) != 1:
+                  raise SystemExit(f"Expected one handoff anchor, found {workflow.count(handoff_anchor)}")
+              workflow = workflow.replace(handoff_anchor, handoff_anchor + handoff_checks)
+
+          production_anchor = "              && grep -Fq 'result = video.play()' \"$tmpdir/client.js\" \\\n"
+          production_checks = """              && grep -Fq 'mobile-v31-parser-source-guard' "$tmpdir/client.js" \\
+              && grep -Fq 'mobile-v31-legacy-reveal-needs-progress' "$tmpdir/client.js" \\
+"""
+          if production_checks not in workflow:
+              if workflow.count(production_anchor) != 1:
+                  raise SystemExit(
+                      f"Expected one production client anchor, found {workflow.count(production_anchor)}"
+                  )
+              workflow = workflow.replace(production_anchor, production_anchor + production_checks)
+
+          production_handoff_anchor = "              && grep -Fq 'playInsideUserGesture' \"$tmpdir/handoff.js\" \\\n"
+          production_handoff_checks = """              && grep -Fq 'video.style.setProperty("visibility", "visible", "important")' "$tmpdir/handoff.js" \\
+              && grep -Fq 'video.style.setProperty("opacity", "0.001", "important")' "$tmpdir/handoff.js" \\
+"""
+          if production_handoff_checks not in workflow:
+              if workflow.count(production_handoff_anchor) != 1:
+                  raise SystemExit(
+                      f"Expected one production handoff anchor, found {workflow.count(production_handoff_anchor)}"
+                  )
+              workflow = workflow.replace(
+                  production_handoff_anchor,
+                  production_handoff_anchor + production_handoff_checks,
+              )
+
+          workflow_path.write_text(workflow, encoding="utf-8")
+          PY
+
+      - name: Materialize canonical generated output
+        run: npm run apply:prompt-policy
+
+      - name: Verify the exact v31-2 repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq '20260813-mobile-background-v31-2' src/page.js
+          grep -Fq '20260813-mobile-video-handoff-v31-2' src/page.js
+          grep -Fq 'mobile-v31-parser-source-guard' public/mobile-background-v30.js
+          grep -Fq 'mobile-v31-legacy-reveal-needs-progress' public/mobile-background-v30.js
+          grep -Fq 'mobile-v31-parser-source-guard' src/mobile-background-response.js
+          grep -Fq 'mobile-v31-legacy-reveal-needs-progress' src/mobile-background-response.js
+          grep -Fq 'video.style.setProperty("visibility", "visible", "important")' public/mobile-video-handoff-v31.js
+          grep -Fq 'video.style.setProperty("opacity", "0.001", "important")' public/mobile-video-handoff-v31.js
+          git diff --check
+
+      - name: Commit the exact generated repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/materialize-mobile-v31-2-visible-preroll.yml
+          git add -A
+          git diff --cached --check
+          git commit -m 'Keep the WebKit video renderable before reveal'
+
+      - name: Validate the committed repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+      - name: Publish the validated repair
+        run: git push origin HEAD:fix/mobile-v31-2-visible-preroll
