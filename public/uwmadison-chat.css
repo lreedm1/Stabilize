@@ -14,13 +14,57 @@
   --uw-chat-red: #a83b3b;
 }
 
+/*
+ * The shared chat shell intentionally locks the main Stabilize experience to
+ * one viewport. The UW resource banner adds substantial content before the
+ * chat, so this host must use the document itself as the vertical scroller.
+ * Keeping the chat card as a full-height, non-shrinking section also prevents
+ * the composer from being compressed underneath iOS browser chrome.
+ */
+html[data-campus-chat="uwmadison"] {
+  height: auto !important;
+  min-height: 100%;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: auto;
+  touch-action: pan-y;
+}
+
+html[data-campus-chat="uwmadison"] body {
+  height: auto !important;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: auto;
+  touch-action: pan-y;
+}
+
 html[data-campus-chat="uwmadison"] .page-shell {
   width: min(1080px, calc(100% - 28px));
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
+  height: auto !important;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin-inline: auto;
+  overflow: visible !important;
   touch-action: pan-y;
+}
+
+html[data-campus-chat="uwmadison"] .site-header,
+html[data-campus-chat="uwmadison"] .uw-chat-banner {
+  flex: 0 0 auto;
+}
+
+html[data-campus-chat="uwmadison"] .chat-card {
+  width: 100%;
+  height: calc(100svh - 32px);
+  min-height: 560px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-color: rgba(255, 255, 255, 0.46);
+  scroll-margin-top: max(12px, env(safe-area-inset-top));
 }
 
 .uw-chat-banner {
@@ -177,10 +221,6 @@ html[data-campus-chat="uwmadison"] .page-shell {
   font-size: 0.72rem;
 }
 
-html[data-campus-chat="uwmadison"] .chat-card {
-  border-color: rgba(255, 255, 255, 0.46);
-}
-
 html[data-campus-chat="uwmadison"] .product-intro h1 {
   max-width: 17ch;
 }
@@ -200,6 +240,10 @@ html[data-campus-chat="uwmadison"] .privacy-signal::before {
   .uw-chat-banner {
     border-radius: 1rem;
   }
+
+  html[data-campus-chat="uwmadison"] .chat-card {
+    height: calc(100svh - 20px);
+  }
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -211,6 +255,15 @@ html[data-campus-chat="uwmadison"] .privacy-signal::before {
 }
 
 @media print {
+  html[data-campus-chat="uwmadison"],
+  html[data-campus-chat="uwmadison"] body,
+  html[data-campus-chat="uwmadison"] .page-shell,
+  html[data-campus-chat="uwmadison"] .chat-card {
+    height: auto !important;
+    min-height: 0;
+    overflow: visible !important;
+  }
+
   .uw-chat-banner {
     border: 1px solid #555;
     background: #fff;
