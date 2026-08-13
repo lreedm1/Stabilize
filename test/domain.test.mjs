@@ -55,6 +55,7 @@ test("stabilize.info is canonical and reedlokken.com redirects", async () => {
   );
   assert.deepEqual(config.routes, [
     { pattern: "stabilize.info/*", zone_name: "stabilize.info" },
+    { pattern: "uwmadison.stabilize.info", custom_domain: true },
     { pattern: "reedlokken.com", custom_domain: true },
     { pattern: "www.reedlokken.com", custom_domain: true },
   ]);
@@ -67,11 +68,16 @@ test("stabilize.info is canonical and reedlokken.com redirects", async () => {
     config.routes
       .filter((route) => route.custom_domain === true)
       .map((route) => route.pattern),
-    ["reedlokken.com", "www.reedlokken.com"],
+    [
+      "uwmadison.stabilize.info",
+      "reedlokken.com",
+      "www.reedlokken.com",
+    ],
   );
 
   assert.match(router, /const CANONICAL_ORIGIN = "https:\/\/stabilize\.info"/);
   assert.match(router, /const CANONICAL_HOST = "stabilize\.info"/);
+  assert.match(router, /const UW_MADISON_HOST = "uwmadison\.stabilize\.info"/);
   assert.match(router, /"reedlokken\.com"/);
   assert.match(router, /"www\.reedlokken\.com"/);
   assert.match(router, /function unknownHostResponse\(\)/);
@@ -80,6 +86,11 @@ test("stabilize.info is canonical and reedlokken.com redirects", async () => {
   assert.match(router, /url\.protocol !== "https:"/);
   assert.match(router, /Strict-Transport-Security/);
   assert.match(router, /max-age=31536000; includeSubDomains/);
+  assert.match(router, /hostname === UW_MADISON_HOST/);
+  assert.match(router, /"\/uwmadison\.html"/);
+  assert.match(router, /"\/uwmadison-robots\.txt"/);
+  assert.match(router, /"\/uwmadison-sitemap\.xml"/);
+  assert.match(router, /source=uwmadison/);
   assert.match(router, /return withStrictTransportSecurity\(response\)/);
   assert.match(router, /property === "PUBLIC_ORIGIN"/);
   assert.match(router, /url\.pathname === "\/auth\/logout"/);
@@ -196,4 +207,41 @@ test("the About page preserves the origin while stating evidence and sustainabil
   for (const page of [howItWorks, floorFirst, safety, privacy]) {
     assert.match(page, /href="\/about\.html">About<\/a>/);
   }
+});
+
+test("the UW-Madison subdomain is independent, useful, and pilot-bounded", async () => {
+  const [page, styles, robots, sitemap] = await Promise.all([
+    repositoryFile("public/uwmadison.html"),
+    repositoryFile("public/uwmadison.css"),
+    repositoryFile("public/uwmadison-robots.txt"),
+    repositoryFile("public/uwmadison-sitemap.xml"),
+  ]);
+
+  assert.match(
+    page,
+    /rel="canonical" href="https:\/\/uwmadison\.stabilize\.info\/"/,
+  );
+  assert.match(page, /not affiliated with, operated by, or\s+endorsed by the University of Wisconsin–Madison/i);
+  assert.match(page, /608-265-5600/);
+  assert.match(page, /option 9/i);
+  assert.match(page, /Call or text 988/i);
+  assert.match(page, /Call 911/i);
+  assert.match(page, /27%/);
+  assert.match(page, /More than 1 in 3/);
+  assert.match(page, /Basic Needs Student Support/);
+  assert.match(page, /Office of Student Assistance and Support/);
+  assert.match(page, /Four-week closed pilot/i);
+  assert.match(page, /10–25 voluntary participants/);
+  assert.match(page, /Student co-design/);
+  assert.match(page, /No advertising or marketing trackers/);
+  assert.match(page, /No institution access to individual conversations/);
+  assert.match(page, /Do not optimize for time in chat/i);
+  assert.doesNotMatch(page, /<script\b/i);
+  assert.doesNotMatch(page, /<img\b/i);
+
+  assert.match(styles, /\.resource-grid/);
+  assert.match(styles, /prefers-reduced-motion/);
+  assert.match(styles, /prefers-reduced-transparency/);
+  assert.match(robots, /Sitemap: https:\/\/uwmadison\.stabilize\.info\/sitemap\.xml/);
+  assert.match(sitemap, /https:\/\/uwmadison\.stabilize\.info\//);
 });
