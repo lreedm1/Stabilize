@@ -157,6 +157,10 @@ test("mobile HEVC v34 uses a high-quality direct static source with H.264 fallba
     hevcHeaderBlock,
     /Cache-Control: public, max-age=31536000, immutable/,
   );
+  assert.ok(
+    headers.indexOf("# mobile-hevc-v34-start") <
+      headers.indexOf("# canonical-favicon-start"),
+  );
 
   const packageJson = JSON.parse(packageSource);
   assert.match(
