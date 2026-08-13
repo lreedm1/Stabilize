@@ -1,6 +1,7 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 
 const VERSION = "20260813-mobile-video-handoff-v31-1";
+const BACKGROUND_VERSION = "20260813-mobile-background-v31-1";
 const VIDEO_ASSET = "/media/mobile-forest-stream-video-v24-native-1080.mp4";
 const MOBILE_BACKGROUND_CONTROLLER = "/mobile-background/runtime";
 const CLIENT_ASSET = "/mobile-video-handoff-v31.js";
@@ -121,6 +122,34 @@ for (const name of testNames) {
       .replaceAll(previousTail, canonicalTail),
   );
 }
+
+await update("test/mobile-background-v30.test.mjs", (source) => {
+  const backgroundDeclaration = `const VERSION = "${BACKGROUND_VERSION}";`;
+  const handoffDeclaration = `const HANDOFF_VERSION = "${VERSION}";`;
+  let next = source;
+  if (!next.includes(handoffDeclaration)) {
+    if (!next.includes(backgroundDeclaration)) {
+      throw new Error("Could not find the v30 test version declaration.");
+    }
+    next = next.replace(
+      backgroundDeclaration,
+      `${backgroundDeclaration}\n${handoffDeclaration}`,
+    );
+  }
+  next = next
+    .replaceAll(
+      'new RegExp("/media/" + VIDEO + "\\\\?v=" + VERSION)',
+      'new RegExp("/media/" + VIDEO + "\\\\?v=" + HANDOFF_VERSION)',
+    )
+    .replaceAll(
+      `new RegExp('src="/media/' + VIDEO + "\\\\?v=" + VERSION + '"')`,
+      `new RegExp('src="/media/' + VIDEO + "\\\\?v=" + HANDOFF_VERSION + '"')`,
+    );
+  if (!next.includes("+ HANDOFF_VERSION")) {
+    throw new Error("Could not align the v30 page assertions with the v31 media version.");
+  }
+  return next;
+});
 
 await update("public/_headers", (source) => {
   const start = "# mobile-video-handoff-v31-start";
