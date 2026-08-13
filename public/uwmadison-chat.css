@@ -45,9 +45,9 @@ html[data-campus-chat="uwmadison"] .page-shell {
 html[data-campus-chat="uwmadison"] .chat-card {
   position: relative;
   width: 100%;
-  min-height: 0;
   height: auto;
   flex: 1 1 auto;
+  min-height: 0;
   overflow: visible;
   border-color: rgba(255, 255, 255, 0.46);
 }

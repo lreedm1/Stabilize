@@ -442,38 +442,6 @@ async function generateCampusReply(messages, route, env) {
   return { reply, model };
 }
 
-function resourceCardsMarkup() {
-  const cards = [
-    {
-      label: "UHS crisis · option 9",
-      href: "tel:+16082655600",
-      detail: "608-265-5600 · 24/7",
-    },
-    {
-      label: "Basic Needs",
-      href: "https://basicneeds.students.wisc.edu/",
-      detail: "Food, housing, essentials",
-    },
-    {
-      label: "OSAS",
-      href: "https://osas.wisc.edu/contact-us/",
-      detail: "Not sure where to start",
-    },
-    {
-      label: "UHS Access · option 2",
-      href: "https://www.uhs.wisc.edu/mental-health/appointment/",
-      detail: "Mental-health care",
-    },
-  ];
-  return cards
-    .map(
-      ({ label, href, detail }) => `<a class="uw-resource-card" href="${escapeHtml(href)}"${
-        href.startsWith("http") ? ' rel="noreferrer"' : ""
-      }><strong>${escapeHtml(label)}</strong><span>${escapeHtml(detail)}</span></a>`,
-    )
-    .join("");
-}
-
 function campusPage() {
   let html = renderPage({
     signedIn: false,
@@ -485,7 +453,7 @@ function campusPage() {
   const description =
     "An independent Stabilize chat that routes UW–Madison students toward verified campus and crisis resources.";
   const campusChrome = `<section class="uw-campus-strip" aria-label="About this UW–Madison chat">
-    <p class="uw-campus-strip-copy"><strong>Independent project.</strong> Not operated or endorsed by UW–Madison; campus resources are built in.</p>
+    <p class="uw-campus-strip-copy"><strong>Independent from UW–Madison.</strong> Not operated or endorsed by UW; resources are built in.</p>
     <div class="uw-campus-strip-actions">
       <a class="uw-resource-link" href="https://uwmadison.stabilize.info/#campus-resources">UW resources</a>
       <details class="uw-urgent-disclosure">
