@@ -177,7 +177,7 @@ test("the runtime carries provider usage into decision-grade impact without chat
   const packageJson = JSON.parse(packageSource);
   assert.match(
     packageJson.scripts["apply:prompt-policy"],
-    /finalize-decision-grade-impact\.mjs && node scripts\/finalize-native-selected-mobile-v24\.mjs && node scripts\/finalize-native-selected-mobile-v24-regressions\.mjs && node scripts\/finalize-mobile-video-handoff-v31\.mjs && node scripts\/finalize-mobile-smooth-v32\.mjs && node scripts\/embed-favicon-fallback\.mjs$/,
+    /finalize-decision-grade-impact\.mjs && node scripts\/finalize-native-selected-mobile-v24\.mjs && node scripts\/finalize-native-selected-mobile-v24-regressions\.mjs && node scripts\/finalize-mobile-video-handoff-v31\.mjs && node scripts\/finalize-mobile-smooth-v32\.mjs && node scripts\/finalize-mobile-hevc-v34\.mjs && node scripts\/embed-favicon-fallback\.mjs$/,
   );
   assert.match(
     packageJson.scripts["test:node"],

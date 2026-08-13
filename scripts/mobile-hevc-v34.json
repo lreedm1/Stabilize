@@ -1,0 +1,21 @@
+{
+  "bitRate": 1692661,
+  "codec": "hevc",
+  "codecTag": "hvc1",
+  "duration": 4.933333,
+  "fps": 60,
+  "h264Asset": "/scenes/mobile-forest-stream-video-v12-720.mp4",
+  "height": 1280,
+  "hevcAsset": "/scenes/mobile-forest-stream-video-v34-hevc-720.mp4",
+  "level": 120,
+  "pixelFormat": "yuv420p",
+  "profile": "Main",
+  "quality": "native-video-hevc-720x1280-60fps",
+  "sourceAsset": "/scenes/mobile-forest-stream-video-v24-native-1080.mp4",
+  "sourceBytes": 5766867,
+  "sourceSha256": "160e341439d5f962c7c0cacb81da37fec741db3fca4d52df71be7f47732f6a35",
+  "version": "20260813-mobile-hevc-v34-1",
+  "videoBytes": 1043808,
+  "videoSha256": "5bb1fd0a8d7f57c9d4daeac83fda18317b0ecf06e7fcca04166af1ba987b55ae",
+  "width": 720
+}

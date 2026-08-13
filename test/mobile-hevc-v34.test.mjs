@@ -122,8 +122,8 @@ test("mobile HEVC v34 uses a high-quality direct static source with H.264 fallba
   assert.doesNotMatch(videoBlock, /\/media\//);
   const hevcReference = `${HEVC_ASSET}?v=${VERSION}`;
   const h264Reference = `${H264_ASSET}?v=${VERSION}`;
-  assert.match(videoBlock, new RegExp(hevcReference.replaceAll(".", "\\.")));
-  assert.match(videoBlock, new RegExp(h264Reference.replaceAll(".", "\\.")));
+  assert.ok(videoBlock.includes(hevcReference));
+  assert.ok(videoBlock.includes(h264Reference));
   assert.ok(videoBlock.indexOf(hevcReference) < videoBlock.indexOf(h264Reference));
   assert.match(
     page,
