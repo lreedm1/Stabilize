@@ -58,7 +58,7 @@ jobs:
           grep -Fq 'video.style.setProperty("opacity", "0.001", "important")' public/mobile-video-handoff-v31.js
           git diff --check
 
-      - name: Commit the exact generated repair
+      - name: Commit the exact generated repair locally
         shell: bash
         run: |
           set -euo pipefail
@@ -79,5 +79,37 @@ jobs:
           npm run verify:clean
           git diff --exit-code
 
-      - name: Publish the validated repair
-        run: git push origin HEAD:fix/mobile-v31-2-visible-preroll
+      - name: Package the validated commit tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir='/tmp/mobile-v31-2-release'
+          rm -rf "$release_dir"
+          mkdir -p "$release_dir/files"
+          git rev-parse HEAD^ > "$release_dir/parent-commit.txt"
+          git rev-parse HEAD > "$release_dir/release-commit.txt"
+          git diff-tree --no-commit-id --name-status -r HEAD^ HEAD > "$release_dir/manifest.tsv"
+
+          while IFS=$'\t' read -r status first second; do
+            [[ -n "$status" ]] || continue
+            path="$first"
+            if [[ "$status" == R* || "$status" == C* ]]; then
+              path="$second"
+            fi
+            if [[ "$status" == D* ]]; then
+              continue
+            fi
+            mkdir -p "$release_dir/files/$(dirname "$path")"
+            git show "HEAD:$path" > "$release_dir/files/$path"
+          done < "$release_dir/manifest.tsv"
+
+          tar -C /tmp -czf /tmp/mobile-v31-2-validated-tree.tar.gz mobile-v31-2-release
+          test -s /tmp/mobile-v31-2-validated-tree.tar.gz
+
+      - name: Upload the exact validated tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-v31-2-validated-tree
+          path: /tmp/mobile-v31-2-validated-tree.tar.gz
+          if-no-files-found: error
+          retention-days: 1
