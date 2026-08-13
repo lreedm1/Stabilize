@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/build-mobile-hd-v35.yml
       - scripts/build-mobile-hd-v35.sh
+      - scripts/finalize-full-guest-conversation.mjs
       - scripts/finalize-mobile-hd-v35.mjs
       - scripts/verify-mobile-hd-v35.yml
       - test/mobile-hd-v35.test.mjs
