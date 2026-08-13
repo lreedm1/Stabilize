@@ -101,12 +101,19 @@ for (const path of [
 ]) {
   const fullGuestExpectation =
     "/finalize-full-guest-conversation\\.mjs$/";
+  const staticFaviconExpectation =
+    "/finalize-decision-grade-impact\\.mjs && node scripts\\/finalize-native-selected-mobile-v24\\.mjs && node scripts\\/finalize-native-selected-mobile-v24-regressions\\.mjs && node scripts\\/finalize-mobile-video-handoff-v31\\.mjs && node scripts\\/finalize-mobile-smooth-v32\\.mjs && node scripts\\/embed-favicon-fallback\\.mjs$/";
   const smoothExpectation =
     "/finalize-decision-grade-impact\\.mjs && node scripts\\/finalize-native-selected-mobile-v24\\.mjs && node scripts\\/finalize-native-selected-mobile-v24-regressions\\.mjs && node scripts\\/finalize-mobile-video-handoff-v31\\.mjs && node scripts\\/finalize-mobile-smooth-v32\\.mjs$/";
   const handoffExpectation =
     "/finalize-decision-grade-impact\\.mjs && node scripts\\/finalize-native-selected-mobile-v24\\.mjs && node scripts\\/finalize-native-selected-mobile-v24-regressions\\.mjs && node scripts\\/finalize-mobile-video-handoff-v31\\.mjs$/";
   const nativeExpectation =
     "/finalize-decision-grade-impact\\.mjs && node scripts\\/finalize-native-selected-mobile-v24\\.mjs && node scripts\\/finalize-native-selected-mobile-v24-regressions\\.mjs$/";
+  const changedFromStaticFavicon = replaceAll(
+    path,
+    staticFaviconExpectation,
+    fullGuestExpectation,
+  );
   const changedFromSmooth = replaceAll(
     path,
     smoothExpectation,
@@ -133,6 +140,7 @@ for (const path of [
     fullGuestExpectation,
   );
   if (
+    !changedFromStaticFavicon &&
     !changedFromSmooth &&
     !changedFromHandoff &&
     !changedFromNative &&

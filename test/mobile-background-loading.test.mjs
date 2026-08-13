@@ -82,7 +82,7 @@ test("mobile clients keep the static image without loading the graphics module c
   const config = JSON.parse(packageSource);
   assert.match(
     config.scripts["apply:prompt-policy"],
-    /finalize-native-selected-mobile-v24-regressions\.mjs && node scripts\/finalize-mobile-video-handoff-v31\.mjs && node scripts\/finalize-mobile-smooth-v32\.mjs$/,
+    /finalize-native-selected-mobile-v24-regressions\.mjs && node scripts\/finalize-mobile-video-handoff-v31\.mjs && node scripts\/finalize-mobile-smooth-v32\.mjs && node scripts\/embed-favicon-fallback\.mjs$/,
   );
 
   const loader = await import(
