@@ -281,3 +281,20 @@ html[data-campus-chat="uwmadison"] .product-intro h1 {
     box-shadow: none;
   }
 }
+
+
+/* UW compact differentiated landing */
+html[data-campus-chat="uwmadison"] .seo-intro.landing-content {
+  width: min(760px, 100%);
+  padding: 1px 1px 8px;
+}
+
+html[data-campus-chat="uwmadison"] .landing-hero {
+  min-height: 0;
+  border-radius: 1rem;
+  padding: clamp(0.9rem, 3.5vh, 1.6rem) clamp(1rem, 4vw, 2rem);
+}
+
+html[data-campus-chat="uwmadison"] .landing-kicker {
+  display: none;
+}

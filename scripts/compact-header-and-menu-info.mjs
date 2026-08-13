@@ -34,7 +34,7 @@ await update("src/copy.js", (source) => {
   }
 
   const oldPlaceholder = '      inputPlaceholder: "What is happening right now?",';
-  const newPlaceholder = '      inputPlaceholder: "What is happening?",';
+  const newPlaceholder = '      inputPlaceholder: "Start with what needs attention",';
   if (text.includes(oldPlaceholder)) {
     text = text.replace(oldPlaceholder, newPlaceholder);
   } else {

@@ -1,7 +1,7 @@
 // Edit product language here. Runtime files should reference this module instead
 // of defining user-facing text beside application logic.
 const PRODUCT_PROMISE =
-  "Stabilize helps you turn an overloaded moment into one safe, practical next step.";
+  "Stabilize adapts to your capacity, keeps memory bounded and deletable, and helps you move from conversation to real-world action.";
 
 export const COPY = {
   page: {
@@ -29,7 +29,7 @@ export const COPY = {
         "Not therapy or diagnosis. Guest chats keep eight recent messages plus a rolling summary capped at 5,000 model-output tokens in the current browser tab; a bounded queue waits locally if summarization fails. They are not written to Stabilize account memory. If you sign in, condensed context is remembered for 30 days, follows the same Google account, and can be deleted immediately from the account menu. Private chat does not use or update that Stabilize memory. This app does not use IP addresses for memory or application logs; infrastructure providers may still process connection metadata. Google handles sign-in. OpenAI processes ordinary messages and guest-summary requests and stores response data for at least 30 days unless organization or project data controls override the request. Adults 18+.",
       inputLabel: "Your message",
       responseLabel: "Latest AI response",
-      inputPlaceholder: "What is happening?",
+      inputPlaceholder: "Start with what needs attention",
       sendButton: "Send",
       newConversationButton: "New conversation",
     },

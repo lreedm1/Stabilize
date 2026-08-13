@@ -33,7 +33,7 @@ test("the main page keeps Home, Info, account, and Admin in menu order", () => {
   assert.ok(headerNavigationIndex >= 0);
   assert.ok(headerMenuIndex > headerNavigationIndex);
   assert.ok(headerActionsIndex > headerMenuIndex);
-  assert.match(html, /placeholder="What is happening\?"/);
+  assert.match(html, /placeholder="Start with what needs attention"/);
   assert.doesNotMatch(html, /What is happening right now\?/);
 
   const menuPanelIndex = html.indexOf('class="menu-panel"');

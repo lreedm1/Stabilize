@@ -45,15 +45,29 @@ function webpDimensions(buffer) {
   throw new Error("No supported WebP image chunk found");
 }
 
-test("the homepage gives a short product promise", async () => {
+test("the homepage explains its differentiated product promise", async () => {
   const [pageSource, productStyles, seoStyles] = await Promise.all([
     readFile(new URL("../src/page.js", import.meta.url), "utf8"),
     readFile(new URL("../public/product.css", import.meta.url), "utf8"),
     readFile(new URL("../public/seo.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(pageSource, /Get unstuck\./);
+  assert.match(pageSource, /A personal AI that helps you steady what matters and take the next useful step\./);
   assert.match(pageSource, /page\.promise/);
+  assert.match(pageSource, /Bounded memory/);
+  assert.match(pageSource, /User-chosen direction/);
+  assert.match(pageSource, /Human support stays central/);
+  assert.match(pageSource, /Built around your capacity/);
+  assert.match(pageSource, /Memory with boundaries/);
+  assert.match(pageSource, /Designed for life outside the chat/);
+  assert.match(pageSource, /Understand the situation/);
+  assert.match(pageSource, /Match the response to capacity/);
+  assert.match(pageSource, /Choose one useful action/);
+  assert.match(pageSource, /Check what actually happened/);
+  assert.match(
+    pageSource,
+    /href="\/landing\.css\?v=20260813-human-aligned-1"/,
+  );
   assert.match(
     pageSource,
     /Guest chats keep the full conversation in this tab/,

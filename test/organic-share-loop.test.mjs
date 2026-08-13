@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const PRODUCT_PROMISE =
-  "Stabilize helps you turn an overloaded moment into one safe, practical next step.";
+  "Stabilize adapts to your capacity, keeps memory bounded and deletable, and helps you move from conversation to real-world action.";
 
 async function source(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");

@@ -529,7 +529,7 @@ function campusPage() {
       `<main class="chat-card" aria-label="UW–Madison resource-aware Stabilize chat">\n        ${campusChrome}`,
     )
     .replace(
-      '<h1 id="seo-heading">Get unstuck.</h1>',
+      '<h1 id="seo-heading">A personal AI that helps you steady what matters and take the next useful step.</h1>',
       '<h1 id="seo-heading">UW–Madison support, one step at a time.</h1>',
     )
     .replace(
@@ -537,7 +537,19 @@ function campusPage() {
       '<p class="product-promise">Tell me what is blocking the next step. I’ll help make it smaller and point to the most relevant UW–Madison resource when one fits.</p>',
     )
     .replace(
-      'placeholder="What is happening?"',
+      /<div class="landing-trust-strip"[\s\S]*?<\/div>\s*/,
+      "",
+    )
+    .replace(
+      /<a class="landing-learn-more"[\s\S]*?<\/a>\s*/,
+      "",
+    )
+    .replace(
+      /<section id="why-stabilize"[\s\S]*?<\/section>\s*<section class="landing-section landing-how"[\s\S]*?<\/section>\s*/,
+      "",
+    )
+    .replace(
+      'placeholder="Start with what needs attention"',
       'placeholder="What is happening at UW–Madison?"',
     );
 
