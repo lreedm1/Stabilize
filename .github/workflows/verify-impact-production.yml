@@ -147,7 +147,7 @@ jobs:
               [[ "$dashboard_status" == "401" || "$dashboard_status" == "503" ]] && \
               grep -Fq 'Stabilize adapts to your capacity, keeps memory bounded and deletable, and helps you move from conversation to real-world action.' "$home" && \
               grep -Fq 'reasoning-choice.js?v=20260807-instant-thinking-2' "$home" && \
-              grep -Fq 'Respond instantly' "$reasoning_script" && \
+              grep -Fq 'Fastest response' "$reasoning_script" && \
               grep -Fq 'Think briefly' "$reasoning_script" && \
               grep -Fq 'Think deeply' "$reasoning_script" && \
               grep -Fq 'Think longest' "$reasoning_script" && \
