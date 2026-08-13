@@ -133,8 +133,9 @@ test("mobile HEVC v34 uses a high-quality direct static source with H.264 fallba
   assert.match(client, new RegExp(`const VERSION = "${VERSION}"`));
   assert.match(client, /const HEVC_ASSET =/);
   assert.match(client, /const H264_ASSET =/);
-  assert.match(client, /source\[data-codec="hevc"\]/);
-  assert.match(client, /source\[data-codec="h264"\]/);
+  assert.match(client, /source\[data-codec="\$\{codec\}"\]/);
+  assert.match(client, /ensureSource\("hevc"/);
+  assert.match(client, /ensureSource\("h264"/);
   assert.match(client, /mobile-forest-stream-video-v34-hevc-720\.mp4/);
   assert.match(client, /native-video-hevc-720x1280-60fps/);
   assert.match(client, /mobileBackgroundV30Codec/);
