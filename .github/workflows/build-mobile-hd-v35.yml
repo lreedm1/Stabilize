@@ -1,0 +1,95 @@
+name: Build mobile HD autoplay v35
+
+on:
+  push:
+    branches:
+      - agent/mobile-video-hd-autoplay-builder
+    paths:
+      - .github/workflows/build-mobile-hd-v35.yml
+      - scripts/build-mobile-hd-v35.sh
+      - scripts/finalize-mobile-hd-v35.mjs
+      - scripts/verify-mobile-hd-v35.yml
+      - test/mobile-hd-v35.test.mjs
+  workflow_dispatch:
+
+concurrency:
+  group: build-mobile-hd-v35-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install media tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies without generators
+        shell: bash
+        run: npm ci --ignore-scripts
+
+      - name: Build exact 1080p30 HEVC and H.264 assets
+        shell: bash
+        run: bash scripts/build-mobile-hd-v35.sh
+
+      - name: Finalize static sources and no-reset autoplay
+        shell: bash
+        run: node scripts/finalize-mobile-hd-v35.mjs
+
+      - name: Run full tests and Worker build gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run check
+
+      - name: Package validated release outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/mobile-hd-v35-release"
+          mkdir -p "$bundle/assets" "$bundle/text"
+          cp public/scenes/mobile-forest-stream-video-v35-hevc-1080.mp4 "$bundle/assets/"
+          cp public/scenes/mobile-forest-stream-video-v35-h264-1080.mp4 "$bundle/assets/"
+          cp scripts/mobile-hd-v35.json "$bundle/"
+          git diff --name-only --diff-filter=ACMRT > "$bundle/changed-files.txt"
+          while IFS= read -r path; do
+            case "$path" in
+              public/scenes/*.mp4) continue ;;
+            esac
+            if [[ -f "$path" ]]; then
+              mkdir -p "$bundle/text/$(dirname "$path")"
+              cp "$path" "$bundle/text/$path"
+            fi
+          done < "$bundle/changed-files.txt"
+          ffprobe -v error -show_entries stream=codec_name,codec_tag_string,profile,pix_fmt,width,height,avg_frame_rate:format=duration,size,bit_rate -of json public/scenes/mobile-forest-stream-video-v35-hevc-1080.mp4 > "$bundle/hevc-probe.json"
+          ffprobe -v error -show_entries stream=codec_name,codec_tag_string,profile,pix_fmt,width,height,avg_frame_rate:format=duration,size,bit_rate -of json public/scenes/mobile-forest-stream-video-v35-h264-1080.mp4 > "$bundle/h264-probe.json"
+          sha256sum public/scenes/mobile-forest-stream-video-v35-*-1080.mp4 > "$bundle/checksums.txt"
+
+      - name: Upload validated release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-hd-v35-release
+          path: ${{ runner.temp }}/mobile-hd-v35-release
+          if-no-files-found: error
+          retention-days: 7
