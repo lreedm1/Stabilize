@@ -34,6 +34,8 @@ test("mobile video is parser-loaded and first-touch playback remains synchronous
     /id="mobile-background-video"[\s\S]{0,500}data-src=/,
   );
 
+  assert.match(page, /mobile-v31-worker-activation-20260813-1/);
+
   assert.match(client, /function playInsideUserGesture\(\)/);
   const gestureFunction = client.match(
     /function playInsideUserGesture\(\) \{[\s\S]*?\n  \}/,

@@ -107,6 +107,7 @@ export function renderPage(options = {}) {
     <meta name="description" content="${escapeHtml(seoDescription)}" />
     <meta name="robots" content="index,follow,max-image-preview:large" />
     <meta name="theme-color" content="#173f31" />
+    <meta name="stabilize-release" content="mobile-v31-worker-activation-20260813-1" />
     <link rel="shortcut icon" href="/stabilize-tab-20260805.ico" type="image/x-icon" />
     <link rel="icon" href="/stabilize-tab-20260805.ico" type="image/x-icon" sizes="16x16 32x32 48x48" />
     <link rel="icon" href="/stabilize-tab-20260805-16.png" type="image/png" sizes="16x16" />
