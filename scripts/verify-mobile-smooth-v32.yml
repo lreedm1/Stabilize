@@ -1,4 +1,4 @@
-name: Verify mobile smooth v32
+name: Verify mobile smooth v33
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: verify-mobile-smooth-v32-${{ github.ref }}
+  group: verify-mobile-smooth-v33-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -47,22 +47,22 @@ jobs:
           npm run apply:prompt-policy
           git diff --exit-code
 
-          version='20260813-mobile-smooth-v32-1'
+          version='20260813-mobile-smooth-v33-1'
           video='public/scenes/mobile-forest-stream-video-v12-720.mp4'
           video_route='/media/mobile-forest-stream-video-v12-720.mp4'
           handoff_route='/mobile-video-handoff-v31.js'
 
           test -s "$video"
-          test "$(wc -c < "$video" | tr -d '[:space:]')" -eq 1314209
+          test "$(wc -c < "$video" | tr -d '[:space:]')" -eq 1447385
           test "$(sha256sum "$video" | awk '{print $1}')" = \
-            '78b6c1f1928d369e2d2a5b15d3b0de44b0458e1f5a940034080c0d8861e14bc3'
+            'be9d679e5e7b2e9240419225f8bb53c4a8fb3510aafed2babc5d1e27f4d12b3f'
           test "$(dd if="$video" bs=1 skip=4 count=4 status=none)" = 'ftyp'
           grep -aFq 'moov' "$video"
           grep -aFq 'mdat' "$video"
           grep -aFq 'avc1' "$video"
           ! grep -aFq 'mp4a' "$video"
           test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video")" = 720x1280
-          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of csv=p=0 "$video")" = 24/1
+          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of csv=p=0 "$video")" = 60/1
           test "$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$video")" = ''
 
           test "$(grep -o 'id="mobile-background-video"' src/page.js | wc -l | tr -d '[:space:]')" -eq 1
@@ -75,7 +75,7 @@ jobs:
 
           grep -Fq "const VERSION = \"${version}\"" public/mobile-video-handoff-v31.js
           grep -Fq "$video_route?v=\${VERSION}" public/mobile-video-handoff-v31.js
-          grep -Fq 'native-video-720x1280-24fps' public/mobile-video-handoff-v31.js
+          grep -Fq 'native-video-720x1280-60fps' public/mobile-video-handoff-v31.js
           grep -Fq 'video.currentTime <= 0' public/mobile-video-handoff-v31.js
           grep -Fq 'video.videoWidth < 700' public/mobile-video-handoff-v31.js
           grep -Fq 'video.videoHeight < 1240' public/mobile-video-handoff-v31.js
@@ -83,10 +83,13 @@ jobs:
           grep -Fq 'video.style.setProperty("opacity", "0.001", "important")' public/mobile-video-handoff-v31.js
           grep -Fq 'const result = video.play();' public/mobile-video-handoff-v31.js
 
-          grep -Fq 'MOBILE_VIDEO_BYTES = 1_314_209' src/mobile-video-response.js
+          grep -Fq 'MOBILE_VIDEO_BYTES = 1_447_385' src/mobile-video-response.js
           grep -Fq "$video_route" src/mobile-video-response.js
           grep -Fq 'Accept-Ranges' src/mobile-video-response.js
           grep -Fq 'Content-Range' src/mobile-video-response.js
+          grep -Fq 'Cache-Control": "public, max-age=31536000, immutable' src/mobile-video-response.js
+          grep -Fq 'mobile-video-smooth-v33-start' public/mobile-background-v30.css
+          grep -Fq -- '-webkit-backdrop-filter: none' public/mobile-background-v30.css
 
   verify-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -113,7 +116,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          version='20260813-mobile-smooth-v32-1'
+          version='20260813-mobile-smooth-v33-1'
           video_route='/media/mobile-forest-stream-video-v12-720.mp4'
           handoff_route='/mobile-video-handoff-v31.js'
           expected_video='public/scenes/mobile-forest-stream-video-v12-720.mp4'
@@ -127,7 +130,7 @@ jobs:
             local state="$1"
             local description="$2"
             local payload
-            payload="$(printf '{"state":"%s","context":"verification/mobile-smooth-v32","description":"%s","target_url":"%s/%s/actions/runs/%s"}' \
+            payload="$(printf '{"state":"%s","context":"verification/mobile-smooth-v33","description":"%s","target_url":"%s/%s/actions/runs/%s"}' \
               "$state" "$description" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
             curl --fail-with-body --silent --show-error \
               --request POST \
@@ -149,20 +152,20 @@ jobs:
             ' "$file" | tail -n 1
           }
 
-          publish_status pending 'Waiting for mobile smooth v32'
+          publish_status pending 'Waiting for mobile smooth v33'
           ready=false
           for attempt in {1..36}; do
             key="${GITHUB_SHA}-${attempt}"
-            page_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/page.headers" -o "$tmpdir/page.html" -w '%{http_code}' "https://stabilize.info/?mobile-v32=${key}" || true)"
+            page_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/page.headers" -o "$tmpdir/page.html" -w '%{http_code}' "https://stabilize.info/?mobile-v33=${key}" || true)"
             handoff_status="$(curl --max-time 25 --silent --show-error --compressed -H 'Cache-Control: no-cache' -D "$tmpdir/handoff.headers" -o "$tmpdir/handoff.js" -w '%{http_code}' "https://stabilize.info${handoff_route}?v=${version}&release=${key}" || true)"
 
-            echo "v32 attempt ${attempt}: page=${page_status:-000} handoff=${handoff_status:-000}"
+            echo "v33 attempt ${attempt}: page=${page_status:-000} handoff=${handoff_status:-000}"
             if [[ "$page_status" == 200 && "$handoff_status" == 200 ]] \
               && grep -Fq "$video_route?v=${version}" "$tmpdir/page.html" \
               && grep -Fq "$handoff_route?v=${version}" "$tmpdir/page.html" \
               && ! grep -Fq '/mobile-background/runtime?v=' "$tmpdir/page.html" \
               && grep -Fq "const VERSION = \"${version}\"" "$tmpdir/handoff.js" \
-              && grep -Fq 'native-video-720x1280-24fps' "$tmpdir/handoff.js" \
+              && grep -Fq 'native-video-720x1280-60fps' "$tmpdir/handoff.js" \
               && grep -Fq 'video.style.setProperty("opacity", "0.001", "important")' "$tmpdir/handoff.js" \
               && grep -Fqi "media-src 'self'" "$tmpdir/page.headers"; then
               ready=true
@@ -172,8 +175,8 @@ jobs:
           done
 
           if [[ "$ready" != true ]]; then
-            publish_status failure 'Mobile smooth v32 is not live'
-            echo '::error::Production did not expose the exact v32 page and handoff client.'
+            publish_status failure 'Mobile smooth v33 is not live'
+            echo '::error::Production did not expose the exact v33 page and handoff client.'
             exit 1
           fi
 
@@ -200,12 +203,12 @@ jobs:
             || "$range_bytes" != 1024 \
             || "$range_content" != "bytes 0-1023/${expected_bytes}" \
             || "$dimensions" != 720x1280 ]]; then
-            publish_status failure 'Exact v32 video delivery failed'
+            publish_status failure 'Exact v33 video delivery failed'
             echo "::error::video=${video_status}, range=${range_status}, bytes=${video_bytes}, sha=${video_sha}, dimensions=${dimensions}"
             exit 1
           fi
 
-          publish_status success 'Mobile smooth v32 is live'
+          publish_status success 'Mobile smooth v33 is live'
 
   verify-mobile-webkit:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -230,7 +233,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/mobile-smooth-v32
+          mkdir -p /tmp/mobile-smooth-v33
           node --input-type=module <<'NODE'
           import { webkit } from "playwright";
           import { createHash } from "node:crypto";
@@ -260,7 +263,7 @@ jobs:
             );
 
             await page.goto(
-              `https://stabilize.info/?mobile-smooth-v32-webkit=${Date.now()}`,
+              `https://stabilize.info/?mobile-smooth-v33-webkit=${Date.now()}`,
               { waitUntil: "domcontentloaded", timeout: 60_000 },
             );
             await page.waitForSelector("#mobile-background-video", {
@@ -298,8 +301,8 @@ jobs:
               page.evaluate(() => {
                 const video = document.querySelector("#mobile-background-video");
                 const canvas = document.querySelector("#mobile-background-v30");
-                if (!(video instanceof HTMLVideoElement)) throw new Error("v32 video missing");
-                if (!(canvas instanceof HTMLCanvasElement)) throw new Error("v32 canvas missing");
+                if (!(video instanceof HTMLVideoElement)) throw new Error("v33 video missing");
+                if (!(canvas instanceof HTMLCanvasElement)) throw new Error("v33 canvas missing");
                 return {
                   width: video.videoWidth,
                   height: video.videoHeight,
@@ -342,7 +345,7 @@ jobs:
             if (second.currentTime - first.currentTime < 0.6) {
               throw new Error("The native video timeline did not advance smoothly.");
             }
-            if (second.quality !== "native-video-720x1280-24fps") {
+            if (second.quality !== "native-video-720x1280-60fps") {
               throw new Error(`Unexpected quality state: ${second.quality}`);
             }
             if (!second.source.includes("mobile-forest-stream-video-v12-720.mp4")) {
@@ -359,7 +362,7 @@ jobs:
             }
 
             await page.screenshot({
-              path: "/tmp/mobile-smooth-v32/native-video.png",
+              path: "/tmp/mobile-smooth-v33/native-video.png",
               fullPage: false,
             });
             await context.close();
@@ -427,13 +430,13 @@ jobs:
             }
 
             await blockedPage.screenshot({
-              path: "/tmp/mobile-smooth-v32/static-poster-fallback.png",
+              path: "/tmp/mobile-smooth-v33/static-poster-fallback.png",
               fullPage: false,
             });
             await blockedContext.close();
           } finally {
             await writeFile(
-              "/tmp/mobile-smooth-v32/evidence.json",
+              "/tmp/mobile-smooth-v33/evidence.json",
               JSON.stringify(evidence, null, 2),
             );
             await browser.close();
@@ -444,7 +447,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-smooth-v32-webkit-evidence
-          path: /tmp/mobile-smooth-v32
+          name: mobile-smooth-v33-webkit-evidence
+          path: /tmp/mobile-smooth-v33
           if-no-files-found: warn
           retention-days: 7

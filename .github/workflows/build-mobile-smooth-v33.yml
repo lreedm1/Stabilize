@@ -16,21 +16,21 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  build-test-package:
+  build-test-publish:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
     steps:
-      - name: Check out the exact release branch
+      - name: Check out the actual release branch
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
           fetch-depth: 1
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -120,29 +120,18 @@ jobs:
           grep -Fq '/main-box-white.css?v=20260805-2' src/page.js
           ! grep -Fq 'mobile-video-smooth-v33-start' public/main-box-white.css
 
-      - name: Package the verified generated commit
-        if: steps.commit.outputs.changed == 'true'
+      - name: Publish verified generated commit to PR branch
+        if: steps.commit.outputs.changed == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         shell: bash
         run: |
           set -euo pipefail
-          evidence='/tmp/stabilize-mobile-smooth-v33'
-          tree="$evidence/generated-release-tree"
-          mkdir -p "$tree"
-          git diff-tree --no-commit-id --name-only -r HEAD > "$evidence/generated-files.txt"
-          while IFS= read -r path; do
-            mkdir -p "$tree/$(dirname "$path")"
-            cp "$path" "$tree/$path"
-          done < "$evidence/generated-files.txt"
-          tar -C "$tree" -czf "$evidence/generated-release.tar.gz" .
-          git rev-parse HEAD^ > "$evidence/generated-parent.txt"
-          git rev-parse HEAD > "$evidence/generated-commit.txt"
-          sha256sum "$evidence/generated-release.tar.gz" > "$evidence/generated-release.tar.gz.sha256"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
 
       - name: Upload release evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-smooth-v33-release
+          name: mobile-smooth-v33-evidence
           path: |
             /tmp/stabilize-mobile-smooth-v33/mobile-forest-stream-video-v12-720.mp4
             /tmp/stabilize-mobile-smooth-v33/probe.json
@@ -150,10 +139,5 @@ jobs:
             /tmp/stabilize-mobile-smooth-v33/frame-early.png
             /tmp/stabilize-mobile-smooth-v33/frame-late.png
             /tmp/stabilize-mobile-smooth-v33/release.json
-            /tmp/stabilize-mobile-smooth-v33/generated-files.txt
-            /tmp/stabilize-mobile-smooth-v33/generated-parent.txt
-            /tmp/stabilize-mobile-smooth-v33/generated-commit.txt
-            /tmp/stabilize-mobile-smooth-v33/generated-release.tar.gz
-            /tmp/stabilize-mobile-smooth-v33/generated-release.tar.gz.sha256
           if-no-files-found: warn
           retention-days: 7
