@@ -308,115 +308,110 @@ async function readBoundedJson(request) {
 }
 
 function latestUserText(body) {
-  const direct = String(body?.message || "").trim();
-  if (direct) return direct;
-  const messages = Array.isArray(body?.messages) ? body.messages : [];
-  const latest = [...messages]
-    .reverse()
-    .find((message) => message?.role === "user");
-  return String(latest?.content || "").trim();
+  if (typeof body?.message === "string") return body.message.trim();
+  if (!Array.isArray(body?.messages)) return "";
+  for (let index = body.messages.length - 1; index >= 0; index -= 1) {
+    const message = body.messages[index];
+    if (message?.role === "user" && typeof message?.content === "string") {
+      return message.content.trim();
+    }
+  }
+  return "";
+}
+
+function normalizeMessages(rawMessages = []) {
+  if (!Array.isArray(rawMessages)) return [];
+  return rawMessages
+    .slice(-MAX_MESSAGES)
+    .map((message) => {
+      const role = message?.role === "assistant" ? "assistant" : "user";
+      const content = String(message?.content || "").trim().slice(0, MAX_MESSAGE_CHARS);
+      return content ? { role, content } : null;
+    })
+    .filter(Boolean);
 }
 
 function modelMessages(body, latestText) {
-  const messages = Array.isArray(body?.messages) ? body.messages : [];
-  const normalized = messages
-    .filter((message) => message && ["user", "assistant"].includes(message.role))
-    .map((message) => ({
-      role: message.role,
-      content: String(message.content || "")
-        .trim()
-        .slice(0, MAX_MESSAGE_CHARS),
-    }))
-    .filter((message) => message.content)
-    .slice(-MAX_MESSAGES);
-
-  const latest = normalized.at(-1);
-  if (latest?.role !== "user" || latest.content !== latestText) {
-    normalized.push({ role: "user", content: latestText });
-  }
-  return normalized.slice(-MAX_MESSAGES);
-}
-
-function routeInstruction(route) {
-  return `${COPY.model.memoryInstruction}\n\n${COPY.model.routeInstruction(route)}\n\nFor a matching UW–Madison need, include one primary resource and at most one backup unless safety requires more. Give the direct contact or official URL, not a generic suggestion to search.`;
+  const normalized = normalizeMessages(body?.messages);
+  if (!normalized.length) return [{ role: "user", content: latestText }];
+  const last = normalized.at(-1);
+  if (last?.role === "user" && last.content === latestText) return normalized;
+  return [...normalized, { role: "user", content: latestText }].slice(-MAX_MESSAGES);
 }
 
 function responseText(body) {
-  const output = Array.isArray(body?.output) ? body.output : [];
-  return output
-    .filter((item) => item?.type === "message" && Array.isArray(item.content))
-    .flatMap((item) => item.content)
-    .filter(
-      (block) =>
-        block?.type === "output_text" && typeof block.text === "string",
-    )
-    .map((block) => block.text)
-    .join("\n")
-    .trim();
-}
-
-function validateReply(value) {
-  const text = String(value || "").trim();
-  if (!text) return null;
-  const unsafeMedication =
-    /\b(?:stop taking|double (?:your|the) dose|take \d+(?:\.\d+)? ?mg|increase (?:your|the) dose|reduce (?:your|the) dose)\b/i;
-  const falseAssurance =
-    /\b(?:i can keep you safe|you are definitely safe|you don't need human help)\b/i;
-  return unsafeMedication.test(text) || falseAssurance.test(text) ? null : text;
-}
-
-function openAIConfig(env) {
-  const apiKey = String(env.OPENAI_API_KEY || "");
-  if (!apiKey) {
-    throw new CampusRequestError(503, "The UW–Madison chat is temporarily unavailable.");
+  if (typeof body?.output_text === "string" && body.output_text.trim()) {
+    return body.output_text.trim();
   }
-  const model = String(
-    env.FREE_PLAN_PRIMARY_MODEL || env.OPENAI_MODEL || "gpt-5.4",
+  if (!Array.isArray(body?.output)) return "";
+  const chunks = [];
+  for (const item of body.output) {
+    if (!Array.isArray(item?.content)) continue;
+    for (const content of item.content) {
+      if (typeof content?.text === "string" && content.text.trim()) {
+        chunks.push(content.text.trim());
+      }
+    }
+  }
+  return chunks.join("\n\n").trim();
+}
+
+function validateReply(reply) {
+  const value = String(reply || "").trim();
+  if (!value) return "";
+  return value.slice(0, 8_000);
+}
+
+function configuredModel(env) {
+  return String(
+    env.FREE_PLAN_PRIMARY_MODEL || env.OPENAI_MODEL || "gpt-5.6-sol",
   ).trim();
-  if (!/^[A-Za-z0-9._:-]+$/.test(model)) {
-    throw new CampusRequestError(503, "The UW–Madison chat is temporarily unavailable.");
-  }
-  const requestedTier = String(env.OPENAI_SERVICE_TIER || "fast")
-    .trim()
-    .toLowerCase();
-  const serviceTier = ALLOWED_SERVICE_TIERS.has(requestedTier)
-    ? requestedTier
-    : "default";
-  return { apiKey, model, serviceTier };
+}
+
+function configuredServiceTier(env) {
+  const tier = String(env.OPENAI_SERVICE_TIER || "default").trim().toLowerCase();
+  return ALLOWED_SERVICE_TIERS.has(tier) ? tier : "default";
 }
 
 async function generateCampusReply(messages, route, env) {
-  const { apiKey, model, serviceTier } = openAIConfig(env);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60_000);
-  const clientRequestId = crypto.randomUUID();
+  const key = String(env.OPENAI_API_KEY || "").trim();
+  if (!key) {
+    throw new CampusRequestError(503, "The UW–Madison chat is temporarily unavailable.");
+  }
 
+  const model = configuredModel(env);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
   let response;
   try {
     response = await fetch(OPENAI_RESPONSES_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
-        "X-Client-Request-Id": clientRequestId,
       },
       body: JSON.stringify({
         model,
-        service_tier: serviceTier,
-        reasoning: { effort: "none" },
+        instructions: CAMPUS_SYSTEM_PROMPT,
+        input: messages.map(({ role, content }) => ({
+          role,
+          content: [{ type: "input_text", text: content }],
+        })),
         max_output_tokens: OUTPUT_TOKEN_LIMIT,
-        text: { verbosity: "low" },
-        instructions: `${CAMPUS_SYSTEM_PROMPT}\n\n${routeInstruction(route)}`,
-        input: messages,
+        service_tier: configuredServiceTier(env),
         store: true,
+        metadata: {
+          experience: "uwmadison-resource-aware-chat",
+          safety_route: route || "DIRECT",
+        },
       }),
       signal: controller.signal,
     });
-  } catch {
+  } catch (error) {
     throw new CampusRequestError(
-      controller.signal.aborted ? 504 : 503,
-      controller.signal.aborted
-        ? "The UW–Madison chat took too long to reply. Try again."
+      503,
+      error?.name === "AbortError"
+        ? "The UW–Madison chat took too long to respond. Try again."
         : "The UW–Madison chat could not reach the AI service. Try again.",
     );
   } finally {
@@ -553,7 +548,7 @@ function campusPage() {
     )
     .replace(
       "</head>",
-      '    <link rel="stylesheet" href="/uwmadison-chat.css?v=20260813-1" />\n  </head>',
+      '    <link rel="stylesheet" href="/uwmadison-chat.css?v=20260813-2" />\n  </head>',
     )
     .replace(
       /<nav class="menu-links" aria-label="Site pages">[\s\S]*?<\/nav>/,
