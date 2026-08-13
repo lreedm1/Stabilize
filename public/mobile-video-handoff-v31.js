@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "20260813-mobile-smooth-v32-1";
+  const VERSION = "20260813-mobile-smooth-v33-1";
   const MOBILE_QUERY = "(hover: none) and (pointer: coarse)";
   const VIDEO_ASSET =
     `/media/mobile-forest-stream-video-v12-720.mp4?v=${VERSION}`;
@@ -94,7 +94,7 @@
     canvas.style.setProperty("visibility", "hidden", "important");
 
     root.dataset.mobileBackgroundV30 = "video";
-    root.dataset.mobileBackgroundV30Quality = "native-video-720x1280-24fps";
+    root.dataset.mobileBackgroundV30Quality = "native-video-720x1280-60fps";
     setState("video", `${video.videoWidth}x${video.videoHeight}`);
 
     if (playbackRetry !== null) {

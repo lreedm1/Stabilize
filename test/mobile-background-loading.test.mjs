@@ -191,7 +191,7 @@ test("single byte ranges cover Safari startup and resume requests", () => {
   });
 });
 
-test("the mobile video response has a strong ETag and exact uncached ranges", async () => {
+test("the mobile video response has a strong ETag and exact cacheable ranges", async () => {
   const video = await readVideo();
   const env = assetEnvironment(video);
   const url = `https://stabilize.info${MOBILE_VIDEO_ROUTE}`;
@@ -203,9 +203,9 @@ test("the mobile video response has a strong ETag and exact uncached ranges", as
   assert.equal(full.headers.get("content-length"), String(MOBILE_VIDEO_BYTES));
   assert.equal(full.headers.get("etag"), MOBILE_VIDEO_ETAG);
   assert.equal(full.headers.get("etag").startsWith("W/"), false);
-  assert.match(full.headers.get("cache-control"), /no-store/);
-  assert.equal(full.headers.get("cdn-cache-control"), "no-store");
-  assert.equal(full.headers.get("cloudflare-cdn-cache-control"), "no-store");
+  assert.equal(full.headers.get("cache-control"), "public, max-age=31536000, immutable");
+  assert.equal(full.headers.get("cdn-cache-control"), "public, max-age=31536000, immutable");
+  assert.equal(full.headers.get("cloudflare-cdn-cache-control"), "public, max-age=31536000, immutable");
   assert.deepEqual(Buffer.from(await full.arrayBuffer()), video);
 
   const partial = await serveMobileVideo(

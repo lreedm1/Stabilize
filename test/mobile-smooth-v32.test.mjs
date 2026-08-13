@@ -10,13 +10,14 @@ import {
   serveMobileVideo,
 } from "../src/mobile-video-response.js";
 
-const VERSION = "20260813-mobile-smooth-v32-1";
+const VERSION = "20260813-mobile-smooth-v33-1";
 const VIDEO_ROUTE = "/media/mobile-forest-stream-video-v12-720.mp4";
 const VIDEO_ASSET = "/scenes/mobile-forest-stream-video-v12-720.mp4";
 const VIDEO_SHA256 =
-  "78b6c1f1928d369e2d2a5b15d3b0de44b0458e1f5a940034080c0d8861e14bc3";
+  "be9d679e5e7b2e9240419225f8bb53c4a8fb3510aafed2babc5d1e27f4d12b3f";
+const CACHE_POLICY = "public, max-age=31536000, immutable";
 
-test("mobile smooth v32 uses a small native stream and a static first-load fallback", async () => {
+test("mobile smooth v33 uses a small genuine 60 fps stream and a static first-load fallback", async () => {
   const [
     page,
     client,
@@ -58,14 +59,15 @@ test("mobile smooth v32 uses a small native stream and a static first-load fallb
   assert.equal(metadata.version, VERSION);
   assert.equal(metadata.videoRoute, VIDEO_ROUTE);
   assert.equal(metadata.videoAsset, VIDEO_ASSET);
-  assert.equal(metadata.videoBytes, 1_314_209);
+  assert.equal(metadata.videoBytes, 1_447_385);
   assert.equal(metadata.width, 720);
   assert.equal(metadata.height, 1280);
-  assert.equal(metadata.fps, 24);
+  assert.equal(metadata.fps, 60);
+  assert.ok(metadata.uniqueSampleFrames >= 48);
 
   assert.equal(MOBILE_VIDEO_ROUTE, VIDEO_ROUTE);
   assert.equal(MOBILE_VIDEO_ASSET_PATH, VIDEO_ASSET);
-  assert.equal(MOBILE_VIDEO_BYTES, 1_314_209);
+  assert.equal(MOBILE_VIDEO_BYTES, 1_447_385);
   assert.equal(MOBILE_VIDEO_ETAG, `"${VIDEO_SHA256}"`);
   assert.equal(video.byteLength, MOBILE_VIDEO_BYTES);
   assert.equal(createHash("sha256").update(video).digest("hex"), VIDEO_SHA256);
@@ -103,7 +105,7 @@ test("mobile smooth v32 uses a small native stream and a static first-load fallb
     client,
     /mobile-forest-stream-video-v12-720\.mp4\?v=\$\{VERSION\}/,
   );
-  assert.match(client, /native-video-720x1280-24fps/);
+  assert.match(client, /native-video-720x1280-60fps/);
   assert.match(client, /video\.currentTime <= 0/);
   assert.match(client, /video\.videoWidth < 700/);
   assert.match(client, /video\.videoHeight < 1240/);
@@ -140,10 +142,18 @@ test("mobile smooth v32 uses a small native stream and a static first-load fallb
   );
 
   assert.equal(workflow, workflowTemplate);
-  assert.match(workflow, /Verify mobile smooth v32/);
+  assert.match(workflow, /Verify mobile smooth v33/);
   assert.match(workflow, /720x1280/);
   assert.match(workflow, /static poster fallback/);
   assert.match(finalizer, /The expensive animated fallback controller is still loaded/);
+
+  const mobileSurfaceStyle = await readFile(
+    new URL("../public/mobile-background-v30.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(mobileSurfaceStyle, /mobile-video-smooth-v33-start/);
+  assert.match(mobileSurfaceStyle, /-webkit-backdrop-filter: none/);
+  assert.match(mobileSurfaceStyle, /backdrop-filter: none/);
 
   const env = {
     ASSETS: {
@@ -164,6 +174,9 @@ test("mobile smooth v32 uses a small native stream and a static first-load fallb
   assert.equal(full.status, 200);
   assert.equal(full.headers.get("content-length"), String(MOBILE_VIDEO_BYTES));
   assert.equal(full.headers.get("accept-ranges"), "bytes");
+  assert.equal(full.headers.get("cache-control"), CACHE_POLICY);
+  assert.equal(full.headers.get("cdn-cache-control"), CACHE_POLICY);
+  assert.equal(full.headers.get("cloudflare-cdn-cache-control"), CACHE_POLICY);
   assert.equal((await full.arrayBuffer()).byteLength, MOBILE_VIDEO_BYTES);
 
   const partial = await serveMobileVideo(
