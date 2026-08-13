@@ -1,16 +1,11 @@
 import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const PNG_NAME = "stabilize-tab-20260813-static-32.png";
-const SVG_NAME = "stabilize-tab-20260813.svg";
-const MANIFEST_VERSION = "20260813-static-1";
+const FAVICON_NAME = "favicon-32x32.png";
 
-const ICON_LINKS = `    <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
-    <link rel="icon" href="/${SVG_NAME}" type="image/svg+xml" sizes="any" />
-    <link rel="icon" href="/${PNG_NAME}" type="image/png" sizes="32x32" />
+const ICON_LINKS = `    <link rel="icon" href="/${FAVICON_NAME}" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/stabilize-app-20260805-180.png" sizes="180x180" />
-    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#173f31" />
-    <link rel="manifest" href="/site.webmanifest?v=${MANIFEST_VERSION}" />
+    <link rel="manifest" href="/site.webmanifest" />
     <meta name="application-name" content="STABILIZE" />
     <meta name="apple-mobile-web-app-title" content="STABILIZE" />`;
 
@@ -56,12 +51,15 @@ function decodeAsset(path) {
   );
 }
 
+// Keep the conventional root ICO available for implicit legacy discovery, but
+// do not advertise it in page markup. The only declared browser favicon is the
+// stable 32x32 PNG below.
 await writeFile(
   "public/favicon.ico",
   await decodeAsset("scripts/favicon-assets/favicon.ico.b64"),
 );
 await writeFile(
-  `public/${PNG_NAME}`,
+  `public/${FAVICON_NAME}`,
   await decodeAsset("scripts/favicon-assets/favicon-32x32.png.b64"),
 );
 
@@ -86,15 +84,9 @@ const manifest = {
   theme_color: "#173f31",
   icons: [
     {
-      src: `/${PNG_NAME}`,
-      sizes: "32x32",
+      src: "/stabilize-app-20260805-180.png",
+      sizes: "180x180",
       type: "image/png",
-      purpose: "any",
-    },
-    {
-      src: `/${SVG_NAME}`,
-      sizes: "any",
-      type: "image/svg+xml",
       purpose: "any",
     },
   ],
@@ -111,11 +103,15 @@ await update("public/_headers", (source) => {
       /\n?# static-favicon-20260813-start[\s\S]*?# static-favicon-20260813-end\n?/g,
       "\n",
     )
+    .replace(
+      /\n?# canonical-favicon-start[\s\S]*?# canonical-favicon-end\n?/g,
+      "\n",
+    )
     .trimEnd();
 
   return `${withoutOldBlocks}
 
-# static-favicon-20260813-start
+# canonical-favicon-start
 /favicon.ico
   Content-Type: image/x-icon
   Cache-Control: public, max-age=86400
@@ -123,25 +119,18 @@ await update("public/_headers", (source) => {
   Cross-Origin-Resource-Policy: same-origin
   X-Content-Type-Options: nosniff
 
-/${PNG_NAME}
+/${FAVICON_NAME}
   Content-Type: image/png
-  Cache-Control: public, max-age=31536000, immutable
+  Cache-Control: public, max-age=86400
   Content-Disposition: inline
   Cross-Origin-Resource-Policy: same-origin
   X-Content-Type-Options: nosniff
-
-/${SVG_NAME}
-  Content-Type: image/svg+xml; charset=utf-8
-  Cache-Control: public, max-age=31536000, immutable
-  Content-Disposition: inline
-  Cross-Origin-Resource-Policy: same-origin
-  X-Content-Type-Options: nosniff
-# static-favicon-20260813-end
+# canonical-favicon-end
 `;
 });
 
 await rm("public/favicon-refresh.js", { force: true });
 
 console.log(
-  "Installed one static PNG, one static SVG, and /favicon.ico without runtime favicon mutation.",
+  "Installed one stable declared PNG favicon with an implicit /favicon.ico fallback.",
 );
