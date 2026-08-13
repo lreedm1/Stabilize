@@ -1,0 +1,117 @@
+name: Diagnose UW chat scrolling
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Install Playwright WebKit
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps webkit
+
+      - name: Inspect mobile scroll layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { webkit } from "playwright";
+
+          const browser = await webkit.launch({ headless: true });
+          const context = await browser.newContext({
+            viewport: { width: 390, height: 844 },
+            screen: { width: 390, height: 844 },
+            deviceScaleFactor: 3,
+            isMobile: true,
+            hasTouch: true,
+            userAgent:
+              "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) " +
+              "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 " +
+              "Mobile/15E148 Safari/604.1",
+          });
+          const page = await context.newPage();
+          await page.goto(
+            `https://chat.uwmadison.stabilize.info/?scroll-diagnostic=${Date.now()}`,
+            { waitUntil: "domcontentloaded", timeout: 60_000 },
+          );
+          await page.waitForSelector(".uw-chat-banner", { timeout: 30_000 });
+          await page.waitForTimeout(1_000);
+
+          const inspect = () => page.evaluate(() => {
+            const pick = (selector) => {
+              const element = document.querySelector(selector);
+              if (!(element instanceof HTMLElement)) return null;
+              const style = getComputedStyle(element);
+              const rect = element.getBoundingClientRect();
+              return {
+                selector,
+                clientHeight: element.clientHeight,
+                scrollHeight: element.scrollHeight,
+                scrollTop: element.scrollTop,
+                offsetHeight: element.offsetHeight,
+                rect: {
+                  top: Math.round(rect.top),
+                  bottom: Math.round(rect.bottom),
+                  height: Math.round(rect.height),
+                },
+                overflow: style.overflow,
+                overflowY: style.overflowY,
+                height: style.height,
+                minHeight: style.minHeight,
+                flex: style.flex,
+                flexShrink: style.flexShrink,
+                position: style.position,
+                touchAction: style.touchAction,
+              };
+            };
+            return {
+              viewport: {
+                innerHeight: window.innerHeight,
+                visualViewportHeight: window.visualViewport?.height || null,
+                scrollY: window.scrollY,
+              },
+              root: {
+                clientHeight: document.documentElement.clientHeight,
+                scrollHeight: document.documentElement.scrollHeight,
+                scrollTop: document.documentElement.scrollTop,
+                overflowY: getComputedStyle(document.documentElement).overflowY,
+              },
+              body: {
+                clientHeight: document.body.clientHeight,
+                scrollHeight: document.body.scrollHeight,
+                scrollTop: document.body.scrollTop,
+                overflowY: getComputedStyle(document.body).overflowY,
+              },
+              shell: pick(".page-shell"),
+              header: pick(".site-header"),
+              banner: pick(".uw-chat-banner"),
+              chat: pick(".chat-card"),
+              surface: pick(".conversation-surface"),
+              intro: pick(".product-intro"),
+              composer: pick(".composer-dock"),
+              input: pick("#message-input"),
+            };
+          });
+
+          console.log("BEFORE\n" + JSON.stringify(await inspect(), null, 2));
+
+          await page.evaluate(() => {
+            window.scrollTo(0, 300);
+            const shell = document.querySelector(".page-shell");
+            if (shell instanceof HTMLElement) shell.scrollTop = 300;
+            const chat = document.querySelector(".chat-card");
+            if (chat instanceof HTMLElement) chat.scrollTop = 300;
+          });
+          await page.waitForTimeout(500);
+
+          console.log("AFTER PROGRAMMATIC SCROLL\n" + JSON.stringify(await inspect(), null, 2));
+          await browser.close();
+          NODE
