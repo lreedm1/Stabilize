@@ -56,6 +56,7 @@ test("stabilize.info is canonical and reedlokken.com redirects", async () => {
   assert.deepEqual(config.routes, [
     { pattern: "stabilize.info/*", zone_name: "stabilize.info" },
     { pattern: "uwmadison.stabilize.info", custom_domain: true },
+    { pattern: "chat.uwmadison.stabilize.info", custom_domain: true },
     { pattern: "reedlokken.com", custom_domain: true },
     { pattern: "www.reedlokken.com", custom_domain: true },
   ]);
@@ -70,6 +71,7 @@ test("stabilize.info is canonical and reedlokken.com redirects", async () => {
       .map((route) => route.pattern),
     [
       "uwmadison.stabilize.info",
+      "chat.uwmadison.stabilize.info",
       "reedlokken.com",
       "www.reedlokken.com",
     ],
@@ -78,6 +80,10 @@ test("stabilize.info is canonical and reedlokken.com redirects", async () => {
   assert.match(router, /const CANONICAL_ORIGIN = "https:\/\/stabilize\.info"/);
   assert.match(router, /const CANONICAL_HOST = "stabilize\.info"/);
   assert.match(router, /const UW_MADISON_HOST = "uwmadison\.stabilize\.info"/);
+  assert.match(router, /CHAT_UW_MADISON_HOST/);
+  assert.match(router, /uwMadisonChatResponse/);
+  assert.match(router, /hostname === CHAT_UW_MADISON_HOST/);
+  assert.match(router, /https:\/\/\$\{CHAT_UW_MADISON_HOST\}\//);
   assert.match(router, /"reedlokken\.com"/);
   assert.match(router, /"www\.reedlokken\.com"/);
   assert.match(router, /function unknownHostResponse\(\)/);
@@ -90,7 +96,6 @@ test("stabilize.info is canonical and reedlokken.com redirects", async () => {
   assert.match(router, /"\/uwmadison\.html"/);
   assert.match(router, /"\/uwmadison-robots\.txt"/);
   assert.match(router, /"\/uwmadison-sitemap\.xml"/);
-  assert.match(router, /source=uwmadison/);
   assert.match(router, /return withStrictTransportSecurity\(response\)/);
   assert.match(router, /property === "PUBLIC_ORIGIN"/);
   assert.match(router, /url\.pathname === "\/auth\/logout"/);

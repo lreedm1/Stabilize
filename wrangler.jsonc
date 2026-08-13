@@ -19,6 +19,10 @@
       "custom_domain": true
     },
     {
+      "pattern": "chat.uwmadison.stabilize.info",
+      "custom_domain": true
+    },
+    {
       "pattern": "reedlokken.com",
       "custom_domain": true
     },
