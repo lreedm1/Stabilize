@@ -101,10 +101,17 @@ for (const path of [
 ]) {
   const fullGuestExpectation =
     "/finalize-full-guest-conversation\\.mjs$/";
+  const smoothExpectation =
+    "/finalize-decision-grade-impact\\.mjs && node scripts\\/finalize-native-selected-mobile-v24\\.mjs && node scripts\\/finalize-native-selected-mobile-v24-regressions\\.mjs && node scripts\\/finalize-mobile-video-handoff-v31\\.mjs && node scripts\\/finalize-mobile-smooth-v32\\.mjs$/";
   const handoffExpectation =
     "/finalize-decision-grade-impact\\.mjs && node scripts\\/finalize-native-selected-mobile-v24\\.mjs && node scripts\\/finalize-native-selected-mobile-v24-regressions\\.mjs && node scripts\\/finalize-mobile-video-handoff-v31\\.mjs$/";
   const nativeExpectation =
     "/finalize-decision-grade-impact\\.mjs && node scripts\\/finalize-native-selected-mobile-v24\\.mjs && node scripts\\/finalize-native-selected-mobile-v24-regressions\\.mjs$/";
+  const changedFromSmooth = replaceAll(
+    path,
+    smoothExpectation,
+    fullGuestExpectation,
+  );
   const changedFromHandoff = replaceAll(
     path,
     handoffExpectation,
@@ -126,6 +133,7 @@ for (const path of [
     fullGuestExpectation,
   );
   if (
+    !changedFromSmooth &&
     !changedFromHandoff &&
     !changedFromNative &&
     !changedFromImpact &&

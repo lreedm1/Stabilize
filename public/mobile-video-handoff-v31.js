@@ -1,10 +1,10 @@
 (() => {
   "use strict";
 
-  const VERSION = "20260813-mobile-video-handoff-v31-1";
+  const VERSION = "20260813-mobile-smooth-v32-1";
   const MOBILE_QUERY = "(hover: none) and (pointer: coarse)";
   const VIDEO_ASSET =
-    `/media/mobile-forest-stream-video-v24-native-1080.mp4?v=${VERSION}`;
+    `/media/mobile-forest-stream-video-v12-720.mp4?v=${VERSION}`;
   const mobile = globalThis.matchMedia?.(MOBILE_QUERY);
   const root = document.documentElement;
   const video = document.querySelector("#mobile-background-video");
@@ -69,8 +69,8 @@
     canvas.style.setProperty("visibility", "visible", "important");
     canvas.style.setProperty("opacity", "1", "important");
     video.style.setProperty("display", "block", "important");
-    video.style.setProperty("visibility", "hidden", "important");
-    video.style.setProperty("opacity", "0", "important");
+    video.style.setProperty("visibility", "visible", "important");
+    video.style.setProperty("opacity", "0.001", "important");
     setState("fallback", detail);
   }
 
@@ -79,8 +79,9 @@
       document.hidden ||
       video.paused ||
       video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
-      video.videoWidth < 2000 ||
-      video.videoHeight < 3000
+      video.currentTime <= 0 ||
+      video.videoWidth < 700 ||
+      video.videoHeight < 1240
     ) {
       return;
     }
@@ -93,7 +94,7 @@
     canvas.style.setProperty("visibility", "hidden", "important");
 
     root.dataset.mobileBackgroundV30 = "video";
-    root.dataset.mobileBackgroundV30Quality = "native-video-2160x3840-24fps";
+    root.dataset.mobileBackgroundV30Quality = "native-video-720x1280-24fps";
     setState("video", `${video.videoWidth}x${video.videoHeight}`);
 
     if (playbackRetry !== null) {
