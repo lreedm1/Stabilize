@@ -14,109 +14,32 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 3
     steps:
-      - name: Install Playwright WebKit
+      - name: Inspect live stylesheet version and scroll rules
         shell: bash
         run: |
           set -euo pipefail
-          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
-          npx playwright install --with-deps webkit
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+          cache_bust="$(date +%s)"
 
-      - name: Inspect mobile scroll layout
-        shell: bash
-        run: |
-          set -euo pipefail
-          node --input-type=module <<'NODE'
-          import { webkit } from "playwright";
+          curl --fail --silent --show-error \
+            "https://chat.uwmadison.stabilize.info/?scroll-diagnostic=${cache_bust}" \
+            > "$workdir/page.html"
 
-          const browser = await webkit.launch({ headless: true });
-          const context = await browser.newContext({
-            viewport: { width: 390, height: 844 },
-            screen: { width: 390, height: 844 },
-            deviceScaleFactor: 3,
-            isMobile: true,
-            hasTouch: true,
-            userAgent:
-              "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) " +
-              "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 " +
-              "Mobile/15E148 Safari/604.1",
-          });
-          const page = await context.newPage();
-          await page.goto(
-            `https://chat.uwmadison.stabilize.info/?scroll-diagnostic=${Date.now()}`,
-            { waitUntil: "domcontentloaded", timeout: 60_000 },
-          );
-          await page.waitForSelector(".uw-chat-banner", { timeout: 30_000 });
-          await page.waitForTimeout(1_000);
+          css_path="$(grep -oE '/uwmadison-chat\.css\?v=[^\" ]+' "$workdir/page.html" | head -n 1)"
+          echo "Live stylesheet path: ${css_path:-missing}"
+          test -n "$css_path"
 
-          const inspect = () => page.evaluate(() => {
-            const pick = (selector) => {
-              const element = document.querySelector(selector);
-              if (!(element instanceof HTMLElement)) return null;
-              const style = getComputedStyle(element);
-              const rect = element.getBoundingClientRect();
-              return {
-                selector,
-                clientHeight: element.clientHeight,
-                scrollHeight: element.scrollHeight,
-                scrollTop: element.scrollTop,
-                offsetHeight: element.offsetHeight,
-                rect: {
-                  top: Math.round(rect.top),
-                  bottom: Math.round(rect.bottom),
-                  height: Math.round(rect.height),
-                },
-                overflow: style.overflow,
-                overflowY: style.overflowY,
-                height: style.height,
-                minHeight: style.minHeight,
-                flex: style.flex,
-                flexShrink: style.flexShrink,
-                position: style.position,
-                touchAction: style.touchAction,
-              };
-            };
-            return {
-              viewport: {
-                innerHeight: window.innerHeight,
-                visualViewportHeight: window.visualViewport?.height || null,
-                scrollY: window.scrollY,
-              },
-              root: {
-                clientHeight: document.documentElement.clientHeight,
-                scrollHeight: document.documentElement.scrollHeight,
-                scrollTop: document.documentElement.scrollTop,
-                overflowY: getComputedStyle(document.documentElement).overflowY,
-              },
-              body: {
-                clientHeight: document.body.clientHeight,
-                scrollHeight: document.body.scrollHeight,
-                scrollTop: document.body.scrollTop,
-                overflowY: getComputedStyle(document.body).overflowY,
-              },
-              shell: pick(".page-shell"),
-              header: pick(".site-header"),
-              banner: pick(".uw-chat-banner"),
-              chat: pick(".chat-card"),
-              surface: pick(".conversation-surface"),
-              intro: pick(".product-intro"),
-              composer: pick(".composer-dock"),
-              input: pick("#message-input"),
-            };
-          });
+          curl --fail --silent --show-error \
+            "https://chat.uwmadison.stabilize.info${css_path}&diagnostic=${cache_bust}" \
+            > "$workdir/uw.css"
 
-          console.log("BEFORE\n" + JSON.stringify(await inspect(), null, 2));
+          echo "Scroll-rule markers in live CSS:"
+          grep -nE 'overflow-y: auto|touch-action: pan-y|webkit-overflow-scrolling' "$workdir/uw.css" || true
+          echo "Live CSS bytes: $(wc -c < "$workdir/uw.css")"
+          echo "Live CSS SHA256: $(sha256sum "$workdir/uw.css" | cut -d' ' -f1)"
 
-          await page.evaluate(() => {
-            window.scrollTo(0, 300);
-            const shell = document.querySelector(".page-shell");
-            if (shell instanceof HTMLElement) shell.scrollTop = 300;
-            const chat = document.querySelector(".chat-card");
-            if (chat instanceof HTMLElement) chat.scrollTop = 300;
-          });
-          await page.waitForTimeout(500);
-
-          console.log("AFTER PROGRAMMATIC SCROLL\n" + JSON.stringify(await inspect(), null, 2));
-          await browser.close();
-          NODE
+          grep -Fq 'overflow-y: auto' "$workdir/uw.css"
+          grep -Fq 'touch-action: pan-y' "$workdir/uw.css"
