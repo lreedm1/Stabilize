@@ -107,16 +107,14 @@ export function renderPage(options = {}) {
     <meta name="description" content="${escapeHtml(seoDescription)}" />
     <meta name="robots" content="index,follow,max-image-preview:large" />
     <meta name="theme-color" content="#173f31" />
-    <link rel="icon" href="/stabilize-tab-20260805-16.png" type="image/png" sizes="16x16" />
-    <link rel="icon" href="/stabilize-tab-20260805-32.png" type="image/png" sizes="32x32" />
+    <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
     <link rel="icon" href="/stabilize-tab-20260813.svg" type="image/svg+xml" sizes="any" />
-    <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACXklEQVR42mNgGGDAiEtC3N7wPzUtennwPCNRDqC2xYQcwkRPy7HZwURPy7HZxUJLi85W6sHZxu2XsKphopXvkS3HxofZyTTQ2XD4OgA9znGlAZISYaCjM0OUpxeDjrIKAy83N8P3nz8ZPn35wvDk1UuGO48fMSzYtJHh8p3bBC0lywH9xWUMkR6eKGK8XFwMvFxcDNJiYgzmOroM565fR3EAMYAoB9gYGMIt//ztG0N2eyvD8UsXGP79/88gKy7BoKeqyuBn78jw6/dvkqOKKAc4m1vA2ftPn2LYdeIYnH/jwX2GGw/uM6zavYt2iZCPmxvONtPRZdBVUaVaYiUqBB48ewZnSwgLM+yePovh3tMnDMcvXWQ4efkSw8GzZxlevntLfnVMqCSUFhNjODJvEQMnOztW+X///zNs2L+PoXLyRIaPXz6TVDMSFQVPX71iSG9pYnjz4QP2eGRkZAhycmaYUl5JmxCAAU52dgYvG1sGBxNTBjsjYwZxIWEMNaYxkQyPX74gOgRIKoi+//zJsHbvHoa1e/cwMDAwMGgpKTFUJ6cxOJuZw9UoSEkR7QCKi+Jr9+4x9CxegCL28csX6ueCvMhoBlMtbYY9J08wnL95g+HF2zcM7z99YpASFWXICg2Hq3v9/j3DtXt3qe8ALg4OBlcLSwZXC0ucav7++8dQPrGf4c/fv9R3wOrdOxk+ff3KYKypxaAmJ8cgyMfPwM/Dw/Dv3z+GZ29eM5y6cplh9rq1DFfu3qFtLqBFC3lwNEhwdRro0T8YPE0yeoYCsl1MxPTfaNk1G/DO6YADAJI04i4LCcRWAAAAAElFTkSuQmCC" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/stabilize-tab-20260813-static-32.png" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/stabilize-app-20260805-180.png" sizes="180x180" />
     <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#173f31" />
-    <link rel="manifest" href="/site.webmanifest?v=20260813-safari-inline-1" />
+    <link rel="manifest" href="/site.webmanifest?v=20260813-static-1" />
     <meta name="application-name" content="STABILIZE" />
     <meta name="apple-mobile-web-app-title" content="STABILIZE" />
-    <script src="/favicon-refresh.js?v=20260813-safari-inline-1" defer></script>
 
     <link rel="canonical" href="${canonicalUrl}" />
     <meta property="og:type" content="website" />

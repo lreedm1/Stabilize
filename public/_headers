@@ -125,11 +125,25 @@
   X-Content-Type-Options: nosniff
 # mobile-video-handoff-v31-end
 
-# cache-independent-safari-tab-icon-start
-/stabilize-tab-20260813.svg
-  Content-Type: image/svg+xml; charset=utf-8
-  Cache-Control: no-store, max-age=0
+# static-favicon-20260813-start
+/favicon.ico
+  Content-Type: image/x-icon
+  Cache-Control: public, max-age=86400
   Content-Disposition: inline
   Cross-Origin-Resource-Policy: same-origin
   X-Content-Type-Options: nosniff
-# cache-independent-safari-tab-icon-end
+
+/stabilize-tab-20260813-static-32.png
+  Content-Type: image/png
+  Cache-Control: public, max-age=31536000, immutable
+  Content-Disposition: inline
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+
+/stabilize-tab-20260813.svg
+  Content-Type: image/svg+xml; charset=utf-8
+  Cache-Control: public, max-age=31536000, immutable
+  Content-Disposition: inline
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+# static-favicon-20260813-end
