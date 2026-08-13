@@ -20,6 +20,7 @@
  * chat, so this host must use the document itself as the vertical scroller.
  * Keeping the chat card as a full-height, non-shrinking section also prevents
  * the composer from being compressed underneath iOS browser chrome.
+ * WebKit regression coverage verifies actual document movement.
  */
 html[data-campus-chat="uwmadison"] {
   height: auto !important;
