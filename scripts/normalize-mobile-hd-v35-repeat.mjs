@@ -2,6 +2,8 @@ import { readFile, writeFile } from "node:fs/promises";
 
 const COMMAND = "node scripts/normalize-mobile-hd-v35-repeat.mjs";
 const FULL_GUEST = "node scripts/finalize-full-guest-conversation.mjs";
+const RESTORE_V34 = "node scripts/restore-mobile-v34-before-v32.mjs";
+const FINALIZE_V32 = "node scripts/finalize-mobile-smooth-v32.mjs";
 const POLICY_FILES = [
   "test/account-preflight.test.mjs",
   "test/signed-in-prefetch-latency.test.mjs",
@@ -17,15 +19,24 @@ await update("package.json", (source) => {
   const data = JSON.parse(source);
   const policy = String(data.scripts?.["apply:prompt-policy"] || "");
   if (!policy) throw new Error("package.json is missing apply:prompt-policy.");
+
   const commands = policy
     .split(" && ")
     .filter(Boolean)
-    .filter((command) => command !== COMMAND);
+    .filter((command) => command !== COMMAND && command !== RESTORE_V34);
+
   const fullGuestIndex = commands.indexOf(FULL_GUEST);
   if (fullGuestIndex < 0) {
     throw new Error("Could not locate the full guest finalizer in the policy pipeline.");
   }
   commands.splice(fullGuestIndex, 0, COMMAND);
+
+  const v32Index = commands.indexOf(FINALIZE_V32);
+  if (v32Index < 0) {
+    throw new Error("Could not locate the legacy mobile v32 finalizer.");
+  }
+  commands.splice(v32Index, 0, RESTORE_V34);
+
   data.scripts["apply:prompt-policy"] = commands.join(" && ");
   return `${JSON.stringify(data, null, 2)}\n`;
 });
@@ -55,5 +66,5 @@ for (const path of POLICY_FILES) {
 }
 
 console.log(
-  "Normalized repeated mobile HD policy assertions before the full guest finalizer.",
+  "Prepared repeated mobile HD generation and legacy handoff compatibility.",
 );
