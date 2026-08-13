@@ -1,0 +1,112 @@
+name: Materialize mobile smooth v32
+
+on:
+  push:
+    branches:
+      - fix/mobile-smooth-v32
+    paths:
+      - .github/workflows/materialize-mobile-smooth-v32.yml
+      - scripts/finalize-mobile-smooth-v32.mjs
+      - scripts/mobile-smooth-v32.json
+      - scripts/verify-mobile-smooth-v32.yml
+      - test/mobile-smooth-v32.test.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: materialize-mobile-smooth-v32
+  cancel-in-progress: true
+
+jobs:
+  materialize-validate-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repair branch
+        uses: actions/checkout@v6
+        with:
+          ref: fix/mobile-smooth-v32
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies without generation
+        run: npm ci --ignore-scripts
+
+      - name: Materialize canonical v32 output
+        run: npm run apply:prompt-policy
+
+      - name: Verify the intended repair before commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq '20260813-mobile-smooth-v32-1' src/page.js
+          grep -Fq '/media/mobile-forest-stream-video-v12-720.mp4' src/page.js
+          ! grep -Fq '/mobile-background/runtime?v=' src/page.js
+          grep -Fq 'native-video-720x1280-24fps' public/mobile-video-handoff-v31.js
+          grep -Fq 'video.style.setProperty("opacity", "0.001", "important")' public/mobile-video-handoff-v31.js
+          grep -Fq 'MOBILE_VIDEO_BYTES = 1_314_209' src/mobile-video-response.js
+          cmp -s scripts/verify-mobile-smooth-v32.yml .github/workflows/verify-mobile-video.yml
+          git diff --check
+
+      - name: Commit the generated tree locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Use the smooth mobile video path'
+
+      - name: Validate the exact committed tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+      - name: Package the validated commit delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir='/tmp/mobile-smooth-v32-release'
+          rm -rf "$release_dir"
+          mkdir -p "$release_dir/files"
+          git rev-parse HEAD^ > "$release_dir/parent-commit.txt"
+          git rev-parse HEAD > "$release_dir/release-commit.txt"
+          git diff-tree --no-commit-id --name-status -r HEAD^ HEAD > "$release_dir/manifest.tsv"
+
+          while IFS=$'\t' read -r status first second; do
+            [[ -n "$status" ]] || continue
+            path="$first"
+            if [[ "$status" == R* || "$status" == C* ]]; then
+              path="$second"
+            fi
+            if [[ "$status" == D* ]]; then
+              continue
+            fi
+            mkdir -p "$release_dir/files/$(dirname "$path")"
+            git show "HEAD:$path" > "$release_dir/files/$path"
+          done < "$release_dir/manifest.tsv"
+
+          tar -C /tmp -czf /tmp/mobile-smooth-v32-validated-tree.tar.gz mobile-smooth-v32-release
+          test -s /tmp/mobile-smooth-v32-validated-tree.tar.gz
+
+      - name: Upload the exact validated tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-smooth-v32-validated-tree
+          path: /tmp/mobile-smooth-v32-validated-tree.tar.gz
+          if-no-files-found: error
+          retention-days: 1
