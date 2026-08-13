@@ -87,7 +87,7 @@ test("mobile video is parser-loaded and first-touch playback remains synchronous
   const packageJson = JSON.parse(packageSource);
   assert.match(
     packageJson.scripts["apply:prompt-policy"],
-    /finalize-mobile-video-handoff-v31\.mjs && node scripts\/finalize-mobile-smooth-v32\.mjs && node scripts\/embed-favicon-fallback\.mjs$/,
+    /finalize-mobile-video-handoff-v31\.mjs && node scripts\/finalize-mobile-smooth-v32\.mjs && node scripts\/finalize-mobile-hevc-v34\.mjs && node scripts\/embed-favicon-fallback\.mjs$/,
   );
   assert.match(packageJson.scripts["test:node"], /mobile-video-handoff-v31/);
   assert.match(finalizer, /preload="auto"/);

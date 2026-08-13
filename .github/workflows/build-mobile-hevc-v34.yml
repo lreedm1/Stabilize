@@ -1,0 +1,163 @@
+name: Build mobile HEVC v34
+
+on:
+  push:
+    branches:
+      - agent/hevc-mobile-background-v34
+    paths:
+      - scripts/build-mobile-hevc-v34.sh
+      - scripts/finalize-mobile-hevc-v34.mjs
+      - scripts/finalize-full-guest-conversation.mjs
+      - scripts/verify-mobile-hevc-v34.yml
+      - test/mobile-hevc-v34.test.mjs
+      - .github/workflows/build-mobile-hevc-v34.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-mobile-hevc-v34
+  cancel-in-progress: true
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out HEVC release branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/hevc-mobile-background-v34
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Replace fragile source-reference regex checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib
+          import re
+
+          path = pathlib.Path("test/mobile-hevc-v34.test.mjs")
+          source = path.read_text(encoding="utf-8")
+          source, hevc_count = re.subn(
+              r'^\s*assert\.match\(videoBlock, new RegExp\(hevcReference\.replaceAll.*$',
+              '  assert.ok(videoBlock.includes(hevcReference));',
+              source,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          source, h264_count = re.subn(
+              r'^\s*assert\.match\(videoBlock, new RegExp\(h264Reference\.replaceAll.*$',
+              '  assert.ok(videoBlock.includes(h264Reference));',
+              source,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          if hevc_count != 1 or h264_count != 1:
+              raise SystemExit(
+                  f"unexpected source-reference replacements: hevc={hevc_count} h264={h264_count}"
+              )
+          path.write_text(source, encoding="utf-8")
+          PY
+
+      - name: Install media tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies without running generators
+        shell: bash
+        run: npm ci --ignore-scripts
+
+      - name: Build and verify the HEVC asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/build-mobile-hevc-v34.sh
+
+      - name: Apply the canonical HEVC release
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/finalize-mobile-hevc-v34.mjs
+          cp .github/workflows/verify-mobile-video.yml \
+            "$RUNNER_TEMP/verify-mobile-video-hevc-v34.yml"
+
+      - name: Publish media and application changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          # GitHub's Actions token may update repository content but may not
+          # create or modify workflow files. Publish every generated release
+          # change except the active verification workflow; that text-only
+          # update is applied through the GitHub connector after this run.
+          git restore --source=HEAD -- .github/workflows/verify-mobile-video.yml
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'The HEVC media and application release are already materialized.'
+          else
+            git commit -m 'Materialize HEVC mobile background v34 [skip ci]'
+          fi
+          git push origin HEAD:agent/hevc-mobile-background-v34
+
+      - name: Create local workflow commit for clean-tree validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/verify-mobile-video-hevc-v34.yml" \
+            .github/workflows/verify-mobile-video.yml
+          git add .github/workflows/verify-mobile-video.yml
+          if git diff --cached --quiet; then
+            echo 'The active verification workflow already matches v34.'
+          else
+            git commit -m 'Verify mobile HEVC v34'
+          fi
+          git status --short
+
+      - name: Run complete test and Worker build gates
+        shell: bash
+        run: |
+          set -uo pipefail
+          diagnostic="$RUNNER_TEMP/hevc-v34-test.log"
+          if ! npm test >"$diagnostic" 2>&1; then
+            echo '::group::Concise failing-test diagnostics'
+            grep -nE '(^|[^a-z])(not ok|failureType|AssertionError|ERR_[A-Z_]+|error:|actual:|expected:|operator:|location:)' "$diagnostic" || true
+            echo '::endgroup::'
+            echo '::group::Last 320 test-log lines'
+            tail -n 320 "$diagnostic"
+            echo '::endgroup::'
+            exit 1
+          fi
+          cat "$diagnostic"
+          npm run check
+          npm run verify:clean
+          git diff --exit-code
+
+      - name: Confirm media branch publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_head="$(
+            git ls-remote origin refs/heads/agent/hevc-mobile-background-v34 \
+              | awk '{print $1}'
+          )"
+          parent="$(git rev-parse HEAD^)"
+          test -n "$remote_head"
+          test "$remote_head" = "$parent"
+          echo "Verified media branch commit: $remote_head"
+          echo "Verified local workflow commit: $(git rev-parse HEAD)"

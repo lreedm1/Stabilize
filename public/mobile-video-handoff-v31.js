@@ -1,10 +1,15 @@
 (() => {
   "use strict";
 
-  const VERSION = "20260813-mobile-smooth-v33-1";
+  const VERSION = "20260813-mobile-hevc-v34-1";
   const MOBILE_QUERY = "(hover: none) and (pointer: coarse)";
   const VIDEO_ASSET =
     `/media/mobile-forest-stream-video-v12-720.mp4?v=${VERSION}`;
+  const HEVC_ASSET =
+    `/scenes/mobile-forest-stream-video-v34-hevc-720.mp4?v=${VERSION}`;
+  const H264_ASSET =
+    `/scenes/mobile-forest-stream-video-v12-720.mp4?v=${VERSION}`;
+  const LEGACY_QUALITY = "native-video-720x1280-60fps";
   const mobile = globalThis.matchMedia?.(MOBILE_QUERY);
   const root = document.documentElement;
   const video = document.querySelector("#mobile-background-video");
@@ -50,17 +55,38 @@
     video.setAttribute("preload", "auto");
     video.setAttribute("x-webkit-airplay", "deny");
 
-    const absoluteAsset = new URL(VIDEO_ASSET, location.href).href;
-    const source = video.querySelector("source");
-    if (source instanceof HTMLSourceElement) {
-      if (source.src !== absoluteAsset) {
-        source.src = VIDEO_ASSET;
-        video.load();
+    let changed = false;
+    function ensureSource(codec, asset, type) {
+      let source = video.querySelector(`source[data-codec="${codec}"]`);
+      if (!(source instanceof HTMLSourceElement)) {
+        source = document.createElement("source");
+        source.dataset.codec = codec;
+        video.append(source);
+        changed = true;
       }
-    } else if (video.src !== absoluteAsset) {
-      video.src = VIDEO_ASSET;
-      video.load();
+      const expected = new URL(asset, location.href).href;
+      if (source.src !== expected) {
+        source.src = asset;
+        changed = true;
+      }
+      if (source.type !== type) {
+        source.type = type;
+        changed = true;
+      }
+      return source;
     }
+
+    const hevc = ensureSource("hevc", HEVC_ASSET, 'video/mp4; codecs="hvc1"');
+    const h264 = ensureSource("h264", H264_ASSET, 'video/mp4; codecs="avc1.42E020"');
+    if (video.firstElementChild !== hevc) {
+      video.insertBefore(hevc, video.firstElementChild);
+      changed = true;
+    }
+    if (hevc.nextElementSibling !== h264) {
+      video.insertBefore(h264, hevc.nextElementSibling);
+      changed = true;
+    }
+    if (changed || !video.currentSrc) video.load();
   }
 
   function keepFallbackVisible(detail = "fallback") {
@@ -93,9 +119,21 @@
     canvas.style.setProperty("opacity", "0", "important");
     canvas.style.setProperty("visibility", "hidden", "important");
 
+    /* mobile-hevc-v34-quality-start */
     root.dataset.mobileBackgroundV30 = "video";
-    root.dataset.mobileBackgroundV30Quality = "native-video-720x1280-60fps";
-    setState("video", `${video.videoWidth}x${video.videoHeight}`);
+    const selectedCodec = video.currentSrc.includes(
+      "mobile-forest-stream-video-v34-hevc-720.mp4",
+    )
+      ? "hevc"
+      : "h264";
+    root.dataset.mobileBackgroundV30Codec = selectedCodec;
+    root.dataset.mobileBackgroundV30Quality =
+      selectedCodec === "hevc" ? "native-video-hevc-720x1280-60fps" : LEGACY_QUALITY;
+    setState(
+      "video",
+      `${selectedCodec}:${video.videoWidth}x${video.videoHeight}`,
+    );
+    /* mobile-hevc-v34-quality-end */
 
     if (playbackRetry !== null) {
       clearTimeout(playbackRetry);

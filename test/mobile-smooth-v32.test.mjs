@@ -133,7 +133,7 @@ test("mobile smooth v33 uses a small genuine 60 fps stream and a static first-lo
   const packageJson = JSON.parse(packageSource);
   assert.match(
     packageJson.scripts["apply:prompt-policy"],
-    /finalize-mobile-video-handoff-v31\.mjs && node scripts\/finalize-mobile-smooth-v32\.mjs && node scripts\/embed-favicon-fallback\.mjs$/,
+    /finalize-mobile-video-handoff-v31\.mjs && node scripts\/finalize-mobile-smooth-v32\.mjs && node scripts\/finalize-mobile-hevc-v34\.mjs && node scripts\/embed-favicon-fallback\.mjs$/,
   );
   assert.match(packageJson.scripts["test:node"], /mobile-smooth-v32\.test\.mjs/);
   assert.doesNotMatch(

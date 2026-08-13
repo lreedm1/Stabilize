@@ -218,8 +218,14 @@ export function renderPage(options = {}) {
       x-webkit-airplay="deny"
     >
       <source
-        src="/media/mobile-forest-stream-video-v12-720.mp4?v=20260813-mobile-smooth-v33-1"
-        type="video/mp4"
+        data-codec="hevc"
+        src="/scenes/mobile-forest-stream-video-v34-hevc-720.mp4?v=20260813-mobile-hevc-v34-1"
+        type='video/mp4; codecs="hvc1"'
+      />
+      <source
+        data-codec="h264"
+        src="/scenes/mobile-forest-stream-video-v12-720.mp4?v=20260813-mobile-hevc-v34-1"
+        type='video/mp4; codecs="avc1.42E020"'
       />
     </video>
     <canvas
@@ -227,7 +233,7 @@ export function renderPage(options = {}) {
       class="mobile-background-v30"
       aria-hidden="true"
     ></canvas>
-    <script src="/mobile-video-handoff-v31.js?v=20260813-mobile-smooth-v33-1"></script>
+    <script src="/mobile-video-handoff-v31.js?v=20260813-mobile-hevc-v34-1"></script>
     <!-- mobile-background-v30-media-end -->
     <div class="page-shell">
       <header class="site-header">
