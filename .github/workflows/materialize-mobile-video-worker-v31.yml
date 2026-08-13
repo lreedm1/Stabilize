@@ -43,8 +43,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [[ ! -f scripts/install-mobile-video-worker-v31.mjs ]]; then
+            echo 'The v31 runtime is already materialized.'
+            exit 0
+          fi
           node scripts/install-mobile-video-worker-v31.mjs
-          node scripts/finalize-mobile-video-worker-v31-clean-tree.mjs
+          if [[ -f scripts/finalize-mobile-video-worker-v31-clean-tree.mjs ]]; then
+            node scripts/finalize-mobile-video-worker-v31-clean-tree.mjs
+          fi
 
       - name: Commit the generated repair locally
         id: commit
@@ -69,6 +75,19 @@ jobs:
           npm test
           npm run check
           npm run verify:clean
+          git diff --exit-code
+
+      - name: Keep workflow changes out of the bot-authored commit
+        if: steps.commit.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout origin/fix/mobile-video-worker-assets-v31 -- \
+            .github/workflows/materialize-mobile-video-worker-v31.yml \
+            .github/workflows/verify-mobile-background.yml \
+            .github/workflows/verify-mobile-video.yml
+          git add -A
+          git commit --amend --no-edit
           git diff --exit-code
 
       - name: Publish the verified repair commit
