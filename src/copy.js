@@ -29,7 +29,7 @@ export const COPY = {
         "Not therapy or diagnosis. Guest chats keep eight recent messages plus a rolling summary capped at 5,000 model-output tokens in the current browser tab; a bounded queue waits locally if summarization fails. They are not written to Stabilize account memory. If you sign in, condensed context is remembered for 30 days, follows the same Google account, and can be deleted immediately from the account menu. Private chat does not use or update that Stabilize memory. This app does not use IP addresses for memory or application logs; infrastructure providers may still process connection metadata. Google handles sign-in. OpenAI processes ordinary messages and guest-summary requests and stores response data for at least 30 days unless organization or project data controls override the request. Adults 18+.",
       inputLabel: "Your message",
       responseLabel: "Latest AI response",
-      inputPlaceholder: "Start with what needs attention",
+      inputPlaceholder: "What needs attention?",
       sendButton: "Send",
       newConversationButton: "New conversation",
     },

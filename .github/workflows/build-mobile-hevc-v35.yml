@@ -1,0 +1,83 @@
+name: Build mobile HEVC v35
+
+on:
+  push:
+    branches:
+      - agent/mobile-hq-v35
+    paths:
+      - scripts/build-mobile-hevc-v35.sh
+      - scripts/finalize-mobile-hevc-v35.mjs
+      - scripts/verify-mobile-hevc-v35.yml
+      - test/mobile-hevc-v35.test.mjs
+      - .github/workflows/build-mobile-hevc-v35.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-mobile-hevc-v35
+  cancel-in-progress: true
+
+jobs:
+  build-verify-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install ffmpeg
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies without generators
+        shell: bash
+        run: npm ci --ignore-scripts
+
+      - name: Build and apply the high-resolution release
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/build-mobile-hevc-v35.sh
+          node scripts/finalize-mobile-hevc-v35.mjs
+
+      - name: Verify the focused release
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test test/mobile-hevc-v35.test.mjs
+          npx wrangler deploy --dry-run
+
+      - name: Package the exact generated files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release"
+          git diff --name-only --diff-filter=ACMRTUXB > "$RUNNER_TEMP/release/changed-files.txt"
+          git ls-files --others --exclude-standard >> "$RUNNER_TEMP/release/changed-files.txt"
+          sort -u "$RUNNER_TEMP/release/changed-files.txt" -o "$RUNNER_TEMP/release/changed-files.txt"
+          test -s "$RUNNER_TEMP/release/changed-files.txt"
+          cat "$RUNNER_TEMP/release/changed-files.txt"
+          tar -czf "$RUNNER_TEMP/release/mobile-hevc-v35-release.tgz" \
+            -T "$RUNNER_TEMP/release/changed-files.txt"
+
+      - name: Upload verified release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-hevc-v35-release
+          path: ${{ runner.temp }}/release
+          if-no-files-found: error
+          retention-days: 7

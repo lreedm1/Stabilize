@@ -1,15 +1,15 @@
 (() => {
   "use strict";
 
-  const VERSION = "20260813-mobile-hevc-v34-1";
+  const VERSION = "20260813-mobile-hevc-v35-1";
   const MOBILE_QUERY = "(hover: none) and (pointer: coarse)";
   const VIDEO_ASSET =
     `/media/mobile-forest-stream-video-v12-720.mp4?v=${VERSION}`;
   const HEVC_ASSET =
-    `/scenes/mobile-forest-stream-video-v34-hevc-720.mp4?v=${VERSION}`;
+    `/scenes/mobile-forest-stream-video-v35-hevc-1080.mp4?v=${VERSION}`;
   const H264_ASSET =
-    `/scenes/mobile-forest-stream-video-v12-720.mp4?v=${VERSION}`;
-  const LEGACY_QUALITY = "native-video-720x1280-60fps";
+    `/scenes/mobile-forest-stream-video-v24-native-1080.mp4?v=${VERSION}`;
+  const LEGACY_QUALITY = "native-video-h264-2160x3840-24fps";
   const mobile = globalThis.matchMedia?.(MOBILE_QUERY);
   const root = document.documentElement;
   const video = document.querySelector("#mobile-background-video");
@@ -106,8 +106,8 @@
       video.paused ||
       video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
       video.currentTime <= 0 ||
-      video.videoWidth < 700 ||
-      video.videoHeight < 1240
+      video.videoWidth < 1000 ||
+      video.videoHeight < 1800
     ) {
       return;
     }
@@ -119,21 +119,21 @@
     canvas.style.setProperty("opacity", "0", "important");
     canvas.style.setProperty("visibility", "hidden", "important");
 
-    /* mobile-hevc-v34-quality-start */
+    /* mobile-hevc-v35-quality-start */
     root.dataset.mobileBackgroundV30 = "video";
     const selectedCodec = video.currentSrc.includes(
-      "mobile-forest-stream-video-v34-hevc-720.mp4",
+      "mobile-forest-stream-video-v35-hevc-1080.mp4",
     )
       ? "hevc"
       : "h264";
     root.dataset.mobileBackgroundV30Codec = selectedCodec;
     root.dataset.mobileBackgroundV30Quality =
-      selectedCodec === "hevc" ? "native-video-hevc-720x1280-60fps" : LEGACY_QUALITY;
+      selectedCodec === "hevc" ? "native-video-hevc-1080x1920-60fps" : LEGACY_QUALITY;
     setState(
       "video",
       `${selectedCodec}:${video.videoWidth}x${video.videoHeight}`,
     );
-    /* mobile-hevc-v34-quality-end */
+    /* mobile-hevc-v35-quality-end */
 
     if (playbackRetry !== null) {
       clearTimeout(playbackRetry);

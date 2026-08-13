@@ -133,6 +133,14 @@
   X-Content-Type-Options: nosniff
 # mobile-hevc-v34-end
 
+# mobile-hevc-v35-start
+/scenes/mobile-forest-stream-video-v35-hevc-1080.mp4
+  Content-Type: video/mp4
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+# mobile-hevc-v35-end
+
 # canonical-favicon-start
 /favicon.ico
   Content-Type: image/x-icon

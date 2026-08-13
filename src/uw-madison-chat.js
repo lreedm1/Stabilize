@@ -549,7 +549,7 @@ function campusPage() {
       "",
     )
     .replace(
-      'placeholder="Start with what needs attention"',
+      'placeholder="What needs attention?"',
       'placeholder="What is happening at UW–Madison?"',
     );
 

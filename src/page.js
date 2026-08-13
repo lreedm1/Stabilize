@@ -220,12 +220,12 @@ export function renderPage(options = {}) {
     >
       <source
         data-codec="hevc"
-        src="/scenes/mobile-forest-stream-video-v34-hevc-720.mp4?v=20260813-mobile-hevc-v34-1"
+        src="/scenes/mobile-forest-stream-video-v35-hevc-1080.mp4?v=20260813-mobile-hevc-v35-1"
         type='video/mp4; codecs="hvc1"'
       />
       <source
         data-codec="h264"
-        src="/scenes/mobile-forest-stream-video-v12-720.mp4?v=20260813-mobile-hevc-v34-1"
+        src="/scenes/mobile-forest-stream-video-v24-native-1080.mp4?v=20260813-mobile-hevc-v35-1"
         type='video/mp4; codecs="avc1.42E020"'
       />
     </video>
@@ -234,7 +234,7 @@ export function renderPage(options = {}) {
       class="mobile-background-v30"
       aria-hidden="true"
     ></canvas>
-    <script src="/mobile-video-handoff-v31.js?v=20260813-mobile-hevc-v34-1"></script>
+    <script src="/mobile-video-handoff-v31.js?v=20260813-mobile-hevc-v35-1"></script>
     <!-- mobile-background-v30-media-end -->
     <div class="page-shell">
       <header class="site-header">

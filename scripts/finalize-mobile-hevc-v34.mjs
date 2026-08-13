@@ -218,7 +218,7 @@ await update("public/mobile-video-handoff-v31.js", (source) => {
   );
 
   const qualityPattern =
-    /(?:\/\* mobile-hevc-v34-quality-start \*\/[\s\S]*?\/\* mobile-hevc-v34-quality-end \*\/|root\.dataset\.mobileBackgroundV30 = "video";\n\s+root\.dataset\.mobileBackgroundV30Quality = "[^"]+";\n\s+setState\("video", `\$\{video\.videoWidth\}x\$\{video\.videoHeight\}`\);)/;
+    /(?:\/\* mobile-hevc-v(?:34|35)-quality-start \*\/[\s\S]*?\/\* mobile-hevc-v(?:34|35)-quality-end \*\/|root\.dataset\.mobileBackgroundV30 = "video";\n\s+root\.dataset\.mobileBackgroundV30Quality = "[^"]+";\n\s+setState\("video", `\$\{video\.videoWidth\}x\$\{video\.videoHeight\}`\);)/;
   const qualityBlock = `/* mobile-hevc-v34-quality-start */
     root.dataset.mobileBackgroundV30 = "video";
     const selectedCodec = video.currentSrc.includes(

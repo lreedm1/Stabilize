@@ -11,7 +11,7 @@ const NEW_PROMISE =
   "Stabilize adapts to your capacity, keeps memory bounded and deletable, and helps you move from conversation to real-world action.";
 const NEW_HEADLINE =
   "A personal AI that helps you steady what matters and take the next useful step.";
-const NEW_PLACEHOLDER = "Start with what needs attention";
+const NEW_PLACEHOLDER = "What needs attention?";
 const FINALIZER_COMMAND = `node ${SCRIPT_PATH}`;
 
 function requireText(source, expected, label) {
@@ -199,9 +199,9 @@ await update("test/header-menu-copy.test.mjs", (source) => {
   let text = source;
   text = text.replace(
     '/placeholder="What is happening\\?"/',
-    `/placeholder="${NEW_PLACEHOLDER}"/`,
+    `/placeholder="${NEW_PLACEHOLDER.replace("?", "\\?")}"/`,
   );
-  requireText(text, NEW_PLACEHOLDER, "the homepage placeholder regression");
+  requireText(text, `/placeholder="${NEW_PLACEHOLDER.replace("?", "\\?")}"/`, "the homepage placeholder regression");
   return text;
 });
 

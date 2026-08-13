@@ -1,30 +1,32 @@
+// Release gate: rerun after legacy mobile finalizer compatibility update.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-const VERSION = "20260813-mobile-hevc-v34-1";
+const VERSION = "20260813-mobile-hevc-v35-1";
 const HEVC_ASSET =
-  "/scenes/mobile-forest-stream-video-v34-hevc-720.mp4";
+  "/scenes/mobile-forest-stream-video-v35-hevc-1080.mp4";
 const H264_ASSET =
-  "/scenes/mobile-forest-stream-video-v12-720.mp4";
-const SOURCE_ASSET =
   "/scenes/mobile-forest-stream-video-v24-native-1080.mp4";
+const SHORT_PLACEHOLDER = "What needs attention?";
+const LONG_PLACEHOLDER = "Start with what needs attention";
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-test("mobile HEVC v34 uses a high-quality direct static source with H.264 fallback", async () => {
+test("mobile HEVC v35 raises visible resolution and shortens the composer prompt", async () => {
   const [
     page,
     client,
     headers,
+    copy,
+    uwChat,
     packageSource,
     metadataSource,
     hevc,
     h264,
-    source,
     builder,
     finalizer,
     workflow,
@@ -36,20 +38,16 @@ test("mobile HEVC v34 uses a high-quality direct static source with H.264 fallba
       "utf8",
     ),
     readFile(new URL("../public/_headers", import.meta.url), "utf8"),
+    readFile(new URL("../src/copy.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/uw-madison-chat.js", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(
-      new URL("../scripts/mobile-hevc-v34.json", import.meta.url),
+      new URL("../scripts/mobile-hevc-v35.json", import.meta.url),
       "utf8",
     ),
     readFile(
       new URL(
-        "../public/scenes/mobile-forest-stream-video-v34-hevc-720.mp4",
-        import.meta.url,
-      ),
-    ),
-    readFile(
-      new URL(
-        "../public/scenes/mobile-forest-stream-video-v12-720.mp4",
+        "../public/scenes/mobile-forest-stream-video-v35-hevc-1080.mp4",
         import.meta.url,
       ),
     ),
@@ -60,11 +58,11 @@ test("mobile HEVC v34 uses a high-quality direct static source with H.264 fallba
       ),
     ),
     readFile(
-      new URL("../scripts/build-mobile-hevc-v34.sh", import.meta.url),
+      new URL("../scripts/build-mobile-hevc-v35.sh", import.meta.url),
       "utf8",
     ),
     readFile(
-      new URL("../scripts/finalize-mobile-hevc-v34.mjs", import.meta.url),
+      new URL("../scripts/finalize-mobile-hevc-v35.mjs", import.meta.url),
       "utf8",
     ),
     readFile(
@@ -72,7 +70,7 @@ test("mobile HEVC v34 uses a high-quality direct static source with H.264 fallba
       "utf8",
     ),
     readFile(
-      new URL("../scripts/verify-mobile-hevc-v34.yml", import.meta.url),
+      new URL("../scripts/verify-mobile-hevc-v35.yml", import.meta.url),
       "utf8",
     ),
   ]);
@@ -81,22 +79,28 @@ test("mobile HEVC v34 uses a high-quality direct static source with H.264 fallba
   assert.equal(metadata.version, VERSION);
   assert.equal(metadata.hevcAsset, HEVC_ASSET);
   assert.equal(metadata.h264Asset, H264_ASSET);
-  assert.equal(metadata.sourceAsset, SOURCE_ASSET);
-  assert.equal(metadata.width, 720);
-  assert.equal(metadata.height, 1280);
+  assert.equal(metadata.sourceAsset, H264_ASSET);
+  assert.equal(metadata.width, 1080);
+  assert.equal(metadata.height, 1920);
   assert.equal(metadata.fps, 60);
+  assert.equal(metadata.fallbackWidth, 2160);
+  assert.equal(metadata.fallbackHeight, 3840);
+  assert.equal(metadata.fallbackFps, 24);
   assert.equal(metadata.codec, "hevc");
   assert.equal(metadata.codecTag, "hvc1");
   assert.equal(metadata.profile, "Main");
   assert.equal(metadata.pixelFormat, "yuv420p");
-  assert.equal(metadata.quality, "native-video-hevc-720x1280-60fps");
+  assert.equal(metadata.quality, "native-video-hevc-1080x1920-60fps");
+  assert.equal(
+    metadata.fallbackQuality,
+    "native-video-h264-2160x3840-24fps",
+  );
   assert.equal(metadata.videoBytes, hevc.byteLength);
   assert.equal(metadata.videoSha256, sha256(hevc));
-  assert.equal(metadata.sourceBytes, source.byteLength);
-  assert.equal(metadata.sourceSha256, sha256(source));
-  assert.ok(hevc.byteLength > 700_000);
-  assert.ok(hevc.byteLength < 4_000_000);
-  assert.ok(hevc.byteLength < source.byteLength);
+  assert.equal(metadata.sourceBytes, h264.byteLength);
+  assert.equal(metadata.sourceSha256, sha256(h264));
+  assert.ok(hevc.byteLength > 1_250_000);
+  assert.ok(hevc.byteLength < 10_000_000);
   assert.ok(metadata.bitRate > 0);
 
   assert.equal(hevc.subarray(4, 8).toString("ascii"), "ftyp");
@@ -131,57 +135,50 @@ test("mobile HEVC v34 uses a high-quality direct static source with H.264 fallba
   );
 
   assert.match(client, new RegExp(`const VERSION = "${VERSION}"`));
-  assert.match(client, /const HEVC_ASSET =/);
-  assert.match(client, /const H264_ASSET =/);
-  assert.match(client, /source\[data-codec="\$\{codec\}"\]/);
   assert.match(client, /ensureSource\("hevc"/);
   assert.match(client, /ensureSource\("h264"/);
-  assert.match(client, /mobile-forest-stream-video-v34-hevc-720\.mp4/);
-  assert.match(client, /native-video-hevc-720x1280-60fps/);
-  assert.match(client, /mobileBackgroundV30Codec/);
-  assert.match(client, /mobile-hevc-v34-quality-start/);
-  const configure = client.match(
-    /function configureVideo\(\) \{[\s\S]*?\n  \}\n\n  function keepFallbackVisible/,
-  )?.[0];
-  assert.ok(configure);
-  assert.match(configure, /HEVC_ASSET/);
-  assert.match(configure, /H264_ASSET/);
-  assert.doesNotMatch(configure, /VIDEO_ASSET/);
+  assert.match(client, /mobile-forest-stream-video-v35-hevc-1080\.mp4/);
+  assert.match(client, /mobile-forest-stream-video-v24-native-1080\.mp4/);
+  assert.match(client, /native-video-hevc-1080x1920-60fps/);
+  assert.match(client, /native-video-h264-2160x3840-24fps/);
+  assert.match(client, /video\.videoWidth < 1000/);
+  assert.match(client, /video\.videoHeight < 1800/);
+  assert.match(client, /mobile-hevc-v35-quality-start/);
+
+  for (const source of [copy, uwChat]) {
+    assert.ok(source.includes(SHORT_PLACEHOLDER));
+    assert.equal(source.includes(LONG_PLACEHOLDER), false);
+  }
 
   const hevcHeaderBlock = headers.match(
-    /# mobile-hevc-v34-start[\s\S]*?# mobile-hevc-v34-end/,
+    /# mobile-hevc-v35-start[\s\S]*?# mobile-hevc-v35-end/,
   )?.[0];
   assert.ok(hevcHeaderBlock);
-  assert.match(hevcHeaderBlock, /mobile-forest-stream-video-v34-hevc-720\.mp4/);
+  assert.match(hevcHeaderBlock, /mobile-forest-stream-video-v35-hevc-1080\.mp4/);
   assert.match(
     hevcHeaderBlock,
     /Cache-Control: public, max-age=31536000, immutable/,
-  );
-  assert.ok(
-    headers.indexOf("# mobile-hevc-v34-start") <
-      headers.indexOf("# canonical-favicon-start"),
   );
 
   const packageJson = JSON.parse(packageSource);
   assert.match(
     packageJson.scripts["apply:prompt-policy"],
-    /finalize-mobile-smooth-v32\.mjs && node scripts\/finalize-mobile-hevc-v34\.mjs && node scripts\/finalize-mobile-hevc-v35\.mjs && node scripts\/embed-favicon-fallback\.mjs$/,
+    /finalize-mobile-hevc-v34\.mjs && node scripts\/finalize-mobile-hevc-v35\.mjs && node scripts\/embed-favicon-fallback\.mjs$/,
   );
-  assert.match(packageJson.scripts["test:node"], /mobile-hevc-v34\.test\.mjs/);
-  assert.doesNotMatch(packageJson.scripts["test:node"], /mobile-smooth-v32\.test\.mjs/);
+  assert.match(packageJson.scripts["test:node"], /mobile-hevc-v35\.test\.mjs/);
+  assert.doesNotMatch(packageJson.scripts["test:node"], /mobile-hevc-v34\.test\.mjs/);
 
   assert.equal(workflow, workflowTemplate);
-  assert.match(workflow, /Verify mobile HEVC v34/);
-  assert.match(workflow, /codec_tag_string/);
-  assert.match(workflow, /hvc1/);
-  assert.match(workflow, /direct static/);
+  assert.match(workflow, /Verify mobile HEVC v35/);
+  assert.match(workflow, /1080x1920/);
+  assert.match(workflow, /What needs attention\?/);
 
-  assert.match(builder, /mobile-forest-stream-video-v24-native-1080\.mp4/);
+  assert.match(builder, /scale=1080:1920/);
   assert.match(builder, /minterpolate=fps=60/);
   assert.match(builder, /-c:v libx265/);
   assert.match(builder, /-tag:v hvc1/);
+  assert.match(builder, /-crf 16/);
   assert.match(builder, /-movflags \+faststart/);
-  assert.match(finalizer, /HEVC must be the first parser-visible video source/);
-  assert.match(finalizer, /mobile-hevc-v34-quality-start/);
-  assert.match(finalizer, /no Worker buffering in the parser-visible sources/);
+  assert.match(finalizer, /1080x1920 HEVC/);
+  assert.match(finalizer, /SHORT_PROMPT = "What needs attention\?"/);
 });

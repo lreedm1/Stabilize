@@ -102,7 +102,10 @@ await update("public/mobile-video-handoff-v31.js", (source) => {
     `\n      video.currentTime <= 0 ||\n      video.videoWidth < ${VIDEO_WIDTH - 20} ||\n      video.videoHeight < ${VIDEO_HEIGHT - 40}`,
     "the decoded-frame reveal guard",
   );
-  next = next.replace(/native-video-\d+x\d+-\d+fps/g, QUALITY);
+  next = next.replace(
+    /native-video(?:-(?:hevc|h264))?-\d+x\d+-\d+fps/g,
+    QUALITY,
+  );
 
   for (const expected of [
     VERSION,
