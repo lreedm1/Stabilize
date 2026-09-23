@@ -1,0 +1,477 @@
+name: Diagnose selected 4K mobile WebKit v25
+
+on:
+  push:
+    branches:
+      - agent/diagnose-selected-4k-webkit-v23
+    paths:
+      - .github/workflows/diagnose-selected-4k-webkit-v25.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/diagnose-selected-4k-webkit-v25.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: agent/diagnose-selected-4k-webkit-v23
+          persist-credentials: false
+
+      - name: Install mobile WebKit
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps webkit
+
+      - name: Capture playback state
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/selected-4k-webkit-v25
+          cat > scripts/tmp-selected-4k-webkit-v25.mjs <<'NODE'
+          import { webkit } from "playwright";
+          import { writeFile } from "node:fs/promises";
+
+          const out = "/tmp/selected-4k-webkit-v25";
+          const mediaPath =
+            "/media/mobile-forest-stream-video-v14-retina-2160.mp4";
+          const evidence = {
+            startedAt: new Date().toISOString(),
+            browserEvents: [],
+            samples: [],
+            playAttempts: [],
+          };
+
+          const browser = await webkit.launch({ headless: true });
+          try {
+            const context = await browser.newContext({
+              viewport: { width: 390, height: 844 },
+              screen: { width: 390, height: 844 },
+              deviceScaleFactor: 3,
+              isMobile: true,
+              hasTouch: true,
+              userAgent:
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) " +
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 " +
+                "Mobile/15E148 Safari/604.1",
+            });
+            const page = await context.newPage();
+
+            page.on("console", (message) =>
+              evidence.browserEvents.push({
+                kind: "console",
+                type: message.type(),
+                text: message.text(),
+                at: Date.now(),
+              }),
+            );
+            page.on("pageerror", (error) =>
+              evidence.browserEvents.push({
+                kind: "pageerror",
+                message: error.message,
+                stack: error.stack || null,
+                at: Date.now(),
+              }),
+            );
+            page.on("requestfailed", (request) =>
+              evidence.browserEvents.push({
+                kind: "requestfailed",
+                url: request.url(),
+                failure: request.failure(),
+                at: Date.now(),
+              }),
+            );
+            page.on("response", async (response) => {
+              if (!response.url().includes(mediaPath)) return;
+              evidence.browserEvents.push({
+                kind: "media-response",
+                status: response.status(),
+                url: response.url(),
+                headers: await response.allHeaders().catch(() => ({})),
+                at: Date.now(),
+              });
+            });
+
+            await page.addInitScript(() => {
+              globalThis.__stabilizeVideoEvents = [];
+              const attached = new WeakSet();
+              const attach = (video) => {
+                if (!(video instanceof HTMLVideoElement) || attached.has(video)) {
+                  return;
+                }
+                attached.add(video);
+                for (const name of [
+                  "loadstart",
+                  "durationchange",
+                  "loadedmetadata",
+                  "loadeddata",
+                  "progress",
+                  "canplay",
+                  "canplaythrough",
+                  "play",
+                  "playing",
+                  "pause",
+                  "waiting",
+                  "stalled",
+                  "suspend",
+                  "abort",
+                  "emptied",
+                  "error",
+                  "timeupdate",
+                  "ended",
+                ]) {
+                  video.addEventListener(name, () => {
+                    globalThis.__stabilizeVideoEvents.push({
+                      name,
+                      at: performance.now(),
+                      readyState: video.readyState,
+                      networkState: video.networkState,
+                      paused: video.paused,
+                      currentTime: video.currentTime,
+                      duration: Number.isFinite(video.duration)
+                        ? video.duration
+                        : null,
+                      width: video.videoWidth,
+                      height: video.videoHeight,
+                      currentSrc: video.currentSrc,
+                      error: video.error
+                        ? {
+                            code: video.error.code,
+                            message: video.error.message || "",
+                          }
+                        : null,
+                    });
+                  });
+                }
+              };
+              const scan = () =>
+                document.querySelectorAll("video").forEach(attach);
+              new MutationObserver(scan).observe(document, {
+                childList: true,
+                subtree: true,
+              });
+              document.addEventListener("DOMContentLoaded", scan);
+              scan();
+            });
+
+            try {
+              await page.goto(
+                `https://stabilize.info/?webkit-v25=${Date.now()}`,
+                { waitUntil: "domcontentloaded", timeout: 60_000 },
+              );
+            } catch (error) {
+              evidence.navigationError = String(error?.stack || error);
+            }
+
+            await page
+              .waitForSelector("#mobile-background-video", {
+                state: "attached",
+                timeout: 30_000,
+              })
+              .catch((error) => {
+                evidence.selectorError = String(error?.stack || error);
+              });
+
+            async function sample(label) {
+              const state = await page.evaluate((path) => {
+                const video = document.querySelector(
+                  "#mobile-background-video",
+                );
+                const style =
+                  video instanceof HTMLVideoElement
+                    ? getComputedStyle(video)
+                    : null;
+                const probe = document.createElement("video");
+                return {
+                  now: performance.now(),
+                  documentHidden: document.hidden,
+                  documentVisibility: document.visibilityState,
+                  portrait: matchMedia(
+                    "(max-width: 980px) and (orientation: portrait)",
+                  ).matches,
+                  exists: video instanceof HTMLVideoElement,
+                  currentSrc:
+                    video instanceof HTMLVideoElement ? video.currentSrc : null,
+                  resolvedSrc:
+                    video instanceof HTMLVideoElement ? video.src : null,
+                  sourceChild:
+                    video instanceof HTMLVideoElement
+                      ? video.querySelector("source")?.getAttribute("src") || null
+                      : null,
+                  autoplay:
+                    video instanceof HTMLVideoElement ? video.autoplay : null,
+                  muted:
+                    video instanceof HTMLVideoElement ? video.muted : null,
+                  defaultMuted:
+                    video instanceof HTMLVideoElement
+                      ? video.defaultMuted
+                      : null,
+                  loop:
+                    video instanceof HTMLVideoElement ? video.loop : null,
+                  playsInline:
+                    video instanceof HTMLVideoElement
+                      ? video.playsInline
+                      : null,
+                  preload:
+                    video instanceof HTMLVideoElement ? video.preload : null,
+                  readyState:
+                    video instanceof HTMLVideoElement ? video.readyState : null,
+                  networkState:
+                    video instanceof HTMLVideoElement
+                      ? video.networkState
+                      : null,
+                  paused:
+                    video instanceof HTMLVideoElement ? video.paused : null,
+                  currentTime:
+                    video instanceof HTMLVideoElement
+                      ? video.currentTime
+                      : null,
+                  duration:
+                    video instanceof HTMLVideoElement &&
+                    Number.isFinite(video.duration)
+                      ? video.duration
+                      : null,
+                  width:
+                    video instanceof HTMLVideoElement
+                      ? video.videoWidth
+                      : null,
+                  height:
+                    video instanceof HTMLVideoElement
+                      ? video.videoHeight
+                      : null,
+                  error:
+                    video instanceof HTMLVideoElement && video.error
+                      ? {
+                          code: video.error.code,
+                          message: video.error.message || "",
+                        }
+                      : null,
+                  display: style?.display || null,
+                  visibility: style?.visibility || null,
+                  opacity: style?.opacity || null,
+                  className:
+                    video instanceof HTMLVideoElement ? video.className : null,
+                  dataset: { ...document.documentElement.dataset },
+                  canPlay: {
+                    mp4: probe.canPlayType("video/mp4"),
+                    baseline: probe.canPlayType(
+                      'video/mp4; codecs="avc1.42E01E"',
+                    ),
+                    main: probe.canPlayType(
+                      'video/mp4; codecs="avc1.4D401F"',
+                    ),
+                    high51: probe.canPlayType(
+                      'video/mp4; codecs="avc1.640033"',
+                    ),
+                  },
+                  resourceEntries: performance
+                    .getEntriesByType("resource")
+                    .filter((entry) => entry.name.includes(path))
+                    .map((entry) => ({
+                      name: entry.name,
+                      initiatorType: entry.initiatorType,
+                      duration: entry.duration,
+                      transferSize: entry.transferSize,
+                      encodedBodySize: entry.encodedBodySize,
+                      decodedBodySize: entry.decodedBodySize,
+                    })),
+                  recentEvents:
+                    globalThis.__stabilizeVideoEvents?.slice(-100) || [],
+                };
+              }, mediaPath);
+              evidence.samples.push({ label, at: Date.now(), state });
+            }
+
+            async function attemptPlay(label) {
+              const result = await page.evaluate(async () => {
+                const video = document.querySelector(
+                  "#mobile-background-video",
+                );
+                if (!(video instanceof HTMLVideoElement)) {
+                  return { status: "missing" };
+                }
+                const timeout = new Promise((resolve) =>
+                  setTimeout(
+                    () =>
+                      resolve({
+                        status: "timeout",
+                        paused: video.paused,
+                        readyState: video.readyState,
+                        networkState: video.networkState,
+                        currentTime: video.currentTime,
+                        error: video.error
+                          ? {
+                              code: video.error.code,
+                              message: video.error.message || "",
+                            }
+                          : null,
+                      }),
+                    3_000,
+                  ),
+                );
+                const play = video
+                  .play()
+                  .then(() => ({
+                    status: "resolved",
+                    paused: video.paused,
+                    readyState: video.readyState,
+                    currentTime: video.currentTime,
+                  }))
+                  .catch((error) => ({
+                    status: "rejected",
+                    name: error?.name || "",
+                    message: error?.message || String(error),
+                    paused: video.paused,
+                    readyState: video.readyState,
+                    networkState: video.networkState,
+                    currentTime: video.currentTime,
+                    mediaError: video.error
+                      ? {
+                          code: video.error.code,
+                          message: video.error.message || "",
+                        }
+                      : null,
+                  }));
+                return Promise.race([play, timeout]);
+              });
+              evidence.playAttempts.push({ label, at: Date.now(), result });
+            }
+
+            for (let second = 0; second < 10; second += 1) {
+              await sample(`before-${second}`);
+              if (second === 3 || second === 7) {
+                await attemptPlay(`before-${second}`);
+              }
+              await page.waitForTimeout(1_000);
+            }
+
+            await page.screenshot({
+              path: `${out}/before-gesture.png`,
+              fullPage: false,
+            });
+
+            evidence.gesture = await page
+              .tap("body", { position: { x: 20, y: 20 } })
+              .then(() => ({ ok: true }))
+              .catch((error) => ({
+                ok: false,
+                error: String(error?.stack || error),
+              }));
+            await attemptPlay("after-tap");
+
+            for (let second = 0; second < 8; second += 1) {
+              await sample(`after-${second}`);
+              if (second === 3 || second === 6) {
+                await attemptPlay(`after-${second}`);
+              }
+              await page.waitForTimeout(1_000);
+            }
+
+            await page.screenshot({
+              path: `${out}/after-gesture.png`,
+              fullPage: false,
+            });
+
+            evidence.fetchChecks = await page.evaluate(async (path) => {
+              const checks = [];
+              for (const [name, headers] of [
+                ["full", {}],
+                ["start", { Range: "bytes=0-1023" }],
+                ["tail", { Range: "bytes=-1024" }],
+              ]) {
+                try {
+                  const response = await fetch(
+                    `${path}?webkit-fetch=${name}-${Date.now()}`,
+                    { cache: "no-store", headers },
+                  );
+                  const body = await response.arrayBuffer();
+                  checks.push({
+                    name,
+                    status: response.status,
+                    ok: response.ok,
+                    bytes: body.byteLength,
+                    headers: Object.fromEntries(response.headers.entries()),
+                  });
+                } catch (error) {
+                  checks.push({
+                    name,
+                    error: String(error?.stack || error),
+                  });
+                }
+              }
+              return checks;
+            }, mediaPath);
+          } finally {
+            evidence.finishedAt = new Date().toISOString();
+            await writeFile(
+              `${out}/diagnostic.json`,
+              JSON.stringify(evidence, null, 2),
+            );
+            await browser.close();
+          }
+          NODE
+
+          node scripts/tmp-selected-4k-webkit-v25.mjs
+          rm -f scripts/tmp-selected-4k-webkit-v25.mjs
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          source = Path('/tmp/selected-4k-webkit-v25/diagnostic.json')
+          data = json.loads(source.read_text())
+          summary = {
+              'navigationError': data.get('navigationError'),
+              'selectorError': data.get('selectorError'),
+              'gesture': data.get('gesture'),
+              'playAttempts': data.get('playAttempts'),
+              'browserEvents': data.get('browserEvents'),
+              'fetchChecks': data.get('fetchChecks'),
+              'samples': [
+                  {
+                      'label': item['label'],
+                      'width': item['state'].get('width'),
+                      'height': item['state'].get('height'),
+                      'readyState': item['state'].get('readyState'),
+                      'networkState': item['state'].get('networkState'),
+                      'paused': item['state'].get('paused'),
+                      'currentTime': item['state'].get('currentTime'),
+                      'duration': item['state'].get('duration'),
+                      'error': item['state'].get('error'),
+                      'state': item['state'].get('dataset', {}).get('mobileBackground'),
+                      'quality': item['state'].get('dataset', {}).get('mobileVideoQuality'),
+                      'autoplayError': item['state'].get('dataset', {}).get('mobileVideoAutoplayError'),
+                      'display': item['state'].get('display'),
+                      'visibility': item['state'].get('visibility'),
+                      'opacity': item['state'].get('opacity'),
+                      'currentSrc': item['state'].get('currentSrc'),
+                      'canPlay': item['state'].get('canPlay'),
+                  }
+                  for item in data.get('samples', [])
+              ],
+          }
+          Path('/tmp/selected-4k-webkit-v25/summary.json').write_text(
+              json.dumps(summary, indent=2)
+          )
+          print(json.dumps(summary, indent=2))
+          PY
+
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selected-4k-webkit-v25-diagnostic
+          path: /tmp/selected-4k-webkit-v25
+          if-no-files-found: error
+          retention-days: 7
