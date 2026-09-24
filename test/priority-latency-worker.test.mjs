@@ -57,7 +57,7 @@ function chatEnv(model = "gpt-5.6-sol") {
   return {
     ...env,
     DEMO_MODE: "false",
-    OPENAI_API_KEY: "test-openai-key",
+    OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false",
     OPENAI_MODEL: model,
     OPENAI_REASONING_EFFORT: "none",
     OPENAI_SERVICE_TIER: "fast",

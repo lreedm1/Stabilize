@@ -8,7 +8,7 @@ function createEnv(overrides = {}) {
       fetch: async () => new Response("asset", { status: 200 }),
     },
     DEMO_MODE: "false",
-    OPENAI_API_KEY: "test-openai-key",
+    OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false",
     OPENAI_MODEL: "gpt-5.2",
     OPENAI_REASONING_EFFORT: "max",
     PUBLIC_ORIGIN: "https://stabilize.test",

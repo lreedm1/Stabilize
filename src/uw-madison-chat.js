@@ -1,3 +1,5 @@
+import { budgetedOpenAIFetch } from "./openai-budget-fetch.js";
+import { DAILY_TOKEN_LIMIT_CODE, TOKEN_BUDGET_UNAVAILABLE_CODE, DAILY_TOKEN_LIMIT_MESSAGE, TOKEN_BUDGET_UNAVAILABLE_MESSAGE } from "./openai-budget-policy.js";
 import { COPY } from "./copy.js";
 import { renderPage } from "./page.js";
 import { classifyInput } from "./safety.js";
@@ -384,7 +386,7 @@ async function generateCampusReply(messages, route, env) {
   const timeout = setTimeout(() => controller.abort(), 30_000);
   let response;
   try {
-    response = await fetch(OPENAI_RESPONSES_URL, {
+    response = await budgetedOpenAIFetch(OPENAI_RESPONSES_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
@@ -406,7 +408,7 @@ async function generateCampusReply(messages, route, env) {
         },
       }),
       signal: controller.signal,
-    });
+    }, env);
   } catch (error) {
     throw new CampusRequestError(
       503,
@@ -420,6 +422,12 @@ async function generateCampusReply(messages, route, env) {
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if ([DAILY_TOKEN_LIMIT_CODE, TOKEN_BUDGET_UNAVAILABLE_CODE].includes(body.error?.code)) {
+      const error = new CampusRequestError(503, body.error?.code === DAILY_TOKEN_LIMIT_CODE
+        ? DAILY_TOKEN_LIMIT_MESSAGE : TOKEN_BUDGET_UNAVAILABLE_MESSAGE);
+      error.retryAfter = response.headers.get("retry-after");
+      throw error;
+    }
     const retryAfter = response.headers.get("retry-after");
     const status = response.status === 429 ? 429 : 503;
     const error = new CampusRequestError(

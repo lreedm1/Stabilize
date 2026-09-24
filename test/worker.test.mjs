@@ -183,7 +183,7 @@ test("health endpoint reports demo mode and session memory", async () => {
 test("health endpoint reports whether OpenAI is configured", async () => {
   const configuredResponse = await worker.fetch(
     new Request("https://stabilize.test/api/health"),
-    createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+    createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false" }),
   );
 
   assert.equal(configuredResponse.status, 200);
@@ -291,7 +291,7 @@ test("private chat neither reads nor writes signed-in memory", async () => {
   const env = createEnv({
     SESSIONS: memory,
     DEMO_MODE: "false",
-    OPENAI_API_KEY: "test-openai-key",
+    OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false",
   });
   const identity = await authenticatedIdentity(env, "private-chat-user");
   const stub = memory.getByName(identity.objectName);
@@ -476,7 +476,7 @@ test("chat endpoint calls OpenAI with store enabled", async () => {
           message: "Help me plan one next step.",
         }),
       }),
-      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false" }),
     );
 
     assert.equal(response.status, 200);
@@ -538,7 +538,7 @@ test("chat rejects messages over 4,000 characters", async () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: "a".repeat(4001) }),
       }),
-      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false" }),
     );
 
     assert.equal(response.status, 400);
@@ -569,7 +569,7 @@ test("max effort safely falls back for older model choices", async () => {
       }),
       createEnv({
         DEMO_MODE: "false",
-        OPENAI_API_KEY: "test-openai-key",
+        OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false",
         OPENAI_MODEL: "gpt-5.1",
         OPENAI_REASONING_EFFORT: "max",
       }),
@@ -600,7 +600,7 @@ test("legacy internal model alias maps to the supported API model", async () => 
       }),
       createEnv({
         DEMO_MODE: "false",
-        OPENAI_API_KEY: "test-openai-key",
+        OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false",
         OPENAI_MODEL: ["gpt-5.6", "sol"].join("-"),
       }),
     );
@@ -632,7 +632,7 @@ test("complex decisions use the strongest supported reasoning", async () => {
             "I am deciding whether to accept a job in Madison or Milwaukee. Compare pay, housing costs, commute, career growth, and stability.",
         }),
       }),
-      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false" }),
     );
 
     assert.equal(response.status, 200);
@@ -672,7 +672,7 @@ test("rate limits return a retry time and a safe traceable error", async () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: "Help me plan one next step." }),
       }),
-      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false" }),
     );
     const body = await response.json();
     const logged = logs.join("\n");
@@ -716,7 +716,7 @@ test("spend and quota limits are not mislabeled as transient rate limits", async
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: "Help me plan one next step." }),
       }),
-      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false" }),
     );
     const body = await response.json();
 
@@ -749,7 +749,7 @@ test("one-message provider rejections suggest rewording without leaking details"
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: "Help me with this unusual request." }),
       }),
-      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false" }),
     );
     const body = await response.json();
 
@@ -780,7 +780,7 @@ test("an empty or rejected model reply becomes a retryable service error", async
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: "Help me plan one next step." }),
       }),
-      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false" }),
     );
     const body = await response.json();
 
@@ -809,7 +809,7 @@ test("provider connection failures return a safe reference", async () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: "Help me plan one next step." }),
       }),
-      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false" }),
     );
     const body = await response.json();
 
@@ -830,7 +830,7 @@ test("remembered summary is supplied as untrusted context", async () => {
   const env = createEnv({
     SESSIONS: memory,
     DEMO_MODE: "false",
-    OPENAI_API_KEY: "test-openai-key",
+    OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false",
   });
   const identity = await authenticatedIdentity(env, "google-user-one");
   const stub = memory.getByName(identity.objectName);
@@ -885,7 +885,7 @@ test("recent turns compact in the background with OpenAI storage enabled", async
   const env = createEnv({
     SESSIONS: memory,
     DEMO_MODE: "false",
-    OPENAI_API_KEY: "test-openai-key",
+    OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false",
   });
   const identity = await authenticatedIdentity(env, "google-user-two");
 
@@ -944,7 +944,7 @@ test("chat endpoint relies on the token budget instead of character truncation",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: "Give me one next step." }),
       }),
-      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key" }),
+      createEnv({ DEMO_MODE: "false", OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false" }),
     );
 
     const body = await response.json();

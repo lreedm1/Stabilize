@@ -1,3 +1,5 @@
+import { budgetedOpenAIFetch } from "./openai-budget-fetch.js";
+import { DAILY_TOKEN_LIMIT_CODE, TOKEN_BUDGET_UNAVAILABLE_CODE, DAILY_TOKEN_LIMIT_MESSAGE, TOKEN_BUDGET_UNAVAILABLE_MESSAGE } from "./openai-budget-policy.js";
 import { COPY } from "./copy.js";
 import {
   AUTH_COOKIE_NAME,
@@ -42,6 +44,8 @@ const LONG_FORM_OUTPUT_TOKEN_LIMIT = 900;
 const LONG_FORM_REQUEST_PATTERN =
   /\b(?:draft|write|rewrite|compose|email|letter|memo|report|speech|proposal|brief|document|essay|code|script|full version|detailed|comprehensive)\b/i;
 const OPENAI_ACCOUNT_LIMIT_CODES = new Set([
+  DAILY_TOKEN_LIMIT_CODE,
+  TOKEN_BUDGET_UNAVAILABLE_CODE,
   "credit_balance_exhausted",
   "insufficient_quota",
   "organization_spend_limit_exceeded",
@@ -698,6 +702,12 @@ function errorReference(clientRequestId) {
 }
 
 function publicOpenAIError(error) {
+  if (error.code === DAILY_TOKEN_LIMIT_CODE) {
+    return { status: 503, message: DAILY_TOKEN_LIMIT_MESSAGE, retryAfterSeconds: Math.ceil((86_400_000 - Date.now() % 86_400_000) / 1000) };
+  }
+  if (error.code === TOKEN_BUDGET_UNAVAILABLE_CODE) {
+    return { status: 503, message: TOKEN_BUDGET_UNAVAILABLE_MESSAGE };
+  }
   if (error.failure === "timeout" || error.status === 408) {
     return { status: 504, message: COPY.api.aiTimeout };
   }
@@ -780,14 +790,14 @@ function chatErrorResponse(error, path) {
   );
 }
 
-async function callOpenAI(payload, apiKey, timeoutMs, errorName) {
+async function callOpenAI(payload, apiKey, timeoutMs, errorName, env) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const clientRequestId = crypto.randomUUID();
 
   let response;
   try {
-    response = await fetch(OPENAI_RESPONSES_URL, {
+    response = await budgetedOpenAIFetch(OPENAI_RESPONSES_URL, {
       method: "POST",
       headers: {
         Authorization: "Bearer " + apiKey,
@@ -796,7 +806,7 @@ async function callOpenAI(payload, apiKey, timeoutMs, errorName) {
       },
       body: JSON.stringify(payload),
       signal: controller.signal,
-    });
+    }, env);
   } catch {
     throw new OpenAIRequestError({
       name: errorName,
@@ -857,14 +867,14 @@ function streamEvent(value) {
   return new TextEncoder().encode(JSON.stringify(value) + "\n");
 }
 
-async function openAIStream(payload, apiKey, timeoutMs, errorName) {
+async function openAIStream(payload, apiKey, timeoutMs, errorName, env) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const clientRequestId = crypto.randomUUID();
 
   let response;
   try {
-    response = await fetch(OPENAI_RESPONSES_URL, {
+    response = await budgetedOpenAIFetch(OPENAI_RESPONSES_URL, {
       method: "POST",
       headers: {
         Authorization: "Bearer " + apiKey,
@@ -873,7 +883,7 @@ async function openAIStream(payload, apiKey, timeoutMs, errorName) {
       },
       body: JSON.stringify({ ...payload, stream: true }),
       signal: controller.signal,
-    });
+    }, env);
   } catch {
     clearTimeout(timeout);
     throw new OpenAIRequestError({
@@ -1092,6 +1102,7 @@ async function generateFallbackReply(messages, route, env, latestText) {
     apiKey,
     60_000,
     "OpenAIFallbackHttpError",
+    env,
   );
   logInteractiveUsage(result, model, serviceTier);
 
@@ -1170,6 +1181,7 @@ function streamChatReply(
             apiKey,
             60_000,
             "OpenAIHttpError",
+            env,
           );
 
           for await (const delta of openAITextDeltas(result)) {
@@ -1329,6 +1341,7 @@ async function generateReply(messages, route, env, latestText) {
     apiKey,
     60_000,
     "OpenAIHttpError",
+    env,
   );
   logInteractiveUsage(result, model, serviceTier);
 
@@ -1394,6 +1407,7 @@ async function generateSummary(snapshot, env) {
     apiKey,
     25_000,
     "OpenAISummaryHttpError",
+    env,
   );
 
   return sanitizeSummary(result.text) || null;
@@ -1432,6 +1446,7 @@ async function generateGuestSummary(existingSummary, pendingMessages, env) {
       apiKey,
       35_000,
       "OpenAIGuestSummaryHttpError",
+      env,
     );
     const nextSummary = sanitizeGuestSummary(result.text);
     return nextSummary

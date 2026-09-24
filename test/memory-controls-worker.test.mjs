@@ -208,7 +208,7 @@ test("memory deletion requires the signed-in same-origin account and leaves bill
 test("a reply started before deletion cannot recreate account memory", async () => {
   const setup = createEnv({
     DEMO_MODE: "false",
-    OPENAI_API_KEY: "test-openai-key",
+    OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false",
   });
   const account = await identity(setup.env, "stale-write-user");
   const stub = setup.env.SESSIONS.getByName(account.objectName);
@@ -281,7 +281,7 @@ test("a reply started before deletion cannot recreate account memory", async () 
 test("signed-out follow-ups use bounded browser-supplied context without server memory", async () => {
   const setup = createEnv({
     DEMO_MODE: "false",
-    OPENAI_API_KEY: "test-openai-key",
+    OPENAI_API_KEY: "test-openai-key", OPENAI_FREE_TOKENS_ONLY: "false",
   });
   const originalFetch = globalThis.fetch;
   let providerBody;
