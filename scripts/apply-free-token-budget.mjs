@@ -92,6 +92,9 @@ await update("wrangler.jsonc", (source) => {
   config.vars.OPENAI_FREE_TOKEN_ALLOWANCE ??= "1000000";
   config.vars.OPENAI_FREE_TOKEN_DAILY_LIMIT ??= "900000";
   config.vars.OPENAI_FREE_TOKEN_ELIGIBILITY_CONFIRMED ??= "false";
+  for (const secret of ["OPENAI_USAGE_ADMIN_KEY", "OPENAI_ORGANIZATION_ID"]) {
+    if (!config.secrets.required.includes(secret)) config.secrets.required.push(secret);
+  }
   return JSON.stringify(config, null, 2) + "\n";
 });
 

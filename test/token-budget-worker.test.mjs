@@ -1,16 +1,30 @@
 import { env, runInDurableObject, runDurableObjectAlarm } from "cloudflare:test";
-import { test } from "vitest";
+import { test, beforeEach, afterEach, vi } from "vitest";
 import assert from "node:assert/strict";
 import worker, { handlePreparedChat } from "../src/index.js";
 import paidWorker from "../src/paid-worker.js";
 import { uwMadisonChatResponse } from "../src/uw-madison-chat.js";
+import { usageEnv, usagePage } from "./fixtures/organization-usage.mjs";
 
 const NOW = Date.parse("2026-09-24T12:00:00Z");
 const DAY = 86_400_000;
-const policy = {
+const policy = { ...usageEnv,
   OPENAI_FREE_TOKENS_ONLY: "true", OPENAI_FREE_TOKEN_ELIGIBILITY_CONFIRMED: "true",
   OPENAI_FREE_TOKEN_ALLOWANCE: "1000000", OPENAI_FREE_TOKEN_DAILY_LIMIT: "900000",
 };
+const originalFetch = globalThis.fetch;
+let reportedTokens, usageCalls;
+beforeEach(() => {
+  vi.spyOn(Date, "now").mockReturnValue(NOW);
+  reportedTokens = 0; usageCalls = 0;
+  globalThis.fetch = async (url, init) => {
+    assert.equal(new URL(url).pathname, "/v1/organization/usage/completions");
+    assert.equal(init.headers.Authorization, "Bearer test-usage-admin-key");
+    usageCalls++;
+    return Response.json(usagePage(url, reportedTokens));
+  };
+});
+afterEach(() => { globalThis.fetch = originalFetch; vi.restoreAllMocks(); });
 async function budget(limit = 1000, initialized = true) {
   const stub = env.OPENAI_TOKEN_BUDGET.getByName(crypto.randomUUID());
   await runInDurableObject(stub, async (instance, state) => {
@@ -105,6 +119,7 @@ function provider(text = "Start with one small task.") {
 function mockProvider({ brokenStream = false } = {}) {
   const original = globalThis.fetch, sent = [];
   globalThis.fetch = async (url, init) => {
+    if (new URL(url).pathname === "/v1/organization/usage/completions") return original(url, init);
     const body = JSON.parse(init.body);
     if (String(url).endsWith("/input_tokens")) return Response.json({ object: "response.input_tokens", input_tokens: 100 });
     sent.push(body);
@@ -136,7 +151,70 @@ test("guest JSON, streaming, private, and campus replies share the same budget",
     assert.equal(mock.sent.length, 4);
     assert.equal((await ledger(stub)).used, 4 * 130);
     assert.equal((await ledger(stub)).reserved, 0);
+    assert.equal(usageCalls, 4, "Every generation must get its own organization usage check");
   } finally { mock.restore(); }
+});
+
+test("other API keys reaching 900K block guest, stream, and campus generation", async () => {
+  const stub = await budget(900_000), app = appEnv(stub), mock = mockProvider();
+  reportedTokens = 900_000;
+  try {
+    for (const stream of [false, true]) {
+      const response = await worker.fetch(chatRequest(stream), app, {});
+      assert.match(await response.text(), /00:00 UTC/);
+    }
+    const campus = await uwMadisonChatResponse(chatRequest(false, "chat.uwmadison.stabilize.info"), app, {});
+    assert.equal(campus.status, 503);
+    assert.equal(mock.sent.length, 0);
+    assert.equal((await ledger(stub)).providerUsed, 900_000);
+  } finally { mock.restore(); }
+});
+
+test("organization usage plus overlapping local reservations cannot exceed the ceiling", async () => {
+  const stub = await budget(900_000);
+  reportedTokens = 890_000;
+  const results = await Promise.all(Array.from({ length: 20 }, (_, i) => stub.reserve(`parallel-${i}`, 6_000)));
+  assert.equal(results.filter((result) => result.allowed).length, 1);
+  assert.equal((await ledger(stub)).reserved, 6_000);
+  assert.equal((await ledger(stub)).providerUsed, 890_000);
+});
+
+test("lagging reports cannot erase local completions or lower the daily organization high-water mark", async () => {
+  const stub = await budget(900_000);
+  reportedTokens = 890_000;
+  assert.equal((await stub.reserve("first", 6_000)).allowed, true);
+  await stub.settle("first", { input_tokens: 5_000, output_tokens: 1_000 });
+  assert.equal((await stub.reserve("second", 6_000)).reason, "exhausted");
+  reportedTokens = 1;
+  assert.equal((await stub.reserve("older-report", 6_000)).reason, "exhausted");
+  assert.equal((await ledger(stub)).providerUsed, 890_000);
+});
+
+test("usage API failures cannot start generation or fall back to an earlier successful check", async () => {
+  const stub = await budget(900_000), app = appEnv(stub), mock = mockProvider();
+  try {
+    assert.equal((await worker.fetch(chatRequest(), app, {})).status, 200);
+    const healthy = globalThis.fetch;
+    globalThis.fetch = async (url, init) => new URL(url).pathname === "/v1/organization/usage/completions"
+      ? Response.json({ error: "unavailable" }, { status: 503 }) : healthy(url, init);
+    const response = await worker.fetch(chatRequest(), app, {});
+    assert.equal(response.status, 503);
+    assert.match(await response.text(), /temporarily unavailable/);
+    assert.equal(mock.sent.length, 1);
+    assert.equal((await ledger(stub)).reserved, 0);
+  } finally { mock.restore(); }
+});
+
+test("UTC rollover clears the reported high-water mark but retains uncertain reservations", async () => {
+  const stub = await budget(900_000);
+  reportedTokens = 890_000;
+  await stub.reserve("unknown", 6_000);
+  await clock(stub, NOW + DAY);
+  reportedTokens = 100;
+  assert.equal((await stub.reserve("new-day", 893_900)).allowed, true);
+  assert.equal((await ledger(stub)).providerUsed, 100);
+  assert.equal((await ledger(stub)).reserved, 899_900);
+  assert.equal((await stub.reserve("overflow", 1)).reason, "exhausted");
 });
 
 test("a malformed stream reserves the retry separately and preserves the unknown first cost", async () => {

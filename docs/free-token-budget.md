@@ -6,6 +6,12 @@ attempts, account-memory summaries, the retained guest-summary helper, and
 `chat.uwmadison.stabilize.info`. The account's 50-message/200-message limits are
 separate from this global token budget.
 
+Before every reservation, the Durable Object reads the organization's current
+UTC-day input and output totals from OpenAI's Usage API. The request has **no
+project, key, model, batch, or processing-tier filter**: it includes other apps,
+including Astra usage, and conservatively includes models in other free pools.
+Cached input and other token subtotals are already included in these totals.
+
 ## Activation
 
 The proposed configuration reserves a 10% margin on a **1,000,000-token daily
@@ -27,7 +33,15 @@ Before merging/deploying an active configuration, the organization owner must:
    organization's same free-token group, or route them through this same ledger.
    A separate API key or project alone does not give it a separate free pool.
    Independent Worker deployments have independent Durable Object namespaces.
-4. Set `OPENAI_FREE_TOKEN_ELIGIBILITY_CONFIRMED=true` in `wrangler.jsonc` after
+4. Configure the Worker's required `OPENAI_USAGE_ADMIN_KEY` secret with an OpenAI
+   admin key authorized to read organization usage, and `OPENAI_ORGANIZATION_ID`
+   with that organization's ID. These are separate from `OPENAI_API_KEY`.
+   Use the narrowest usage-read permissions available. Store the admin key only
+   as a Worker secret; never put it in the repository, browser, logs, or chat.
+   The usage lookup sends it only to the fixed Usage API endpoint. Counting and
+   generation retain the ordinary chat key and explicitly select the same org.
+   Missing credentials or denied usage access stop protected requests.
+5. Set `OPENAI_FREE_TOKEN_ELIGIBILITY_CONFIRMED=true` in `wrangler.jsonc` after
    these checks. Keep `OPENAI_FREE_TOKENS_ONLY=true`. Explicit Wrangler vars
    should be treated as the source of truth when redeploying.
 
@@ -38,19 +52,40 @@ to reset usage during a day. Keep a positive API balance, as OpenAI requires thi
 even for complimentary traffic.
 
 An enforced project spend limit is a useful additional backstop, but provider
-enforcement can lag. This app-side ledger cannot establish continued enrollment,
-prevent charges caused by untracked organization traffic, or detect revocation
-of the incentive. Recheck eligibility if billing or account settings change;
+enforcement can lag. The Usage API check detects **reported** usage from other
+applications; it cannot reserve their concurrent requests or prove that the
+provider has reported all recent usage. This app-side ledger also cannot establish
+continued enrollment or detect revocation of the incentive. Recheck eligibility
+if billing or account settings change;
 set the confirmation flag to `false` while uncertain. This is a conservative
 admission control, not a provider guarantee that the bill will be exactly zero.
 
 ## Request accounting
 
+- Every reservation fetches `/v1/organization/usage/completions` for **00:00 UTC
+  through the next 00:00 UTC**, using one-day buckets. All pagination must finish
+  within an eight-second timeout; HTTP errors, malformed/missing data, invalid
+  totals, and incomplete pagination deny generation. Only an explicit successful
+  empty report counts as zero. Failed checks never reuse an earlier success.
+- The ledger keeps the highest reported total for the UTC day. Admission checks
+  `reported high-water mark + locally completed tokens + outstanding reservations
+  + new reservation <= daily limit`. Local usage is deliberately added even if
+  some of it is already reflected in OpenAI's aggregate: there is no safe way to
+  prove the overlap from an unfiltered aggregate. This can stop generation well
+  before 900K actual tokens (roughly 450K if all traffic is local and reporting
+  is current), in exchange for avoiding undercounting during reporting delays.
+  Checking only `max(reported, local)` would miss recent local usage whenever
+  the reported total is larger and has not caught up.
+- The check must be from the same UTC day and no more than 15 seconds old both
+  during the atomic reservation and immediately before generation. A midnight
+  rollover, a changed organization, or an expired check denies the request.
+  Reported usage resets at UTC midnight; uncertain reservations remain held.
 - Only `gpt-5.4` and `gpt-5.6-sol` are approved. Both consume the **same** ledger;
   switching to GPT-5.4 cannot bypass the daily stop. New models need review.
 - Each request is sent to `/v1/responses/input_tokens` before generation, with
   the same normalized input, instructions, reasoning and text configuration.
-  A failed/invalid count stops the request. This adds one provider round trip.
+  A failed/invalid count stops the request. Counting and organization usage each
+  add a provider round trip before generation.
 - The ledger atomically reserves exact input + maximum output + 256 tokens.
   Existing smaller output caps are preserved; otherwise a hard 8,192-token cap
   bounds reasoning and visible output together. High-effort requests can reach
@@ -99,5 +134,6 @@ References checked September 24, 2026:
 
 - [Data-sharing incentive and quota rules](https://help.openai.com/en/articles/10306912-sharing-feedback-evaluation-and-fine-tuning-data-and-api-inputs-and-outputs-with-openai)
 - [Counting tokens](https://developers.openai.com/api/docs/guides/token-counting)
+- [Organization usage API](https://developers.openai.com/api/reference/ruby/resources/admin/subresources/organization/subresources/usage/methods/completions)
 - [Responses output limit](https://developers.openai.com/api/reference/typescript/resources/responses/methods/create)
 - [Spend limits](https://developers.openai.com/api/docs/guides/spend-limits)

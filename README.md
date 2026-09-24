@@ -1,6 +1,6 @@
 # Stabilize
 
-> **Daily AI budget:** the free-only guard is prepared but requires verified OpenAI eligibility before activation. It covers every chat and memory request; see [setup and rollout](docs/free-token-budget.md). In free-only mode the processing tier is Standard, including routes historically labeled Fast.
+> **Daily AI budget:** the free-only guard is prepared but requires verified OpenAI eligibility and organization usage credentials before activation. Every chat and memory request checks the organization's UTC-day token usage and reserves its maximum token use against the 900K ceiling; see [setup and rollout](docs/free-token-budget.md). In free-only mode the processing tier is Standard, including routes historically labeled Fast.
 
 Stabilize is a small, floor-first AI support website for overloaded moments. It aims to help an adult protect immediate needs, reduce cognitive load, and choose one safe, reversible next step.
 

@@ -146,7 +146,9 @@
       "OPENAI_API_KEY",
       "GOOGLE_CLIENT_ID",
       "GOOGLE_CLIENT_SECRET",
-      "AUTH_SECRET"
+      "AUTH_SECRET",
+      "OPENAI_USAGE_ADMIN_KEY",
+      "OPENAI_ORGANIZATION_ID"
     ]
   },
   "observability": {

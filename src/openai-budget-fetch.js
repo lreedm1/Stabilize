@@ -2,6 +2,7 @@ import {
   FREE_TOKEN_MODELS, DAILY_TOKEN_LIMIT_CODE, TOKEN_BUDGET_UNAVAILABLE_CODE,
   DAILY_TOKEN_LIMIT_MESSAGE, TOKEN_BUDGET_UNAVAILABLE_MESSAGE, freeTokenLimit,
 } from "./openai-budget-policy.js";
+import { freshOrganizationUsage, usageOrganization } from "./openai-organization-usage.js";
 
 const RESPONSES_URL = "https://api.openai.com/v1/responses";
 const BUDGET_OBJECT_NAME = "openai-organization-primary-model-group-v1";
@@ -94,9 +95,12 @@ function meterStream(response, stub, id) {
 export async function budgetedOpenAIFetch(url, init, env) {
   // Explicit rollback only. An absent/misspelled flag does NOT disable protection.
   if (env?.OPENAI_FREE_TOKENS_ONLY === "false") return fetch(url, init);
-  let payload, stub, reservation, id;
+  let payload, stub, reservation, id, organization, headers;
   try {
     freeTokenLimit(env || {});
+    organization = usageOrganization(env);
+    headers = new Headers(init.headers);
+    headers.set("OpenAI-Organization", organization);
     if (url !== RESPONSES_URL || init.method !== "POST") return denial();
     payload = normalizePayload(JSON.parse(init.body));
     stub = env.OPENAI_TOKEN_BUDGET.getByName(BUDGET_OBJECT_NAME);
@@ -105,7 +109,7 @@ export async function budgetedOpenAIFetch(url, init, env) {
         .map((key) => [key, payload[key]]),
     );
     const countResponse = await fetch(`${RESPONSES_URL}/input_tokens`, {
-      ...init, body: JSON.stringify(countPayload),
+      ...init, headers, body: JSON.stringify(countPayload),
     });
     if (!countResponse.ok) return denial();
     const count = await countResponse.json();
@@ -115,12 +119,14 @@ export async function budgetedOpenAIFetch(url, init, env) {
     id = new Headers(init.headers).get("X-Client-Request-Id") || crypto.randomUUID();
     reservation = await stub.reserve(id, tokens);
     if (!reservation?.allowed) return denial(reservation?.reason);
+    // A slow RPC or UTC rollover must not use yesterday's usage check. Keep
+    // the reservation if this last check fails; uncertain holds fail closed.
+    if (!freshOrganizationUsage(reservation.usage, organization)) return denial();
     console.info(JSON.stringify({ event: "openai_budget_reserved", clientRequestId: id, model: payload.model, tokens }));
   } catch {
     return denial();
   }
   // No automatic retry or refund. A network error may follow billable generation.
-  const headers = new Headers(init.headers);
   headers.set("X-Client-Request-Id", id);
   const response = await fetch(url, { ...init, headers, body: JSON.stringify(payload) });
   if (!response.ok) return response;

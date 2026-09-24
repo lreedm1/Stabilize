@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { budgetedOpenAIFetch } from "../src/openai-budget-fetch.js";
 import { usageTokens } from "../src/openai-budget-policy.js";
+import { usageEnv, usageSnapshot } from "./fixtures/organization-usage.mjs";
 
 const URL = "https://api.openai.com/v1/responses";
 const payload = {
@@ -11,20 +12,20 @@ const payload = {
 };
 function setup(overrides = {}) {
   const calls = [], reservations = [], settlements = [];
-  const env = {
+  const env = { ...usageEnv,
     OPENAI_FREE_TOKENS_ONLY: "true", OPENAI_FREE_TOKEN_ELIGIBILITY_CONFIRMED: "true",
     OPENAI_FREE_TOKEN_ALLOWANCE: "1000000", OPENAI_FREE_TOKEN_DAILY_LIMIT: "900000",
     OPENAI_TOKEN_BUDGET: { getByName(name) {
       assert.equal(name, "openai-organization-primary-model-group-v1");
       return {
-        async reserve(id, tokens) { reservations.push({ id, tokens }); return { allowed: true }; },
+        async reserve(id, tokens) { reservations.push({ id, tokens }); return { allowed: true, usage: usageSnapshot() }; },
         async settle(id, usage) { settlements.push({ id, usage }); },
       };
     } }, ...overrides,
   };
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, init) => {
-    calls.push({ url, payload: JSON.parse(init.body) });
+    calls.push({ url, payload: JSON.parse(init.body), headers: new Headers(init.headers) });
     return Response.json(url.endsWith("/input_tokens")
       ? { object: "response.input_tokens", input_tokens: 500 }
       : { usage: { input_tokens: 500, output_tokens: 100, total_tokens: 600 }, output: [] });
@@ -49,6 +50,10 @@ test("reserves full exact input plus capped reasoning/output before generation",
     assert.equal(s.calls[0].payload.instructions, payload.instructions);
     assert.equal(s.calls[1].payload.max_output_tokens, 8192);
     assert.equal(s.calls[1].payload.service_tier, "default");
+    for (const call of s.calls) {
+      assert.equal(call.headers.get("OpenAI-Organization"), usageEnv.OPENAI_ORGANIZATION_ID);
+      assert.equal(call.headers.get("Authorization"), "Bearer test");
+    }
     assert.equal(s.calls[1].payload.prompt_cache_options, undefined);
     assert.equal(s.calls[1].payload.input[0].content[0].prompt_cache_breakpoint, undefined);
     assert.equal(s.reservations[0].tokens, 500 + 8192 + 256);
@@ -62,6 +67,10 @@ test("missing eligibility/binding, invalid budgets, tools, and unknown models fa
     [{ OPENAI_FREE_TOKEN_ELIGIBILITY_CONFIRMED: "false" }, payload],
     [{ OPENAI_FREE_TOKEN_ELIGIBILITY_CONFIRMED: undefined }, payload],
     [{ OPENAI_TOKEN_BUDGET: undefined }, payload],
+    [{ OPENAI_USAGE_ADMIN_KEY: undefined }, payload],
+    [{ OPENAI_USAGE_ADMIN_KEY: " " }, payload],
+    [{ OPENAI_ORGANIZATION_ID: undefined }, payload],
+    [{ OPENAI_ORGANIZATION_ID: "wrong organization" }, payload],
     [{ OPENAI_FREE_TOKEN_ALLOWANCE: "250000" }, payload],
     [{ OPENAI_FREE_TOKEN_DAILY_LIMIT: "1000001" }, payload],
     [{ OPENAI_FREE_TOKEN_DAILY_LIMIT: "NaN" }, payload],
@@ -75,6 +84,20 @@ test("missing eligibility/binding, invalid budgets, tools, and unknown models fa
     try {
       assert.equal((await request(s.env, body)).status, 503);
       assert.equal(s.calls.length, 0);
+    } finally { s.restore(); }
+  }
+});
+
+test("expired, missing, wrong-organization, and previous-day usage checks cannot start generation", async () => {
+  const now = Date.now();
+  for (const usage of [undefined, usageSnapshot(now - 16_000), usageSnapshot(now - 86_400_000),
+    { ...usageSnapshot(now), organization: "org-other" }, { ...usageSnapshot(now), checkedAt: now + 60_000 }]) {
+    const s = setup();
+    s.env.OPENAI_TOKEN_BUDGET.getByName = () => ({ async reserve() { return { allowed: true, usage }; } });
+    try {
+      assert.equal((await request(s.env)).status, 503);
+      assert.equal(s.calls.length, 1, "Only the input-token count may be sent");
+      assert.equal(s.calls[0].url, URL + "/input_tokens");
     } finally { s.restore(); }
   }
 });

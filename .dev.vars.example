@@ -1,5 +1,8 @@
 # Local testing only. Never commit real values.
 OPENAI_API_KEY=replace-with-an-openai-api-key
+# Free-only mode also needs organization usage access. Never expose the admin key to clients.
+OPENAI_USAGE_ADMIN_KEY=replace-with-an-openai-usage-admin-key
+OPENAI_ORGANIZATION_ID=org-replace-with-the-same-organization-as-the-chat-key
 GOOGLE_CLIENT_ID=replace-with-a-google-web-client-id
 GOOGLE_CLIENT_SECRET=replace-with-a-google-client-secret
 # Generate at least 32 random bytes, for example: openssl rand -base64 32
