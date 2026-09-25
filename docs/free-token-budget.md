@@ -14,10 +14,13 @@ Cached input and other token subtotals are already included in these totals.
 
 ## Activation
 
-The proposed configuration reserves a 10% margin on a **1,000,000-token daily
-allowance**, stopping at **900,000 tokens**. Eligibility is deliberately **not
-confirmed** in the committed configuration. Deploying it as-is pauses model
-generation; fixed safety responses and the rest of the site continue to work.
+The production configuration reserves a 10% margin on a **1,000,000-token daily
+allowance**, stopping at **900,000 tokens**. The owner approved activation after
+organization enrollment and Tier 3 eligibility were inspected, a Usage API
+read-only admin key was created, and the owner reported saving the Worker
+secrets. The confirmation flag is enabled; credential validity is still checked
+at runtime, and failed checks pause generation. Fixed safety responses and the
+rest of the site continue to work.
 
 Before merging/deploying an active configuration, the organization owner must:
 
@@ -44,6 +47,11 @@ Before merging/deploying an active configuration, the organization owner must:
 5. Set `OPENAI_FREE_TOKEN_ELIGIBILITY_CONFIRMED=true` in `wrangler.jsonc` after
    these checks. Keep `OPENAI_FREE_TOKENS_ONLY=true`. Explicit Wrangler vars
    should be treated as the source of truth when redeploying.
+
+The deployment gate waits for the public free-token-mode marker before sending
+its chat probe. It accepts a complete streamed reply or the specific daily-budget
+denial produced after successful input counting and organization usage lookup.
+Missing credentials, failed usage checks, and other provider errors fail the gate.
 
 The ledger's first reservation initializes it but denies generation for the rest
 of that UTC day because prior provider usage is unknown. Requests can begin after

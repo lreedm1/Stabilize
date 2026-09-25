@@ -40,10 +40,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Playwright WebKit
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install WebKit dependencies
         shell: bash
         run: |
           set -euo pipefail
+          npm ci --ignore-scripts
           npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
           npx playwright install --with-deps webkit
 
