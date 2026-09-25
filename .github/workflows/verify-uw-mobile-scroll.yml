@@ -49,9 +49,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm ci --ignore-scripts
-          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
-          npx playwright install --with-deps webkit
+          npm install --prefix "$RUNNER_TEMP/stabilize-webkit" --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+          "$RUNNER_TEMP/stabilize-webkit/node_modules/.bin/playwright" install --with-deps webkit
 
       - name: Verify the composer and urgent drawer on an iPhone-sized viewport
         shell: bash
@@ -59,7 +58,8 @@ jobs:
           set -euo pipefail
           node --input-type=module <<'NODE'
           import { readFile } from "node:fs/promises";
-          import { webkit } from "playwright";
+          import { createRequire } from "node:module";
+          const { webkit } = createRequire(`${process.env.RUNNER_TEMP}/stabilize-webkit/package.json`)("playwright");
 
           const baseUrl = "https://chat.uwmadison.stabilize.info/";
           const expectedVersion = process.env.EXPECTED_STYLESHEET_VERSION;
