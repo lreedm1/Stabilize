@@ -1,9 +1,7 @@
 name: Verify exact mobile autoplay v28 production
 
+# Historical media checks are manual; verify-live-composer.yml verifies the current chat page.
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 concurrency:
