@@ -9,6 +9,7 @@ let loadScheduled = false;
 let modulationScheduled = false;
 
 export function shouldLoadInteractiveBackground(target = globalThis.window) {
+  if (globalThis.document?.documentElement?.dataset?.simpleChat === "true") return false;
   if (!target || typeof target.matchMedia !== "function") return false;
   if (target.navigator?.connection?.saveData === true) return false;
   return !target.matchMedia(STATIC_ONLY_BACKGROUND_QUERY).matches;

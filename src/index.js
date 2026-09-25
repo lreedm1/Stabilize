@@ -13,7 +13,7 @@ import {
   readAuthSession,
   signOut,
 } from "./auth.js";
-import { renderPage } from "./page.js";
+import { renderPage } from "./simple-page.js";
 import { classifyInput, fixedReplyForRoute } from "./safety.js";
 import { selectReasoningEffort } from "./reasoning-policy.js";
 import { SessionMemory } from "./session-memory.js";

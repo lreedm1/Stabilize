@@ -1,4 +1,4 @@
-name: Verify live composer release
+name: Verify live chat page
 
 on:
   push:
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   verify-live-composer:
-    name: Verify live composer CSS
+    name: Verify live chat page and CSS
     runs-on: ubuntu-latest
     timeout-minutes: 12
 
@@ -26,7 +26,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Verify the exact generated composer asset is live
+      - name: Verify the simplified page and exact stylesheet are live
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -34,14 +34,18 @@ jobs:
           set -u
 
           asset_version="$(
-            sed -n 's/^const ASSET_VERSION = "\([^"]*\)";$/\1/p' \
-              scripts/center-composer-placeholder.mjs \
+            sed -n 's/.*href="\/simple-chat.css?v=\([^"]*\)".*/\1/p' \
+              src/simple-page.js \
               | head -n 1
           )"
           if [[ -z "$asset_version" ]]; then
-            echo "::error::Could not read the composer asset version."
+            echo "::error::Could not read the chat stylesheet version."
             exit 1
           fi
+
+          expected_css_sha="$(sha256sum public/simple-chat.css | cut -d' ' -f1)"
+          css_file="$(mktemp)"
+          trap 'rm -f "$css_file"' EXIT
 
           publish_status() {
             local state="$1"
@@ -64,7 +68,7 @@ jobs:
 
           publish_status \
             pending \
-            "Waiting for the exact centered composer release"
+            "Waiting for the simplified chat page and stylesheet"
 
           for attempt in {1..36}; do
             cache_key="${GITHUB_SHA}-${attempt}"
@@ -75,34 +79,30 @@ jobs:
                 || true
             )"
 
-            if grep -Fq "/billing.css?v=${asset_version}" <<<"$html"; then
-              css="$(
-                curl --fail --max-time 20 --silent --show-error \
+            if grep -Fq 'data-simple-chat="true"' <<<"$html" \
+              && grep -Fq 'What’s getting in the way?' <<<"$html" \
+              && grep -Fq 'id="chat-form"' <<<"$html" \
+              && grep -Fq "/simple-chat.css?v=${asset_version}" <<<"$html" \
+              && ! grep -Fq 'id="why-stabilize"' <<<"$html"; then
+              if curl --fail --max-time 20 --silent --show-error \
                   --header "Cache-Control: no-cache" \
-                  "https://stabilize.info/billing.css?v=${asset_version}&composer-release=${cache_key}" \
-                  || true
-              )"
-
-              if grep -Fq "/* Balanced 42px composer bar */" <<<"$css" \
-                && grep -Fq "padding: 10px;" <<<"$css" \
-                && grep -Fq "line-height: 20px;" <<<"$css" \
-                && grep -Fq "/* Horizontally centered composer placeholder */" <<<"$css" \
-                && grep -Fq "text-align: left;" <<<"$css" \
-                && grep -Fq "text-align: center;" <<<"$css"; then
-                echo "Production serves composer asset ${asset_version} with the placeholder centered on both axes."
+                  "https://stabilize.info/simple-chat.css?v=${asset_version}&composer-release=${cache_key}" \
+                  --output "$css_file" \
+                && [[ "$(sha256sum "$css_file" | cut -d' ' -f1)" == "$expected_css_sha" ]]; then
+                echo "Production serves the simplified chat page and exact stylesheet ${asset_version}."
                 publish_status \
                   success \
-                  "Exact centered composer release is live"
+                  "Simplified chat page and exact stylesheet are live"
                 exit 0
               fi
             fi
 
-            echo "Composer release attempt ${attempt}: ${asset_version} is not live yet."
+            echo "Chat page release attempt ${attempt}: ${asset_version} is not live yet."
             sleep 10
           done
 
           publish_status \
             failure \
-            "Production did not serve the centered composer release"
-          echo "::error::Production never served billing.css?v=${asset_version} with the centered placeholder rules."
+            "Production did not serve the simplified chat page"
+          echo "::error::Production never served the simplified page with its exact stylesheet."
           exit 1

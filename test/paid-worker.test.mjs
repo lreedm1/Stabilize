@@ -126,7 +126,7 @@ test("opaque cross-site billing submissions remain blocked", async () => {
   });
 });
 
-test("the homepage places the current model picker left of the message form", async () => {
+test("the homepage keeps model settings in the menu and the message form clear", async () => {
   const user = await identity("paid-model-picker-user");
   await user.billing.updateBilling({
     customerId: "cus_picker_12345678",
@@ -145,13 +145,16 @@ test("the homepage places the current model picker left of the message form", as
 
   assert.equal(response.status, 200);
   const html = await response.text();
-  const rowIndex = html.indexOf('class="composer-entry-row"');
+  const rowIndex = html.indexOf('class="menu-panel"');
   const pickerIndex = html.indexOf('class="composer-model-picker"', rowIndex);
   const chatFormIndex = html.indexOf('id="chat-form"', rowIndex);
 
   assert.ok(rowIndex >= 0);
   assert.ok(pickerIndex > rowIndex);
   assert.ok(chatFormIndex > pickerIndex);
+  assert.doesNotMatch(html, /class="composer-entry-row"/);
+  assert.match(html, /class="composer-model-kicker">Settings<\/span>/);
+  assert.ok(html.indexOf('class="simple-more"') > pickerIndex);
   assert.match(
     html,
     /<h3 id="composer-quick-model-heading">Model<\/h3>/,
