@@ -683,6 +683,11 @@ async function injectBillingPage(response, request, env, authSession, state, rec
     );
   }
 
+  if (env.OPENAI_FREE_TOKENS_ONLY !== "false") {
+    html = html.replaceAll("GPT-5.6 Fast", "GPT-5.6")
+      .replace("<html ", '<html data-free-tokens-only="true" ')
+      .replaceAll("/billing-client.js?v=20260808-account-preflight-1", "/billing-client.js?v=20260924-free-token-budget-1");
+  }
   const headers = new Headers(response.headers);
   headers.delete("content-length");
   headers.delete("content-encoding");

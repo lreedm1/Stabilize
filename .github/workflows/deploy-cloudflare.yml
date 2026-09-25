@@ -188,7 +188,33 @@ jobs:
           echo "::error::stabilize.info did not expose the repaired opaque-origin billing route."
           exit 1
 
-      - name: Verify production chat streaming
+      - name: Wait for the production free-token guard
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          page="$(mktemp)"
+          trap 'rm -f "$page"' EXIT
+          for attempt in {1..30}; do
+            curl --fail --max-time 20 --silent --show-error \
+              --header "Cache-Control: no-cache" \
+              --output "$page" \
+              "https://stabilize.info/?budget-deployment=${GITHUB_SHA}" || true
+            if node -e '
+              const fs = require("node:fs");
+              process.exit(fs.readFileSync(process.argv[1], "utf8").includes(
+                "data-free-tokens-only=\"true\""
+              ) ? 0 : 1);
+            ' "$page"; then
+              echo "The deployed Worker exposes the free-token guard."
+              exit 0
+            fi
+            echo "Waiting for the free-token guard: attempt ${attempt}"
+            sleep 10
+          done
+          echo "::error::The free-token guard is not active; no live chat probe was sent."
+          exit 1
+
+      - name: Verify production chat streaming or daily budget stop
         if: github.event_name != 'pull_request'
         shell: bash
         run: |
@@ -220,7 +246,17 @@ jobs:
                 let completed = null;
                 for (const line of lines) {
                   const event = JSON.parse(line);
-                  if (event.type === "error") process.exit(1);
+                  if (event.type === "error") {
+                    if (
+                      event.diagnostic?.code === "stabilize_daily_token_limit" &&
+                      event.diagnostic?.status === 503 &&
+                      !streamedText && !completed
+                    ) {
+                      console.log("Verified daily-budget stop after successful usage checks.");
+                      process.exit(0);
+                    }
+                    process.exit(1);
+                  }
                   if (event.type === "delta" && typeof event.delta === "string") {
                     streamedText += event.delta;
                   }
@@ -262,7 +298,7 @@ jobs:
             rm -f "$headers" "$body"
             sleep 10
           done
-          echo "::error::stabilize.info did not produce a complete streamed assistant reply."
+          echo "::error::stabilize.info produced neither a complete reply nor a verified daily-budget stop."
           exit 1
 
       - name: Publish Cloudflare deployment result

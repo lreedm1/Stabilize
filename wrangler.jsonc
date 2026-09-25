@@ -76,6 +76,10 @@
       {
         "name": "IMPACT",
         "class_name": "ImpactAnalytics"
+      },
+      {
+        "name": "OPENAI_TOKEN_BUDGET",
+        "class_name": "OpenAITokenBudget"
       }
     ]
   },
@@ -104,6 +108,12 @@
       "new_sqlite_classes": [
         "ImpactAnalytics"
       ]
+    },
+    {
+      "tag": "v5-token-budget",
+      "new_sqlite_classes": [
+        "OpenAITokenBudget"
+      ]
     }
   ],
   "vars": {
@@ -125,14 +135,20 @@
     "IMPACT_MONTHLY_RECURRING_COST_CENTS": "0",
     "FREE_PLAN_PRIMARY_MODEL": "gpt-5.6-sol",
     "FREE_PLAN_FALLBACK_MODEL": "gpt-5.4",
-    "OPENAI_SERVICE_TIER": "fast"
+    "OPENAI_SERVICE_TIER": "fast",
+    "OPENAI_FREE_TOKENS_ONLY": "true",
+    "OPENAI_FREE_TOKEN_ALLOWANCE": "1000000",
+    "OPENAI_FREE_TOKEN_DAILY_LIMIT": "900000",
+    "OPENAI_FREE_TOKEN_ELIGIBILITY_CONFIRMED": "true"
   },
   "secrets": {
     "required": [
       "OPENAI_API_KEY",
       "GOOGLE_CLIENT_ID",
       "GOOGLE_CLIENT_SECRET",
-      "AUTH_SECRET"
+      "AUTH_SECRET",
+      "OPENAI_USAGE_ADMIN_KEY",
+      "OPENAI_ORGANIZATION_ID"
     ]
   },
   "observability": {

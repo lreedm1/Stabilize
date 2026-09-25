@@ -1,3 +1,8 @@
+function freeTokenModelCopy(text) {
+  return document.documentElement.dataset.freeTokensOnly === "true"
+    ? text.replaceAll("GPT-5.6 Fast", "GPT-5.6") : text;
+}
+
 const billingForms = document.querySelectorAll("form[data-billing-redirect]");
 const composerModelPickers = document.querySelectorAll(
   "details.composer-model-picker",
@@ -197,7 +202,7 @@ function updateSelectedModelDisplay(model) {
 }
 
 function updateModelUsageDisplay(usage) {
-  const message = modelUsageCopy(usage);
+  const message = freeTokenModelCopy(modelUsageCopy(usage));
   for (const node of document.querySelectorAll(
     '[data-model-usage="true"], .billing-usage',
   )) {
@@ -256,6 +261,7 @@ function showModelFallbackNotice(defaultModel, limit = 50) {
     "You used today’s " +
     limit +
     " GPT-5.6 Fast messages. Stabilize used GPT-5.4 for this message; it was still sent.";
+  notice.textContent = freeTokenModelCopy(notice.textContent);
   for (const select of document.querySelectorAll(
     '#model-choice, #composer-model-choice',
   )) {
@@ -449,7 +455,7 @@ function installAccountBillingPreflight(preflight) {
   document.documentElement.dataset.subscriptionActive = String(
     preflight.paid,
   );
-  const copy = accountBillingUsageCopy(preflight);
+  const copy = freeTokenModelCopy(accountBillingUsageCopy(preflight));
   if (!copy) return;
   for (const node of document.querySelectorAll('[data-model-usage="true"]')) {
     node.textContent = copy;

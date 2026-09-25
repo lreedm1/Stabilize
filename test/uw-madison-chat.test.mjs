@@ -16,7 +16,7 @@ function campusRequest(path = "/", init = {}) {
 
 function testEnvironment(overrides = {}) {
   return {
-    OPENAI_API_KEY: "test-key",
+    OPENAI_API_KEY: "test-key", OPENAI_FREE_TOKENS_ONLY: "false",
     OPENAI_MODEL: "gpt-5.4",
     FREE_PLAN_PRIMARY_MODEL: "gpt-5.6-sol",
     OPENAI_SERVICE_TIER: "fast",
