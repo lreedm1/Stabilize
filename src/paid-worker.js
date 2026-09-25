@@ -661,14 +661,21 @@ async function injectBillingPage(response, request, env, authSession, state, rec
     );
   }
   if (composerModelPicker) {
-    html = html.replace(
-      /<form id="chat-form" class="chat-form">[\s\S]*?<\/form>/,
-      (chatForm) =>
-        '<div class="composer-entry-row">' +
-        composerModelPicker +
-        chatForm +
-        "</div>",
-    );
+    if (html.includes("<!-- simple-chat-settings -->")) {
+      const settings = composerModelPicker
+        .replace('class="composer-model-kicker">Model', 'class="composer-model-kicker">Settings')
+        .replace('aria-label="Open model and chat controls. Current model: ', 'aria-label="Open settings. Current model: ');
+      html = html.replace("<!-- simple-chat-settings -->", settings);
+    } else {
+      html = html.replace(
+        /<form id="chat-form" class="chat-form">[\s\S]*?<\/form>/,
+        (chatForm) =>
+          '<div class="composer-entry-row">' +
+          composerModelPicker +
+          chatForm +
+          "</div>",
+      );
+    }
   }
   if ((markup || composerModelPicker) && !html.includes('src="/billing-client.js')) {
     html = html.replace(

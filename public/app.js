@@ -21,6 +21,26 @@ const deleteMemoryButton = document.querySelector("#delete-memory-button");
 const memoryDeleteStatus = document.querySelector("#memory-delete-status");
 const signedIn = document.documentElement.dataset.signedIn === "true";
 
+if (siteMenu instanceof HTMLDetailsElement) {
+  const closeSiteMenu = (restoreFocus = false) => {
+    siteMenu.open = false;
+    if (restoreFocus) siteMenu.querySelector("summary")?.focus();
+  };
+  document.addEventListener("click", (event) => {
+    if (event.target instanceof Node && !siteMenu.contains(event.target)) {
+      closeSiteMenu();
+    }
+  });
+  form.addEventListener("focusin", () => closeSiteMenu());
+  siteMenu.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    // Let the existing model picker handle its own Escape first.
+    if (siteMenu.querySelector(".composer-model-picker[open]")) return;
+    event.preventDefault();
+    closeSiteMenu(true);
+  });
+}
+
 if (!(copyTemplate instanceof HTMLTemplateElement)) {
   throw new Error("Missing client copy data");
 }

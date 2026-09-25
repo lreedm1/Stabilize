@@ -1069,28 +1069,21 @@ test("root page renders the simplified chat without audio or a danger shortcut",
   assert.equal(response.headers.get("set-cookie"), null);
   assert.ok(html.includes(`href="/auth/google"`));
   assert.ok(html.includes(COPY.page.auth.signIn));
-  assert.ok(html.includes(COPY.page.chat.supportNote));
+  assert.ok(html.includes("AI can make mistakes. Not emergency care."));
   assert.ok(html.includes(COPY.page.chat.infoLabel));
   assert.ok(html.includes(COPY.page.chat.infoDetails));
   assert.ok(COPY.page.chat.supportNote.length < 80);
   assert.doesNotMatch(html, /forget-memory|Forget remembered context/);
-  assert.ok(html.includes('id="terrain-background"'));
-  assert.ok(html.includes('id="photo-backdrop"'));
-  assert.ok(html.includes('id="photo-backdrop-image"'));
-  assert.ok(html.includes("lake-valley-portrait-720.webp 720w"));
-  assert.ok(html.includes("lake-valley-landscape-3840.webp 3840w"));
-  assert.ok(
-    html.indexOf('id="terrain-background"') <
-      html.indexOf('id="photo-backdrop"'),
-  );
-  assert.ok(
-    html.indexOf('id="photo-backdrop"') <
-      html.indexOf('id="photo-background"'),
-  );
+  assert.match(html, /data-simple-chat="true"/);
+  assert.match(html, /<h1 id="seo-heading">What’s getting in the way\?<\/h1>/);
+  assert.match(html, /class="simple-brand"[^>]*>Stabilize<\/a>/);
+  assert.doesNotMatch(html, /<video|<canvas|<picture|\/scenes\//);
+  assert.doesNotMatch(html, /landing-hero|landing-section|why-stabilize|landing-trust/);
+  assert.equal((html.match(/href="\/auth\/google"/g) || []).length, 1);
   assert.doesNotMatch(html, /sound-toggle|sound-volume|sound-controls/);
   assert.doesNotMatch(html, /danger-button|emergency-panel|emergency-actions/);
   assert.doesNotMatch(html, /<audio|nature-sounds\.js/);
-  assert.ok(html.includes('placeholder="' + COPY.page.chat.inputPlaceholder + '"'));
+  assert.ok(html.includes('placeholder="Type your message…"'));
   assert.match(html, /id="conversation-surface"[\s\S]*data-view="compose"/);
   assert.ok(html.includes(COPY.page.chat.responseLabel));
   assert.match(html, /rel="preload"[\s\S]*lexend-latin-wght-normal\.woff2/);
@@ -1102,12 +1095,12 @@ test("root page renders the simplified chat without audio or a danger shortcut",
   const menuIndex = html.indexOf('class="menu-panel"');
   const infoIndex = html.indexOf(COPY.page.chat.infoDetails, menuIndex);
   const outputIndex = html.indexOf('id="chat-log"');
-  const noteIndex = html.indexOf(COPY.page.chat.supportNote);
+  const noteIndex = html.indexOf('class="simple-boundary"');
   const composerIndex = html.indexOf('id="chat-form"');
   assert.ok(menuIndex >= 0 && menuIndex < infoIndex);
   assert.ok(infoIndex < outputIndex);
   assert.ok(outputIndex >= 0 && outputIndex < noteIndex);
-  assert.ok(noteIndex < composerIndex);
+  assert.ok(composerIndex < noteIndex);
   assert.match(html.slice(outputIndex, noteIndex), /\shidden(?:\s|>)/);
   assert.doesNotMatch(html.slice(outputIndex, noteIndex), /assistant-output/);
 

@@ -196,10 +196,14 @@ async function injectFeedbackPage(response, request, env, authSession) {
     );
   }
   if (markup) {
-    html = html.replace(
-      /(<div class="menu-panel">[\s\S]*?)(\s*<\/div>\s*<\/details>)/,
-      `$1${markup}$2`,
-    );
+    if (html.includes("<!-- simple-chat-feedback -->")) {
+      html = html.replace("<!-- simple-chat-feedback -->", markup);
+    } else {
+      html = html.replace(
+        /(<div class="menu-panel">[\s\S]*?)(\s*<\/div>\s*<\/details>)/,
+        `$1${markup}$2`,
+      );
+    }
   }
   if (notice) {
     html = html.replace(
