@@ -1,9 +1,7 @@
 name: Verify mobile HEVC v35
 
+# Historical media checks are manual; verify-live-composer.yml verifies the current chat page.
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
