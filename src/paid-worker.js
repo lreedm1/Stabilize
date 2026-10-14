@@ -630,16 +630,7 @@ async function injectBillingPage(response, request, env, authSession, state, rec
   const freeLimit = freeDailyModelMessageLimit(env);
   const paidLimit = monthlyModelMessageLimit(env);
   const markup = "";
-  const composerModelPicker = composerModelPickerMarkup({
-    signedIn: Boolean(authSession),
-    configured,
-    state,
-    choices,
-    defaultModel,
-    freeLimit,
-    paidLimit,
-  });
-  const url = new URL(request.url);
+  // Keep billing logic, but do not expose model or thinking selectors.\n  const composerModelPicker = "";\n  const url = new URL(request.url);
   const notice = billingNotice(url, reconciled);
   let html = await response.text();
 
@@ -1025,9 +1016,8 @@ async function paidChatResponse(request, env, ctx) {
   }
 
   const defaultModel = String(env.OPENAI_MODEL || "gpt-5.4");
-  if (preparation.paid !== true && preparation.model === defaultModel) {
-    body.reasoningEffort = "none";
-  }
+  // A quota fallback may change the underlying model, never the Think setting.
+  body.reasoningEffort = "medium";
   const selectedEnv = modelEnvironment(env, preparation.model);
   let response = await preparedChatResponse(
     request,
