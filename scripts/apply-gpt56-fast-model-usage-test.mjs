@@ -1,4 +1,7 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+
+const currentCoverage = await readFile("test/model-usage-worker.test.mjs", "utf8").catch(() => "");
+if (!currentCoverage.includes('assert.equal(providerRequest.reasoning.effort, "medium");')) {
 
 await writeFile(
   "test/model-usage-worker.test.mjs",
@@ -171,4 +174,5 @@ test("the free homepage presents GPT-5.6 Fast first", async () => {
 `,
 );
 
-console.log("Replaced model-usage Worker coverage for GPT-5.6 Fast-first routing.");
+}
+console.log("Preserved Think-only model usage coverage.");
