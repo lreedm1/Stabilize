@@ -248,7 +248,7 @@ await update("test/sustainability.test.mjs", (source) =>
   ),
 );
 
-await update("test/model-usage-worker.test.mjs", () => `import { env } from "cloudflare:test";
+await update("test/model-usage-worker.test.mjs", (source) => source.includes('assert.equal(providerRequest.reasoning.effort, "medium");') ? source : `import { env } from "cloudflare:test";
 import { test } from "vitest";
 import assert from "node:assert/strict";
 import worker from "../src/paid-worker.js";
