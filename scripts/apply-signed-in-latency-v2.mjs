@@ -334,7 +334,7 @@ await update("src/paid-worker.js", (source) => {
   }
   const selectedEnv = modelEnvironment(env, preparation.model);
   let response = await preparedChatResponse(`;
-  if (!next.includes("preparation.model === defaultModel")) {
+  if (!next.includes("preparation.model === defaultModel") && !next.includes('body.reasoningEffort = "medium";')) {
     next = replaceRequired(
       next,
       oldReasoning,
