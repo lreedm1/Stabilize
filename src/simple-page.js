@@ -78,6 +78,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/seo.css?v=20260808-memory-controls-1" />
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
     <link rel="stylesheet" href="/simple-chat.css?v=20261014-functional-1" />
+    <link rel="stylesheet" href="/persistent-chat.css?v=20261014-1" />
   </head>
   <body class="simple-chat">
     <div class="page-shell">
@@ -148,6 +149,7 @@ export function renderPage(options = {}) {
     <template id="product-copy">${escapeHtml(JSON.stringify(productCopy))}</template>
     <script type="module" src="/app.js?v=20260925-simple-chat-1"></script>
     <script type="module" src="/reasoning-choice.js?v=20261014-think-only"></script>
+    <script defer src="/persistent-chat.js?v=20261014-1"></script>
   </body>
 </html>`;
 }
