@@ -183,6 +183,44 @@ async function uwMadisonResponse(request, env) {
   return serveUwMadisonAsset(request, env, assetPath);
 }
 
+const INFORMATION_PAGES = new Set([
+  "/about.html", "/privacy.html", "/safety.html", "/how-it-works.html",
+  "/floor-first.html", "/sustainability.html", "/support.html",
+]);
+
+async function withPersistentChat(response, request) {
+  const url = new URL(request.url);
+  if (url.pathname === "/" && url.searchParams.get("embed") === "1" && response.ok) {
+    // Only our own informational pages may frame the canonical chat surface.
+    const headers = new Headers(response.headers);
+    const policy = headers.get("Content-Security-Policy") || "";
+    headers.set("Content-Security-Policy", policy.replace("frame-ancestors 'none'", "frame-ancestors 'self'"));
+    headers.set("X-Frame-Options", "SAMEORIGIN");
+    return new Response(request.method === "HEAD" ? null : response.body, {
+      status: response.status, statusText: response.statusText, headers,
+    });
+  }
+  if (!INFORMATION_PAGES.has(url.pathname) ||
+      !["GET"].includes(request.method) ||
+      !response.ok ||
+      !String(response.headers.get("Content-Type") || "").includes("text/html")) {
+    return response;
+  }
+  const html = await response.text();
+  if (!html.includes("</head>") || !html.includes("</body>")) {
+    return new Response(html, { status: response.status, headers: response.headers });
+  }
+  const decorated = html
+    .replace("</head>", '    <link rel="stylesheet" href="/persistent-chat.css?v=20261014-1" />\n  </head>')
+    .replace("</body>", '    <script defer src="/persistent-chat.js?v=20261014-1"></script>\n  </body>');
+  const headers = new Headers(response.headers);
+  headers.delete("Content-Length");
+  headers.delete("Content-Encoding");
+  return new Response(decorated, {
+    status: response.status, statusText: response.statusText, headers,
+  });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -242,6 +280,6 @@ export default {
         ? await signOut(request, canonicalEnv)
         : await worker.fetch(request, canonicalEnv, ctx);
 
-    return withStrictTransportSecurity(response);
+    return withStrictTransportSecurity(await withPersistentChat(response, request));
   },
 };
