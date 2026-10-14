@@ -77,7 +77,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/styles.css?v=20260807-priority-latency-1" />
     <link rel="stylesheet" href="/seo.css?v=20260808-memory-controls-1" />
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
-    <link rel="stylesheet" href="/simple-chat.css?v=20260925-1" />
+    <link rel="stylesheet" href="/simple-chat.css?v=20261014-functional-1" />
   </head>
   <body class="simple-chat">
     <div class="page-shell">
@@ -118,7 +118,17 @@ export function renderPage(options = {}) {
       <main class="chat-card" aria-label="Stabilize AI check-in">
         <section id="conversation-surface" class="conversation-surface" data-view="compose">
           <section id="seo-intro" class="seo-intro simple-intro" aria-labelledby="seo-heading">
-            <h1 id="seo-heading">What’s getting in the way?</h1>
+            <h1 id="seo-heading">Make life easier to navigate.</h1>
+            <p class="simple-landing-promise">Protect your safety, health, freedom, purpose, and community.</p>
+            <p class="simple-landing-promise">Ask for help finding one practical, reversible next step.</p>
+            <a href="#learn-more" class="simple-learn-link" role="button">Learn more</a>
+            <section id="learn-more" class="simple-learn-content" aria-label="Learn more about Stabilize">
+              <h2>Support for the life you want to live</h2>
+              <p>Stabilize helps you find information, physical resources, and human connections while keeping your choices your own.</p>
+              <p>It starts with safety and health, protects independence, and makes room for purpose and community.</p>
+              <p>Small, reversible steps are often easier to sustain than drastic change. <a href="/about.html">Read about the project</a>.</p>
+              <a href="#seo-heading" class="simple-learn-back">Back to chat</a>
+            </section>
           </section>
           <div id="chat-log" class="chat-log" role="log" aria-label="${escapeHtml(page.chat.responseLabel)}" aria-live="polite" aria-atomic="false" tabindex="0" hidden></div>
           <div class="composer-dock">
@@ -129,7 +139,7 @@ export function renderPage(options = {}) {
               <textarea id="message-input" name="message" rows="2" maxlength="4000" placeholder="Type your message…" required></textarea>
               <button id="send-button" type="submit">${escapeHtml(page.chat.sendButton)}</button>
             </form>
-            <p class="simple-boundary">AI can make mistakes. Not emergency care. <a href="/privacy.html" title="${escapeHtml(privacyNote)}">Privacy</a></p>
+            <p class="simple-boundary">AI can make mistakes · Not emergency care · <a href="/privacy.html" title="${escapeHtml(privacyNote)}">Privacy</a></p>
           </div>
         </section>
       </main>
@@ -137,7 +147,7 @@ export function renderPage(options = {}) {
     <template id="client-copy">${escapeHtml(JSON.stringify(client))}</template>
     <template id="product-copy">${escapeHtml(JSON.stringify(productCopy))}</template>
     <script type="module" src="/app.js?v=20260925-simple-chat-1"></script>
-    <script type="module" src="/reasoning-choice.js?v=20260807-instant-thinking-2-fastest-1"></script>
+    <script type="module" src="/reasoning-choice.js?v=20261014-think-only"></script>
   </body>
 </html>`;
 }
