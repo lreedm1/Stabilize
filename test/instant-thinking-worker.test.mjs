@@ -87,16 +87,16 @@ async function collectProviderEfforts(efforts, model) {
   }
 }
 
-test("GPT-5.4 uses every supported free thinking level exactly", async () => {
+test("GPT-5.4 always uses Think for all historical choice values", async () => {
   const expectedEfforts = ["none", "low", "medium", "high", "xhigh"];
   const observed = await collectProviderEfforts(expectedEfforts, "gpt-5.4");
   assert.deepEqual(
     observed,
-    expectedEfforts.map((effort) => ({ effort, model: "gpt-5.4" })),
+    expectedEfforts.map(() => ({ effort: "medium", model: "gpt-5.4" })),
   );
 });
 
-test("Current adds free maximum thinking", async () => {
+test("Current always uses Think for all historical choice values", async () => {
   const expectedEfforts = [
     "none",
     "low",
@@ -111,11 +111,11 @@ test("Current adds free maximum thinking", async () => {
   );
   assert.deepEqual(
     observed,
-    expectedEfforts.map((effort) => ({ effort, model: "gpt-5.6-sol" })),
+    expectedEfforts.map(() => ({ effort: "medium", model: "gpt-5.6-sol" })),
   );
 });
 
-test("invalid values use instant and GPT-5.4 safely maps maximum to xhigh", async () => {
+test("invalid and maximum values are normalized to Think", async () => {
   const originalFetch = globalThis.fetch;
   const observed = [];
 
@@ -131,7 +131,7 @@ test("invalid values use instant and GPT-5.4 safely maps maximum to xhigh", asyn
       assert.equal(response.status, 200);
       await response.text();
     }
-    assert.deepEqual(observed, ["none", "none", "xhigh"]);
+    assert.deepEqual(observed, ["medium", "medium", "medium"]);
   } finally {
     globalThis.fetch = originalFetch;
   }
