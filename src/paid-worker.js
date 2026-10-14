@@ -630,7 +630,9 @@ async function injectBillingPage(response, request, env, authSession, state, rec
   const freeLimit = freeDailyModelMessageLimit(env);
   const paidLimit = monthlyModelMessageLimit(env);
   const markup = "";
-  // Keep billing logic, but do not expose model or thinking selectors.\n  const composerModelPicker = "";\n  const url = new URL(request.url);
+  // Keep billing logic, but do not expose model or thinking selectors.
+  const composerModelPicker = "";
+  const url = new URL(request.url);
   const notice = billingNotice(url, reconciled);
   let html = await response.text();
 
