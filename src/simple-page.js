@@ -77,7 +77,7 @@ export function renderPage(options = {}) {
     <link rel="stylesheet" href="/styles.css?v=20260807-priority-latency-1" />
     <link rel="stylesheet" href="/seo.css?v=20260808-memory-controls-1" />
     <link rel="stylesheet" href="/product.css?v=20260804-compact-outcomes-2" />
-    <link rel="stylesheet" href="/simple-chat.css?v=20261014-functional-1" />
+    <link rel="stylesheet" href="/simple-chat.css?v=20261014-background-restored-1" />
     <link rel="stylesheet" href="/persistent-chat.css?v=20261014-1" />
   </head>
   <body class="simple-chat">
