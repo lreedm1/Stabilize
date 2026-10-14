@@ -493,10 +493,10 @@ function supportsExplicitPromptCaching(model) {
 }
 
 function interactiveOutputTokenLimit(latestText, reasoningEffort) {
-  if (reasoningEffort !== "none") return null;
-  return LONG_FORM_REQUEST_PATTERN.test(String(latestText || ""))
-    ? LONG_FORM_OUTPUT_TOKEN_LIMIT
-    : ORDINARY_OUTPUT_TOKEN_LIMIT;
+  const longForm = LONG_FORM_REQUEST_PATTERN.test(String(latestText || ""));
+  // Think also needs a finite budget, with room for internal reasoning tokens.
+  if (reasoningEffort !== "none") return longForm ? 2400 : 1400;
+  return longForm ? LONG_FORM_OUTPUT_TOKEN_LIMIT : ORDINARY_OUTPUT_TOKEN_LIMIT;
 }
 
 function interactivePrompt(model, route, messages) {
