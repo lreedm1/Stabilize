@@ -496,17 +496,17 @@ test("chat endpoint calls OpenAI with store enabled", async () => {
 
     const providerBody = JSON.parse(providerRequest.init.body);
     assert.equal(providerBody.model, "gpt-5.6-sol");
-    assert.deepEqual(providerBody.reasoning, { effort: "max" });
+    assert.deepEqual(providerBody.reasoning, { effort: "medium" });
     assert.deepEqual(providerBody.text, { verbosity: "low" });
     assert.equal(providerBody.store, true);
-    assert.equal("max_output_tokens" in providerBody, false);
+    assert.equal(providerBody.max_output_tokens, 1400);
     assert.equal(providerBody.input[0].role, "user");
     assert.equal(providerBody.input[0].content, "Help me plan one next step.");
     assert.match(providerBody.instructions, /route ORDINARY/i);
     assert.match(providerBody.instructions, /Floor supports; answer leads/i);
     assert.match(providerBody.instructions, /current evidence wins/i);
     assert.match(providerBody.instructions, /Systems > willpower/i);
-    assert.ok(COPY.model.systemPrompt.length < 3_200);
+    assert.ok(COPY.model.systemPrompt.length < 5_500);
     assert.match(providerBody.instructions, /220 words or fewer/i);
     assert.match(providerBody.instructions, /document-ready content/i);
     assert.match(providerBody.instructions, /PRIOR CONTEXT MEMORY/i);
@@ -576,7 +576,7 @@ test("max effort safely falls back for older model choices", async () => {
     );
 
     assert.equal(response.status, 200);
-    assert.deepEqual(providerBody.reasoning, { effort: "high" });
+    assert.deepEqual(providerBody.reasoning, { effort: "medium" });
     assert.deepEqual(providerBody.text, { verbosity: "low" });
   } finally {
     globalThis.fetch = originalFetch;
@@ -608,7 +608,7 @@ test("legacy internal model alias maps to the supported API model", async () => 
     assert.equal(response.status, 200);
     await response.json();
     assert.equal(providerBody.model, "gpt-5.6-sol");
-    assert.deepEqual(providerBody.reasoning, { effort: "max" });
+    assert.deepEqual(providerBody.reasoning, { effort: "medium" });
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -636,7 +636,7 @@ test("complex decisions use the strongest supported reasoning", async () => {
     );
 
     assert.equal(response.status, 200);
-    assert.deepEqual(providerBody.reasoning, { effort: "max" });
+    assert.deepEqual(providerBody.reasoning, { effort: "medium" });
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1069,13 +1069,13 @@ test("root page renders the simplified chat without audio or a danger shortcut",
   assert.equal(response.headers.get("set-cookie"), null);
   assert.ok(html.includes(`href="/auth/google"`));
   assert.ok(html.includes(COPY.page.auth.signIn));
-  assert.ok(html.includes("AI can make mistakes. Not emergency care."));
+  assert.ok(html.includes("AI can make mistakes · Not emergency care"));
   assert.ok(html.includes(COPY.page.chat.infoLabel));
   assert.ok(html.includes(COPY.page.chat.infoDetails));
   assert.ok(COPY.page.chat.supportNote.length < 80);
   assert.doesNotMatch(html, /forget-memory|Forget remembered context/);
   assert.match(html, /data-simple-chat="true"/);
-  assert.match(html, /<h1 id="seo-heading">What’s getting in the way\?<\/h1>/);
+  assert.match(html, /<h1 id="seo-heading">Make life easier to navigate\.<\/h1>/);
   assert.match(html, /class="simple-brand"[^>]*>Stabilize<\/a>/);
   assert.doesNotMatch(html, /<video|<canvas|<picture|\/scenes\//);
   assert.doesNotMatch(html, /landing-hero|landing-section|why-stabilize|landing-trust/);
