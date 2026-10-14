@@ -81,3 +81,31 @@
 @media (prefers-reduced-motion: reduce) {
   .simple-chat .chat-log { scroll-behavior: auto; }
 }
+
+/* Functional 80/20 landing: two short statements, one action, no decorative scroll. */
+.simple-chat .simple-landing-promise { color:var(--muted); max-width:50ch; margin:10px auto 0; font-size:clamp(.88rem,1.5vw,1.03rem); line-height:1.45; }
+.simple-chat .simple-learn-link,
+.simple-chat .simple-learn-back { display:inline-block; min-height:44px; margin-top:14px; padding:11px 18px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--accent-dark); text-decoration:none; font-weight:600; }
+.simple-chat .simple-learn-content { display:none; width:100%; max-width:min(52ch,50vw); margin:22px auto 0; text-align:left; overflow-wrap:anywhere; }
+.simple-chat .simple-learn-content:target { display:block; }
+.simple-chat .simple-learn-content h2 { font-size:1.14rem; margin-bottom:8px; color:var(--text); }
+.simple-chat .simple-learn-content p { line-height:1.55; font-size:.91rem; color:var(--text); }
+.simple-chat .simple-learn-content p + p { margin-top:10px; }
+.simple-chat .simple-intro { min-width:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; }
+.simple-chat .conversation-surface { min-width:0; overflow:hidden; }
+.simple-chat .chat-log { min-width:0; max-height:100%; min-height:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; align-items:stretch; justify-content:flex-start; }
+.simple-chat .assistant-output,
+.simple-chat .user-output { min-width:0; max-width:100%; box-sizing:border-box; overflow-wrap:anywhere; word-break:normal; }
+.simple-chat .assistant-output :is(pre,table) { display:block; max-width:100%; overflow-x:auto; }
+.simple-chat .assistant-output :is(img,svg,video) { max-width:100%; height:auto; }
+.simple-chat .composer-dock { z-index:1; background:var(--surface-strong); }
+.simple-chat .conversation-surface[data-view="response"],
+.simple-chat .conversation-surface[data-view="thinking"] { grid-template-rows:minmax(0,1fr) auto; }
+.simple-chat .conversation-surface[data-view="response"] .chat-log,
+.simple-chat .conversation-surface[data-view="thinking"] .chat-log { grid-row:1; }
+.simple-chat .conversation-surface[data-view="response"] .composer-dock,
+.simple-chat .conversation-surface[data-view="thinking"] .composer-dock { grid-row:2; }
+@media (max-width:760px) {
+ .simple-chat .simple-learn-content { max-width:min(52ch,100%); }
+ .simple-chat .simple-landing-promise { max-width:38ch; }
+}
