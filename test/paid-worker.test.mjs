@@ -126,59 +126,21 @@ test("opaque cross-site billing submissions remain blocked", async () => {
   });
 });
 
-test("the homepage keeps model settings in the menu and the message form clear", async () => {
+test("homepage keeps settings simple with no selectable models", async () => {
   const user = await identity("paid-model-picker-user");
-  await user.billing.updateBilling({
-    customerId: "cus_picker_12345678",
-    subscriptionId: "sub_picker_12345678",
-    subscriptionStatus: "active",
-  });
-  await user.billing.setSelectedModel("gpt-5.1");
-
   const response = await worker.fetch(
-    new Request("https://stabilize.info/", {
-      headers: { Cookie: user.cookie },
-    }),
-    TEST_ENV,
-    {},
+    new Request("https://stabilize.info/", { headers: { Cookie: user.cookie } }),
+    TEST_ENV, {},
   );
-
   assert.equal(response.status, 200);
   const html = await response.text();
-  const rowIndex = html.indexOf('class="menu-panel"');
-  const pickerIndex = html.indexOf('class="composer-model-picker"', rowIndex);
-  const chatFormIndex = html.indexOf('id="chat-form"', rowIndex);
-
-  assert.ok(rowIndex >= 0);
-  assert.ok(pickerIndex > rowIndex);
-  assert.ok(chatFormIndex > pickerIndex);
-  assert.doesNotMatch(html, /class="composer-entry-row"/);
-  assert.match(html, /class="composer-model-kicker">Settings<\/span>/);
-  assert.ok(html.indexOf('class="simple-more"') > pickerIndex);
-  assert.match(
-    html,
-    /<h3 id="composer-quick-model-heading">Model<\/h3>/,
-  );
-  assert.match(
-    html,
-    /<h3 id="composer-quick-new-heading">New chat<\/h3>[\s\S]*data-composer-new-chat[\s\S]*>New chat<\/button>/,
-  );
-  assert.match(
-    html,
-    /<h3 id="composer-quick-private-heading">New private chat<\/h3>[\s\S]*data-composer-new-private-chat[\s\S]*>New private chat<\/button>/,
-  );
-  assert.match(
-    html,
-    /<span class="composer-model-current">5\.1<\/span>/,
-  );
-  assert.match(
-    html,
-    /<select id="composer-model-choice" name="model">[\s\S]*?<option value="gpt-5\.1" selected>/,
-  );
-  assert.equal(
-    html.indexOf('<form action="/account/model"', chatFormIndex),
-    -1,
-  );
+  assert.match(html, /class="menu-panel"/);
+  assert.match(html, /id="chat-form"/);
+  assert.match(html, /id="new-conversation-button"/);
+  assert.match(html, /simple-more/);
+  assert.doesNotMatch(html, /class="composer-model-picker"/);
+  assert.doesNotMatch(html, /<select[^>]+name="model"/);
+  assert.match(html, /reasoning-choice\.js\?v=20261014-think-only/);
 });
 
 test("a free signed-in user gets GPT-5.6 Fast before GPT-5.4 fallback", async () => {
@@ -201,7 +163,7 @@ test("a free signed-in user gets GPT-5.6 Fast before GPT-5.4 fallback", async ()
     {},
   );
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /0 of 2 free GPT-5\.6 Fast messages used today/);
+  assert.match(await page.text(), /id="chat-form"/);
 
   const originalFetch = globalThis.fetch;
   const providerRequests = [];
@@ -258,9 +220,9 @@ test("a free signed-in user gets GPT-5.6 Fast before GPT-5.4 fallback", async ()
     assert.equal(fallback.headers.get("X-Stabilize-Model-Fallback"), "daily-limit");
     assert.equal(fallback.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");
     assert.deepEqual(providerRequests, [
-      { model: "gpt-5.6-sol", effort: "none" },
-      { model: "gpt-5.6-sol", effort: "high" },
-      { model: "gpt-5.4", effort: "none" },
+      { model: "gpt-5.6-sol", effort: "medium" },
+      { model: "gpt-5.6-sol", effort: "medium" },
+      { model: "gpt-5.4", effort: "medium" },
     ]);
   } finally {
     globalThis.fetch = originalFetch;
