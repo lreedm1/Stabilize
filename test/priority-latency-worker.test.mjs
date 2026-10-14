@@ -113,7 +113,7 @@ test("GPT-5.6 interactive requests use Fast mode, explicit caching, and adaptive
     assert.equal(bodies.length, 2);
     assert.equal(bodies[0].stream, true);
     assert.equal(bodies[0].service_tier, "fast");
-    assert.equal(bodies[0].max_output_tokens, 360);
+    assert.equal(bodies[0].max_output_tokens, 1400);
     assert.deepEqual(bodies[0].text, { verbosity: "low" });
     assert.equal(bodies[0].prompt_cache_key, "stabilize-floor-first-v1");
     assert.deepEqual(bodies[0].prompt_cache_options, {
@@ -128,7 +128,7 @@ test("GPT-5.6 interactive requests use Fast mode, explicit caching, and adaptive
       bodies[0].input[0].content[0].prompt_cache_breakpoint,
       { mode: "explicit" },
     );
-    assert.equal(bodies[1].max_output_tokens, 900);
+    assert.equal(bodies[1].max_output_tokens, 2400);
     assert.match(logs.join("\n"), /"cachedTokens":1024/);
     assert.match(logs.join("\n"), /"actualServiceTier":"priority"/);
   } finally {
