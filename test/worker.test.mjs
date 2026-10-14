@@ -499,7 +499,7 @@ test("chat endpoint calls OpenAI with store enabled", async () => {
     assert.deepEqual(providerBody.reasoning, { effort: "medium" });
     assert.deepEqual(providerBody.text, { verbosity: "low" });
     assert.equal(providerBody.store, true);
-    assert.equal(providerBody.max_output_tokens, 1400);
+    assert.equal(providerBody.max_output_tokens, undefined);
     assert.equal(providerBody.input[0].role, "user");
     assert.equal(providerBody.input[0].content, "Help me plan one next step.");
     assert.match(providerBody.instructions, /route ORDINARY/i);
