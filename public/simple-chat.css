@@ -109,3 +109,67 @@
  .simple-chat .simple-learn-content { max-width:min(52ch,100%); }
  .simple-chat .simple-landing-promise { max-width:38ch; }
 }
+
+/* Restore Stabilize's original nature photography behind the functional UI. */
+html[data-simple-chat="true"] { min-height:100%; }
+body.simple-chat:not(.stabilize-embedded) {
+  background:#e7efe8 !important;
+  position:relative;
+  isolation:isolate;
+}
+body.simple-chat:not(.stabilize-embedded)::before {
+  content:"";
+  display:block !important;
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  pointer-events:none;
+  background-image:
+    linear-gradient(rgba(248,252,249,.70),rgba(248,252,249,.78)),
+    url("/scenes/lake-valley-landscape-2560.webp");
+  background-position:center center;
+  background-size:cover;
+  background-repeat:no-repeat;
+}
+body.simple-chat:not(.stabilize-embedded) .page-shell,
+body.simple-chat:not(.stabilize-embedded) .chat-card,
+body.simple-chat:not(.stabilize-embedded) .conversation-surface {
+  background:transparent;
+}
+body.simple-chat:not(.stabilize-embedded) .simple-intro {
+  padding:22px 18px 26px;
+  border-radius:18px;
+  background:rgba(255,255,255,.76);
+  box-shadow:0 8px 30px rgba(12,35,25,.06);
+  -webkit-backdrop-filter:blur(8px);
+  backdrop-filter:blur(8px);
+}
+body.simple-chat:not(.stabilize-embedded) .composer-dock {
+  padding:12px;
+  border-radius:16px;
+  background:rgba(255,255,255,.84);
+  -webkit-backdrop-filter:blur(8px);
+  backdrop-filter:blur(8px);
+}
+body.simple-chat:not(.stabilize-embedded) .chat-log {
+  padding:12px;
+  border-radius:16px;
+  background:rgba(255,255,255,.84);
+  -webkit-backdrop-filter:blur(8px);
+  backdrop-filter:blur(8px);
+}
+body.simple-chat:not(.stabilize-embedded) .assistant-output { background:transparent; }
+@media(max-width:760px) {
+  body.simple-chat:not(.stabilize-embedded)::before {
+    background-image:
+      linear-gradient(rgba(248,252,249,.62),rgba(248,252,249,.76)),
+      url("/scenes/mobile-forest-stream-v24-native-1080.webp");
+    background-position:center center;
+  }
+  body.simple-chat:not(.stabilize-embedded) .simple-intro { padding:14px 12px 18px; }
+}
+@media (prefers-reduced-transparency:reduce) {
+  body.simple-chat:not(.stabilize-embedded) .simple-intro,
+  body.simple-chat:not(.stabilize-embedded) .composer-dock,
+  body.simple-chat:not(.stabilize-embedded) .chat-log { background:rgba(255,255,255,.97); backdrop-filter:none; }
+}
