@@ -205,7 +205,7 @@ test("the About page preserves the origin while stating evidence and sustainabil
   assert.match(about, /preserve agency/i);
   assert.match(about, /Impact requires sustainability/i);
   assert.match(about, /50 GPT-5\.6 Fast\s+messages per UTC day/i);
-  assert.match(about, /current paid model-allowance subscription\s+enables subscriber model choice/i);
+  assert.match(about, /current paid model-allowance subscription\\s+provides up to 200 non-default-model messages/);
   assert.match(about, /not emergency care/i);
   assert.match(enhancer, /href=\"\/about\.html\"/);
 
