@@ -96,7 +96,7 @@ test("stabilize.info is canonical and reedlokken.com redirects", async () => {
   assert.match(router, /"\/uwmadison\.html"/);
   assert.match(router, /"\/uwmadison-robots\.txt"/);
   assert.match(router, /"\/uwmadison-sitemap\.xml"/);
-  assert.match(router, /return withStrictTransportSecurity\(response\)/);
+  assert.match(router, /return withStrictTransportSecurity\(await withPersistentChat\(response, request\)\)/);
   assert.match(router, /property === "PUBLIC_ORIGIN"/);
   assert.match(router, /url\.pathname === "\/auth\/logout"/);
   assert.match(router, /await signOut\(request, canonicalEnv\)/);
