@@ -88,7 +88,7 @@ test("guest Fastest response uses GPT-5.6 Fast", async () => {
         candidate.service_tier === "fast",
     );
     assert.ok(providerRequest, "guest chat did not issue a GPT-5.6 Fast request");
-    assert.equal(providerRequest.reasoning.effort, "none");
+    assert.equal(providerRequest.reasoning.effort, "medium");
     assert.equal((await response.json()).reply, "Use one reversible step.");
   } finally {
     globalThis.fetch = originalFetch;
@@ -146,9 +146,9 @@ test("signed-in first messages use GPT-5.6 and then fall back to GPT-5.4", async
     assert.equal(fallback.headers.get("X-Stabilize-Model-Selected"), "gpt-5.4");
 
     assert.deepEqual(providerRequests, [
-      { model: "gpt-5.6-sol", effort: "none", tier: "fast" },
-      { model: "gpt-5.6-sol", effort: "high", tier: "fast" },
-      { model: "gpt-5.4", effort: "none", tier: "fast" },
+      { model: "gpt-5.6-sol", effort: "medium", tier: "fast" },
+      { model: "gpt-5.6-sol", effort: "medium", tier: "fast" },
+      { model: "gpt-5.4", effort: "medium", tier: "fast" },
     ]);
     assert.equal((await user.billing.readState()).freeUsageCount, 2);
   } finally {
@@ -167,8 +167,8 @@ test("the free homepage presents GPT-5.6 Fast first", async () => {
   );
   assert.equal(page.status, 200);
   const html = await page.text();
-  assert.match(html, /0 of 2 free GPT-5\.6 Fast messages used today/);
-  assert.match(html, /GPT-5\.6 Fast is automatic for the first 2 messages/);
-  assert.match(html, /<span class="composer-model-current">5\.6<\/span>/);
+  assert.match(html, /id="chat-form"/);
+  assert.match(html, /reasoning-choice\.js\?v=20261014-think-only/);
+  assert.doesNotMatch(html, /composer-model-picker/);
   assert.doesNotMatch(html, /id="composer-model-choice" name="model"/);
 });
