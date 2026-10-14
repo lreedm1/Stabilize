@@ -670,7 +670,8 @@ async function injectBillingPage(response, request, env, authSession, state, rec
       );
     }
   }
-  if ((markup || composerModelPicker) && !html.includes('src="/billing-client.js')) {
+  // Keep memory prefetch and billing status even with no model selector.
+  if (!html.includes('src="/billing-client.js')) {
     html = html.replace(
       "</body>",
       '    <script type="module" src="/billing-client.js?v=20260808-account-preflight-1"></script>\n  </body>',
