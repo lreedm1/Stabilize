@@ -469,14 +469,9 @@ function effectiveReasoningEffort(model, requestedEffort) {
   return requestedEffort;
 }
 
-function requestedReasoningEffort(body, model, fallbackEffort) {
-  const effort = String(
-    body?.reasoningEffort || fallbackEffort || "none",
-  )
-    .trim()
-    .toLowerCase();
-  if (!OPENAI_REASONING_EFFORTS.has(effort)) return "none";
-  return effectiveReasoningEffort(String(model || ""), effort);
+function requestedReasoningEffort(_body, model, _fallbackEffort) {
+  // Think is the only supported selection. Ignore historical client preferences.
+  return effectiveReasoningEffort(String(model || ""), "medium");
 }
 
 function reasoningEnvironment(env, effort) {
@@ -1153,7 +1148,7 @@ function streamChatReply(
           type: "meta",
           route,
           reasoningEffort: String(
-            env.OPENAI_REASONING_EFFORT || "none",
+            env.OPENAI_REASONING_EFFORT || "medium",
           ),
         }),
       );
