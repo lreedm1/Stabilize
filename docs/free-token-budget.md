@@ -131,6 +131,15 @@ A public error of `stabilize_token_budget_unavailable` is **not** the normal
 daily-token exhaustion response. It means a required preflight check failed.
 The Worker deliberately fails closed; do not disable the guard to restore chat.
 
+For failures only, the budget preflight now provides a bounded `error.type`
+diagnostic such as `budget_input_count_http_403` or
+`budget_reservation_usage_http_401`. In streamed responses this appears in
+the existing `error` event's `diagnostic.type` field. These classifications
+are intentionally public and contain no account details, provider messages,
+organization IDs, or credentials. They do not change the allowance, request
+permissions, error status, retry behavior, or fail-closed enforcement. Once
+the cause is addressed, verify that ordinary chat returns actual model text.
+
 Inspect Cloudflare Worker logs for these **metadata-only** events:
 
 - `openai_budget_preflight_failed`: `stage` identifies configuration,

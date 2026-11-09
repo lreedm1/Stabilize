@@ -49,7 +49,9 @@ export async function readOrganizationUsage(env, { now = Date.now } = {}) {
     });
     if (!response.ok) {
       console.warn(JSON.stringify({ event: "openai_organization_usage_http_failed", httpStatus: response.status }));
-      throw new Error("Organization usage is unavailable");
+      const error = new Error("Organization usage is unavailable");
+      error.httpStatus = response.status;
+      throw error;
     }
     const body = await response.json();
     if (body?.object !== "page" || !Array.isArray(body.data) || typeof body.has_more !== "boolean") {

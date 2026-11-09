@@ -13,20 +13,31 @@ const ALLOWED_FIELDS = new Set([
   "store", "stream", "service_tier", "metadata", "prompt_cache_key", "prompt_cache_options",
 ]);
 
-function denial(reason = "unavailable") {
+function denial(reason = "unavailable", diagnosticType = null) {
   const daily = ["exhausted", "initializing"].includes(reason);
   const retry = Math.ceil((86_400_000 - Date.now() % 86_400_000) / 1000);
+  const safeType = !daily && typeof diagnosticType === "string" &&
+    /^budget_[a-z0-9_]{1,80}$/.test(diagnosticType) ? diagnosticType : null;
   return Response.json({ error: {
     code: daily ? DAILY_TOKEN_LIMIT_CODE : TOKEN_BUDGET_UNAVAILABLE_CODE,
+    ...(safeType ? { type: safeType } : {}),
     message: daily ? DAILY_TOKEN_LIMIT_MESSAGE : TOKEN_BUDGET_UNAVAILABLE_MESSAGE,
   } }, { status: 503, headers: daily ? { "Retry-After": String(retry) } : {} });
 }
 
 function denyPreflight(stage, details = {}, reason = "unavailable") {
-  // Only fixed stage names, HTTP statuses and internal reason codes are logged.
-  // Never log provider payloads, response bodies, credentials or messages.
+  // Report fixed, non-sensitive diagnostic classifications in logs and errors.
+  // Never expose credentials, provider bodies, chat text, or raw exception messages.
   console.warn(JSON.stringify({ event: "openai_budget_preflight_failed", stage, ...details }));
-  return denial(reason);
+  const safeReason = typeof reason === "string" &&
+    /^(?:usage_(?:http_[1-5][0-9]{2}|credentials|validation|stale|timeout|error)|unavailable|suspended|duplicate|exhausted|initializing)$/.test(reason)
+    ? reason : "unavailable";
+  const status = details.httpStatus;
+  const suffix = stage === "input_count" &&
+    Number.isInteger(status) && status >= 100 && status <= 599
+      ? `_http_${status}`
+      : stage === "reservation" ? `_${safeReason}` : "";
+  return denial(reason, `budget_${stage}${suffix}`);
 }
 
 function normalizePayload(payload) {
@@ -103,14 +114,18 @@ export async function budgetedOpenAIFetch(url, init, env) {
   // Explicit rollback only. An absent/misspelled flag does NOT disable protection.
   if (env?.OPENAI_FREE_TOKENS_ONLY === "false") return fetch(url, init);
   let payload, stub, reservation, id, organization, headers;
-  let stage = "configuration";
+  let stage = "free_token_configuration";
   try {
     freeTokenLimit(env || {});
+    stage = "organization_credentials";
     organization = usageOrganization(env);
     headers = new Headers(init.headers);
     headers.set("OpenAI-Organization", organization);
-    if (url !== RESPONSES_URL || init.method !== "POST") return denyPreflight("request_validation");
+    stage = "request_validation";
+    if (url !== RESPONSES_URL || init.method !== "POST") return denyPreflight(stage);
+    stage = "payload_normalization";
     payload = normalizePayload(JSON.parse(init.body));
+    stage = "budget_binding";
     stub = env.OPENAI_TOKEN_BUDGET.getByName(BUDGET_OBJECT_NAME);
     stage = "input_count";
     const countPayload = Object.fromEntries(
