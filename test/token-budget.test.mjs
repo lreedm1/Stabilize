@@ -148,6 +148,36 @@ test("failed token counting reports a safe diagnostic stage and HTTP status", as
   }
 });
 
+test("safe denial types identify the blocked preflight without disclosing provider messages", async () => {
+  const s = setup();
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const countFetch = globalThis.fetch;
+    globalThis.fetch = async (url, init) => url.endsWith("/input_tokens")
+      ? Response.json({ error: { message: "PRIVATE PROVIDER MESSAGE" } }, { status: 403 })
+      : countFetch(url, init);
+    let response = await request(s.env);
+    assert.equal(response.status, 503);
+    let body = await response.json();
+    assert.equal(body.error.code, "stabilize_token_budget_unavailable");
+    assert.equal(body.error.type, "budget_input_count_http_403");
+    assert.doesNotMatch(JSON.stringify(body), /PRIVATE PROVIDER MESSAGE/);
+    s.env.OPENAI_TOKEN_BUDGET.getByName = () => ({
+      async reserve() { return { allowed: false, reason: "usage_http_401" }; },
+    });
+    globalThis.fetch = countFetch;
+    response = await request(s.env);
+    assert.equal(response.status, 503);
+    body = await response.json();
+    assert.equal(body.error.type, "budget_reservation_usage_http_401");
+    assert.equal(s.reservations.length, 0);
+  } finally {
+    console.warn = originalWarn;
+    s.restore();
+  }
+});
+
 test("HTTP and network errors retain the complete reservation", async () => {
   for (const network of [false, true]) {
     const s = setup();
