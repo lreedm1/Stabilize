@@ -49,10 +49,18 @@ jobs:
         run: |
           python -m py_compile ops/api-repair/repair.py
           python ops/api-repair/repair.py --self-test
+          python -m unittest discover -s ops/api-repair -p 'test_*.py'
 
-      - name: Diagnose or repair
+      - name: Diagnose public chat (no credentials)
+        if: ${{ inputs.mode == 'diagnose' }}
         env:
-          REPAIR_MODE: ${{ inputs.mode }}
+          REPAIR_MODE: diagnose
+        run: python ops/api-repair/repair.py
+
+      - name: Repair credentials and deploy (explicit opt-in)
+        if: ${{ inputs.mode == 'repair' }}
+        env:
+          REPAIR_MODE: repair
           REPAIR_CONFIRMATION: ${{ inputs.confirmation }}
           REPAIR_CREATE_SERVICE_ACCOUNT: ${{ inputs.create_service_account }}
           CF_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
