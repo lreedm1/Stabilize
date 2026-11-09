@@ -49,7 +49,20 @@ export class OpenAITokenBudget extends DurableObject {
       const cause = error instanceof Error && known.has(error.message)
         ? error.message : error instanceof Error ? error.name : "UnknownError";
       console.warn(JSON.stringify({ event: "openai_budget_usage_check_failed", cause }));
-      return { allowed: false, reason: "unavailable" };
+      // Only return fixed, non-sensitive failure classes. Budget admission
+      // remains denied on every failure; these codes are diagnostic only.
+      const httpStatus = error?.httpStatus;
+      const reason = error?.message === "Organization usage credentials are not configured"
+        ? "usage_credentials"
+        : error?.message === "Organization usage is unavailable" &&
+          Number.isInteger(httpStatus) && httpStatus >= 100 && httpStatus <= 599
+          ? `usage_http_${httpStatus}`
+          : error?.message === "Organization usage check expired" ? "usage_stale"
+          : error?.message?.startsWith("Invalid organization usage") ||
+            error?.message?.includes("pagination") ? "usage_validation"
+          : ["TimeoutError", "AbortError"].includes(error?.name) ? "usage_timeout"
+          : "usage_error";
+      return { allowed: false, reason };
     }
     return this.ctx.storage.transaction(async (storage) => {
       const state = await this.ledger(storage);
