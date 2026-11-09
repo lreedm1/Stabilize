@@ -1,0 +1,65 @@
+name: Stabilize API credential repair
+
+# Manual only. Does not run on PRs or scheduled triggers.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "diagnose is read-only; repair changes secrets and deploys only with the confirmation phrase"
+        required: true
+        default: diagnose
+        type: choice
+        options:
+          - diagnose
+          - repair
+      create_service_account:
+        description: "For repair, optionally create a new service-account key through the OpenAI Admin API"
+        required: true
+        default: false
+        type: boolean
+      confirmation:
+        description: "For repair only, type APPLY-STABILIZE-REPAIR"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stabilize-credentials-production
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out trusted main branch
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Check repair script
+        run: |
+          python -m py_compile ops/api-repair/repair.py
+          python ops/api-repair/repair.py --self-test
+
+      - name: Diagnose or repair
+        env:
+          REPAIR_MODE: ${{ inputs.mode }}
+          REPAIR_CONFIRMATION: ${{ inputs.confirmation }}
+          REPAIR_CREATE_SERVICE_ACCOUNT: ${{ inputs.create_service_account }}
+          CF_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          OPENAI_ORG_ID: ${{ vars.STABILIZE_OPENAI_ORG_ID || secrets.STABILIZE_OPENAI_ORG_ID }}
+          OPENAI_PROJECT_ID: ${{ vars.STABILIZE_OPENAI_PROJECT_ID || secrets.STABILIZE_OPENAI_PROJECT_ID }}
+          OPENAI_USAGE_ADMIN_KEY: ${{ secrets.STABILIZE_OPENAI_USAGE_ADMIN_KEY }}
+          OPENAI_PROJECT_API_KEY: ${{ secrets.STABILIZE_OPENAI_API_KEY }}
+          OPENAI_PROVISION_ADMIN_KEY: ${{ secrets.STABILIZE_OPENAI_PROVISION_ADMIN_KEY }}
+        run: python ops/api-repair/repair.py
