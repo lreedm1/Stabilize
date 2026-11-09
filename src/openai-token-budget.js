@@ -35,7 +35,22 @@ export class OpenAITokenBudget extends DurableObject {
     }
     let usage;
     try { usage = await readOrganizationUsage(this.env, { now: () => this.now() }); }
-    catch { return { allowed: false, reason: "unavailable" }; }
+    catch (error) {
+      const known = new Set([
+        "Organization usage credentials are not configured",
+        "Organization usage is unavailable",
+        "Invalid organization usage page",
+        "Invalid organization usage bucket",
+        "Invalid organization usage total",
+        "Organization usage check expired",
+        "Incomplete organization usage pagination",
+        "Organization usage pagination exceeded its limit",
+      ]);
+      const cause = error instanceof Error && known.has(error.message)
+        ? error.message : error instanceof Error ? error.name : "UnknownError";
+      console.warn(JSON.stringify({ event: "openai_budget_usage_check_failed", cause }));
+      return { allowed: false, reason: "unavailable" };
+    }
     return this.ctx.storage.transaction(async (storage) => {
       const state = await this.ledger(storage);
       if (!freshOrganizationUsage(usage, usageOrganization(this.env), this.now()) ||

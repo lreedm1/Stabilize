@@ -127,6 +127,27 @@ test("denied, failed, or malformed count/reservation never starts generation", a
   }
 });
 
+test("failed token counting reports a safe diagnostic stage and HTTP status", async () => {
+  const s = setup();
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = (entry) => warnings.push(JSON.parse(entry));
+  globalThis.fetch = async (url) => {
+    assert.equal(url, URL + "/input_tokens", "Generation must not start when counting fails");
+    return Response.json({ error: { message: "DO NOT LOG PROVIDER RESPONSE" } }, { status: 429 });
+  };
+  try {
+    assert.equal((await request(s.env)).status, 503);
+    assert.deepEqual(warnings, [
+      { event: "openai_budget_preflight_failed", stage: "input_count", httpStatus: 429 },
+    ]);
+    assert.doesNotMatch(JSON.stringify(warnings), /DO NOT LOG PROVIDER RESPONSE/);
+  } finally {
+    console.warn = originalWarn;
+    s.restore();
+  }
+});
+
 test("HTTP and network errors retain the complete reservation", async () => {
   for (const network of [false, true]) {
     const s = setup();
