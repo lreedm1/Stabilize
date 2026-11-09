@@ -125,6 +125,36 @@ be used to resolve a production budget error. An absent/malformed flag keeps
 protection enabled. Missing confirmation, invalid budgets or missing storage
 fail closed.
 
+## Diagnosing a production 503
+
+A public error of `stabilize_token_budget_unavailable` is **not** the normal
+daily-token exhaustion response. It means a required preflight check failed.
+The Worker deliberately fails closed; do not disable the guard to restore chat.
+
+Inspect Cloudflare Worker logs for these **metadata-only** events:
+
+- `openai_budget_preflight_failed`: `stage` identifies configuration,
+  request validation, input counting, reservation, or stale usage. The
+  input-count HTTP failure includes `httpStatus`.
+- `openai_budget_usage_check_failed`: `cause` identifies a known
+  usage-read validation error, or a general exception name.
+- `openai_organization_usage_http_failed`: `httpStatus` identifies
+  authentication, authorization, throttling, or upstream HTTP errors.
+
+No chat content, OpenAI response bodies, API keys, or organization IDs
+are logged by these diagnostics. If `stage=reservation` and
+`reason=unavailable`, check the organization-usage diagnostic from
+the same request. If `stage=input_count`, investigate the project
+API key, selected model, token-count payload, and OpenAI status code.
+Check that the Worker secrets `OPENAI_API_KEY`,
+`OPENAI_USAGE_ADMIN_KEY`, and `OPENAI_ORGANIZATION_ID` exist,
+are valid, and belong to the same intended OpenAI organization.
+The presence of a configured secret does not establish its validity.
+
+Validate with `npm test` and `npm run check` before deploying.
+Confirm a fresh ordinary guest chat succeeds after any credential or
+configuration repair. Never log raw credentials or provider error bodies.
+
 ## Development and validation
 
 `npm run apply:prompt-policy` also runs the `postapply:prompt-policy` hook to
