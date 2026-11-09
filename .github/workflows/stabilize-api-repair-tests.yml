@@ -1,0 +1,32 @@
+name: Validate Stabilize API repair tools
+
+on:
+  pull_request:
+    paths:
+      - 'ops/api-repair/**'
+      - '.github/workflows/stabilize-api-repair.yml'
+      - '.github/workflows/stabilize-api-repair-tests.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'ops/api-repair/**'
+      - '.github/workflows/stabilize-api-repair.yml'
+      - '.github/workflows/stabilize-api-repair-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m py_compile ops/api-repair/repair.py ops/api-repair/test_repair.py
+      - run: python -m unittest discover -s ops/api-repair -p 'test_*.py'
+      - run: python ops/api-repair/repair.py --self-test
