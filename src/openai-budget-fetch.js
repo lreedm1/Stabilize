@@ -22,6 +22,13 @@ function denial(reason = "unavailable") {
   } }, { status: 503, headers: daily ? { "Retry-After": String(retry) } : {} });
 }
 
+function denyPreflight(stage, details = {}, reason = "unavailable") {
+  // Only fixed stage names, HTTP statuses and internal reason codes are logged.
+  // Never log provider payloads, response bodies, credentials or messages.
+  console.warn(JSON.stringify({ event: "openai_budget_preflight_failed", stage, ...details }));
+  return denial(reason);
+}
+
 function normalizePayload(payload) {
   if (!FREE_TOKEN_MODELS.has(payload.model) || Object.keys(payload).some((key) => !ALLOWED_FIELDS.has(key))) {
     throw new Error("Request is not approved for complimentary tokens");
@@ -96,14 +103,16 @@ export async function budgetedOpenAIFetch(url, init, env) {
   // Explicit rollback only. An absent/misspelled flag does NOT disable protection.
   if (env?.OPENAI_FREE_TOKENS_ONLY === "false") return fetch(url, init);
   let payload, stub, reservation, id, organization, headers;
+  let stage = "configuration";
   try {
     freeTokenLimit(env || {});
     organization = usageOrganization(env);
     headers = new Headers(init.headers);
     headers.set("OpenAI-Organization", organization);
-    if (url !== RESPONSES_URL || init.method !== "POST") return denial();
+    if (url !== RESPONSES_URL || init.method !== "POST") return denyPreflight("request_validation");
     payload = normalizePayload(JSON.parse(init.body));
     stub = env.OPENAI_TOKEN_BUDGET.getByName(BUDGET_OBJECT_NAME);
+    stage = "input_count";
     const countPayload = Object.fromEntries(
       ["model", "input", "instructions", "reasoning", "text"].filter((key) => payload[key] !== undefined)
         .map((key) => [key, payload[key]]),
@@ -111,20 +120,26 @@ export async function budgetedOpenAIFetch(url, init, env) {
     const countResponse = await fetch(`${RESPONSES_URL}/input_tokens`, {
       ...init, headers, body: JSON.stringify(countPayload),
     });
-    if (!countResponse.ok) return denial();
+    if (!countResponse.ok) return denyPreflight(stage, { httpStatus: countResponse.status });
     const count = await countResponse.json();
-    if (count.object !== "response.input_tokens" || !Number.isSafeInteger(count.input_tokens) || count.input_tokens < 0) return denial();
+    if (count.object !== "response.input_tokens" || !Number.isSafeInteger(count.input_tokens) || count.input_tokens < 0) {
+      return denyPreflight("input_count_validation");
+    }
     // A small per-request buffer supplements the 10% daily headroom.
     const tokens = count.input_tokens + payload.max_output_tokens + 256;
     id = new Headers(init.headers).get("X-Client-Request-Id") || crypto.randomUUID();
+    stage = "reservation";
     reservation = await stub.reserve(id, tokens);
-    if (!reservation?.allowed) return denial(reservation?.reason);
+    if (!reservation?.allowed) {
+      return denyPreflight(stage, { reason: reservation?.reason || "unavailable" }, reservation?.reason);
+    }
     // A slow RPC or UTC rollover must not use yesterday's usage check. Keep
     // the reservation if this last check fails; uncertain holds fail closed.
-    if (!freshOrganizationUsage(reservation.usage, organization)) return denial();
+    stage = "usage_freshness";
+    if (!freshOrganizationUsage(reservation.usage, organization)) return denyPreflight(stage);
     console.info(JSON.stringify({ event: "openai_budget_reserved", clientRequestId: id, model: payload.model, tokens }));
-  } catch {
-    return denial();
+  } catch (error) {
+    return denyPreflight(stage, { exception: error instanceof Error ? error.name : "UnknownError" });
   }
   // No automatic retry or refund. A network error may follow billable generation.
   headers.set("X-Client-Request-Id", id);
