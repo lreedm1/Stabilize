@@ -34,8 +34,11 @@ identify the same account. No copying or rotating of an API token is required.
 
 **Repository secrets**:
 
-- `CLOUDFLARE_API_TOKEN` — narrowly scoped to the Stabilize Worker,
-  with Workers Scripts Write/deployment access.
+- `CLOUDFLARE_API_TOKEN` — prefer an account-owned API token with the
+  `Editor` role scoped to the existing `stabilize` Worker. This permits reading
+  configuration and logs, updating secrets, and deploying versions without
+  access to unrelated Workers. Reuse an existing suitably scoped token when
+  available; do not grant account-wide Admin or unrelated storage permissions.
 - `STABILIZE_OPENAI_USAGE_ADMIN_KEY` — an OpenAI organization admin key
   allowed to read the organization Usage API.
 - `STABILIZE_OPENAI_API_KEY` — a working project API key for the same
@@ -47,6 +50,32 @@ Never paste raw keys into a GitHub issue, commit, workflow inputs, or chat.
 If your existing GitHub repository already has a general-purpose
 `OPENAI_API_KEY` secret for another task, do not reuse it automatically:
 ensure the chosen key belongs to the right eligible project.
+
+### If the remote Cloudflare browser cannot sign in
+
+The workflow can authenticate directly to Cloudflare using its GitHub secret;
+it does not require the remote browser to have a signed-in Cloudflare session.
+If your ordinary browser can access your Cloudflare account:
+
+1. Open the account containing `stabilize`. Under **Manage Account → Account
+   API Tokens**, reuse an existing suitably scoped token if you still have its
+   original secret. Otherwise create a token named `Stabilize repair`, choose
+   **Specified Workers → stabilize → Editor**, and copy it directly to
+   GitHub's **New repository secret** form as `CLOUDFLARE_API_TOKEN`.
+   Do not paste the token into chat, workflow inputs, source, or logs.
+2. Copy that Cloudflare account's ID into the GitHub repository **variable**
+   `CLOUDFLARE_ACCOUNT_ID`.
+
+Saving these entries does not itself dispatch the manual repair. It supplies
+credentials for workflows that are subsequently run, including normal deploys.
+The reviewed repair still requires its explicit confirmation and version check.
+Other required OpenAI configuration must also be supplied before full preflight.
+If ordinary Cloudflare sign-in fails as well, resolve account access first;
+do not expand token permissions or repeatedly retry the rejected sign-in.
+
+The per-Worker token is sufficient for existing Worker version/secret operations.
+Changing Routes or Custom Domains requires additional zone permissions and is
+outside this credential repair.
 
 ## Run
 
@@ -144,5 +173,7 @@ Provider references:
 
 - [OpenAI complimentary-token requirements](https://help.openai.com/en/articles/10306912-sharing-feedback-evaluation-and-fine-tuning-data-and-api-inputs-and-outputs-with-openai)
 - [Cloudflare secret operation deployment behavior](https://developers.cloudflare.com/workers/configuration/secrets/)
+- [Cloudflare per-Worker roles and token scope](https://developers.cloudflare.com/workers/authorization/workers/)
+- [Create an account-owned Cloudflare token](https://developers.cloudflare.com/fundamentals/api/get-started/account-owned-tokens/)
 - Pinned Wrangler package: `src/versions/secrets/index.ts`,
   `patchLatestWorkerVersionWithSecrets`, as shipped in Wrangler 4.118.0.
