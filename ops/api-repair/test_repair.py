@@ -57,6 +57,13 @@ def stream_events():
 
 
 class RepairTests(unittest.TestCase):
+    def setUp(self):
+        # Mock repair calls must not look like real credential/deployment changes
+        # in the same Actions log as the later production diagnostic.
+        output = patch("sys.stdout", new_callable=io.StringIO)
+        output.start()
+        self.addCleanup(output.stop)
+
     def test_confirmation_required_before_any_access(self):
         with patch.dict(os.environ, {"REPAIR_CONFIRMATION": "wrong"}, clear=True):
             with self.assertRaisesRegex(repair.SafeError, "explicit workflow confirmation"):
@@ -234,6 +241,16 @@ class RepairTests(unittest.TestCase):
     def test_non_stream_content_type_fails(self):
         with self.assertRaisesRegex(repair.SafeError, "NDJSON"):
             self.probe(stream_events(), "text/html")
+
+    def test_http_failure_reports_status_without_response_contents(self):
+        failure = repair.urllib.error.HTTPError(
+            "https://stabilize.info/api/chat", 403,
+            "private upstream detail", Message(), io.BytesIO(b"private response"),
+        )
+        with patch.object(repair.urllib.request, "urlopen", side_effect=failure):
+            with self.assertRaises(repair.SafeError) as caught:
+                repair.run_chat_probe()
+        self.assertEqual(str(caught.exception), "Live chat HTTP 403")
 
     def test_truncated_or_oversize_stream_cannot_pass(self):
         for body in [b'{"type":', b'x' * (repair.MAX_PROBE_BYTES + 1)]:
