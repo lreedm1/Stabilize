@@ -687,6 +687,7 @@ async function injectBillingPage(response, request, env, authSession, state, rec
   if (env.OPENAI_FREE_TOKENS_ONLY !== "false") {
     html = html.replaceAll("GPT-5.6 Fast", "GPT-5.6")
       .replace("<html ", '<html data-free-tokens-only="true" ')
+      .replace('<p class="simple-boundary">', '<p class="simple-boundary" data-free-token-privacy>Free AI requires sharing messages and replies with OpenAI for model improvement. Avoid sensitive information.</p><p class="simple-boundary">')
       .replaceAll("/billing-client.js?v=20260808-account-preflight-1", "/billing-client.js?v=20260924-free-token-budget-1");
   }
   const headers = new Headers(response.headers);

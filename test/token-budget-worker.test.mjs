@@ -251,6 +251,8 @@ test("free-only pages remove Fast claims and fixed safety replies survive an exh
     const html = await page.text();
     assert.equal(page.status, 200);
     assert.match(html, /data-free-tokens-only="true"/);
+    assert.match(html, /data-free-token-privacy/);
+    assert.match(html, /requires sharing messages and replies with OpenAI for model improvement/);
     assert.doesNotMatch(html, /GPT-5.6 Fast/);
     assert.match(html, /billing-client.js\?v=20260924-free-token-budget-1/);
     const urgent = await worker.fetch(new Request(chatRequest(), {

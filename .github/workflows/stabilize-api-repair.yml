@@ -5,13 +5,18 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "diagnose is read-only; repair changes secrets and deploys only with the confirmation phrase"
+        description: "diagnose tests public chat; preflight checks credentials without generation or mutation; repair deploys"
         required: true
         default: diagnose
         type: choice
         options:
           - diagnose
+          - preflight
           - repair
+      expected_version:
+        description: "For repair, the reviewed 100%-live Cloudflare version ID reported by preflight"
+        required: false
+        type: string
       create_service_account:
         description: "For repair, optionally create a new service-account key through the OpenAI Admin API"
         required: true
@@ -57,11 +62,12 @@ jobs:
           REPAIR_MODE: diagnose
         run: python ops/api-repair/repair.py
 
-      - name: Repair credentials and deploy (explicit opt-in)
-        if: ${{ inputs.mode == 'repair' }}
+      - name: Validate credentials or apply explicitly approved repair
+        if: ${{ inputs.mode == 'preflight' || inputs.mode == 'repair' }}
         env:
-          REPAIR_MODE: repair
+          REPAIR_MODE: ${{ inputs.mode }}
           REPAIR_CONFIRMATION: ${{ inputs.confirmation }}
+          REPAIR_EXPECTED_VERSION: ${{ inputs.expected_version }}
           REPAIR_CREATE_SERVICE_ACCOUNT: ${{ inputs.create_service_account }}
           CF_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

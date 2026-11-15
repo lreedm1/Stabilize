@@ -63,6 +63,17 @@ await update("src/paid-worker.js", (source) => {
   return source.slice(0, start) + block + source.slice(end);
 });
 
+// Preserve the complimentary-program disclosure if older generators rebuild
+// the page middleware. This changes copy only, not provider sharing settings.
+await update("src/paid-worker.js", (source) => {
+  if (source.includes("data-free-token-privacy")) return source;
+  return source.replace(
+    `.replace("<html ", '<html data-free-tokens-only="true" ')`,
+    `.replace("<html ", '<html data-free-tokens-only="true" ')
+      .replace('<p class="simple-boundary">', '<p class="simple-boundary" data-free-token-privacy>Free AI requires sharing messages and replies with OpenAI for model improvement. Avoid sensitive information.</p><p class="simple-boundary">')`,
+  );
+});
+
 await update("public/billing-client.js", (source) => {
   let next = source;
   if (!next.includes("function freeTokenModelCopy(")) {
