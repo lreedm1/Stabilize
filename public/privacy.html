@@ -157,9 +157,19 @@
         signed-in account-summary requests with <code>store: true</code>. Under
         OpenAI's current platform documentation, resulting Responses API data is stored as
         application state for at least 30 days unless organization or project data controls cause
-        the request to be treated differently. OpenAI says API data is not used to train its models
-        unless the API customer explicitly opts in. Private chat prevents Stabilize account-memory
-        reads and writes, but it does not change this provider processing.
+        the request to be treated differently. Private chat prevents Stabilize account-memory
+        reads and writes, but it does not change this provider processing or data sharing.
+      </p>
+      <p>
+        <strong>Complimentary AI and model improvement:</strong> OpenAI's complimentary-token
+        program requires an eligible project to share inputs and outputs with OpenAI. When
+        Stabilize provides AI through that program, messages and replies, including Private chat
+        and context sent for summaries, are shared with OpenAI and may be used to improve and
+        train models. OpenAI's default policy of not training on API data does not apply to
+        this opted-in traffic. Do not include sensitive, confidential, or proprietary information,
+        including private health details. Deleting Stabilize memory does not recall data already
+        shared with OpenAI. See
+        <a href="https://help.openai.com/en/articles/10306912-sharing-feedback-evaluation-and-fine-tuning-data-and-api-inputs-and-outputs-with-openai">OpenAI's data-sharing program</a>.
       </p>
 
       <h2>Use caution with sensitive information</h2>

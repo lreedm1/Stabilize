@@ -18,6 +18,14 @@ from pathlib import Path
 OPENAI = "https://api.openai.com/v1"
 CLOUDFLARE = "https://api.cloudflare.com/client/v4"
 WORKER = "stabilize"
+MAX_PROBE_BYTES = 1_000_000
+APPROVED_BUDGET = {
+    "OPENAI_FREE_TOKENS_ONLY": "true",
+    "OPENAI_FREE_TOKEN_ALLOWANCE": "1000000",
+    "OPENAI_FREE_TOKEN_DAILY_LIMIT": "900000",
+    "OPENAI_FREE_TOKEN_ELIGIBILITY_CONFIRMED": "true",
+}
+REPAIR_SECRETS = {"OPENAI_ORGANIZATION_ID", "OPENAI_USAGE_ADMIN_KEY", "OPENAI_API_KEY"}
 
 
 class SafeError(Exception):
@@ -43,7 +51,7 @@ def api(method, url, key, payload=None, org=None):
         headers["OpenAI-Organization"] = org
     data = None
     if payload is not None:
-        headers["Content-Type"] = "application/json"
+        headers["Content-Type"] = "application/merge-patch+json" if method == "PATCH" else "application/json"
         data = json.dumps(payload, separators=(",", ":")).encode()
     req = urllib.request.Request(url, headers=headers, data=data, method=method)
     try:
@@ -85,8 +93,11 @@ def validate_usage(org, admin_key):
         "end_time": int((midnight + dt.timedelta(days=1)).timestamp()),
         "bucket_width": "1d", "limit": 1,
     })
-    page = api("GET", OPENAI + "/organization/usage/completions?" + query,
-               admin_key, org=org)
+    try:
+        page = api("GET", OPENAI + "/organization/usage/completions?" + query,
+                   admin_key, org=org)
+    except SafeError as error:
+        raise SafeError("Organization usage preflight: " + str(error)) from None
     if page.get("object") != "page" or not isinstance(page.get("data"), list):
         raise SafeError("OpenAI organization usage returned an unexpected shape")
     print("[OK] Organization usage admin key authenticated")
@@ -94,9 +105,13 @@ def validate_usage(org, admin_key):
 
 def validate_project_key(org, project_key):
     for model in ("gpt-5.4", "gpt-5.6-sol"):
-        response = api("POST", OPENAI + "/responses/input_tokens", project_key,
-                       {"model": model, "input": [{"role": "user", "content": "Hi"}]}, org=org)
-        if response.get("object") != "response.input_tokens" or not isinstance(response.get("input_tokens"), int):
+        try:
+            response = api("POST", OPENAI + "/responses/input_tokens", project_key,
+                           {"model": model, "input": [{"role": "user", "content": "Hi"}]}, org=org)
+        except SafeError as error:
+            raise SafeError("Token-count preflight for " + model + ": " + str(error)) from None
+        if (response.get("object") != "response.input_tokens" or
+                type(response.get("input_tokens")) is not int or response["input_tokens"] < 0):
             raise SafeError("OpenAI project key counting returned unexpected response")
     print("[OK] Project API key authenticated for Stabilize's two configured models")
 
@@ -110,6 +125,8 @@ def validate_repo_budget():
         raise SafeError("Repository token ceiling differs from the approved 900000 limit")
     if vars_.get("OPENAI_FREE_TOKEN_ELIGIBILITY_CONFIRMED") != "true":
         raise SafeError("Repository complimentary-token eligibility is not confirmed")
+    if vars_.get("OPENAI_FREE_TOKEN_ALLOWANCE") != "1000000":
+        raise SafeError("Repository allowance differs from the approved 1000000 allowance")
     print("[OK] Repository budget safeguards remain configured")
 
 
@@ -134,8 +151,10 @@ def cf_api(method, path, cf_key, payload=None):
     return api(method, CLOUDFLARE + path, cf_key, payload)
 
 
-def version_ids(path, cf_key):
+def version_ids(path, cf_key, expected_latest=None):
     entries = parse_items(cf_api("GET", path + "/versions", cf_key), "versions")
+    if expected_latest and (not entries or entries[0].get("id") != expected_latest):
+        raise SafeError("Latest uploaded version is not the reviewed live version; inspect pending releases")
     ids = {v["id"] for v in entries if isinstance(v, dict) and isinstance(v.get("id"), str)}
     if not ids:
         raise SafeError("No Cloudflare Worker versions found")
@@ -149,6 +168,75 @@ def validate_worker(path, cf_key):
     if missing:
         print("[INFO] Secret entries absent and will be created:", ", ".join(sorted(missing)))
     print("[OK] Cloudflare Worker secret inventory accessible")
+
+
+def deployed_version(path, cf_key):
+    deployments = parse_items(cf_api("GET", path + "/deployments?per_page=1", cf_key),
+                              "deployments")
+    versions = deployments[0].get("versions", []) if deployments else []
+    if (len(versions) != 1 or not isinstance(versions[0], dict) or
+            versions[0].get("percentage") != 100):
+        raise SafeError("Repair requires one verified Worker version at 100% traffic")
+    version = versions[0].get("version_id")
+    if not isinstance(version, str) or not re.fullmatch(r"[a-fA-F0-9-]{36}", version):
+        raise SafeError("Cloudflare returned an invalid version ID")
+    return version
+
+
+def version_resources(path, cf_key, version):
+    result = cf_api("GET", path + "/versions/" + version, cf_key).get("result", {})
+    resources = result.get("resources", {})
+    if (result.get("id") != version or not isinstance(resources, dict) or
+            not isinstance(resources.get("bindings"), list) or
+            not isinstance(resources.get("script"), dict) or
+            not resources["script"].get("etag")):
+        raise SafeError("Cannot verify Worker version resources")
+    bindings = resources["bindings"]
+    if any(not isinstance(b, dict) or not isinstance(b.get("name"), str) for b in bindings):
+        raise SafeError("Cannot verify Worker bindings")
+    by_name = {b["name"]: b for b in bindings}
+    if len(by_name) != len(bindings):
+        raise SafeError("Worker has duplicate binding names")
+    for name, expected in {**APPROVED_BUDGET, "DEMO_MODE": "false"}.items():
+        binding = by_name.get(name, {})
+        if binding.get("type") != "plain_text" or binding.get("text") != expected:
+            raise SafeError("Deployed Worker does not match approved configuration: " + name)
+    ledger = by_name.get("OPENAI_TOKEN_BUDGET", {})
+    if ledger.get("type") != "durable_object_namespace" or not ledger.get("namespace_id"):
+        raise SafeError("Cannot verify the existing Durable Object token ledger binding")
+    return resources
+
+
+def unchanged_resources(before, after):
+    # Compare only in memory. Never print bindings, which may contain secrets.
+    def unchanged_bindings(resources):
+        return {b["name"]: b for b in resources["bindings"] if b["name"] not in REPAIR_SECRETS}
+    repaired = {b["name"] for b in after["bindings"] if b.get("type") == "secret_text"}
+    return (REPAIR_SECRETS <= repaired and
+            before["script"]["etag"] == after["script"]["etag"] and
+            before.get("script_runtime") == after.get("script_runtime") and
+            unchanged_bindings(before) == unchanged_bindings(after))
+
+
+def preflight(create_service_account=False):
+    validate_repo_budget()
+    org = value("OPENAI_ORG_ID")
+    openai_headers_org(org)
+    usage_key = value("OPENAI_USAGE_ADMIN_KEY")
+    cf_key = value("CF_API_TOKEN")
+    path = cf_path(value("CF_ACCOUNT_ID"))
+    validate_usage(org, usage_key)
+    validate_worker(path, cf_key)
+    version = deployed_version(path, cf_key)
+    version_ids(path, cf_key, expected_latest=version)
+    resources = version_resources(path, cf_key, version)
+    project_key = None
+    if not create_service_account:
+        project_key = value("OPENAI_PROJECT_API_KEY")
+        validate_project_key(org, project_key)
+    print("[OK] Live Worker budget and ledger binding verified; version=" + version)
+    print("[REQUIRED] Independently verify project identity, enrollment, allowance, Standard incentive usage, balance, and privacy before repair")
+    return org, usage_key, cf_key, path, project_key, version, resources
 
 
 def create_service_key(org, project_id, provision_key):
@@ -175,68 +263,98 @@ def run_chat_probe():
                  "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=75) as response:
-            data = response.read(1_000_000).decode("utf-8", "replace")
+            if response.headers.get_content_type() != "application/x-ndjson":
+                raise SafeError("Live chat did not return an NDJSON stream")
+            raw = response.read(MAX_PROBE_BYTES + 1)
+            if len(raw) > MAX_PROBE_BYTES:
+                raise SafeError("Live chat exceeded the bounded probe size")
+            data = raw.decode("utf-8", "strict")
+    except urllib.error.HTTPError as err:
+        raise SafeError(f"Live chat HTTP {err.code}") from None
     except (urllib.error.URLError, TimeoutError) as err:
         raise SafeError("Live chat unavailable: " + type(err).__name__) from None
+    except UnicodeDecodeError:
+        raise SafeError("Live chat returned invalid UTF-8") from None
     try:
         events = [json.loads(line) for line in data.splitlines() if line.strip()]
     except ValueError:
         raise SafeError("Live chat did not return parseable NDJSON") from None
+    streamed_text = ""
+    completed = None
     for event in events:
         if not isinstance(event, dict):
-            continue
+            raise SafeError("Live chat returned an invalid stream event")
         if event.get("type") == "error":
             diag = event.get("diagnostic") or {}
             if not isinstance(diag, dict):
                 diag = {}
             raise SafeError("Live chat failed: " + safe_code(diag.get("code")) +
                             " / " + safe_code(diag.get("type")))
-        if event.get("type") == "done" and isinstance(event.get("reply"), str) and event["reply"].strip():
-            print("[OK] Live guest chat produced a complete AI reply")
-            return
-    raise SafeError("Live chat returned no completed AI reply")
+        if completed is not None:
+            raise SafeError("Live chat returned events after completion")
+        if event.get("type") == "delta" and isinstance(event.get("delta"), str):
+            streamed_text += event["delta"]
+        if event.get("type") == "done":
+            completed = event
+    if (not streamed_text.strip() or not completed or completed.get("route") != "ORDINARY" or
+            not isinstance(completed.get("reply"), str) or not completed["reply"].strip()):
+        raise SafeError("Live chat returned no complete streamed ordinary AI reply")
+    analytics = completed.get("analytics") or {}
+    if (not isinstance(analytics, dict) or analytics.get("model") not in {"gpt-5.4", "gpt-5.6-sol"} or
+            any(type(analytics.get(k)) is not int or analytics[k] <= 0
+                for k in ("inputTokens", "outputTokens"))):
+        raise SafeError("Live chat did not confirm model-generated token usage")
+    if analytics.get("actualServiceTier") != "default":
+        raise SafeError("Live chat did not confirm Standard processing")
+    print("[OK] Live guest chat produced streamed text and a completed AI reply with token usage")
 
 
 def repair():
     if os.environ.get("REPAIR_CONFIRMATION") != "APPLY-STABILIZE-REPAIR":
         raise SafeError("Repair requires explicit workflow confirmation APPLY-STABILIZE-REPAIR")
-    validate_repo_budget()
-    org = value("OPENAI_ORG_ID")
-    openai_headers_org(org)
-    usage_key = value("OPENAI_USAGE_ADMIN_KEY")
-    cf_key = value("CF_API_TOKEN")
-    path = cf_path(value("CF_ACCOUNT_ID"))
-
-    # Verify both upstream systems before creating any identity or writing secrets.
-    validate_usage(org, usage_key)
-    validate_worker(path, cf_key)
-    before = version_ids(path, cf_key)
-
+    expected_version = value("REPAIR_EXPECTED_VERSION")
     rotate = os.environ.get("REPAIR_CREATE_SERVICE_ACCOUNT", "").lower() == "true"
+    org, usage_key, cf_key, path, project_key, version, resources = preflight(rotate)
+    if version != expected_version:
+        raise SafeError("Live Worker version changed; repeat preflight and review before repair")
+    before = version_ids(path, cf_key, expected_latest=expected_version)
     if rotate:
         provision_key = value("OPENAI_PROVISION_ADMIN_KEY")
         project_id = value("OPENAI_PROJECT_ID")
         # Creating service accounts in the OpenAI Default project may be disallowed.
         project_key = create_service_key(org, project_id, provision_key)
-    else:
-        project_key = value("OPENAI_PROJECT_API_KEY")
-    validate_project_key(org, project_key)
+        validate_project_key(org, project_key)
 
-    # One atomic version preserves all unrelated bindings/secrets.
-    secrets = {name: {"name": name, "type": "secret_text", "text": content}
+    if deployed_version(path, cf_key) != expected_version:
+        raise SafeError("Live deployment changed before secret patch; stop competing deployments")
+
+    # Use the version-only endpoint used by the pinned Wrangler's
+    # `versions secret bulk`, NOT legacy scripts/.../secrets-bulk, which can
+    # deploy immediately. Verify the resulting code and bindings before traffic.
+    secrets = {name: {"type": "secret_text", "text": content}
                for name, content in {
                    "OPENAI_ORGANIZATION_ID": org,
                    "OPENAI_USAGE_ADMIN_KEY": usage_key,
                    "OPENAI_API_KEY": project_key,
                }.items()}
-    cf_api("PATCH", path + "/secrets-bulk", cf_key, {"secrets": secrets})
-    print("[OK] Cloudflare accepted credential patch; no token budget variables modified")
+    version_path = path.replace("/workers/scripts/", "/workers/workers/") + "/versions/latest"
+    patched = cf_api("PATCH", version_path, cf_key, {"env": secrets}).get("result", {})
+    new_version = patched.get("id") if isinstance(patched, dict) else None
+    print("[OK] Cloudflare accepted version-only credential patch; deployment still requires verification")
+
+    if (not isinstance(new_version, str) or not re.fullmatch(r"[a-fA-F0-9-]{36}", new_version) or
+            new_version in before):
+        raise SafeError("Credential patch returned no new version ID; manual inspection required")
 
     after = version_ids(path, cf_key)
     created = after - before
-    if len(created) != 1:
+    if created != {new_version}:
         raise SafeError("Credential patch completed, but unable to safely identify one new version; manual deployment required")
-    new_version = next(iter(created))
+    new_resources = version_resources(path, cf_key, new_version)
+    if not unchanged_resources(resources, new_resources):
+        raise SafeError("Patched version changed code or unrelated configuration; no deployment requested")
+    if deployed_version(path, cf_key) != expected_version:
+        raise SafeError("Live deployment changed after secret patch; manual inspection required")
     cf_api("POST", path + "/deployments", cf_key, {
         "strategy": "percentage", "versions": [{"version_id": new_version, "percentage": 100}]
     })
@@ -271,6 +389,10 @@ def main():
     mode = os.environ.get("REPAIR_MODE", "diagnose")
     if mode == "diagnose":
         run_chat_probe()
+    elif mode == "preflight":
+        if os.environ.get("REPAIR_CREATE_SERVICE_ACCOUNT", "").lower() == "true":
+            raise SafeError("Read-only preflight cannot provision credentials; leave create_service_account=false")
+        preflight()
     elif mode == "repair":
         repair()
     else:
